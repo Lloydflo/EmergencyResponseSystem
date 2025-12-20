@@ -1,0 +1,788 @@
+/* ===================================
+   CSS VARIABLES - COLOR SCHEME
+   =================================== */
+:root {
+    --primary-color-1: #4c8a89;
+    --secondary-color-1: #3a506b;
+    --tertiary-color-1: #1c2541;
+    --dark-color-1: #0b132b;
+    --text-color-1: #171717;
+    --text-secondary-1: #575757;
+    --bg-color-1: #ffffff;
+    --header-bg-1: #ffffff;
+    --footer-bg-1: #fafafa;
+    --nav-text-1: #171717;
+    --border-color-1: #e5e5e5;
+    --card-bg-1: #ffffff;
+    --shadow-1: rgba(0, 0, 0, 0.05);
+    --font-family-1: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+}
+
+/* Dark mode variables */
+[data-theme="dark"] {
+    --text-color-1: #fafafa;
+    --text-secondary-1: #a1a1aa;
+    --bg-color-1: #000000;
+    --header-bg-1: #0a0a0a;
+    --footer-bg-1: #0a0a0a;
+    --nav-text-1: #fafafa;
+    --border-color-1: #27272a;
+    --card-bg-1: #0a0a0a;
+    --shadow-1: rgba(0, 0, 0, 0.2);
+}
+
+/* ===================================
+   BASE STYLES - RESET & TYPOGRAPHY
+   =================================== */
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+body {
+    font-family: var(--font-family-1);
+    background-color: var(--bg-color-1);
+    color: var(--text-color-1);
+    transition: background-color 0.3s ease, color 0.3s ease;
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+}
+
+
+/* ===================================
+   CUSTOM SCROLLBAR STYLES
+   =================================== */
+/* Main scrollbar (body/html) */
+::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+}
+
+::-webkit-scrollbar-track {
+    background: var(--bg-color-1);
+    border-left: 1px solid var(--border-color-1);
+}
+
+::-webkit-scrollbar-thumb {
+    background: var(--border-color-1);
+    border-radius: 5px;
+    border: 2px solid var(--bg-color-1);
+}
+
+::-webkit-scrollbar-thumb:hover {
+    background: var(--text-secondary-1);
+}
+
+/* Firefox scrollbar */
+* {
+    scrollbar-width: thin;
+    scrollbar-color: var(--border-color-1) var(--bg-color-1);
+}
+
+/* Smooth scrolling */
+html {
+    scroll-behavior: smooth;
+}
+
+/* For containers that might have overflow */
+.scrollable-container,
+.mobile-nav,
+.modal-content,
+.dropdown-menu,
+.overflow-auto,
+.overflow-y-auto,
+.overflow-x-auto {
+    scrollbar-width: thin;
+    scrollbar-color: var(--border-color-1) var(--card-bg-1);
+}
+
+.scrollable-container::-webkit-scrollbar,
+.mobile-nav::-webkit-scrollbar,
+.modal-content::-webkit-scrollbar,
+.dropdown-menu::-webkit-scrollbar,
+.overflow-auto::-webkit-scrollbar,
+.overflow-y-auto::-webkit-scrollbar,
+.overflow-x-auto::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+}
+
+.scrollable-container::-webkit-scrollbar-track,
+.mobile-nav::-webkit-scrollbar-track,
+.modal-content::-webkit-scrollbar-track,
+.dropdown-menu::-webkit-scrollbar-track,
+.overflow-auto::-webkit-scrollbar-track,
+.overflow-y-auto::-webkit-scrollbar-track,
+.overflow-x-auto::-webkit-scrollbar-track {
+    background: var(--card-bg-1);
+    border-radius: 3px;
+}
+
+.scrollable-container::-webkit-scrollbar-thumb,
+.mobile-nav::-webkit-scrollbar-thumb,
+.modal-content::-webkit-scrollbar-thumb,
+.dropdown-menu::-webkit-scrollbar-thumb,
+.overflow-auto::-webkit-scrollbar-thumb,
+.overflow-y-auto::-webkit-scrollbar-thumb,
+.overflow-x-auto::-webkit-scrollbar-thumb {
+    background: var(--border-color-1);
+    border-radius: 3px;
+}
+
+.scrollable-container::-webkit-scrollbar-thumb:hover,
+.mobile-nav::-webkit-scrollbar-thumb:hover,
+.modal-content::-webkit-scrollbar-thumb:hover,
+.dropdown-menu::-webkit-scrollbar-thumb:hover,
+.overflow-auto::-webkit-scrollbar-thumb:hover,
+.overflow-y-auto::-webkit-scrollbar-thumb:hover,
+.overflow-x-auto::-webkit-scrollbar-thumb:hover {
+    background: var(--text-secondary-1);
+}
+
+
+/* ===================================
+   HEADER STYLES
+   =================================== */
+.header {
+    background-color: var(--header-bg-1);
+    padding: 1rem 0;
+    border-bottom: 1px solid var(--border-color-1);
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    z-index: 1000;
+    transition: all 0.3s ease;
+    backdrop-filter: blur(10px);
+}
+
+.header-container {
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 0 1rem;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    position: relative;
+    gap: 2rem;
+}
+
+/* Logo */
+.logo {
+    font-size: 1.5rem;
+    font-weight: 700;
+    color: var(--nav-text-1);
+    text-decoration: none;
+    transition: all 0.3s ease;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.logo:hover {
+    color: var(--primary-color-1);
+    transform: translateY(-1px);
+}
+
+.logo i {
+    color: var(--primary-color-1);
+}
+
+/* Navigation */
+.nav-center {
+    flex: 1;
+    display: flex;
+    justify-content: center;
+    max-width: 800px;
+    background: transparent;
+}
+
+.nav-menu {
+    display: flex;
+    list-style: none;
+    gap: 1rem;
+    justify-content: center;
+    flex-wrap: nowrap;
+    background: transparent;
+}
+
+.nav-link {
+    color: var(--nav-text-1);
+    text-decoration: none;
+    padding: 0.5rem 1rem;
+    border-radius: 8px;
+    transition: all 0.3s ease;
+    font-weight: 500;
+    font-size: 14px;
+    position: relative;
+}
+
+.nav-link:hover {
+    color: var(--primary-color-1);
+    transform: translateY(-1px);
+}
+
+.nav-link.active {
+    color: var(--primary-color-1);
+}
+
+.nav-link::after {
+    content: '';
+    position: absolute;
+    bottom: 0;
+    left: 50%;
+    width: 0;
+    height: 2px;
+    background-color: var(--primary-color-1);
+    transition: all 0.3s ease;
+    transform: translateX(-50%);
+}
+
+.nav-link:hover::after,
+.nav-link.active::after {
+    width: 80%;
+}
+
+/* Navigation Actions */
+.nav-actions {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+/* Mobile Menu Toggle */
+.mobile-menu-toggle {
+    display: none;
+    background: none;
+    border: none;
+    color: var(--nav-text-1);
+    font-size: 1.5rem;
+    cursor: pointer;
+    padding: 0.5rem;
+    border-radius: 6px;
+    transition: all 0.2s ease;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 40px;
+    height: 40px;
+}
+
+.mobile-menu-toggle:hover {
+    background-color: var(--border-color-1);
+}
+
+/* Mobile Close Button */
+.mobile-nav-close {
+    background: none;
+    border: none;
+    color: var(--nav-text-1);
+    font-size: 1.5rem;
+    cursor: pointer;
+    padding: 0.5rem;
+    border-radius: 6px;
+    transition: all 0.2s ease;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 40px;
+    height: 40px;
+}
+
+.mobile-nav-close:hover {
+    background-color: var(--border-color-1);
+    color: var(--primary-color-1);
+}
+
+/* ===================================
+   BUTTON STYLES
+   =================================== */
+.btn {
+    padding: 0.5rem 1rem;
+    border-radius: 6px;
+    text-decoration: none;
+    font-weight: 500;
+    font-size: 14px;
+    transition: all 0.2s ease;
+    border: 1px solid transparent;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+/* Disabled / non-interactive buttons (including anchor-like buttons) */
+.btn.disabled,
+.btn[aria-disabled="true"],
+.btn.is-disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+    pointer-events: none;
+    transform: none !important;
+}
+
+.btn-primary {
+    background-color: var(--primary-color-1);
+    color: white;
+    border-color: var(--primary-color-1);
+}
+
+.btn-primary:hover {
+    background-color: #4ca8a6;
+    border-color: #4ca8a6;
+    transform: translateY(-1px);
+}
+
+.btn-secondary {
+    background-color: transparent;
+    color: var(--text-color-1);
+    border-color: var(--border-color-1);
+}
+
+.btn-secondary:hover {
+    background-color: var(--border-color-1);
+    border-color: var(--primary-color-1);
+    color: var(--primary-color-1);
+}
+
+/* ===================================
+   MOBILE NAVIGATION
+   =================================== */
+.mobile-nav {
+    position: fixed;
+    top: 0;
+    right: -100%;
+    width: 80%;
+    max-width: 320px;
+    height: 100vh;
+    background: var(--header-bg-1);
+    border-left: 1px solid var(--border-color-1);
+    transition: right 0.3s ease;
+    z-index: 1001;
+    overflow-y: auto;
+    display: block !important;
+    visibility: hidden;
+}
+
+.mobile-nav.active {
+    right: 0;
+    visibility: visible;
+}
+
+.mobile-nav-header {
+    position: sticky;
+    top: 0;
+    left: 0;
+    right: 0;
+    padding: 1rem 1.5rem;
+    border-bottom: 1px solid var(--border-color-1);
+    background: var(--header-bg-1);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    z-index: 10;
+}
+
+.mobile-nav-logo {
+    font-size: 1.25rem;
+    font-weight: 600;
+    color: var(--text-color-1);
+    text-decoration: none;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.mobile-nav-logo i {
+    color: var(--primary-color-1);
+}
+
+.mobile-nav-close {
+    background: none;
+    border: none;
+    color: var(--nav-text-1);
+    font-size: 1.5rem;
+    cursor: pointer;
+    padding: 0.5rem;
+    border-radius: 6px;
+    transition: all 0.2s ease;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 40px;
+    height: 40px;
+}
+
+.mobile-nav-close:hover {
+    background-color: var(--border-color-1);
+    color: var(--primary-color-1);
+}
+
+.mobile-nav-menu {
+    list-style: none;
+    padding: 2rem 1.5rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+    margin: 0;
+}
+
+.mobile-nav-link {
+    display: block;
+    padding: 0.75rem 1rem;
+    color: var(--text-color-1);
+    text-decoration: none;
+    border-radius: 6px;
+    transition: all 0.2s ease;
+    font-weight: 500;
+}
+
+.mobile-nav-link:hover {
+    background-color: var(--border-color-1);
+    color: var(--primary-color-1);
+}
+
+.mobile-nav-link.active {
+    background-color: var(--primary-color-1);
+    color: white;
+}
+
+/* Mobile Divider */
+.mobile-nav-divider {
+    height: 1px;
+    background-color: var(--border-color-1);
+    margin: 1rem 0;
+}
+
+/* Mobile Overlay */
+.mobile-nav-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100vh;
+    background: rgba(0, 0, 0, 0.5);
+    z-index: 1000;
+    opacity: 0;
+    visibility: hidden;
+    transition: all 0.3s ease;
+}
+
+.mobile-nav-overlay.active {
+    opacity: 1;
+    visibility: visible;
+}
+
+
+
+/* ===================================
+   FOOTER STYLES
+   =================================== */
+.footer {
+    background-color: var(--footer-bg-1);
+    color: var(--text-color);
+    margin-top: auto;
+    transition: all 0.3s ease;
+    border-top: 1px solid var(--border-color-1);
+}
+
+.footer-main {
+    display: grid;
+    grid-template-columns: 2fr 1fr 1fr 1fr 1fr;
+    gap: 3rem;
+    padding: 3rem 0 2rem;
+    border-bottom: 1px solid var(--border-color-1);
+}
+
+/* Footer Brand */
+.footer-brand {
+    max-width: 280px;
+}
+
+.footer-logo {
+    font-size: 1.25rem;
+    font-weight: 600;
+    color: var(--text-color-1);
+    text-decoration: none;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    margin-bottom: 0.75rem;
+}
+
+.footer-logo i {
+    color: var(--primary-color-1);
+}
+
+.footer-description {
+    color: var(--text-secondary-1);
+    font-size: 13px;
+    line-height: 1.6;
+    margin-bottom: 1rem;
+}
+
+.footer-social {
+    display: flex;
+    gap: 0.75rem;
+}
+
+.social-link {
+    width: 36px;
+    height: 36px;
+    border-radius: 8px;
+    border: 1px solid var(--border-color-1);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--text-secondary-1);
+    text-decoration: none;
+    transition: all 0.2s ease;
+}
+
+.social-link:hover {
+    border-color: var(--primary-color-1);
+    color: var(--primary-color-1);
+    transform: translateY(-1px);
+}
+
+/* Footer Columns */
+.footer-column h4 {
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--text-color-1);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    margin-bottom: 1rem;
+}
+
+.footer-links {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+    list-style: none;
+    padding: 0;
+    margin: 0;
+}
+
+.footer-link {
+    color: var(--text-secondary-1);
+    text-decoration: none;
+    font-size: 13px;
+    transition: all 0.2s ease;
+}
+
+.footer-link:hover {
+    color: var(--primary-color-1);
+}
+
+/* Footer Bottom */
+.footer-bottom {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 1.5rem 0;
+    flex-wrap: nowrap;
+    gap: 1rem;
+}
+
+.footer-copyright {
+    color: var(--text-secondary-1);
+    font-size: 12px;
+    flex-shrink: 0;
+}
+
+.footer-legal {
+    display: flex;
+    gap: 1.5rem;
+    flex-shrink: 0;
+}
+
+.footer-legal .footer-link {
+    font-size: 12px;
+}
+
+/* ===================================
+   THEME TOGGLE
+   =================================== */
+.theme-toggle {
+    display: inline-flex;
+    align-items: center;
+    background: var(--card-bg-1);
+    border: 1px solid var(--border-color-1);
+    border-radius: 6px;
+    padding: 2px;
+    gap: 2px;
+    flex-shrink: 0;
+}
+
+.theme-toggle-btn {
+    background: transparent;
+    border: none;
+    color: var(--text-secondary-1);
+    font-size: 14px;
+    cursor: pointer;
+    padding: 6px;
+    border-radius: 4px;
+    transition: all 0.2s ease;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 28px;
+    height: 28px;
+}
+
+.theme-toggle-btn:hover {
+    color: var(--text-color-1);
+    background-color: var(--border-color-1);
+}
+
+.theme-toggle-btn.active {
+    background: var(--primary-color-1);
+    color: white;
+}
+
+/* ===================================
+   RESPONSIVE DESIGN
+   =================================== */
+
+/* Desktop - Hide mobile elements */
+@media (min-width: 1025px) {
+    .mobile-nav {
+        display: none !important;
+    }
+    
+    .mobile-nav-overlay {
+        display: none !important;
+    }
+    
+    .mobile-menu-toggle {
+        display: none !important;
+    }
+}
+
+/* Tablet - Show mobile menu */
+@media (max-width: 1024px) {
+    .nav-center {
+        display: none;
+    }
+    
+    .nav-actions .btn {
+        display: none !important;
+    }
+    
+    .mobile-menu-toggle {
+        display: block;
+    }
+    
+    .mobile-nav {
+        display: block !important;
+    }
+}
+
+/* Medium screens - Adjust navigation */
+@media (max-width: 900px) {
+    .nav-menu {
+        gap: 0.5rem;
+    }
+    
+    .nav-link {
+        padding: 0.5rem 0.75rem;
+        font-size: 13px;
+    }
+    
+    .header-container {
+        gap: 1rem;
+    }
+}
+
+/* Mobile - Adjust layouts */
+@media (max-width: 768px) {
+    .header-container {
+        padding: 0 1rem;
+    }
+    
+    .mobile-nav-menu {
+        padding-bottom: 2rem;
+    }
+    
+    .mobile-nav-menu .btn {
+        margin-top: 1rem;
+    }
+    
+    .mobile-nav-link {
+        margin-bottom: 0.5rem;
+    }
+    
+    .footer-container {
+        padding: 0 0.75rem;
+    }
+    
+    .footer-main {
+        grid-template-columns: repeat(2, 1fr);
+        gap: 2rem;
+        padding: 2rem 0 1.5rem;
+    }
+    
+    .footer-brand {
+        grid-column: 1 / -1;
+        max-width: 100%;
+    }
+    
+    .footer-bottom {
+        flex-direction: column;
+        gap: 1rem;
+        align-items: flex-start;
+        padding: 1.5rem 0;
+    }
+    
+    .footer-legal {
+        flex-direction: column;
+        gap: 0.5rem;
+    }
+    
+    .theme-toggle {
+        order: -1;
+    }
+}
+
+/* Small Mobile - Single column */
+@media (max-width: 480px) {
+    .header-container {
+        padding: 0 0.75rem;
+    }
+    
+    .main-content {
+        padding: 0 0.5rem;
+        padding-top: 4.5rem;
+    }
+    
+    .footer-container {
+        padding: 0 0.5rem;
+    }
+    
+    .footer-main {
+        grid-template-columns: 1fr;
+        gap: 1.5rem;
+    }
+    
+    .footer-column {
+        text-align: center;
+    }
+    
+    .footer-social {
+        justify-content: center;
+    }
+    
+    .footer-bottom {
+        text-align: center;
+        align-items: center;
+    }
+    
+    .theme-toggle {
+        order: 0;
+    }
+}

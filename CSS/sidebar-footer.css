@@ -1,0 +1,170 @@
+/* ===============================
+   FULL-WIDTH ADMIN FOOTER (FIXED)
+   =============================== */
+
+/* Footer background spans full screen */
+.admin-footer {
+    width: 100%;
+    position: relative;
+    left: 0;
+    right: 0;
+    background-color: var(--footer-bg-1);
+    border-top: 1px solid var(--border-color-1);
+    z-index: 990;
+    padding: 20px 0;
+    box-sizing: border-box;
+}
+
+/* Inner wrapper keeps content aligned with your page width */
+.footer-bottom {
+    width: 100%;
+    max-width: 1350px;      /* Match your main-container width */
+    margin: 0 auto;
+    padding: 0 20px;
+    box-sizing: border-box;
+
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: wrap;         /* FOR MOBILE — prevent overflow */
+    gap: 20px;
+}
+
+/* ===============================
+   MOBILE RESPONSIVE FIXES
+   =============================== */
+@media (max-width: 767px) {
+    .admin-footer {
+        width: 100vw;
+        left: 0;
+        margin-left: calc(50% - 50vw);
+        padding: 15px 0;
+    }
+
+    .footer-bottom {
+        justify-content: center;
+        text-align: center;
+        gap: 15px;
+        padding: 0 15px;
+    }
+
+    .footer-copyright {
+        order: 1;
+        width: 100%;
+    }
+
+    .footer-legal {
+        order: 2;
+        width: 100%;
+        justify-content: center;
+        gap: 12px;
+        flex-wrap: wrap;
+    }
+
+    .footer-legal .footer-link {
+        font-size: 14px;
+        padding: 0 8px;
+    }
+
+    .theme-toggle {
+        order: 3;
+        display: flex;
+        justify-content: center;
+        gap: 8px;
+    }
+
+    .theme-toggle .theme-toggle-btn {
+        padding: 8px 12px;
+        font-size: 14px;
+    }
+}
+
+/* Extra small screens */
+@media (max-width: 640px) {
+    .admin-footer {
+        padding: 12px 0;
+    }
+
+    .footer-bottom {
+        gap: 12px;
+        padding: 0 12px;
+    }
+
+    .footer-link,
+    .footer-copyright p {
+        font-size: 13px;
+    }
+
+    .footer-legal {
+        gap: 8px;
+    }
+
+    .footer-legal .footer-link {
+        font-size: 12px;
+        padding: 0 6px;
+    }
+
+    .theme-toggle .theme-toggle-btn {
+        padding: 6px 10px;
+        font-size: 12px;
+    }
+}
+
+/* Ultra small screens */
+@media (max-width: 480px) {
+    .admin-footer {
+        padding: 10px 0;
+    }
+
+    .footer-bottom {
+        gap: 10px;
+        padding: 0 10px;
+    }
+
+    .footer-link,
+    .footer-copyright p {
+        font-size: 11px;
+    }
+
+    .footer-legal {
+        gap: 6px;
+    }
+
+    .footer-legal .footer-link {
+        font-size: 11px;
+        padding: 0 4px;
+    }
+
+    .theme-toggle {
+        gap: 6px;
+    }
+
+    .theme-toggle .theme-toggle-btn {
+        padding: 5px 8px;
+        font-size: 11px;
+    }
+}
+
+/* Tablet view */
+@media (min-width: 768px) and (max-width: 1024px) {
+    .footer-bottom {
+        padding: 0 30px;
+        gap: 25px;
+    }
+
+    .footer-legal .footer-link {
+        font-size: 15px;
+    }
+
+    .theme-toggle .theme-toggle-btn {
+        padding: 10px 14px;
+        font-size: 15px;
+    }
+}
+
+/* Large desktop optimization */
+@media (min-width: 1351px) {
+    .footer-bottom {
+        max-width: 1400px;
+    }
+}
