@@ -1,10 +1,8 @@
 <?php
-/**
- * Emergency Response System - Admin Dashboard (UI Only)
- * Comprehensive dashboard with static demo data and full functionality
- */
+
+
+
 $pageTitle = 'ERS Admin Dashboard';
-// Static demo data for UI-only dashboard
 $activeIncidents = 0;
 $availableResponders = 0;
 $avgResponseTime = 0;
@@ -44,16 +42,6 @@ $resourceUtilization = 0;
                     <h1 class="dashboard-title">Emergency Response Dashboard</h1>
                     <p class="dashboard-subtitle">Real-time monitoring and system overview • <?php echo date('l, F j, Y \a\t g:i A'); ?></p>
                 </div>
-                <div class="dashboard-actions">
-                    <button class="btn-dashboard" onclick="refreshDashboard()">
-                        <i class="fas fa-sync"></i> Refresh
-                    </button>
-                    <button class="btn-dashboard" onclick="exportDashboard()">
-                        <i class="fas fa-download"></i> Export
-                    </button>
-                    <button class="btn-dashboard" onclick="systemSettings()">
-                        <i class="fas fa-cog"></i> Settings
-                    </button>
                 </div>
             </div>
             <!-- Key Metrics -->

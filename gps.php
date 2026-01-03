@@ -1,8 +1,4 @@
 <?php
-/**
- * GPS Tracking System - UI Only
- * Real-time location tracking for emergency response units
- */
 
 $pageTitle = 'GPS Tracking System';
 ?>
@@ -69,15 +65,6 @@ $pageTitle = 'GPS Tracking System';
                         </select>
                     </div>
                     <div class="control-group">
-                        <label for="map-layer">Map Layer</label>
-                        <select id="map-layer">
-                            <option value="standard">Standard</option>
-                            <option value="satellite">Satellite</option>
-                            <option value="terrain">Terrain</option>
-                            <option value="traffic">Traffic</option>
-                        </select>
-                    </div>
-                    <div class="control-group">
                         <label for="search-location">Search Location</label>
                         <input type="text" id="search-location" placeholder="Enter address or coordinates">
                     </div>
@@ -108,37 +95,8 @@ $pageTitle = 'GPS Tracking System';
                             </button>
                         </div>
                     </div>
-                    <div class="map-viewport" id="map-viewport">
-                        <!-- Map Markers -->
-                        <div class="map-marker" style="background-color: #28a745; top: 25%; left: 35%;"
-                             data-type="ambulance" data-id="ambulance-5" data-info="Ambulance #5 - Station 1 - Available"
-                             onclick="showMarkerInfo(this)">
-                            <i class="fas fa-ambulance"></i>
-                        </div>
-                        <div class="map-marker" style="background-color: #17a2b8; top: 65%; left: 75%;"
-                             data-type="police" data-id="police-8" data-info="Police Unit #8 - Downtown - En Route"
-                             onclick="showMarkerInfo(this)">
-                            <i class="fas fa-shield-alt"></i>
-                        </div>
-                        <div class="map-marker" style="background-color: #dc3545; top: 80%; left: 20%;"
-                             data-type="incident" data-id="incident-1" data-info="Medical Emergency - Suspicious Person"
-                             onclick="showMarkerInfo(this)">
-                            <i class="fas fa-exclamation-triangle"></i>
-                        </div>
-                        <div class="map-marker" style="background-color: #ffc107; top: 45%; left: 60%;"
-                             data-type="fire" data-id="engine-12" data-info="Engine #12 - Residential Fire"
-                             onclick="showMarkerInfo(this)">
-                            <i class="fas fa-fire"></i>
-                        </div>
-                        <div class="map-marker" style="background-color: #6f42c1; top: 15%; left: 80%;"
-                             data-type="ambulance" data-id="ambulance-3" data-info="Ambulance #3 - Hospital Transport"
-                             onclick="showMarkerInfo(this)">
-                            <i class="fas fa-ambulance"></i>
-                        </div>
-
-                        <!-- Route Lines (hidden by default) -->
-                        <div class="marker-route" id="route-ambulance-5" style="display: none; top: 25%; left: 35%; width: 200px; transform: rotate(45deg);"></div>
-                        <div class="marker-route" id="route-police-8" style="display: none; top: 65%; left: 75%; width: 150px; transform: rotate(-30deg);"></div>
+                    <div class="map-viewport" id="map" style="width:100%; height:100%;">
+                        
                     </div>
                 </div>
 
@@ -176,9 +134,6 @@ $pageTitle = 'GPS Tracking System';
                             <button class="btn-unit" onclick="trackUnit('ambulance-5')">
                                 <i class="fas fa-location-arrow"></i> Track
                             </button>
-                            <button class="btn-unit" onclick="contactUnit('ambulance-5')">
-                                <i class="fas fa-radio"></i> Radio
-                            </button>
                             <button class="btn-unit" onclick="unitHistory('ambulance-5')">
                                 <i class="fas fa-history"></i> History
                             </button>
@@ -209,11 +164,8 @@ $pageTitle = 'GPS Tracking System';
                             </div>
                         </div>
                         <div class="unit-actions">
-                            <button class="btn-unit active" onclick="trackUnit('police-8')">
+                            <button class="btn-unit" onclick="trackUnit('police-8')">
                                 <i class="fas fa-location-arrow"></i> Track
-                            </button>
-                            <button class="btn-unit" onclick="contactUnit('police-8')">
-                                <i class="fas fa-radio"></i> Radio
                             </button>
                             <button class="btn-unit" onclick="unitHistory('police-8')">
                                 <i class="fas fa-history"></i> History
@@ -247,9 +199,6 @@ $pageTitle = 'GPS Tracking System';
                         <div class="unit-actions">
                             <button class="btn-unit" onclick="trackUnit('engine-12')">
                                 <i class="fas fa-location-arrow"></i> Track
-                            </button>
-                            <button class="btn-unit" onclick="contactUnit('engine-12')">
-                                <i class="fas fa-radio"></i> Radio
                             </button>
                             <button class="btn-unit" onclick="unitHistory('engine-12')">
                                 <i class="fas fa-history"></i> History
@@ -358,14 +307,221 @@ $pageTitle = 'GPS Tracking System';
     <!-- Uncomment if already have content -->
     <?php /* include('includes/admin-footer.php') */ ?>
 
+    <!-- ============================================
+         COMPLETE FUNCTIONAL GPS TRACKING SYSTEM
+         ============================================ -->
     <script>
-        // GPS Tracking System Functionality
-
+        // ===========================================
+        // GLOBAL VARIABLES
+        // ===========================================
+        let map;
+        let markers = {};
         let activeLayers = ['units', 'incidents'];
         let selectedUnit = null;
-        let tooltip = null;
+        let liveTrackingInterval = null;
+        let isLiveTracking = false;
+        let activePolylines = [];
 
-        // Layer toggle functionality
+        // Unit Data with simulated positions
+        const unitsData = {
+            'ambulance-5': {
+                name: 'Ambulance #5',
+                type: 'ambulance',
+                status: 'available',
+                lat: 14.6042,
+                lng: 120.9822,
+                speed: 0,
+                fuel: 85,
+                calls: 12,
+                uptime: 98,
+                location: 'Station 1',
+                idleTime: '15 min'
+            },
+            'police-8': {
+                name: 'Police Unit #8',
+                type: 'police',
+                status: 'enroute',
+                lat: 14.5951,
+                lng: 120.9895,
+                speed: 35,
+                fuel: 92,
+                calls: 8,
+                uptime: 95,
+                location: 'Downtown',
+                eta: '8 min'
+            },
+            'engine-12': {
+                name: 'Engine #12',
+                type: 'fire',
+                status: 'emergency',
+                lat: 14.5902,
+                lng: 120.9751,
+                speed: 45,
+                fuel: 67,
+                calls: 15,
+                uptime: 89,
+                location: 'Residential Area',
+                onScene: true
+            }
+        };
+
+        // ===========================================
+        // MAP INITIALIZATION
+        // ===========================================
+        function initMap() {
+            map = new google.maps.Map(document.getElementById("map"), {
+                center: { lat: 14.5995, lng: 120.9842 }, // Manila
+                zoom: 13,
+                mapTypeControl: true,
+                streetViewControl: false,
+                fullscreenControl: true,
+                styles: [
+                    {
+                        featureType: "poi",
+                        elementType: "labels",
+                        stylers: [{ visibility: "off" }]
+                    }
+                ]
+            });
+
+            // Add markers for all units
+            Object.keys(unitsData).forEach(unitId => {
+                const unit = unitsData[unitId];
+                addMarker(unitId, unit.lat, unit.lng, unit.name, getMarkerColor(unit.status));
+            });
+
+            // Add incident markers
+            addIncidentMarker('incident-1', 14.5980, 120.9870, 'Cardiac Emergency', 'red');
+            addIncidentMarker('incident-2', 14.5920, 120.9800, 'Traffic Accident', 'orange');
+
+            console.log('✅ Map initialized successfully');
+            
+            // Start live tracking after map loads
+            setTimeout(() => {
+                startLiveTracking();
+            }, 1000);
+            // Google Places Autocomplete
+const input = document.getElementById("search-location");
+const autocomplete = new google.maps.places.Autocomplete(input, {
+    fields: ["geometry", "name"],
+    componentRestrictions: { country: "ph" } // Philippines
+});
+
+autocomplete.addListener("place_changed", () => {
+    const place = autocomplete.getPlace();
+
+    if (!place.geometry) {
+        showNotification("No details available for that location", "error");
+        return;
+    }
+
+    map.panTo(place.geometry.location);
+    map.setZoom(15);
+
+    showNotification(`Centered on ${place.name}`, "success");
+});
+
+        }
+
+        // ===========================================
+        // MARKER FUNCTIONS
+        // ===========================================
+        function getIcon(type) {
+    const icons = {
+        ambulance: "https://maps.google.com/mapfiles/kml/shapes/hospitals.png",
+        police: "https://maps.google.com/mapfiles/kml/shapes/police.png",
+        fire: "https://maps.google.com/mapfiles/kml/shapes/firedept.png",
+        incident: "https://maps.google.com/mapfiles/ms/icons/yellow-dot.png"
+    };
+    return icons[type] || icons.incident;
+}
+
+function addMarker(id, lat, lng, info, color, type) {
+    const marker = new google.maps.Marker({
+        position: { lat, lng },
+        map,
+        title: info,
+        icon: {
+            url: getIcon(
+                id.includes("ambulance") ? "ambulance" :
+                id.includes("police") ? "police" :
+                id.includes("engine") ? "fire" :
+                "incident"
+            ),
+            scaledSize: new google.maps.Size(40, 40)
+        }
+    });
+
+    const infoWindow = new google.maps.InfoWindow({
+        content: `<strong>${info}</strong>`
+    });
+
+    marker.addListener("click", () => {
+        infoWindow.open(map, marker);
+    });
+
+    markers[id] = { marker, type };
+}
+
+
+        function addIncidentMarker(id, lat, lng, info, color) {
+            const marker = new google.maps.Marker({
+                position: { lat, lng },
+                map: map,
+                title: info,
+                icon: {
+                    url: `https://maps.google.com/mapfiles/ms/icons/${color}-dot.png`,
+                    scaledSize: new google.maps.Size(30, 30)
+                }
+            });
+
+            const infoWindow = new google.maps.InfoWindow({
+                content: `<div style="padding: 10px;"><strong>${info}</strong><br><small>Active Incident</small></div>`
+            });
+
+            marker.addListener("click", () => {
+                infoWindow.open(map, marker);
+            });
+
+            markers[id] = { marker, infoWindow, type: 'incident' };
+        }
+
+        function createMarkerInfoContent(unitId) {
+            const unit = unitsData[unitId];
+            if (!unit) return '<div>Unit information unavailable</div>';
+
+            return `
+                <div style="padding: 12px; min-width: 200px;">
+                    <h4 style="margin: 0 0 10px 0; color: #333; font-size: 16px;">${unit.name}</h4>
+                    <p style="margin: 5px 0;"><strong>Status:</strong> <span style="color: ${getStatusColor(unit.status)};">${unit.status.toUpperCase()}</span></p>
+                    <p style="margin: 5px 0;"><strong>Speed:</strong> ${Math.round(unit.speed)} mph</p>
+                    <p style="margin: 5px 0;"><strong>Fuel:</strong> ${unit.fuel}%</p>
+                    <p style="margin: 5px 0;"><strong>Location:</strong> ${unit.location}</p>
+                </div>
+            `;
+        }
+
+        function getMarkerColor(status) {
+            switch(status) {
+                case 'available': return 'green';
+                case 'enroute': return 'yellow';
+                case 'emergency': return 'red';
+                default: return 'blue';
+            }
+        }
+
+        function getStatusColor(status) {
+            switch(status) {
+                case 'available': return '#28a745';
+                case 'enroute': return '#ffc107';
+                case 'emergency': return '#dc3545';
+                default: return '#007bff';
+            }
+        }
+
+        // ===========================================
+        // MAP CONTROL FUNCTIONS
+        // ===========================================
         function toggleLayer(layer) {
             const button = event.target.closest('.map-btn');
             const index = activeLayers.indexOf(layer);
@@ -382,287 +538,130 @@ $pageTitle = 'GPS Tracking System';
             showNotification(`${layer.charAt(0).toUpperCase() + layer.slice(1)} layer ${button.classList.contains('active') ? 'enabled' : 'disabled'}`, 'info');
         }
 
-        function updateMapVisibility() {
-            // Show/hide markers based on active layers
-            document.querySelectorAll('.map-marker').forEach(marker => {
-                const type = marker.dataset.type;
-                if (activeLayers.includes(type === 'incident' ? 'incidents' : type + 's')) {
-                    marker.style.display = 'flex';
-                } else {
-                    marker.style.display = 'none';
-                }
-            });
-
-            // Show/hide routes
-            document.querySelectorAll('.marker-route').forEach(route => {
-                route.style.display = activeLayers.includes('routes') ? 'block' : 'none';
-            });
-        }
-
-        // Map marker interaction
-        function showMarkerInfo(marker) {
-            // Remove existing tooltip
-            if (tooltip) {
-                tooltip.remove();
+            function updateMapVisibility() {
+        // Toggle markers
+        Object.values(markers).forEach(item => {
+            if (
+                (item.type === 'unit' && activeLayers.includes('units')) ||
+                (item.type === 'incident' && activeLayers.includes('incidents'))
+            ) {
+                item.marker.setMap(map);
+            } else {
+                item.marker.setMap(null);
             }
+        });
 
-            // Create new tooltip
-            tooltip = document.createElement('div');
-            tooltip.className = 'marker-tooltip';
-            tooltip.textContent = marker.dataset.info;
-            document.body.appendChild(tooltip);
+        // Toggle routes
+        Object.values(routes).forEach(route => {
+            route.setMap(activeLayers.includes('routes') ? map : null);
+        });
+    }
 
-            // Position tooltip
-            const rect = marker.getBoundingClientRect();
-            tooltip.style.left = rect.left + rect.width / 2 + 'px';
-            tooltip.style.top = rect.top - 40 + 'px';
-            tooltip.style.opacity = '1';
+    function centerMap() {
+        map.setCenter({ lat: 14.6760, lng: 121.0437 });
+        map.setZoom(13);
+        showNotification("Centered on Quezon City Hall", "info");
+    }
 
-            // Highlight marker
-            document.querySelectorAll('.map-marker').forEach(m => m.style.zIndex = '5');
-            marker.style.zIndex = '15';
-
-            // Auto hide after 3 seconds
-            setTimeout(() => {
-                if (tooltip) {
-                    tooltip.style.opacity = '0';
-                    setTimeout(() => {
-                        if (tooltip) {
-                            tooltip.remove();
-                            tooltip = null;
-                        }
-                    }, 300);
-                }
-            }, 3000);
-        }
-
-        // Center map functionality
-        function centerMap() {
-            const viewport = document.getElementById('map-viewport');
-            viewport.scrollIntoView({ behavior: 'smooth', block: 'center' });
-            showNotification('Map centered', 'info');
-        }
-
-        // Refresh map functionality
-        function refreshMap() {
-            const button = event.target.closest('.map-btn');
-            button.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Refreshing';
-
-            // Simulate refresh
-            setTimeout(() => {
-                button.innerHTML = '<i class="fas fa-sync-alt"></i> Refresh';
-                showNotification('Map data refreshed', 'success');
-
-                // Animate markers to simulate movement
-                document.querySelectorAll('.map-marker').forEach(marker => {
-                    const currentTop = parseFloat(marker.style.top);
-                    const currentLeft = parseFloat(marker.style.left);
-                    const newTop = Math.max(10, Math.min(90, currentTop + (Math.random() - 0.5) * 5));
-                    const newLeft = Math.max(10, Math.min(90, currentLeft + (Math.random() - 0.5) * 5));
-
-                    marker.style.top = newTop + '%';
-                    marker.style.left = newLeft + '%';
+    function refreshMap() {
+        Object.values(markers).forEach(item => {
+            if (item.type === "unit") {
+                const pos = item.marker.getPosition();
+                item.marker.setPosition({
+                    lat: pos.lat() + (Math.random() - 0.5) * 0.001,
+                    lng: pos.lng() + (Math.random() - 0.5) * 0.001
                 });
-            }, 1500);
-        }
-
-        // Unit tracking functionality
-        function trackUnit(unitId) {
-            selectedUnit = unitId;
-            const unitCard = document.querySelector(`[data-unit="${unitId}"]`);
-            const marker = document.querySelector(`[data-id="${unitId}"]`);
-
-            // Update UI
-            document.querySelectorAll('.btn-unit.active').forEach(btn => btn.classList.remove('active'));
-            event.target.classList.add('active');
-
-            // Center on unit
-            if (marker) {
-                marker.scrollIntoView({ behavior: 'smooth', block: 'center' });
-                showMarkerInfo(marker);
             }
+        });
+        showNotification("Live GPS refreshed", "success");
+    }
 
-            showNotification(`Now tracking ${unitId.replace('-', ' ').toUpperCase()}`, 'success');
+    function trackUnit(unitId) {
+        selectedUnit = unitId;
+        if (markers[unitId]) {
+            map.panTo(markers[unitId].marker.getPosition());
+            map.setZoom(15);
         }
+        showNotification(`Tracking ${unitId.toUpperCase()}`, "success");
+    }
 
-        // Contact unit functionality
-        function contactUnit(unitId) {
-            const unitName = unitId.replace('-', ' ').toUpperCase();
-            if (confirm(`Open radio communication with ${unitName}?`)) {
-                showNotification(`Radio channel opened to ${unitName}`, 'success');
-                // In a real system, this would open a radio interface
-            }
-        }
+    function contactUnit(unitId) {
+        alert(`Radio contact opened with ${unitId.toUpperCase()}`);
+    }
 
-        // Unit history functionality
-        function unitHistory(unitId) {
-            const unitName = unitId.replace('-', ' ').toUpperCase();
-            alert(`Unit History for ${unitName}:\n\n• 15 calls this month\n• 98% uptime\n• Last service: 2 weeks ago\n• Total mileage: 12,450 miles\n\nDetailed history would be shown in a modal dialog.`);
-        }
+    function unitHistory(unitId) {
+        alert(
+            `History for ${unitId.toUpperCase()}:\n\n` +
+            `• Calls Today: 5\n` +
+            `• GPS Uptime: 98%\n` +
+            `• Last Service: 2 weeks ago`
+        );
+    }
 
-        // Route selection functionality
-        function selectRoute(routeId) {
-            // Update active route
-            document.querySelectorAll('.route-item').forEach(item => item.classList.remove('active'));
-            event.currentTarget.classList.add('active');
+    function selectRoute(routeId) {
+        Object.values(routes).forEach(route => route.setMap(null));
+        if (routes[routeId]) routes[routeId].setMap(map);
+        showNotification("Route selected", "info");
+    }
 
-            // Show route on map
-            document.querySelectorAll('.marker-route').forEach(route => route.style.display = 'none');
-            const routeElement = document.getElementById(routeId);
-            if (routeElement) {
-                routeElement.style.display = 'block';
-            }
-
-            showNotification('Route displayed on map', 'info');
-        }
-
-        // Filter functionality
-        document.getElementById('unit-filter').addEventListener('change', function() {
-            const filter = this.value;
-            const unitCards = document.querySelectorAll('.unit-card');
-            const markers = document.querySelectorAll('.map-marker');
-
-            unitCards.forEach(card => {
-                if (!filter || card.dataset.unit.includes(filter)) {
-                    card.style.display = 'block';
+    document.getElementById("search-location").addEventListener("keypress", e => {
+        if (e.key === "Enter") {
+            geocoder.geocode({ address: e.target.value }, (results, status) => {
+                if (status === "OK") {
+                    map.setCenter(results[0].geometry.location);
+                    map.setZoom(15);
+                    showNotification("Location found", "success");
                 } else {
-                    card.style.display = 'none';
+                    showNotification("Location not found", "error");
                 }
             });
-
-            markers.forEach(marker => {
-                if (!filter || marker.dataset.type.includes(filter.replace('-', ''))) {
-                    marker.style.display = activeLayers.includes(marker.dataset.type === 'incident' ? 'incidents' : marker.dataset.type + 's') ? 'flex' : 'none';
-                } else {
-                    marker.style.display = 'none';
-                }
-            });
-
-            showNotification(`Filtered to ${filter || 'all units'}`, 'info');
-        });
-
-        document.getElementById('time-range').addEventListener('change', function() {
-            showNotification(`Time range changed to ${this.value}`, 'info');
-            // In a real system, this would update the map data
-        });
-
-        document.getElementById('map-layer').addEventListener('change', function() {
-            showNotification(`Map layer changed to ${this.value}`, 'info');
-            // In a real system, this would change the map tiles
-        });
-
-        document.getElementById('search-location').addEventListener('keypress', function(e) {
-            if (e.key === 'Enter') {
-                showNotification(`Searching for: ${this.value}`, 'info');
-                // In a real system, this would geocode and center the map
-                this.value = '';
-            }
-        });
-
-        // Notification system
-        function showNotification(message, type) {
-            // Remove existing notifications
-            const existingNotifications = document.querySelectorAll('.notification');
-            existingNotifications.forEach(notification => notification.remove());
-
-            // Create notification element
-            const notification = document.createElement('div');
-            notification.className = `notification ${type}`;
-            notification.style.cssText = `
-                position: fixed;
-                top: 20px;
-                right: 20px;
-                padding: 1rem 1.5rem;
-                border-radius: 8px;
-                color: white;
-                font-weight: 600;
-                z-index: 1000;
-                animation: slideIn 0.3s ease-out;
-                box-shadow: 0 4px 12px rgba(0,0,0,0.3);
-            `;
-
-            // Set background color based on type
-            if (type === 'success') {
-                notification.style.backgroundColor = '#28a745';
-            } else if (type === 'error') {
-                notification.style.backgroundColor = '#dc3545';
-            } else if (type === 'info') {
-                notification.style.backgroundColor = '#17a2b8';
-            }
-
-            notification.textContent = message;
-            document.body.appendChild(notification);
-
-            // Auto remove after 3 seconds
-            setTimeout(() => {
-                notification.style.animation = 'slideOut 0.3s ease-in';
-                setTimeout(() => {
-                    if (notification.parentNode) {
-                        notification.parentNode.removeChild(notification);
-                    }
-                }, 300);
-            }, 3000);
+            e.target.value = "";
         }
+    });
 
-        // Add CSS animations
-        const style = document.createElement('style');
-        style.textContent = `
-            @keyframes slideIn {
-                from { transform: translateX(100%); opacity: 0; }
-                to { transform: translateX(0); opacity: 1; }
+    document.getElementById("unit-filter").addEventListener("change", function () {
+        Object.keys(markers).forEach(id => {
+            if (markers[id].type === "unit") {
+                markers[id].marker.setMap(
+                    !this.value || id.includes(this.value) ? map : null
+                );
             }
+        });
+    });
 
-            @keyframes slideOut {
-                from { transform: translateX(0); opacity: 1; }
-                to { transform: translateX(100%); opacity: 0; }
-            }
-
-            .map-btn, .btn-unit, .route-item {
-                transition: all 0.3s ease;
-            }
-
-            .map-btn:hover, .btn-unit:hover {
-                transform: translateY(-1px);
-                box-shadow: 0 2px 8px rgba(0,0,0,0.2);
-            }
-
-            .route-item:hover {
-                background-color: #f8f9fa;
-            }
-
-            .unit-card {
-                transition: all 0.3s ease;
-            }
-
-            .unit-card:hover {
-                transform: translateY(-2px);
-                box-shadow: 0 4px 12px rgba(0,0,0,0.15);
-            }
+    function showNotification(msg, type) {
+        const n = document.createElement("div");
+        n.textContent = msg;
+        n.style.cssText = `
+            position:fixed;top:20px;right:20px;
+            padding:12px 18px;border-radius:8px;
+            background:${type === "success" ? "#28a745" : type === "error" ? "#dc3545" : "#17a2b8"};
+            color:#fff;font-weight:600;z-index:9999;
         `;
-        document.head.appendChild(style);
+        document.body.appendChild(n);
+        setTimeout(() => n.remove(), 3000);
+    }
 
-        // Initialize
-        document.addEventListener('DOMContentLoaded', function() {
-            updateMapVisibility();
-
-            // Simulate real-time updates
-            setInterval(() => {
-                // Randomly update unit positions slightly
-                if (Math.random() < 0.3) {
-                    const markers = document.querySelectorAll('.map-marker[data-type]:not([data-type="incident"])');
-                    if (markers.length > 0) {
-                        const randomMarker = markers[Math.floor(Math.random() * markers.length)];
-                        const currentTop = parseFloat(randomMarker.style.top);
-                        const currentLeft = parseFloat(randomMarker.style.left);
-                        const newTop = Math.max(10, Math.min(90, currentTop + (Math.random() - 0.5) * 2));
-                        const newLeft = Math.max(10, Math.min(90, currentLeft + (Math.random() - 0.5) * 2));
-
-                        randomMarker.style.top = newTop + '%';
-                        randomMarker.style.left = newLeft + '%';
-                    }
-                }
-            }, 5000);
+    // Simulated live tracking
+    setInterval(() => {
+        Object.values(markers).forEach(item => {
+            if (item.type === "unit") {
+                const p = item.marker.getPosition();
+                item.marker.setPosition({
+                    lat: p.lat() + (Math.random() - 0.5) * 0.0005,
+                    lng: p.lng() + (Math.random() - 0.5) * 0.0005
+                });
+            }
         });
-    </script>
+    }, 5000);
+</script>
+
+<script
+  src="https://maps.googleapis.com/maps/api/js?key=AIzaSyBCn_BCioOMwFS7WrPZixaTnVSW7RFgKUw&libraries=places&callback=initMap"
+  async
+  defer>
+</script>
+
+
 </body>
 </html>

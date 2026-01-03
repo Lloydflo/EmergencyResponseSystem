@@ -1,8 +1,5 @@
 <?php
-/**
- * Emergency Dispatch Center - UI Only
- * Central command center for coordinating emergency responses
- */
+
 
 $pageTitle = 'Emergency Dispatch Center';
 ?>
@@ -36,8 +33,8 @@ $pageTitle = 'Emergency Dispatch Center';
     <div class="main-content">
         <div class="main-container">
 
-            <h1 style="font-size: 2rem; font-weight: 700; color: #333; margin-bottom: 2rem; display: flex; align-items: center;">
-                <i class="fas fa-tower-broadcast" style="margin-right: 0.5rem; color: #dc3545;"></i>
+            <h1 style="font-size: 2rem; font-weight: 700; color: #333; margin-bottom: 0rem; display: flex; align-items: center;;">
+                <i class="" style="margin-right: 2rem; color: #dc3545; margin-top: 9rem;"></i>
                 Emergency Dispatch Center
             </h1>
 
@@ -255,84 +252,45 @@ $pageTitle = 'Emergency Dispatch Center';
 
                     <div class="map-container">
                         <div class="map-placeholder">
-                            <i class="fas fa-map-marked-alt fa-3x" style="color: #dee2e6; margin-bottom: 1rem;"></i>
-                            <div>Interactive Map View</div>
-                            <small style="color: #999;">Real-time unit tracking & incident locations</small>
                         </div>
 
                         <!-- Simulated map markers -->
-                        <div class="map-marker" style="top: 30%; left: 40%;" title="Cardiac Arrest Incident" onclick="markerClick('Cardiac Arrest - Downtown Hospital')"></div>
-                        <div class="map-marker" style="top: 60%; left: 70%;" title="Traffic Accident" onclick="markerClick('Multi-Vehicle Accident - Highway 101')"></div>
-                        <div class="map-marker" style="top: 80%; left: 20%;" title="Suspicious Person" onclick="markerClick('Suspicious Person Report')"></div>
-                        <div class="map-marker" style="background: #28a745; top: 25%; left: 35%;" title="Ambulance #5" onclick="markerClick('Ambulance #5 - Available')"></div>
-                        <div class="map-marker" style="background: #17a2b8; top: 65%; left: 75%;" title="Police Unit #8" onclick="markerClick('Police Unit #8 - Available')"></div>
+                        <div class="map-viewport" id="map" style="width:100%; height:100%;"></div>
                     </div>
                 </div>
             </div>
 
-            <!-- Communication Panel -->
-            <div class="communication-panel">
-                <div class="panel-header">
-                    <h2 class="panel-title">
-                        <i class="fas fa-broadcast-tower"></i>
-                        Communication Center
-                    </h2>
-                </div>
-
-                <div class="comm-tabs">
-                    <button class="comm-tab active" onclick="switchCommTab('radio')">Radio</button>
-                    <button class="comm-tab" onclick="switchCommTab('phone')">Phone</button>
-                    <button class="comm-tab" onclick="switchCommTab('messages')">Messages</button>
-                </div>
-
-                <div id="radio" class="comm-content active">
-                    <div class="radio-interface">
-                        <div class="radio-display">
-                            <div>[14:32] Dispatch: Ambulance 5, respond to cardiac arrest at Downtown Hospital</div>
-                            <div>[14:31] Ambulance 5: Copy, en route ETA 6 minutes</div>
-                            <div>[14:28] Police Unit 8: Traffic accident cleared, returning to patrol</div>
-                            <div>[14:25] Dispatch: All units, be advised of possible severe weather</div>
-                        </div>
-                        <div class="radio-controls">
-                            <button class="radio-btn" onclick="radioCommand('all')">All Call</button>
-                            <button class="radio-btn" onclick="radioCommand('ambulance')">Ambulance</button>
-                            <button class="radio-btn" onclick="radioCommand('police')">Police</button>
-                            <button class="radio-btn" onclick="radioCommand('fire')">Fire</button>
-                            <button class="radio-btn active" onclick="radioCommand('push')">Push to Talk</button>
-                        </div>
+            <!-- AI-Powered Dispatch Recommendations -->
+            <div class="ai-recommendations-section">
+                <div class="ai-recommendations-card">
+                    <div class="ai-recommendations-header">
+                        <h2><i class="fas fa-brain"></i> AI Dispatch Recommendations</h2>
+                        <span class="ai-badge"><i class="fas fa-robot"></i> Powered by Gemini AI</span>
                     </div>
-                </div>
+                    <div class="ai-recommendations-content" id="ai-recommendations-content">
+                        <?php
+                        include 'includes/gemini_helper.php';
 
-                <div id="phone" class="comm-content">
-                    <div class="phone-interface">
-                        <div class="phone-display">
-                            <div class="phone-number">+1 (555) 123-4567</div>
-                            <div class="phone-status">Ready to dial</div>
-                        </div>
-                        <div class="phone-keypad">
-                            <button class="phone-key" onclick="dialDigit('1')">1</button>
-                            <button class="phone-key" onclick="dialDigit('2')">2</button>
-                            <button class="phone-key" onclick="dialDigit('3')">3</button>
-                            <button class="phone-key" onclick="dialDigit('4')">4</button>
-                            <button class="phone-key" onclick="dialDigit('5')">5</button>
-                            <button class="phone-key" onclick="dialDigit('6')">6</button>
-                            <button class="phone-key" onclick="dialDigit('7')">7</button>
-                            <button class="phone-key" onclick="dialDigit('8')">8</button>
-                            <button class="phone-key" onclick="dialDigit('9')">9</button>
-                            <button class="phone-key" onclick="dialDigit('*')">*</button>
-                            <button class="phone-key" onclick="dialDigit('0')">0</button>
-                            <button class="phone-key" onclick="dialDigit('#')">#</button>
-                            <button class="phone-key wide" onclick="makeCall()">Call</button>
-                            <button class="phone-key wide" onclick="endCall()">End</button>
-                        </div>
+                        // Sample dispatch data - replace with actual real-time data
+                        $dispatchData = [
+                            'active_incidents' => 3,
+                            'available_units' => 8,
+                            'pending_calls' => 2,
+                            'current_incident' => 'Cardiac Arrest - Downtown Hospital'
+                        ];
+
+                        $recommendations = getDispatchRecommendations($dispatchData);
+                        if ($recommendations) {
+                            echo '<div class="ai-recommendation-text">' . nl2br(htmlspecialchars($recommendations)) . '</div>';
+                        } else {
+                            echo '<div class="ai-error"><i class="fas fa-exclamation-triangle"></i> Unable to generate AI recommendations at this time.</div>';
+                        }
+                        ?>
                     </div>
-                </div>
-
-                <div id="messages" class="comm-content">
-                    <div style="padding: 1rem; text-align: center; color: #666;">
-                        <i class="fas fa-comments fa-3x" style="margin-bottom: 1rem;"></i>
-                        <div>Secure Messaging System</div>
-                        <small>Encrypted communication for sensitive information</small>
+                    <div class="ai-recommendations-actions">
+                        <button class="btn-ai-refresh" onclick="refreshAIRecommendations()">
+                            <i class="fas fa-sync"></i> Get Recommendations
+                        </button>
                     </div>
                 </div>
             </div>
@@ -344,6 +302,40 @@ $pageTitle = 'Emergency Dispatch Center';
     <?php /* include('includes/admin-footer.php') */ ?>
 
     <script>
+let markers = {};
+
+function initMap() {
+    map = new google.maps.Map(document.getElementById("map"), {
+        center: { lat: 14.5995, lng: 120.9842 },
+        zoom: 13
+    });
+
+    addMarker("ambulance-5", 14.6042, 120.9822, "Ambulance #5 - Available", "red");
+    addMarker("police-8", 14.5951, 120.9895, "Police Unit #8 - En Route", "blue");
+    addMarker("engine-12", 14.5902, 120.9751, "Engine #12 - Fire Emergency", "orange");
+}
+
+function addMarker(id, lat, lng, info, color) {
+    const marker = new google.maps.Marker({
+        position: { lat, lng },
+        map,
+        title: info,
+        icon: `https://maps.google.com/mapfiles/ms/icons/${color}-dot.png`
+    });
+
+    const infoWindow = new google.maps.InfoWindow({
+        content: `<strong>${info}</strong>`
+    });
+
+    marker.addListener("click", () => infoWindow.open(map, marker));
+    markers[id] = marker;
+}
+
+/* ===== EXISTING GPS CODE CONTINUES BELOW ===== */
+
+let activeLayers = ['units', 'incidents'];
+let selectedUnit = null;
+let tooltip = null;
         // Emergency Dispatch Center Functionality
 
         // Dispatch unit to incident
@@ -365,9 +357,6 @@ $pageTitle = 'Emergency Dispatch Center';
                     }
                 });
 
-                // Add to radio log
-                addRadioMessage(`Dispatch: ${unitName}, respond to ${callTitle.split(' - ')[0]}`);
-
                 showNotification(`${unitName} dispatched successfully`, 'success');
             }
         }
@@ -385,11 +374,9 @@ $pageTitle = 'Emergency Dispatch Center';
             if (newStatus === 'busy') {
                 button.innerHTML = '<i class="fas fa-stop"></i> Stand Down';
                 button.onclick = () => unitStatus(button, 'available');
-                addRadioMessage(`${unitName}: Responding to call`);
             } else {
                 button.innerHTML = '<i class="fas fa-play"></i> Deploy';
                 button.onclick = () => unitStatus(button, 'busy');
-                addRadioMessage(`${unitName}: Available for dispatch`);
             }
 
             showNotification(`Unit ${unitName} status: ${newStatus.toUpperCase()}`, 'info');
@@ -423,11 +410,6 @@ $pageTitle = 'Emergency Dispatch Center';
             const callerName = callCard.querySelector('.call-meta span:nth-child(2)').textContent;
 
             if (confirm(`Call ${callerName}?`)) {
-                // Switch to phone tab and set number
-                switchCommTab('phone');
-                document.querySelector('.phone-number').textContent = '+1 (555) 123-4567';
-                document.querySelector('.phone-status').textContent = `Calling ${callerName}`;
-
                 showNotification(`Calling ${callerName}...`, 'info');
             }
         }
@@ -448,92 +430,21 @@ $pageTitle = 'Emergency Dispatch Center';
             showNotification(`Selected: ${title}`, 'info');
         }
 
-        // Communication tabs
-        function switchCommTab(tabName) {
-            // Update tab buttons
-            document.querySelectorAll('.comm-tab').forEach(tab => {
-                tab.classList.remove('active');
-            });
-            event.target.classList.add('active');
-
-            // Update content
-            document.querySelectorAll('.comm-content').forEach(content => {
-                content.classList.remove('active');
-            });
-            document.getElementById(tabName).classList.add('active');
-        }
-
-        // Radio functions
-        function radioCommand(command) {
-            const buttons = document.querySelectorAll('.radio-btn');
-            buttons.forEach(btn => btn.classList.remove('active'));
-
-            if (command !== 'push') {
-                event.target.classList.add('active');
-            }
-
-            addRadioMessage(`Dispatch: ${command.toUpperCase()} units, attention please`);
-        }
-
-        function addRadioMessage(message) {
-            const display = document.querySelector('.radio-display');
-            const time = new Date().toLocaleTimeString('en-US', {hour12: false, hour: '2-digit', minute: '2-digit'});
-            const messageDiv = document.createElement('div');
-            messageDiv.textContent = `[${time}] ${message}`;
-            display.appendChild(messageDiv);
-            display.scrollTop = display.scrollHeight;
-        }
-
-        // Phone functions
-        let currentNumber = '';
-
-        function dialDigit(digit) {
-            currentNumber += digit;
-            document.querySelector('.phone-number').textContent = formatPhoneNumber(currentNumber);
-        }
-
-        function formatPhoneNumber(number) {
-            if (number.length <= 3) return number;
-            if (number.length <= 6) return `(${number.slice(0,3)}) ${number.slice(3)}`;
-            return `(${number.slice(0,3)}) ${number.slice(3,6)}-${number.slice(6)}`;
-        }
-
-        function makeCall() {
-            if (currentNumber.length > 0) {
-                document.querySelector('.phone-status').textContent = 'Calling...';
-                addRadioMessage(`Phone: Outgoing call to ${document.querySelector('.phone-number').textContent}`);
-                showNotification('Call initiated', 'success');
-            }
-        }
-
-        function endCall() {
-            document.querySelector('.phone-status').textContent = 'Call ended';
-            currentNumber = '';
-            document.querySelector('.phone-number').textContent = '+1 (555) 123-4567';
-
-            setTimeout(() => {
-                document.querySelector('.phone-status').textContent = 'Ready to dial';
-            }, 2000);
-        }
-
         // Quick action functions
         function emergencyBroadcast() {
             if (confirm('Initiate emergency broadcast to all units?')) {
-                addRadioMessage('EMERGENCY BROADCAST: All units, emergency situation declared');
                 showNotification('Emergency broadcast sent to all units', 'error');
             }
         }
 
         function lockdownProtocol() {
             if (confirm('Activate lockdown protocol for all facilities?')) {
-                addRadioMessage('LOCKDOWN PROTOCOL ACTIVATED: Secure all facilities immediately');
                 showNotification('Lockdown protocol activated', 'error');
             }
         }
 
         function massCasualty() {
             if (confirm('Initiate mass casualty response protocol?')) {
-                addRadioMessage('MASS CASUALTY RESPONSE: All available units respond immediately');
                 showNotification('Mass casualty response initiated', 'error');
             }
         }
@@ -541,7 +452,6 @@ $pageTitle = 'Emergency Dispatch Center';
         function resourceRequest() {
             const resource = prompt('What resources do you need?');
             if (resource) {
-                addRadioMessage(`RESOURCE REQUEST: ${resource} - requesting immediate assistance`);
                 showNotification(`Resource request sent: ${resource}`, 'info');
             }
         }
@@ -627,18 +537,14 @@ $pageTitle = 'Emergency Dispatch Center';
 
         // Initialize
         document.addEventListener('DOMContentLoaded', function() {
-            // Start radio simulation
-            setInterval(() => {
-                const messages = [
-                    'Unit check: All units report status',
-                    'Weather advisory: Heavy rain expected',
-                    'System check: All communications nominal'
-                ];
-                if (Math.random() < 0.3) {
-                    addRadioMessage(messages[Math.floor(Math.random() * messages.length)]);
-                }
-            }, 10000);
+            // Initialization complete
         });
     </script>
+
+    <script
+  src="https://maps.googleapis.com/maps/api/js?key=AIzaSyBCn_BCioOMwFS7WrPZixaTnVSW7RFgKUw&libraries=places&callback=initMap"
+  async
+  defer>
+</script>
 </body>
 </html>

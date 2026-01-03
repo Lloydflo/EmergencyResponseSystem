@@ -1,8 +1,5 @@
 <?php
-/**
- * Emergency Resources Status Management - UI Only
- * Comprehensive resource tracking and management system
- */
+
 
 $pageTitle = 'Resources Status Management';
 ?>
@@ -577,6 +574,41 @@ $pageTitle = 'Resources Status Management';
                         </button>
                         <button class="btn-resource" onclick="viewMaintenanceDetails(this)">
                             <i class="fas fa-eye"></i> Details
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- AI-Powered Predictive Analytics -->
+            <div class="ai-predictive-section">
+                <div class="ai-predictive-card">
+                    <div class="ai-predictive-header">
+                        <h2><i class="fas fa-brain"></i> AI Predictive Resource Analytics</h2>
+                        <span class="ai-badge"><i class="fas fa-robot"></i> Powered by Gemini AI</span>
+                    </div>
+                    <div class="ai-predictive-content" id="ai-predictive-content">
+                        <?php
+                        include 'includes/gemini_helper.php';
+
+                        // Sample historical data - replace with actual historical data
+                        $historicalData = [
+                            'weekly_incidents' => 45,
+                            'peak_hours' => '2PM-6PM',
+                            'common_types' => 'Medical emergencies, traffic accidents',
+                            'current_resources' => '24 vehicles, 156 personnel, 89 equipment items'
+                        ];
+
+                        $predictions = predictResourceNeeds($historicalData);
+                        if ($predictions) {
+                            echo '<div class="ai-predictive-text">' . nl2br(htmlspecialchars($predictions)) . '</div>';
+                        } else {
+                            echo '<div class="ai-error"><i class="fas fa-exclamation-triangle"></i> Unable to generate AI predictions at this time.</div>';
+                        }
+                        ?>
+                    </div>
+                    <div class="ai-predictive-actions">
+                        <button class="btn-ai-refresh" onclick="refreshAIPredictions()">
+                            <i class="fas fa-sync"></i> Generate Predictions
                         </button>
                     </div>
                 </div>

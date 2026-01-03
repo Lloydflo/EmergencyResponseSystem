@@ -1,8 +1,4 @@
 <?php
-/**
- * Emergency Call Receiving and Logging System - UI Only
- * User interface for emergency call logging
- */
 
 $pageTitle = 'Emergency Call Center';
 ?>

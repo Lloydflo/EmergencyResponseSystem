@@ -1,8 +1,5 @@
 <?php
-/**
- * Incident Priority Management System - UI Only
- * User interface for managing emergency incident priorities
- */
+
 
 $pageTitle = 'Incident Priority Management';
 ?>
@@ -283,6 +280,41 @@ $pageTitle = 'Incident Priority Management';
                         <button class="btn-action"><i class="fas fa-edit"></i> Update</button>
                         <button class="btn-action"><i class="fas fa-phone"></i> Contact</button>
                         <button class="btn-action"><i class="fas fa-check"></i> Resolve</button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- AI-Powered Incident Analysis -->
+            <div class="ai-analysis-section">
+                <div class="ai-analysis-card">
+                    <div class="ai-analysis-header">
+                        <h2><i class="fas fa-brain"></i> AI Incident Analysis</h2>
+                        <span class="ai-badge"><i class="fas fa-robot"></i> Powered by Gemini AI</span>
+                    </div>
+                    <div class="ai-analysis-content" id="ai-analysis-content">
+                        <?php
+                        include 'includes/gemini_helper.php';
+
+                        // Sample incident data - replace with actual incident data
+                        $incidentData = [
+                            'type' => 'Cardiac Arrest',
+                            'location' => 'Downtown Hospital',
+                            'description' => 'Patient experiencing cardiac arrest in emergency room',
+                            'severity' => 'Critical'
+                        ];
+
+                        $analysis = analyzeIncident($incidentData);
+                        if ($analysis) {
+                            echo '<div class="ai-analysis-text">' . nl2br(htmlspecialchars($analysis)) . '</div>';
+                        } else {
+                            echo '<div class="ai-error"><i class="fas fa-exclamation-triangle"></i> Unable to generate AI analysis at this time.</div>';
+                        }
+                        ?>
+                    </div>
+                    <div class="ai-analysis-actions">
+                        <button class="btn-ai-refresh" onclick="refreshAIAnalysis()">
+                            <i class="fas fa-sync"></i> Analyze Incidents
+                        </button>
                     </div>
                 </div>
             </div>

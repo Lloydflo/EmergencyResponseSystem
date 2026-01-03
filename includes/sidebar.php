@@ -29,7 +29,7 @@
             <div class="sidebar-section">
                 <ul class="sidebar-menu">
                     <li class="sidebar-menu-item">
-                        <a href="admin-dashboard.php" class="sidebar-link <?php echo basename($_SERVER['PHP_SELF']) == 'admin-dashboard.php' ? 'active' : ''; ?>">
+                        <a href="index.php" class="sidebar-link <?php echo basename($_SERVER['PHP_SELF']) == 'index.php' ? 'active' : ''; ?>">
                             <span>Dashboard</span>
                         </a>
                     </li>
@@ -56,6 +56,11 @@
                     <li class="sidebar-menu-item">
                         <a href="resources.php" class="sidebar-link <?php echo basename($_SERVER['PHP_SELF']) == 'resources.php' ? 'active' : ''; ?>">
                             <span>Resources Status</span>
+                        </a>
+                    </li>
+                    <li class="sidebar-menu-item">
+                        <a href="interagency.php" class="sidebar-link <?php echo basename($_SERVER['PHP_SELF']) == 'interagency.php' ? 'active' : ''; ?>">
+                            <span>Inter-Agency</span>
                         </a>
                     </li>
                     <li class="sidebar-menu-item">

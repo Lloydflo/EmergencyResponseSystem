@@ -1,8 +1,5 @@
 <?php
-/**
- * Emergency Response Analytics & Reporting - UI Only
- * Comprehensive analytics dashboard and reporting system
- */
+
 
 $pageTitle = 'Analytics & Reporting';
 ?>
@@ -152,6 +149,41 @@ $pageTitle = 'Analytics & Reporting';
                         </div>
                         <button class="btn-report primary" onclick="applyFilters()">
                             <i class="fas fa-search"></i> Apply Filters
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- AI-Powered Insights -->
+            <div class="ai-insights-section">
+                <div class="ai-insights-card">
+                    <div class="ai-insights-header">
+                        <h2><i class="fas fa-brain"></i> AI-Powered Insights</h2>
+                        <span class="ai-badge"><i class="fas fa-robot"></i> Powered by Gemini AI</span>
+                    </div>
+                    <div class="ai-insights-content" id="ai-insights-content">
+                        <?php
+                        include 'includes/gemini_helper.php';
+
+                        // Sample data - replace with actual data from your database
+                        $reportData = [
+                            'total_incidents' => 247,
+                            'avg_response_time' => '8.2 minutes',
+                            'resource_utilization' => '76%',
+                            'active_responders' => 12
+                        ];
+
+                        $insights = generateReportInsights($reportData);
+                        if ($insights) {
+                            echo '<div class="ai-insight-text">' . nl2br(htmlspecialchars($insights)) . '</div>';
+                        } else {
+                            echo '<div class="ai-error"><i class="fas fa-exclamation-triangle"></i> Unable to generate AI insights at this time.</div>';
+                        }
+                        ?>
+                    </div>
+                    <div class="ai-insights-actions">
+                        <button class="btn-ai-refresh" onclick="refreshAIInsights()">
+                            <i class="fas fa-sync"></i> Refresh Insights
                         </button>
                     </div>
                 </div>
