@@ -11,25 +11,29 @@ function saveOtpToDatabase($email, $otpCode, $expiryMinutes = 5) {
 }
 // Send OTP Email with HTML template
 function sendOtpEmail($to, $otpCode, $systemName = 'Emergency Response', $logoUrl = 'Email.png') {
+    // Load env/config for SMTP settings
+    require_once __DIR__ . '/config.php';
     require_once __DIR__ . '/../vendor/phpmailer/phpmailer/src/PHPMailer.php';
     require_once __DIR__ . '/../vendor/phpmailer/phpmailer/src/SMTP.php';
     require_once __DIR__ . '/../vendor/phpmailer/phpmailer/src/Exception.php';
 
     $mail = new PHPMailer\PHPMailer\PHPMailer();
     $mail->isSMTP();
-    $mail->Host = 'smtp.gmail.com'; // Palitan ng SMTP server
+    $mail->Host = getenv('SMTP_HOST') ?: 'smtp.gmail.com';
     $mail->SMTPAuth = true;
-    $mail->Username = 'emergencyresponseteam8@gmail.com'; // Palitan ng SMTP username
-    $mail->Password = 'gsyk kbtn vzhq ryuw'; // Palitan ng SMTP password
-    $mail->SMTPSecure = 'tls';
-    $mail->Port = 587;
+    $mail->Username = getenv('SMTP_USER') ?: '';
+    $mail->Password = getenv('SMTP_PASS') ?: '';
+    $mail->SMTPSecure = getenv('SMTP_SECURE') ?: 'tls';
+    $mail->Port = (int)(getenv('SMTP_PORT') ?: 587);
 
-    $mail->setFrom('no-reply@example.com', $systemName);
+    $fromEmail = getenv('SMTP_FROM_EMAIL') ?: 'no-reply@example.com';
+    $fromName = getenv('SMTP_FROM_NAME') ?: $systemName;
+    $mail->setFrom($fromEmail, $fromName);
     $mail->addAddress($to);
     $mail->isHTML(true);
     $mail->Subject = 'Your OTP Code';
 
-    $logoImg = $logoUrl ? '<img src="Email.png"' . htmlspecialchars($logoUrl) . '" alt="' . htmlspecialchars($systemName) . ' Logo" style="height:40px; margin-bottom:10px;" />' : '';
+    $logoImg = $logoUrl ? '<img src="' . htmlspecialchars($logoUrl) . '" alt="' . htmlspecialchars($systemName) . ' Logo" style="height:40px; margin-bottom:10px;" />' : '';
 
     $mail->Body = '
     <div style="font-family: Arial, sans-serif; max-width: 400px; margin: auto; border-radius: 8px; background: #fff; padding: 24px; border: 1px solid #eee;">
