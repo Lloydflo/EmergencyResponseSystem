@@ -9,7 +9,7 @@ if (!defined('GEMINI_API_URL')) define('GEMINI_API_URL', 'https://generativelang
 $rootDir = dirname(__DIR__);
 $envFile = $rootDir . DIRECTORY_SEPARATOR . '.env';
 if (is_file($envFile) && is_readable($envFile)) {
-	$lines = @file($envFile, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES);
+	$lines = file($envFile, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES);
 	if (is_array($lines)) {
 		foreach ($lines as $line) {
 			$trimmed = ltrim($line);
@@ -25,7 +25,7 @@ if (is_file($envFile) && is_readable($envFile)) {
 				if ($key !== '') {
 					$_ENV[$key] = $value;
 					$_SERVER[$key] = $value;
-					@putenv($key . '=' . $value);
+					putenv($key . '=' . $value);
 				}
 			}
 		}
@@ -51,11 +51,11 @@ $__env_with_default = function (string $key, $default, bool $allowEmpty = false)
 // Database configuration (supports environment overrides)
 // Set via environment variables or .env file on the server for production:
 // DB_HOST, DB_PORT (optional), DB_NAME, DB_USER, DB_PASS, DB_CHARSET (optional)
-if (!defined('DB_HOST')) define('DB_HOST', $__env_with_default('DB_HOST', 'localhost'));
-if (!defined('DB_PORT')) define('DB_PORT', $__env_with_default('DB_PORT', 3306));
-if (!defined('DB_NAME')) define('DB_NAME', $__env_with_default('DB_NAME', 'ers_db'));
-if (!defined('DB_USER')) define('DB_USER', $__env_with_default('DB_USER', 'root'));
+if (!defined('DB_HOST')) define('DB_HOST', $__env_with_default('DB_HOST', 'localhost', false));
+if (!defined('DB_PORT')) define('DB_PORT', $__env_with_default('DB_PORT', 3306, false));
+if (!defined('DB_NAME')) define('DB_NAME', $__env_with_default('DB_NAME', 'ers_db', false));
+if (!defined('DB_USER')) define('DB_USER', $__env_with_default('DB_USER', 'root', false));
 // Allow empty password if explicitly provided (e.g., local dev)
 if (!defined('DB_PASS')) define('DB_PASS', $__env_with_default('DB_PASS', '', true));
-if (!defined('DB_CHARSET')) define('DB_CHARSET', $__env_with_default('DB_CHARSET', 'utf8mb4'));
+if (!defined('DB_CHARSET')) define('DB_CHARSET', $__env_with_default('DB_CHARSET', 'utf8mb4', false));
 ?>
