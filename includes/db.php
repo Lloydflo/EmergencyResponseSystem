@@ -10,7 +10,22 @@ function get_db_connection(): ?PDO {
     if (!defined('DB_HOST') || !defined('DB_NAME')) {
         return null;
     }
-    $dsn = 'mysql:host=' . DB_HOST . ';dbname=' . DB_NAME . ';charset=' . DB_CHARSET;
+    $host = DB_HOST;
+    $portFromHost = null;
+    if (strpos($host, ':') !== false) {
+        $parts = explode(':', $host, 2);
+        $host = $parts[0];
+        if (isset($parts[1]) && ctype_digit($parts[1])) {
+            $portFromHost = $parts[1];
+        }
+    }
+
+    $dsn = 'mysql:host=' . $host;
+    $port = (defined('DB_PORT') && DB_PORT) ? DB_PORT : $portFromHost;
+    if ($port) {
+        $dsn .= ';port=' . $port;
+    }
+    $dsn .= ';dbname=' . DB_NAME . ';charset=' . DB_CHARSET;
     $options = [
         PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
         PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
