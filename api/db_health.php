@@ -24,7 +24,11 @@ try {
         $response['status'] = 'ok';
     } else {
         $response['status'] = 'failed';
-        $response['error'] = 'Connection object is null. Check credentials and server reachability.';
+        $response['error'] = isset($GLOBALS['DB_LAST_ERROR']) ? $GLOBALS['DB_LAST_ERROR'] : 'Connection object is null. Check credentials and server reachability.';
+        // Offer hints based on common causes
+        if (!extension_loaded('pdo_mysql')) {
+            $response['hint'] = 'Enable pdo_mysql in PHP configuration (php.ini).';
+        }
     }
 } catch (Throwable $e) {
     $response['status'] = 'failed';

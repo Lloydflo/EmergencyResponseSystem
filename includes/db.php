@@ -1,6 +1,11 @@
 <?php
 require_once __DIR__ . '/config.php';
 
+// Store last DB connection error for diagnostics (read-only)
+if (!isset($GLOBALS['DB_LAST_ERROR'])) {
+    $GLOBALS['DB_LAST_ERROR'] = null;
+}
+
 function get_db_connection(): ?PDO {
     static $pdo = null;
     if ($pdo instanceof PDO) {
@@ -8,6 +13,7 @@ function get_db_connection(): ?PDO {
     }
     // Return null if database constants are not defined (allows pages to load without DB)
     if (!defined('DB_HOST') || !defined('DB_NAME')) {
+        $GLOBALS['DB_LAST_ERROR'] = 'DB constants missing (DB_HOST/DB_NAME)';
         return null;
     }
     $host = DB_HOST;
@@ -32,10 +38,16 @@ function get_db_connection(): ?PDO {
         PDO::ATTR_EMULATE_PREPARES => false,
     ];
     try {
+        if (!extension_loaded('pdo_mysql')) {
+            $GLOBALS['DB_LAST_ERROR'] = 'pdo_mysql extension not loaded';
+            return null;
+        }
         $pdo = new PDO($dsn, DB_USER, DB_PASS, $options);
+        $GLOBALS['DB_LAST_ERROR'] = null;
         return $pdo;
     } catch (PDOException $e) {
         // Don't die - return null instead so pages can still load
+        $GLOBALS['DB_LAST_ERROR'] = $e->getMessage();
         error_log('Database connection failed: ' . $e->getMessage());
         return null;
     }
