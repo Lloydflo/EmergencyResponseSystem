@@ -1,13 +1,17 @@
--- File reorganized: moved auth and proofs under ers_db
--- ERS Unified Database Schema with FKs and Triggers
--- MySQL 8.0+ / InnoDB / utf8mb4
+-- Backup of ers_db.sql (created by Copilot on 2026-02-10)
 
-CREATE DATABASE IF NOT EXISTS `ers_db` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
-USE `ers_db`;
+-- Original contents below
 
--- =====================
--- Auth & Users
--- =====================
+-- Resolution proof storage
+CREATE TABLE IF NOT EXISTS `incident_proofs` (
+  `id` INT NOT NULL AUTO_INCREMENT,
+  `incident_id` INT NOT NULL,
+  `file_path` VARCHAR(255) NOT NULL,
+  `created_at` DATETIME DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  KEY `idx_incident_proofs_incident` (`incident_id`),
+  CONSTRAINT `fk_incident_proofs_incident` FOREIGN KEY (`incident_id`) REFERENCES `incidents`(`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 CREATE TABLE IF NOT EXISTS `users` (
   `id` INT UNSIGNED NOT NULL AUTO_INCREMENT,
   `email` VARCHAR(150) NOT NULL,
@@ -24,14 +28,31 @@ CREATE TABLE IF NOT EXISTS `users` (
   KEY `idx_users_role` (`role`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
-CREATE TABLE IF NOT EXISTS `otp_codes` (
-  `id` INT AUTO_INCREMENT PRIMARY KEY,
-  `email` VARCHAR(255) NOT NULL,
-  `otp_code` VARCHAR(10) NOT NULL,
-  `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  `expires_at` DATETIME NOT NULL,
-  `status` ENUM('active','used','expired') DEFAULT 'active'
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+
+-- Insert default admin account
+-- Email: admin@example.com
+-- Password: admin123
+-- NOTE: Run setup_admin.php to create the admin user with proper password hashing
+-- The password hash should be generated using PHP's password_hash() function
+-- Example: password_hash('admin123', PASSWORD_DEFAULT)
+-- =====================
+-- OTP Codes Table
+-- =====================
+CREATE TABLE IF NOT EXISTS otp_codes (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  email VARCHAR(255) NOT NULL,
+  otp_code VARCHAR(10) NOT NULL,
+  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  expires_at DATETIME NOT NULL,
+  status ENUM('active','used','expired') DEFAULT 'active'
+);
+-- ERS Unified Database Schema with FKs and Triggers
+-- MySQL 8.0+ / InnoDB / utf8mb4
+
+CREATE DATABASE IF NOT EXISTS `ers_db` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+USE `ers_db`;
+
 -- =====================
 -- Core: Calls & Incidents
 -- =====================
@@ -72,7 +93,6 @@ CREATE TABLE IF NOT EXISTS `incidents` (
   `reported_by_call_id` BIGINT UNSIGNED NULL,
   `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
   `updated_at` DATETIME NULL ON UPDATE CURRENT_TIMESTAMP,
-  `responded_at` DATETIME NULL,
   `resolved_at` DATETIME NULL,
   PRIMARY KEY (`id`),
   UNIQUE KEY `uk_incidents_reference_no` (`reference_no`),
@@ -80,7 +100,6 @@ CREATE TABLE IF NOT EXISTS `incidents` (
   KEY `idx_incidents_priority` (`priority`),
   KEY `idx_incidents_status` (`status`),
   KEY `idx_incidents_created_at` (`created_at`),
-  KEY `idx_incidents_responded_at` (`responded_at`),
   CONSTRAINT `fk_incidents_call`
     FOREIGN KEY (`reported_by_call_id`)
     REFERENCES `calls` (`id`)
@@ -101,19 +120,6 @@ CREATE TABLE IF NOT EXISTS `incident_notes` (
     REFERENCES `incidents` (`id`)
     ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
-
--- =====================
--- Resolution Proofs
--- =====================
-CREATE TABLE IF NOT EXISTS `incident_proofs` (
-  `id` BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
-  `incident_id` BIGINT UNSIGNED NOT NULL,
-  `file_path` VARCHAR(255) NOT NULL,
-  `created_at` DATETIME DEFAULT CURRENT_TIMESTAMP,
-  PRIMARY KEY (`id`),
-  KEY `idx_incident_proofs_incident` (`incident_id`),
-  CONSTRAINT `fk_incident_proofs_incident` FOREIGN KEY (`incident_id`) REFERENCES `incidents`(`id`) ON DELETE CASCADE
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 -- =====================
 -- Dispatch & Units
@@ -154,8 +160,6 @@ CREATE TABLE IF NOT EXISTS `dispatches` (
   KEY `idx_dispatches_incident_id` (`incident_id`),
   KEY `idx_dispatches_unit_id` (`unit_id`),
   KEY `idx_dispatches_status` (`status`),
-  KEY `idx_dispatches_assigned_at` (`assigned_at`),
-  KEY `idx_dispatches_on_scene_at` (`on_scene_at`),
   CONSTRAINT `fk_dispatches_incident`
     FOREIGN KEY (`incident_id`)
     REFERENCES `incidents` (`id`)
@@ -372,11 +376,6 @@ BEGIN
     UPDATE `units` SET `status` = 'on_scene', `last_status_at` = CURRENT_TIMESTAMP WHERE `id` = NEW.`unit_id`;
   ELSEIF NEW.`status` IN ('cleared','cancelled') THEN
     UPDATE `units` SET `status` = 'available', `current_incident_id` = NULL, `last_status_at` = CURRENT_TIMESTAMP WHERE `id` = NEW.`unit_id`;
-  END IF;
-
-  -- Set first response timestamp when status progresses beyond 'assigned'
-  IF NEW.`status` IN ('acknowledged','enroute','on_scene') THEN
-    UPDATE `incidents` SET `responded_at` = COALESCE(`responded_at`, CURRENT_TIMESTAMP) WHERE `id` = NEW.`incident_id`;
   END IF;
 
   IF NEW.`status` = 'cleared' THEN
