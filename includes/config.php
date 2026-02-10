@@ -17,7 +17,7 @@ if (!defined('APP_ENV')) define('APP_ENV', 'development');
 // Primary Database (localhost for development)
 if (!defined('DB_HOST')) define('DB_HOST', 'localhost');
 if (!defined('DB_PORT')) define('DB_PORT', 3000);
-if (!defined('DB_NAME')) define('DB_NAME', 'emergency_response_test');
+if (!defined('DB_NAME')) define('DB_NAME', 'ers_db');
 if (!defined('DB_USER')) define('DB_USER', 'root');
 if (!defined('DB_PASS')) define('DB_PASS', ''); // Empty for XAMPP default
 if (!defined('DB_CHARSET')) define('DB_CHARSET', 'utf8mb4');
@@ -25,7 +25,7 @@ if (!defined('DB_CHARSET')) define('DB_CHARSET', 'utf8mb4');
 // Fallback Database
 if (!defined('DB_FALLBACK_HOST')) define('DB_FALLBACK_HOST', '127.0.0.1');
 if (!defined('DB_FALLBACK_PORT')) define('DB_FALLBACK_PORT', 3000);
-if (!defined('DB_FALLBACK_NAME')) define('DB_FALLBACK_NAME', 'emergency_response_test');
+if (!defined('DB_FALLBACK_NAME')) define('DB_FALLBACK_NAME', 'ers_db');
 if (!defined('DB_FALLBACK_USER')) define('DB_FALLBACK_USER', 'root');
 if (!defined('DB_FALLBACK_PASS')) define('DB_FALLBACK_PASS', '');
 ?>
