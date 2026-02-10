@@ -307,6 +307,7 @@
 .chip.success { border-color: #28a745; color: #28a745; }
 .chip.warning { border-color: #ffc107; color: #ffc107; }
 .chip.info { border-color: #17a2b8; color: #17a2b8; }
+.chip.responder { border-color: #6f42c1; color: #6f42c1; }
 
 @media (max-width: 900px) {
 	.incident-summary .summary-row { grid-template-columns: repeat(2, 1fr); }

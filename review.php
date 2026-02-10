@@ -147,29 +147,8 @@ $pageTitle = 'Emergency Call Center';
             <section id="panelProof" class="tab-panel" role="tabpanel" aria-labelledby="tabProof" hidden>
                 <div class="proof-section">
                     <div class="section-header">
-                        <h4>Resolution Proof</h4>
-                        <p class="text-muted">Attach a photo or capture using your camera to document the resolution.</p>
-                    </div>
-                    <div class="proof-controls">
-                        <div class="control-group">
-                            <label class="control-label" for="proofFile">Upload Image</label>
-                            <input type="file" id="proofFile" accept="image/*" aria-label="Upload proof image" />
-                            <button type="button" id="uploadProofBtn" class="btn btn-primary" aria-label="Upload image"><i class="fa fa-upload"></i> Upload</button>
-                        </div>
-                        <div class="control-group">
-                            <label class="control-label">Camera Capture</label>
-                            <div class="camera-row">
-                                <video id="proofVideo" playsinline muted aria-label="Camera preview"></video>
-                                <canvas id="proofCanvas" hidden aria-label="Captured image preview"></canvas>
-                            </div>
-                            <div class="camera-actions">
-                                <button type="button" id="startCameraBtn" class="btn" aria-label="Start camera"><i class="fa fa-camera"></i> Start Camera</button>
-                                <button type="button" id="capturePhotoBtn" class="btn btn-primary" disabled aria-label="Capture photo"><i class="fa fa-dot-circle"></i> Capture</button>
-                                <button type="button" id="stopCameraBtn" class="btn btn-secondary" disabled aria-label="Stop camera"><i class="fa fa-stop"></i> Stop</button>
-                                <button type="button" id="saveCaptureBtn" class="btn btn-primary" hidden aria-label="Save captured image"><i class="fa fa-save"></i> Save Capture</button>
-                                <button type="button" id="discardCaptureBtn" class="btn btn-secondary" hidden aria-label="Discard capture">Discard</button>
-                            </div>
-                        </div>
+                        <h4>Resolution Proofs</h4>
+                        <p class="text-muted">Proof images are submitted by dispatched responders after the incident is resolved.</p>
                     </div>
                     <div class="proof-gallery">
                         <div class="gallery-header">

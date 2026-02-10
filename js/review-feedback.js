@@ -34,19 +34,9 @@
   const panelFeedback = qs('#panelFeedback');
   const panelProof = qs('#panelProof');
 
-  // Proof capture elements
-  const proofFile = qs('#proofFile');
-  const uploadProofBtn = qs('#uploadProofBtn');
-  const proofVideo = qs('#proofVideo');
-  const proofCanvas = qs('#proofCanvas');
-  const startCameraBtn = qs('#startCameraBtn');
-  const capturePhotoBtn = qs('#capturePhotoBtn');
-  const stopCameraBtn = qs('#stopCameraBtn');
-  const saveCaptureBtn = qs('#saveCaptureBtn');
-  const discardCaptureBtn = qs('#discardCaptureBtn');
   const proofGallery = qs('#proofGallery');
 
-  let mediaStream = null;
+  // No local capture/upload on review page; proofs come from responders.
 
   let currentItems = [];
 
@@ -180,12 +170,18 @@
         feedbackList.innerHTML = '<div class="feedback-item"><div class="meta">No feedback yet. Be the first to add one.</div></div>';
         return;
       }
-      feedbackList.innerHTML = notes.map(n => `
+      feedbackList.innerHTML = notes.map(n => {
+        const author = String(n.author_name || 'Anonymous');
+        const isResponder = author.toLowerCase().startsWith('responder:');
+          const authorHtml = isResponder
+            ? `<span class="chip responder">Responder</span> ${escapeHtml(author)}`
+          : escapeHtml(author);
+        return `
         <div class="feedback-item">
-          <div class="meta">${escapeHtml(n.author_name || 'Anonymous')} • ${formatDate(n.created_at)}</div>
+          <div class="meta">${authorHtml} • ${formatDate(n.created_at)}</div>
           <div class="text">${escapeHtml(n.note || '')}</div>
-        </div>
-      `).join('');
+        </div>`;
+      }).join('');
     } catch (e) {
       feedbackList.innerHTML = `<div class="feedback-item"><div class="meta">Error loading feedback: ${e.message}</div></div>`;
     }
@@ -242,7 +238,7 @@
       if (!data.ok) throw new Error(data.error || 'Failed to load');
       const items = data.items || [];
       if (!items.length){
-        proofGallery.innerHTML = '<div class="gallery-empty">No proofs yet.</div>';
+        proofGallery.innerHTML = '<div class="gallery-empty">No responder proofs yet.</div>';
         return;
       }
       proofGallery.innerHTML = items.map(p => `
@@ -255,117 +251,7 @@
       proofGallery.innerHTML = `<div class="gallery-empty">Error loading proofs: ${escapeHtml(e.message)}</div>`;
     }
   }
-
-  async function uploadProofFile(){
-    const incident_id = parseInt(feedbackIncidentId.value, 10);
-    const file = proofFile.files[0];
-    if (!incident_id) { alert('Missing incident id'); return; }
-    if (!file) { alert('Please choose an image to upload.'); return; }
-    uploadProofBtn.disabled = true; uploadProofBtn.classList.add('is-disabled');
-    const fd = new FormData();
-    fd.append('incident_id', String(incident_id));
-    fd.append('proof', file);
-    try {
-      const res = await fetch('api/incident_proof_upload.php', { method: 'POST', body: fd });
-      const data = await res.json();
-      if (!data.ok) throw new Error(data.error || 'Upload failed');
-      proofFile.value = '';
-      await loadProofs(incident_id);
-    } catch (e) {
-      alert('Failed to upload proof: ' + e.message);
-    } finally {
-      uploadProofBtn.disabled = false; uploadProofBtn.classList.remove('is-disabled');
-    }
-  }
-
-  async function startCamera(){
-    try {
-      if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia){
-        throw new Error('Camera not supported on this device/browser');
-      }
-      mediaStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' }, audio: false });
-      proofVideo.srcObject = mediaStream;
-      await proofVideo.play();
-      // Mirror the preview horizontally
-      proofVideo.style.transform = 'scaleX(-1)';
-      proofVideo.style.transformOrigin = 'center';
-      capturePhotoBtn.disabled = false;
-      stopCameraBtn.disabled = false;
-      startCameraBtn.disabled = true;
-      proofCanvas.hidden = true;
-      proofVideo.hidden = false;
-      saveCaptureBtn.hidden = true;
-      discardCaptureBtn.hidden = true;
-    } catch (e) {
-      alert('Camera access failed: ' + e.message);
-    }
-  }
-
-  function stopCamera(){
-    try {
-      if (mediaStream){ mediaStream.getTracks().forEach(t => t.stop()); }
-    } catch {}
-    mediaStream = null;
-    proofVideo.srcObject = null;
-    capturePhotoBtn.disabled = true;
-    stopCameraBtn.disabled = true;
-    startCameraBtn.disabled = false;
-  }
-
-  function capturePhoto(){
-    const vw = proofVideo.videoWidth;
-    const vh = proofVideo.videoHeight;
-    if (!vw || !vh){ alert('Camera not ready.'); return; }
-    proofCanvas.width = vw;
-    proofCanvas.height = vh;
-    const ctx = proofCanvas.getContext('2d');
-    // Draw mirrored image onto the canvas
-    ctx.save();
-    ctx.translate(vw, 0);
-    ctx.scale(-1, 1);
-    ctx.drawImage(proofVideo, 0, 0, vw, vh);
-    ctx.restore();
-    proofCanvas.hidden = false;
-    proofVideo.hidden = true;
-    saveCaptureBtn.hidden = false;
-    discardCaptureBtn.hidden = false;
-  }
-
-  async function saveCapture(){
-    const incident_id = parseInt(feedbackIncidentId.value, 10);
-    if (!incident_id){ alert('Missing incident id'); return; }
-    saveCaptureBtn.disabled = true; saveCaptureBtn.classList.add('is-disabled');
-    try {
-      const blob = await new Promise(resolve => proofCanvas.toBlob(resolve, 'image/jpeg', 0.95));
-      if (!blob) throw new Error('Failed to encode image');
-      const fd = new FormData();
-      fd.append('incident_id', String(incident_id));
-      fd.append('proof', new File([blob], 'capture.jpg', { type: 'image/jpeg' }));
-      const res = await fetch('api/incident_proof_upload.php', { method: 'POST', body: fd });
-      const data = await res.json();
-      if (!data.ok) throw new Error(data.error || 'Upload failed');
-      await loadProofs(incident_id);
-      discardCapture();
-    } catch (e) {
-      alert('Failed to save capture: ' + e.message);
-    } finally {
-      saveCaptureBtn.disabled = false; saveCaptureBtn.classList.remove('is-disabled');
-    }
-  }
-
-  function discardCapture(){
-    proofCanvas.hidden = true;
-    proofVideo.hidden = false;
-    saveCaptureBtn.hidden = true;
-    discardCaptureBtn.hidden = true;
-  }
-
-  uploadProofBtn?.addEventListener('click', uploadProofFile);
-  startCameraBtn?.addEventListener('click', startCamera);
-  stopCameraBtn?.addEventListener('click', stopCamera);
-  capturePhotoBtn?.addEventListener('click', capturePhoto);
-  saveCaptureBtn?.addEventListener('click', saveCapture);
-  discardCaptureBtn?.addEventListener('click', discardCapture);
+  // No upload or camera event bindings; review page is read-only for proofs.
 
   applyFiltersBtn.addEventListener('click', loadIncidents);
   // Auto-apply on filter changes and Enter in search
