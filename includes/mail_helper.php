@@ -10,26 +10,44 @@ function saveOtpToDatabase($email, $otpCode, $expiryMinutes = 5) {
     return $stmt->execute([$email, $otpCode, $expiresAt]);
 }
 // Send OTP Email with HTML template
-function sendOtpEmail($to, $otpCode, $systemName = 'Emergency Response', $logoUrl = 'Email.png') {
+function sendOtpEmail($to, $otpCode, $systemName = null, $logoUrl = 'Email.png') {
     require_once __DIR__ . '/../vendor/phpmailer/phpmailer/src/PHPMailer.php';
     require_once __DIR__ . '/../vendor/phpmailer/phpmailer/src/SMTP.php';
     require_once __DIR__ . '/../vendor/phpmailer/phpmailer/src/Exception.php';
 
+    // Load .env if exists
+    $envPath = dirname(__DIR__) . '/.env';
+    if (file_exists($envPath)) {
+        $lines = file($envPath, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES);
+        foreach ($lines as $line) {
+            if (strpos(trim($line), '#') === 0) continue;
+            if (!strpos($line, '=')) continue;
+            list($name, $value) = explode('=', $line, 2);
+            $name = trim($name);
+            $value = trim($value);
+            if (!isset($_ENV[$name])) {
+                $_ENV[$name] = $value;
+            }
+        }
+    }
+
     $mail = new PHPMailer\PHPMailer\PHPMailer();
     $mail->isSMTP();
-    $mail->Host = 'smtp.gmail.com'; // Palitan ng SMTP server
+    $mail->Host = $_ENV['MAIL_HOST'] ?? 'localhost';
     $mail->SMTPAuth = true;
-    $mail->Username = 'emergencyresponseteam8@gmail.com'; // Palitan ng SMTP username
-    $mail->Password = 'gsyk kbtn vzhq ryuw'; // Palitan ng SMTP password
-    $mail->SMTPSecure = 'tls';
-    $mail->Port = 587;
+    $mail->Username = $_ENV['MAIL_USERNAME'] ?? '';
+    $mail->Password = $_ENV['MAIL_PASSWORD'] ?? '';
+    $mail->SMTPSecure = $_ENV['MAIL_ENCRYPTION'] ?? 'tls';
+    $mail->Port = isset($_ENV['MAIL_PORT']) ? (int)$_ENV['MAIL_PORT'] : 587;
 
-    $mail->setFrom('no-reply@example.com', $systemName);
+    $fromAddress = $_ENV['MAIL_FROM_ADDRESS'] ?? 'no-reply@example.com';
+    $fromName = $systemName ?? ($_ENV['MAIL_FROM_NAME'] ?? 'System');
+    $mail->setFrom($fromAddress, $fromName);
     $mail->addAddress($to);
     $mail->isHTML(true);
     $mail->Subject = 'Your OTP Code';
 
-    $logoImg = $logoUrl ? '<img src="Email.png"' . htmlspecialchars($logoUrl) . '" alt="' . htmlspecialchars($systemName) . ' Logo" style="height:40px; margin-bottom:10px;" />' : '';
+    $logoImg = $logoUrl ? '<img src="Email.png"' . htmlspecialchars($logoUrl) . '" alt="' . htmlspecialchars($fromName) . ' Logo" style="height:40px; margin-bottom:10px;" />' : '';
 
     $mail->Body = '
     <div style="font-family: Arial, sans-serif; max-width: 400px; margin: auto; border-radius: 8px; background: #fff; padding: 24px; border: 1px solid #eee;">
@@ -46,8 +64,8 @@ function sendOtpEmail($to, $otpCode, $systemName = 'Emergency Response', $logoUr
         </div>
         <p style="margin: 0 0 12px 0;">⏳ This code will expire in <b>3 minutes</b> for your security.</p>
         <p style="margin: 0 0 12px 0;">If you did not request this OTP, please ignore this email. If you need further assistance, feel free to contact our support team.</p>
-        <p>Thank you for using ' . htmlspecialchars($systemName) . '!</p>
-        <div style="text-align:center; color:#bbb; font-size:12px; margin-top:24px;">© ' . date('Y') . ' ' . htmlspecialchars($systemName) . '</div>
+        <p>Thank you for using ' . htmlspecialchars($fromName) . '!</p>
+        <div style="text-align:center; color:#bbb; font-size:12px; margin-top:24px;">© ' . date('Y') . ' ' . htmlspecialchars($fromName) . '</div>
     </div>';
 
     return $mail->send();
