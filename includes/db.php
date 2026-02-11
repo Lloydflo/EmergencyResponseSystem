@@ -6,22 +6,35 @@ function get_db_connection(): ?PDO {
     if ($pdo instanceof PDO) {
         return $pdo;
     }
-    // Return null if database constants are not defined (allows pages to load without DB)
-    if (!defined('DB_HOST') || !defined('DB_NAME')) {
+    // Get DB config array from config.php
+    $config = require __DIR__ . '/config.php';
+    if (!isset($config['DB_HOST'], $config['DB_NAME'], $config['DB_USER'], $config['DB_PASS'])) {
         return null;
     }
-    $dsn = 'mysql:host=' . DB_HOST . ';dbname=' . DB_NAME . ';charset=' . DB_CHARSET;
+    $dsn = 'mysql:host=' . $config['DB_HOST'] . ';dbname=' . $config['DB_NAME'] . ';charset=utf8mb4';
     $options = [
         PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
         PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
         PDO::ATTR_EMULATE_PREPARES => false,
     ];
     try {
-        $pdo = new PDO($dsn, DB_USER, DB_PASS, $options);
+        $pdo = new PDO($dsn, $config['DB_USER'], $config['DB_PASS'], $options);
         return $pdo;
     } catch (PDOException $e) {
-        // Don't die - return null instead so pages can still load
         error_log('Database connection failed: ' . $e->getMessage());
         return null;
     }
 }
+
+function fetch_all_from_table($table) {
+    $pdo = get_db_connection();
+    if (!$pdo) return [];
+    $stmt = $pdo->prepare("SELECT * FROM `" . $table . "`");
+    $stmt->execute();
+    return $stmt->fetchAll();
+}
+
+// Usage example (for testing):
+// $rows = fetch_all_from_table('your_table_name');
+// print_r($rows);
+?>

@@ -418,12 +418,17 @@ try {
                 return R * c;
             }
                         document.getElementById('confirm-dispatch-btn').onclick = function() {
+                            const btn = document.getElementById('confirm-dispatch-btn');
+                            btn.disabled = true;
+                            btn.textContent = 'Dispatching...';
                             const unitSelect = document.getElementById('unit-select');
                             const unitId = unitSelect.value;
                             const selectedOption = unitSelect.options[unitSelect.selectedIndex];
                             const unitIdentifier = selectedOption ? selectedOption.getAttribute('data-identifier') : '';
                             if (!unitId || !currentIncidentId) {
                                 alert('Please select a unit.');
+                                btn.disabled = false;
+                                btn.textContent = 'Confirm Dispatch';
                                 return;
                             }
                             // If sample unit, just redirect to GPS with static coordinates
@@ -525,8 +530,14 @@ try {
                                     window.location.href = 'gps.php?' + qp.toString();
                                 } else {
                                     alert('Failed to dispatch unit: ' + (data.error || 'Unknown error'));
+                                    btn.disabled = false;
+                                    btn.textContent = 'Confirm Dispatch';
                                 }
-                            }).catch(() => alert('Network error.'));
+                            }).catch(() => {
+                                alert('Network error.');
+                                btn.disabled = false;
+                                btn.textContent = 'Confirm Dispatch';
+                            });
                         };
         });
         </script>

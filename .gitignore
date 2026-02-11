@@ -4,6 +4,7 @@
 # Environment & config
 .env
 config.php
+db.config.php
 
 # Logs & cache
 *.log

@@ -216,6 +216,11 @@ function loadIncidentMarkers() {
         const toLat = parseFloat(params.get('to_lat'));
         const toLng = parseFloat(params.get('to_lng'));
         if (!isNaN(fromLat) && !isNaN(fromLng) && !isNaN(toLat) && !isNaN(toLng)) {
+            // Remove any existing route before plotting new one
+            if (window.currentRoutingControl && typeof window.currentRoutingControl.remove === 'function') {
+                try { window.currentRoutingControl.remove(); } catch (e) {}
+                window.currentRoutingControl = null;
+            }
             if (typeof addRouteToIncident === 'function') {
                 addRouteToIncident(fromLat, fromLng, toLat, toLng);
                 showNotification('Route loaded for dispatched unit', 'success');
