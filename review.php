@@ -17,10 +17,10 @@ $pageTitle = 'Emergency Call Center';
     <link rel="stylesheet" href="css/sidebar.css">
     <link rel="stylesheet" href="css/admin-header.css">
     <link rel="stylesheet" href="css/sidebar-footer.css">
-    <link rel="stylesheet" href="CSS/cards.css">
-    <link rel="stylesheet" href="CSS/call.css">
-    <link rel="stylesheet" href="CSS/dashboard.css">
-    <link rel="stylesheet" href="CSS/review.css">
+    <link rel="stylesheet" href="css/cards.css">
+    <link rel="stylesheet" href="css/call.css">
+    <link rel="stylesheet" href="css/dashboard.css">
+    <link rel="stylesheet" href="css/review.css">
 </head>
 <body>
     <?php include 'includes/sidebar.php'; ?>
