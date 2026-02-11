@@ -18,8 +18,8 @@ $pageTitle = 'Emergency Call Center';
     <link rel="stylesheet" href="css/sidebar.css">
     <link rel="stylesheet" href="css/admin-header.css">
     <link rel="stylesheet" href="css/sidebar-footer.css">
-    <link rel="stylesheet" href="CSS/cards.css">
-    <link rel="stylesheet" href="CSS/call.css">
+    <link rel="stylesheet" href="css/cards.css">
+    <link rel="stylesheet" href="css/call.css">
     <script src="js/place-autocomplete.js"></script>
 </head>
 <body>

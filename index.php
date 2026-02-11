@@ -77,8 +77,8 @@ try {
     <link rel="stylesheet" href="css/sidebar.css">
     <link rel="stylesheet" href="css/admin-header.css">
     <link rel="stylesheet" href="css/sidebar-footer.css">
-    <link rel="stylesheet" href="CSS/cards.css">
-    <link rel="stylesheet" href="CSS/dashboard.css">
+    <link rel="stylesheet" href="css/cards.css">
+    <link rel="stylesheet" href="css/dashboard.css">
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
 </head>
 <body>

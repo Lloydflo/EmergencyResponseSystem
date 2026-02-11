@@ -54,7 +54,7 @@ try {
     <link rel="stylesheet" href="css/sidebar.css">
     <link rel="stylesheet" href="css/admin-header.css">
     <link rel="stylesheet" href="css/sidebar-footer.css">
-    <link rel="stylesheet" href="CSS/cards.css">
+    <link rel="stylesheet" href="css/cards.css">
     <link rel="stylesheet" href="css/dispatch.css">
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
     <link rel="stylesheet" href="https://unpkg.com/leaflet-routing-machine@latest/dist/leaflet-routing-machine.css"/>

@@ -69,10 +69,10 @@ if ($user_id && $pdo) {
     ?>
 </div>
 
-<link rel="stylesheet" href="CSS/account-settings.css">
+<link rel="stylesheet" href="css/account-settings.css">
 <link rel="stylesheet" href="css/global.css">
-<link rel="stylesheet" href="CSS/sidebar.css">
-<link rel="stylesheet" href="CSS/admin-header.css">
+<link rel="stylesheet" href="css/sidebar.css">
+<link rel="stylesheet" href="css/admin-header.css">
 <style>
 .account-info {
     margin-top: 32px;
