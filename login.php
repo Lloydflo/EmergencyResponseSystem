@@ -1,6 +1,16 @@
-
 <?php
+// DEBUG: Enable error reporting for troubleshooting on remote server
+ini_set('display_errors', 1);
+ini_set('display_startup_errors', 1);
+error_reporting(E_ALL);
+
+function debug_log($msg) {
+    file_put_contents(__DIR__ . '/debug_login.log', date('Y-m-d H:i:s') . ' ' . $msg . "\n", FILE_APPEND);
+}
+debug_log('--- LOGIN.PHP START ---');
+
 require_once __DIR__ . '/includes/auth.php';
+debug_log('auth.php loaded');
 
 $pageTitle = 'Admin Login';
 $error_message = '';
@@ -8,6 +18,7 @@ $success_message = '';
 
 // If already logged in, redirect to index
 if (is_logged_in()) {
+    debug_log('Already logged in, redirecting to index');
     header('Location: index.php');
     exit;
 }
@@ -18,26 +29,32 @@ if (isset($_GET['logged_out']) && $_GET['logged_out'] == '1') {
 }
 // Handle login form submission
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    debug_log('POST request received');
     $email = trim($_POST['email'] ?? '');
     $password = $_POST['password'] ?? '';
-    
+    debug_log('Email: ' . $email);
     if (empty($email) || empty($password)) {
         $error_message = 'Please enter both email and password.';
+        debug_log('Missing email or password');
     } else {
         $result = login_user($email, $password);
+        debug_log('login_user result: ' . json_encode($result));
         if ($result['success']) {
-            // OTP step: generate, save to DB, and send OTP email, then redirect to OTP page
             require_once __DIR__ . '/includes/mail_helper.php';
             $otp = rand(100000, 999999);
             $_SESSION['otp'] = $otp;
             $_SESSION['otp_email'] = $email;
             $_SESSION['otp_expiry'] = time() + 180; // 3 minutes
             saveOtpToDatabase($email, $otp, 3);
+            debug_log('OTP generated and saved');
             sendOtpEmail($email, $otp);
+            debug_log('OTP email sent (or attempted)');
             header('Location: otp.php');
+            debug_log('Redirecting to otp.php');
             exit;
         } else {
             $error_message = $result['message'];
+            debug_log('Login failed: ' . $error_message);
         }
     }
 }
