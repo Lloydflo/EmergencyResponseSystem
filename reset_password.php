@@ -4,6 +4,20 @@ require_once __DIR__ . '/includes/db.php';
 
 $token = $_GET['token'] ?? '';
 $email = $_GET['email'] ?? '';
+$valid_token = false;
+$pdo = get_db_connection();
+if ($pdo && $token && $email) {
+    $stmt = $pdo->prepare('SELECT * FROM password_resets WHERE email = ? AND token = ? AND expires_at > NOW()');
+    $stmt->execute([$email, $token]);
+    $reset = $stmt->fetch();
+    if ($reset) {
+        $valid_token = true;
+    } else {
+        $error = 'Invalid or expired password reset link.';
+    }
+} elseif (!$token || !$email) {
+    $error = 'Invalid password reset link.';
+}
 $error = '';
 $success = '';
 
@@ -12,26 +26,37 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $token = $_POST['token'] ?? '';
     $new_password = $_POST['new_password'] ?? '';
     $confirm_password = $_POST['confirm_password'] ?? '';
-
-    if (empty($new_password) || empty($confirm_password)) {
-        $error = 'Please fill in all fields.';
-    } elseif ($new_password !== $confirm_password) {
-        $error = 'Passwords do not match.';
-    } elseif (strlen($new_password) < 6) {
-        $error = 'Password must be at least 6 characters.';
+    $pdo = get_db_connection();
+    $valid_token = false;
+    if ($pdo && $token && $email) {
+        $stmt = $pdo->prepare('SELECT * FROM password_resets WHERE email = ? AND token = ? AND expires_at > NOW()');
+        $stmt->execute([$email, $token]);
+        $reset = $stmt->fetch();
+        if ($reset) {
+            $valid_token = true;
+        } else {
+            $error = 'Invalid or expired password reset link.';
+        }
     } else {
-        $pdo = get_db_connection();
-        if ($pdo) {
-            // For demo, skip token validation. In production, validate token expiry and match.
+        $error = 'Invalid password reset link.';
+    }
+    if ($valid_token) {
+        if (empty($new_password) || empty($confirm_password)) {
+            $error = 'Please fill in all fields.';
+        } elseif ($new_password !== $confirm_password) {
+            $error = 'Passwords do not match.';
+        } elseif (strlen($new_password) < 6) {
+            $error = 'Password must be at least 6 characters.';
+        } else {
             $hashed = password_hash($new_password, PASSWORD_DEFAULT);
             $stmt = $pdo->prepare('UPDATE users SET password = ? WHERE email = ?');
             if ($stmt->execute([$hashed, $email])) {
+                // Delete used token
+                $pdo->prepare('DELETE FROM password_resets WHERE email = ?')->execute([$email]);
                 $success = 'Password has been updated. You may now <a href="login.php">login</a>.';
             } else {
                 $error = 'Failed to update password.';
             }
-        } else {
-            $error = 'Database connection error.';
         }
     }
 }
@@ -57,7 +82,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             <?php if (!empty($success)): ?>
                 <div class="login-success-message"> <?php echo $success; ?> </div>
             <?php endif; ?>
-            <?php if (empty($success)): ?>
+            <?php if (empty($success) && $valid_token): ?>
             <form method="post">
                 <input type="hidden" name="email" value="<?php echo htmlspecialchars($email); ?>">
                 <input type="hidden" name="token" value="<?php echo htmlspecialchars($token); ?>">
