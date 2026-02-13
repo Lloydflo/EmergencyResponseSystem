@@ -68,7 +68,11 @@ function sendOtpEmail($to, $otpCode, $systemName = null, $logoUrl = 'Email.png')
         <div style="text-align:center; color:#bbb; font-size:12px; margin-top:24px;">© ' . date('Y') . ' ' . htmlspecialchars($fromName) . '</div>
     </div>';
 
-    return $mail->send();
+    if (!$mail->send()) {
+        error_log('Mailer Error: ' . $mail->ErrorInfo . "\n", 3, __DIR__ . '/../mailer_error.log');
+        return false;
+    }
+    return true;
 }
 // PHPMailer-based mail sender for OTP and notifications
 
