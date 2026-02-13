@@ -1,4 +1,5 @@
-<?php
+
+pwe<?php
 require_once __DIR__ . '/includes/auth.php';
 
 $pageTitle = 'Admin Login';
@@ -15,7 +16,6 @@ if (is_logged_in()) {
 if (isset($_GET['logged_out']) && $_GET['logged_out'] == '1') {
     $success_message = 'You have been successfully logged out.';
 }
-
 // Handle login form submission
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $email = trim($_POST['email'] ?? '');
@@ -158,11 +158,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
                 <!-- Remember Me & Forgot Password -->
                 <div class="form-options">
-                    <label class="checkbox-label">
-                        <input type="checkbox" name="remember" id="remember" class="checkbox-input">
-                        <span class="checkbox-text">Remember me</span>
-                    </label>
-                    <a href="#" class="forgot-password">Forgot Password?</a>
+                    <a href="forgot_password.php" class="forgot-password">Forgot Password?</a>
                 </div>
 
                 <!-- Sign In Button -->
