@@ -33,13 +33,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $_SESSION['otp_email'] = $email;
             $_SESSION['otp_expiry'] = time() + 180; // 3 minutes
             saveOtpToDatabase($email, $otp, 3);
-            $mailSent = sendOtpEmail($email, $otp);
-            if ($mailSent) {
-                header('Location: otp.php');
-                exit;
-            } else {
-                $error_message = 'Failed to send OTP email. Please contact admin or try again later.';
-            }
+            sendOtpEmail($email, $otp);
+            header('Location: otp.php');
+            exit;
         } else {
             $error_message = $result['message'];
         }
