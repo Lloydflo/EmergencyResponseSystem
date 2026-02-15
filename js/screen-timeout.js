@@ -1,10 +1,10 @@
 // screen-timeout.js
-// Adds a screen timeout overlay and warning after 5 minutes of inactivity
+// Adds a screen timeout overlay and warning after 10 minutes of inactivity
 
 
 console.log("Screen timeout loaded");
 document.addEventListener('DOMContentLoaded', function() {
-    const TIMEOUT = 30 * 1000; // 30 seconds in milliseconds
+    const TIMEOUT = 10 * 60 * 1000; // 10 minutes in milliseconds
     let timeoutId;
     let overlay = null;
     let warning = null;
@@ -42,7 +42,7 @@ document.addEventListener('DOMContentLoaded', function() {
             warning.style.boxShadow = '0 2px 16px rgba(0,0,0,0.2)';
             warning.style.fontSize = '1.3rem';
             warning.style.fontWeight = 'bold';
-            warning.innerText = 'You have been inactive for 30 seconds. Move your mouse or press any key to continue.';
+            warning.innerText = 'You have been inactive for 10 minutes. Move your mouse or press any key to continue.';
             overlay.appendChild(warning);
         }
     }

@@ -96,6 +96,16 @@ $pageTitle = 'Emergency Call Center';
                     </div>
                 </div>
                 <div class="summary-row">
+                    <div>
+                        <div class="summary-label"><i class="fa fa-clock"></i> Dispatch Time</div>
+                        <div id="summaryDispatchTime" class="summary-value">—</div>
+                    </div>
+                    <div>
+                        <div class="summary-label"><i class="fa fa-hourglass-end"></i> Resolve Time</div>
+                        <div id="summaryResolveTime" class="summary-value">—</div>
+                    </div>
+                </div>
+                <div class="summary-row">
                     <div class="summary-col">
                         <div class="summary-label"><i class="fa fa-location-dot"></i> Location</div>
                         <div id="summaryLocation" class="summary-value">—</div>
@@ -120,27 +130,12 @@ $pageTitle = 'Emergency Call Center';
 
             <section id="panelFeedback" class="tab-panel" role="tabpanel" aria-labelledby="tabFeedback">
                 <div class="feedback-section">
-                    <h4>Feedback Notes</h4>
+                    <h4>Responder Feedback</h4>
                     <div id="feedbackList" class="feedback-list" aria-live="polite"></div>
                 </div>
-
-                <div class="feedback-form">
-                    <h4>Add Feedback</h4>
-                    <form id="feedbackForm" aria-label="Add feedback form">
-                        <input type="hidden" id="feedbackIncidentId" />
-                        <div class="form-field">
-                            <label for="authorInput">Your name</label>
-                            <input type="text" id="authorInput" placeholder="Anonymous" />
-                        </div>
-                        <div class="form-field">
-                            <label for="noteInput">Feedback note <span class="required" aria-hidden="true">*</span></label>
-                            <textarea id="noteInput" rows="4" placeholder="Any specific observations, suggested improvements, or commendations..." aria-required="true"></textarea>
-                        </div>
-                        <div class="form-actions">
-                            <button type="submit" class="btn btn-success"><i class="fa fa-paper-plane"></i> Submit Feedback</button>
-                            <button type="button" id="cancelFeedbackBtn" class="btn btn-secondary">Close</button>
-                        </div>
-                    </form>
+                <div class="form-actions">
+                    <button type="button" id="cancelFeedbackBtn" class="btn btn-secondary">Close</button>
+                    <button type="button" id="confirmReviewBtn" class="btn btn-success"><i class="fa fa-check"></i> Confirm</button>
                 </div>
             </section>
 
@@ -148,28 +143,10 @@ $pageTitle = 'Emergency Call Center';
                 <div class="proof-section">
                     <div class="section-header">
                         <h4>Resolution Proof</h4>
-                        <p class="text-muted">Attach a photo or capture using your camera to document the resolution.</p>
+                        <p class="text-muted">Below are the images sent by responders as proof of resolution.</p>
                     </div>
-                    <div class="proof-controls">
-                        <div class="control-group">
-                            <label class="control-label" for="proofFile">Upload Image</label>
-                            <input type="file" id="proofFile" accept="image/*" aria-label="Upload proof image" />
-                            <button type="button" id="uploadProofBtn" class="btn btn-primary" aria-label="Upload image"><i class="fa fa-upload"></i> Upload</button>
-                        </div>
-                        <div class="control-group">
-                            <label class="control-label">Camera Capture</label>
-                            <div class="camera-row">
-                                <video id="proofVideo" playsinline muted aria-label="Camera preview"></video>
-                                <canvas id="proofCanvas" hidden aria-label="Captured image preview"></canvas>
-                            </div>
-                            <div class="camera-actions">
-                                <button type="button" id="startCameraBtn" class="btn" aria-label="Start camera"><i class="fa fa-camera"></i> Start Camera</button>
-                                <button type="button" id="capturePhotoBtn" class="btn btn-primary" disabled aria-label="Capture photo"><i class="fa fa-dot-circle"></i> Capture</button>
-                                <button type="button" id="stopCameraBtn" class="btn btn-secondary" disabled aria-label="Stop camera"><i class="fa fa-stop"></i> Stop</button>
-                                <button type="button" id="saveCaptureBtn" class="btn btn-primary" hidden aria-label="Save captured image"><i class="fa fa-save"></i> Save Capture</button>
-                                <button type="button" id="discardCaptureBtn" class="btn btn-secondary" hidden aria-label="Discard capture">Discard</button>
-                            </div>
-                        </div>
+                    <div class="proof-controls" style="border: 2px dashed #28a745; border-radius: 12px; padding: 1rem; margin-bottom: 1rem;">
+                        <!-- No upload/camera controls, only gallery below -->
                     </div>
                     <div class="proof-gallery">
                         <div class="gallery-header">

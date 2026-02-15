@@ -1,3 +1,4 @@
+// ===============================
 <?php
 require_once __DIR__ . '/includes/auth.php';
 // Require full login (including OTP verification) before loading page
@@ -102,8 +103,8 @@ try {
             </div>
 
             <!-- Main Dispatch Grid -->
+
             <div class="dispatch-grid">
-                <!-- Active Calls Panel -->
                 <div class="dispatch-panel">
                     <div class="panel-header">
                         <h2 class="panel-title">
@@ -112,57 +113,12 @@ try {
                         </h2>
                         <span style="background: #dc3545; color: white; padding: 0.25rem 0.75rem; border-radius: 20px; font-size: 0.8rem; font-weight: 600;"><?php echo $activeIncidents; ?> Active</span>
                     </div>
-
                     <div id="active-calls-container" style="height: calc(100vh - 320px); overflow-y: auto; padding-right: 4px;">
                     <?php
-                    // Fetch all active incidents (pending/dispatched)
-                    $incidents = [];
-                    if ($pdo) {
-                        $stmt = $pdo->query("SELECT i.*, c.caller_name, c.caller_phone, c.priority AS call_priority, c.received_at FROM incidents i LEFT JOIN calls c ON c.id = i.reported_by_call_id WHERE i.status IN ('pending','dispatched') ORDER BY i.created_at DESC LIMIT 30");
-                        $incidents = $stmt->fetchAll();
-                    }
-                    if ($incidents) {
-                        foreach ($incidents as $incident) {
-                            // Priority class
-                            $prio = strtolower($incident['priority'] ?? 'medium');
-                            $prioClass = $prio === 'high' ? 'high' : ($prio === 'low' ? 'low' : 'medium');
-                            // Time ago
-                            $created = strtotime($incident['created_at']);
-                            $minsAgo = floor((time() - $created) / 60);
-                            $timeAgo = $minsAgo < 1 ? 'Just now' : ($minsAgo . ' min ago');
-                            // Caller
-                            $caller = $incident['caller_name'] ?: 'Unknown';
-                            $phone = $incident['caller_phone'] ?: '';
-                            $title = $incident['title'] ?: $incident['type'];
-                            echo '<div class="call-card ' . $prioClass . '">';
-                            echo '  <div class="call-info">';
-                            echo '    <div class="call-details">';
-                            echo '      <div class="call-title">' . htmlspecialchars($title) . '</div>';
-                            echo '      <div class="call-meta">';
-                            echo '        <span><i class="fas fa-clock"></i> ' . htmlspecialchars($timeAgo) . '</span>';
-                            echo '        <span><i class="fas fa-user"></i> ' . htmlspecialchars($caller) . '</span>';
-                            echo '        <span class="status-indicator status-' . $prioClass . '"></span> ' . ucfirst($prio) . ' Priority';
-                            echo '      </div>';
-                            echo '    </div>';
-                            echo '  </div>';
-                            echo '  <div class="call-actions">';
-                                echo '    <button class="btn-dispatch" onclick="openDispatchModal(' . (int)$incident['id'] . ')">Dispatch Unit</button>';
-                                echo '    <button class="btn-action-small" onclick="viewDetails(this)" data-incident-id="' . (int)$incident['id'] . '"><i class="fas fa-eye"></i> Details</button>';
-                            if ($phone) {
-                                echo '    <button class="btn-action-small" onclick="contactCaller(this)" data-phone="' . htmlspecialchars($phone) . '"><i class="fas fa-phone"></i> Call</button>';
-                            }
-                            echo '    <button class="btn-action-small" onclick="resolveIncident(this)" data-incident-id="' . (int)$incident['id'] . '"><i class="fas fa-check"></i> Resolve</button>';
-                            echo '  </div>';
-                            echo '</div>';
-                        }
-                    } else {
-                        echo '<div class="call-card"><div class="call-info"><div class="call-details"><div class="call-title">No active emergency calls.</div></div></div></div>';
-                    }
+                    // ...existing code for active calls...
                     ?>
                     </div>
                 </div>
-
-                <!-- Available Units Panel -->
                 <div class="dispatch-panel">
                     <div class="panel-header">
                         <h2 class="panel-title">
@@ -173,42 +129,13 @@ try {
                             <span id="available-units-count" style="background: #28a745; color: white; padding: 0.25rem 0.75rem; border-radius: 20px; font-size: 0.8rem; font-weight: 600;"><?php echo $availableUnits; ?> Available</span>
                         </div>
                     </div>
-
                     <div id="available-units-container" style="height: calc(100vh - 320px); overflow-y: auto; padding-right: 4px;">
                     <?php
-                    // Fetch only available units
-                    $units = [];
-                    if ($pdo) {
-                        $stmt = $pdo->query("SELECT * FROM units WHERE status='available' ORDER BY unit_type, identifier");
-                        $units = $stmt->fetchAll();
-                    }
-                    if ($units) {
-                        foreach ($units as $unit) {
-                            $meta = [];
-                            if ($unit['unit_type']) $meta[] = ucfirst($unit['unit_type']);
-                            echo '<div class="unit-card available">';
-                            echo '  <div class="unit-info">';
-                            echo '    <div class="unit-details">';
-                            echo '      <div class="unit-name">' . htmlspecialchars($unit['identifier']) . '</div>';
-                            echo '      <div class="unit-meta">';
-                            echo '        <span><i class="fas fa-map-marker-alt"></i> ' . htmlspecialchars($unit['location'] ?? ($unit['unit_type'] ? ucfirst($unit['unit_type']) : '')) . '</span>';
-                            if (!empty($meta)) echo ' <span>' . implode(' | ', $meta) . '</span>';
-                            echo '      </div>';
-                            echo '    </div>';
-                            echo '  </div>';
-                            echo '  <div class="unit-actions">';
-                            // Removed Deploy button
-                            echo '    <button class="btn-action-small" onclick="unitLocation(this)" data-unit-id="' . (int)$unit['id'] . '" data-identifier="' . htmlspecialchars($unit['identifier']) . '"><i class="fas fa-location-arrow"></i> Track</button>';
-                            echo '  </div>';
-                            echo '</div>';
-                        }
-                    }
+                    // ...existing code for available units...
                     ?>
                     </div>
                 </div>
-
-                <!-- Map Panel -->
-                <div class="dispatch-panel">
+                <div class="dispatch-panel" style="min-width:400px;max-width:600px;flex:1;">
                     <div class="panel-header">
                         <h2 class="panel-title">
                             <i class="fas fa-map"></i>
@@ -220,12 +147,8 @@ try {
                             </button>
                         </div>
                     </div>
-
                     <div class="map-container">
-                        <div class="map-placeholder">
-                        </div>
-
-                        <!-- Simulated map markers -->
+                        <div class="map-placeholder"></div>
                         <div class="map-viewport" id="map" style="width:100%; height:100%;"></div>
                     </div>
                 </div>
@@ -270,276 +193,277 @@ try {
     </div>
 
 
-        <!-- Dispatch Modal -->
-        <div id="dispatch-modal" class="modal" style="display:none; position:fixed; top:0; left:0; width:100vw; height:100vh; background:rgba(0,0,0,0.4); z-index:9999; align-items:center; justify-content:center;">
-            <form class="modal-content" style="background:#fff; padding:2.5rem 2.5rem 2rem 2.5rem; border-radius:16px; max-width:600px; width:98%; position:relative; box-shadow:0 8px 32px rgba(0,0,0,0.18); display:flex; flex-direction:column; gap:1.2rem; min-height:350px;">
-                <span class="close" onclick="closeDispatchModal()" style="position:absolute; top:10px; right:20px; font-size:2rem; cursor:pointer;">&times;</span>
-                <h2 style="margin:0 0 1.2rem 0; text-align:left; font-size:2rem; font-weight:700;">Dispatch Unit</h2>
-                <div style="display:flex; flex-direction:column; gap:1.1rem;">
-                    <div style="display:flex; flex-direction:column; gap:0.3rem;">
-                        <label style="font-weight:600;">Incident Details</label>
-                        <div id="modal-incident-details" style="background:#f8f9fa; border-radius:7px; padding:0.75rem 1rem; font-size:1rem;"></div>
-                    </div>
-                    <div style="display:flex; flex-direction:column; gap:0.3rem;">
-                        <label for="unit-select" style="font-weight:600;">Available Units <span style="color:red">*</span></label>
-                        <select id="unit-select" style="width:100%; padding:0.7rem; border-radius:6px; border:1.5px solid #bbb; font-size:1.08rem; background:#f9f9f9;">
-                            <option value="">-- Select --</option>
-                        </select>
-                    </div>
-                    <div style="display:flex; flex-direction:column; gap:0.3rem;">
-                        <label style="font-weight:600;">Unit Details</label>
-                            <!-- Ilagay dito ang code para sa unit details -->
-                            <div id="unit-details" style="background:#f1f3f4; border-radius:7px; padding:0.75rem 1rem; min-height:48px; font-size:0.98rem;"></div>
-                    </div>
-                </div>
-                <div style="display:flex; gap:1rem; justify-content:flex-end; margin-top:1.2rem;">
-                    <button type="button" onclick="closeDispatchModal()" style="background:#f1f1f1; color:#333; border:none; border-radius:6px; padding:0.7rem 1.5rem; font-size:1rem; font-weight:500; cursor:pointer;">Cancel</button>
-                    <button id="confirm-dispatch-btn" type="button" class="btn-dispatch" style="background:#007bff; color:#fff; border:none; border-radius:6px; padding:0.7rem 1.5rem; font-size:1rem; font-weight:600; cursor:pointer;">Confirm Dispatch</button>
-                </div>
-            </form>
-        </div>
 
-        <script>
-        // Modal logic
-        let currentIncidentId = null;
-        let currentIncidentLat = null;
-        let currentIncidentLng = null;
-        function openDispatchModal(incidentId) {
-            currentIncidentId = incidentId;
-            document.getElementById('dispatch-modal').style.display = 'flex';
-            // Fetch incident details and available units
-            fetch('api/incident_details.php?id=' + encodeURIComponent(incidentId))
+<!-- Dispatch Modal (moved to end for guaranteed loading) -->
+<div id="dispatch-modal" class="modal" style="display:none; position:fixed; top:0; left:0; width:100vw; height:100vh; background:rgba(0,0,0,0.4); z-index:9999; align-items:center; justify-content:center;">
+    <form class="modal-content" style="background:#fff; padding:2.5rem 2.5rem 2rem 2.5rem; border-radius:16px; max-width:600px; width:98%; position:relative; box-shadow:0 8px 32px rgba(0,0,0,0.18); display:flex; flex-direction:column; gap:1.2rem; min-height:350px;">
+        <span class="close" onclick="closeDispatchModal()" style="position:absolute; top:10px; right:20px; font-size:2rem; cursor:pointer;">&times;</span>
+        <h2 style="margin:0 0 1.2rem 0; text-align:left; font-size:2rem; font-weight:700;">Dispatch Unit</h2>
+        <div style="display:flex; flex-direction:column; gap:1.1rem;">
+            <div style="display:flex; flex-direction:column; gap:0.3rem;">
+                <label style="font-weight:600;">Incident Details</label>
+                <div id="modal-incident-details" style="background:#f8f9fa; border-radius:7px; padding:0.75rem 1rem; font-size:1rem;"></div>
+            </div>
+            <div style="display:flex; flex-direction:column; gap:0.3rem;">
+                <label for="unit-select" style="font-weight:600;">Available Units <span style="color:red">*</span></label>
+                <select id="unit-select" style="width:100%; padding:0.7rem; border-radius:6px; border:1.5px solid #bbb; font-size:1.08rem; background:#f9f9f9;">
+                    <option value="">-- Select --</option>
+                </select>
+            </div>
+            <div style="display:flex; flex-direction:column; gap:0.3rem;">
+                <label style="font-weight:600;">Unit Details</label>
+                <div id="unit-details" style="background:#f1f3f4; border-radius:7px; padding:0.75rem 1rem; min-height:48px; font-size:0.98rem;"></div>
+            </div>
+        </div>
+        <div style="display:flex; gap:1rem; justify-content:flex-end; margin-top:1.2rem;">
+            <button type="button" onclick="closeDispatchModal()" style="background:#f1f1f1; color:#333; border:none; border-radius:6px; padding:0.7rem 1.5rem; font-size:1rem; font-weight:500; cursor:pointer;">Cancel</button>
+            <button id="confirm-dispatch-btn" type="button" class="btn-dispatch" style="background:#007bff; color:#fff; border:none; border-radius:6px; padding:0.7rem 1.5rem; font-size:1rem; font-weight:600; cursor:pointer;">Confirm Dispatch</button>
+        </div>
+    </form>
+</div>
+<script>
+// Modal logic (moved to end for guaranteed loading)
+let currentIncidentId = null;
+let currentIncidentLat = null;
+let currentIncidentLng = null;
+function openDispatchModal(incidentId) {
+    currentIncidentId = incidentId;
+    document.getElementById('dispatch-modal').style.display = 'flex';
+    // Fetch incident details and available units
+    fetch('api/incident_details.php?id=' + encodeURIComponent(incidentId))
+        .then(r => r.json())
+        .then(data => {
+            if (data.incident) {
+                const inc = data.incident;
+                currentIncidentLat = inc && inc.latitude ? Number(inc.latitude) : null;
+                currentIncidentLng = inc && inc.longitude ? Number(inc.longitude) : null;
+                document.getElementById('modal-incident-details').innerHTML =
+                    `<strong>Type:</strong> ${inc.type || ''}<br>` +
+                    `<strong>Title:</strong> ${inc.title || ''}<br>` +
+                    `<strong>Location:</strong> ${inc.location_address || 'N/A'}<br>` +
+                    (inc.latitude && inc.longitude ? `<strong>Coordinates:</strong> ${inc.latitude}, ${inc.longitude}<br>` : '') +
+                    `<strong>Priority:</strong> ${inc.priority || ''}`;
+            } else {
+                document.getElementById('modal-incident-details').innerHTML = '<span style="color:red">Incident not found.</span>';
+            }
+            // Populate units
+            const select = document.getElementById('unit-select');
+            select.innerHTML = '<option value="">-- Select --</option>';
+            if (data.units && data.units.length) {
+                data.units.forEach(u => {
+                    const dist = (typeof u.distance_km === 'number' && isFinite(u.distance_km)) ? `${u.distance_km.toFixed(1)} km` : '';
+                    const suffix = dist ? `${u.unit_type}, ${dist}` : `${u.unit_type}`;
+                    select.innerHTML += `<option value="${u.id}" data-type="${u.unit_type}" data-identifier="${u.identifier}">${u.identifier} (${suffix})</option>`;
+                });
+            } else {
+                // If no real units, show sample units in dropdown
+                const samples = [
+                    {id: 'sample-police', unit_type: 'police', identifier: 'police-unit-1'},
+                    {id: 'sample-fire', unit_type: 'fire', identifier: 'fire-truck-1'},
+                    {id: 'sample-ambulance', unit_type: 'ambulance', identifier: 'ambulance-1'}
+                ];
+                samples.forEach(u => {
+                    select.innerHTML += `<option value="${u.id}" data-type="${u.unit_type}" data-identifier="${u.identifier}">${u.identifier} (${u.unit_type})</option>`;
+                });
+            }
+            document.getElementById('unit-details').innerHTML = '';
+        });
+}
+function closeDispatchModal() {
+    document.getElementById('dispatch-modal').style.display = 'none';
+    document.getElementById('modal-incident-details').innerHTML = '';
+    document.getElementById('unit-select').innerHTML = '<option value="">-- Select --</option>';
+    document.getElementById('unit-details').innerHTML = '';
+}
+document.addEventListener('DOMContentLoaded', function() {
+    document.getElementById('unit-select').addEventListener('change', function() {
+        const unitId = this.value;
+        if (!unitId) {
+            document.getElementById('unit-details').innerHTML = '';
+            return;
+        }
+        // If sample unit, show static details
+        if (unitId.startsWith('sample-')) {
+            let details = {
+                'sample-police': {
+                    driver: 'Officer Cruz', plate: 'PN-1281', type: 'police', status: 'available', lat: 14.6500, lng: 121.0300
+                },
+                'sample-fire': {
+                    driver: 'FF Santos', plate: 'FT-3482', type: 'fire', status: 'available', lat: 14.6700, lng: 121.0450
+                },
+                'sample-ambulance': {
+                    driver: 'EMT Dela Cruz', plate: 'AB-5523', type: 'ambulance', status: 'available', lat: 14.6900, lng: 121.0600
+                }
+            };
+            const u = details[unitId];
+            let html =
+                `<strong>Driver:</strong> ${u.driver}<br>` +
+                `<strong>Plate #:</strong> ${u.plate}<br>` +
+                `<strong>Type:</strong> ${u.type}<br>` +
+                `<strong>Status:</strong> ${u.status}`;
+            if (currentIncidentLat && currentIncidentLng && u.lat && u.lng) {
+                const distKm = haversine(Number(u.lat), Number(u.lng), currentIncidentLat, currentIncidentLng).toFixed(2);
+                html += `<br><strong>Distance to Incident:</strong> ${distKm} km`;
+            }
+            document.getElementById('unit-details').innerHTML = html;
+        } else {
+            fetch('api/unit_details.php?id=' + encodeURIComponent(unitId))
                 .then(r => r.json())
                 .then(data => {
-                    if (data.incident) {
-                        const inc = data.incident;
-                        currentIncidentLat = inc && inc.latitude ? Number(inc.latitude) : null;
-                        currentIncidentLng = inc && inc.longitude ? Number(inc.longitude) : null;
-                        document.getElementById('modal-incident-details').innerHTML =
-                            `<strong>Type:</strong> ${inc.type || ''}<br>` +
-                            `<strong>Title:</strong> ${inc.title || ''}<br>` +
-                            `<strong>Location:</strong> ${inc.location_address || 'N/A'}<br>` +
-                            (inc.latitude && inc.longitude ? `<strong>Coordinates:</strong> ${inc.latitude}, ${inc.longitude}<br>` : '') +
-                            `<strong>Priority:</strong> ${inc.priority || ''}`;
+                    if (data.unit) {
+                        const u = data.unit;
+                        let html =
+                            `<strong>Driver:</strong> ${u.driver_name || 'N/A'}<br>` +
+                            `<strong>Plate #:</strong> ${u.plate_number || 'N/A'}<br>` +
+                            `<strong>Type:</strong> ${u.unit_type || ''}<br>` +
+                            `<strong>Status:</strong> ${u.status || ''}`;
+                        if (currentIncidentLat && currentIncidentLng && u.latitude && u.longitude) {
+                            const distKm = haversine(Number(u.latitude), Number(u.longitude), currentIncidentLat, currentIncidentLng).toFixed(2);
+                            html += `<br><strong>Distance to Incident:</strong> ${distKm} km`;
+                        }
+                        document.getElementById('unit-details').innerHTML = html;
                     } else {
-                        document.getElementById('modal-incident-details').innerHTML = '<span style="color:red">Incident not found.</span>';
+                        document.getElementById('unit-details').innerHTML = '<span style="color:red">Unit not found.</span>';
                     }
-                    // Populate units
-                    const select = document.getElementById('unit-select');
-                    select.innerHTML = '<option value="">-- Select --</option>';
-                    if (data.units && data.units.length) {
-                        data.units.forEach(u => {
-                            const dist = (typeof u.distance_km === 'number' && isFinite(u.distance_km)) ? `${u.distance_km.toFixed(1)} km` : '';
-                            const suffix = dist ? `${u.unit_type}, ${dist}` : `${u.unit_type}`;
-                            select.innerHTML += `<option value="${u.id}" data-type="${u.unit_type}" data-identifier="${u.identifier}">${u.identifier} (${suffix})</option>`;
-                        });
-                    } else {
-                        // If no real units, show sample units in dropdown
-                        const samples = [
-                            {id: 'sample-police', unit_type: 'police', identifier: 'police-unit-1'},
-                            {id: 'sample-fire', unit_type: 'fire', identifier: 'fire-truck-1'},
-                            {id: 'sample-ambulance', unit_type: 'ambulance', identifier: 'ambulance-1'}
-                        ];
-                        samples.forEach(u => {
-                            select.innerHTML += `<option value="${u.id}" data-type="${u.unit_type}" data-identifier="${u.identifier}">${u.identifier} (${u.unit_type})</option>`;
-                        });
-                    }
-                    document.getElementById('unit-details').innerHTML = '';
                 });
         }
-        function closeDispatchModal() {
-            document.getElementById('dispatch-modal').style.display = 'none';
-            document.getElementById('modal-incident-details').innerHTML = '';
-            document.getElementById('unit-select').innerHTML = '<option value="">-- Select --</option>';
-            document.getElementById('unit-details').innerHTML = '';
+    });
+    function haversine(lat1, lon1, lat2, lon2) {
+        const R = 6371; // km
+        const toRad = d => d * Math.PI / 180;
+        const dLat = toRad(lat2 - lat1);
+        const dLon = toRad(lon2 - lon1);
+        const a = Math.sin(dLat/2) * Math.sin(dLat/2) +
+                  Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) *
+                  Math.sin(dLon/2) * Math.sin(dLon/2);
+        const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+        return R * c;
+    }
+    document.getElementById('confirm-dispatch-btn').onclick = function() {
+        const btn = document.getElementById('confirm-dispatch-btn');
+        btn.disabled = true;
+        btn.textContent = 'Dispatching...';
+        const unitSelect = document.getElementById('unit-select');
+        const unitId = unitSelect.value;
+        const selectedOption = unitSelect.options[unitSelect.selectedIndex];
+        const unitIdentifier = selectedOption ? selectedOption.getAttribute('data-identifier') : '';
+        if (!unitId || !currentIncidentId) {
+            alert('Please select a unit.');
+            btn.disabled = false;
+            btn.textContent = 'Confirm Dispatch';
+            return;
         }
-        document.addEventListener('DOMContentLoaded', function() {
-            document.getElementById('unit-select').addEventListener('change', function() {
-                const unitId = this.value;
-                if (!unitId) {
-                    document.getElementById('unit-details').innerHTML = '';
-                    return;
-                }
-                // If sample unit, show static details
-                if (unitId.startsWith('sample-')) {
-                    let details = {
-                        'sample-police': {
-                            driver: 'Officer Cruz', plate: 'PN-1281', type: 'police', status: 'available', lat: 14.6500, lng: 121.0300
-                        },
-                        'sample-fire': {
-                            driver: 'FF Santos', plate: 'FT-3482', type: 'fire', status: 'available', lat: 14.6700, lng: 121.0450
-                        },
-                        'sample-ambulance': {
-                            driver: 'EMT Dela Cruz', plate: 'AB-5523', type: 'ambulance', status: 'available', lat: 14.6900, lng: 121.0600
-                        }
-                    };
-                    const u = details[unitId];
-                    let html =
-                        `<strong>Driver:</strong> ${u.driver}<br>` +
-                        `<strong>Plate #:</strong> ${u.plate}<br>` +
-                        `<strong>Type:</strong> ${u.type}<br>` +
-                        `<strong>Status:</strong> ${u.status}`;
-                    if (currentIncidentLat && currentIncidentLng && u.lat && u.lng) {
-                        const distKm = haversine(Number(u.lat), Number(u.lng), currentIncidentLat, currentIncidentLng).toFixed(2);
-                        html += `<br><strong>Distance to Incident:</strong> ${distKm} km`;
+        // If sample unit, just redirect to GPS with static coordinates
+        if (unitId.startsWith('sample-')) {
+            let coords = {
+                'sample-police': {lat: 14.6500, lng: 121.0300},
+                'sample-fire': {lat: 14.6700, lng: 121.0450},
+                'sample-ambulance': {lat: 14.6900, lng: 121.0600}
+            };
+            const u = coords[unitId];
+            const qp = new URLSearchParams();
+            qp.set('unit_id', unitId);
+            if (unitIdentifier) qp.set('unit', unitIdentifier);
+            qp.set('from_lat', String(u.lat));
+            qp.set('from_lng', String(u.lng));
+            // Try to get incident location for routing
+            fetch('api/incident_details.php?id=' + encodeURIComponent(currentIncidentId))
+                .then(r => r.json())
+                .then(incRes => {
+                    let toLat = null, toLng = null;
+                    const inc = incRes.incident || {};
+                    if (inc.latitude && inc.longitude) {
+                        toLat = Number(inc.latitude);
+                        toLng = Number(inc.longitude);
+                    } else if (inc.location_address && inc.location_address.match(/\d+\.\d+,[ ]*\d+\.\d+/)) {
+                        const parts = inc.location_address.split(',').map(Number);
+                        toLat = parts[0];
+                        toLng = parts[1];
                     }
-                    document.getElementById('unit-details').innerHTML = html;
-                } else {
-                    fetch('api/unit_details.php?id=' + encodeURIComponent(unitId))
-                        .then(r => r.json())
-                        .then(data => {
-                            if (data.unit) {
-                                const u = data.unit;
-                                let html =
-                                    `<strong>Driver:</strong> ${u.driver_name || 'N/A'}<br>` +
-                                    `<strong>Plate #:</strong> ${u.plate_number || 'N/A'}<br>` +
-                                    `<strong>Type:</strong> ${u.unit_type || ''}<br>` +
-                                    `<strong>Status:</strong> ${u.status || ''}`;
-                                if (currentIncidentLat && currentIncidentLng && u.latitude && u.longitude) {
-                                    const distKm = haversine(Number(u.latitude), Number(u.longitude), currentIncidentLat, currentIncidentLng).toFixed(2);
-                                    html += `<br><strong>Distance to Incident:</strong> ${distKm} km`;
-                                }
-                                document.getElementById('unit-details').innerHTML = html;
-                            } else {
-                                document.getElementById('unit-details').innerHTML = '<span style="color:red">Unit not found.</span>';
-                            }
-                        });
-                }
-            });
-            function haversine(lat1, lon1, lat2, lon2) {
-                const R = 6371; // km
-                const toRad = d => d * Math.PI / 180;
-                const dLat = toRad(lat2 - lat1);
-                const dLon = toRad(lon2 - lon1);
-                const a = Math.sin(dLat/2) * Math.sin(dLat/2) +
-                          Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) *
-                          Math.sin(dLon/2) * Math.sin(dLon/2);
-                const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-                return R * c;
+                    if (toLat && toLng) {
+                        qp.set('to_lat', String(toLat));
+                        qp.set('to_lng', String(toLng));
+                    }
+                    window.location.href = 'gps.php?' + qp.toString();
+                });
+            return;
+        }
+        // Real unit: do original dispatch logic
+        Promise.all([
+            fetch('api/incident_details.php?id=' + encodeURIComponent(currentIncidentId)).then(r => r.json()),
+            fetch('api/unit_details.php?id=' + encodeURIComponent(unitId)).then(r => r.json())
+        ]).then(([incRes, unitRes]) => {
+            const inc = incRes.incident || {};
+            const u = unitRes.unit || {};
+            // Fallbacks for incident location
+            let toLat = null, toLng = null;
+            if (inc.latitude && inc.longitude) {
+                toLat = Number(inc.latitude);
+                toLng = Number(inc.longitude);
+            } else if (inc.location_address && inc.location_address.match(/\d+\.\d+,[ ]*\d+\.\d+/)) {
+                const parts = inc.location_address.split(',').map(Number);
+                toLat = parts[0];
+                toLng = parts[1];
+            } else {
+                // Default fallback: QC Hall
+                toLat = 14.6760;
+                toLng = 121.0437;
             }
-                        document.getElementById('confirm-dispatch-btn').onclick = function() {
-                            const btn = document.getElementById('confirm-dispatch-btn');
-                            btn.disabled = true;
-                            btn.textContent = 'Dispatching...';
-                            const unitSelect = document.getElementById('unit-select');
-                            const unitId = unitSelect.value;
-                            const selectedOption = unitSelect.options[unitSelect.selectedIndex];
-                            const unitIdentifier = selectedOption ? selectedOption.getAttribute('data-identifier') : '';
-                            if (!unitId || !currentIncidentId) {
-                                alert('Please select a unit.');
-                                btn.disabled = false;
-                                btn.textContent = 'Confirm Dispatch';
-                                return;
-                            }
-                            // If sample unit, just redirect to GPS with static coordinates
-                            if (unitId.startsWith('sample-')) {
-                                let coords = {
-                                    'sample-police': {lat: 14.6500, lng: 121.0300},
-                                    'sample-fire': {lat: 14.6700, lng: 121.0450},
-                                    'sample-ambulance': {lat: 14.6900, lng: 121.0600}
-                                };
-                                const u = coords[unitId];
-                                const qp = new URLSearchParams();
-                                qp.set('unit_id', unitId);
-                                if (unitIdentifier) qp.set('unit', unitIdentifier);
-                                qp.set('from_lat', String(u.lat));
-                                qp.set('from_lng', String(u.lng));
-                                // Try to get incident location for routing
-                                fetch('api/incident_details.php?id=' + encodeURIComponent(currentIncidentId))
-                                    .then(r => r.json())
-                                    .then(incRes => {
-                                        let toLat = null, toLng = null;
-                                        const inc = incRes.incident || {};
-                                        if (inc.latitude && inc.longitude) {
-                                            toLat = Number(inc.latitude);
-                                            toLng = Number(inc.longitude);
-                                        } else if (inc.location_address && inc.location_address.match(/\d+\.\d+,[ ]*\d+\.\d+/)) {
-                                            const parts = inc.location_address.split(',').map(Number);
-                                            toLat = parts[0];
-                                            toLng = parts[1];
-                                        }
-                                        if (toLat && toLng) {
-                                            qp.set('to_lat', String(toLat));
-                                            qp.set('to_lng', String(toLng));
-                                        }
-                                        window.location.href = 'gps.php?' + qp.toString();
-                                    });
-                                return;
-                            }
-                            // Real unit: do original dispatch logic
-                            Promise.all([
-                                fetch('api/incident_details.php?id=' + encodeURIComponent(currentIncidentId)).then(r => r.json()),
-                                fetch('api/unit_details.php?id=' + encodeURIComponent(unitId)).then(r => r.json())
-                            ]).then(([incRes, unitRes]) => {
-                                const inc = incRes.incident || {};
-                                const u = unitRes.unit || {};
-                                // Fallbacks for incident location
-                                let toLat = null, toLng = null;
-                                if (inc.latitude && inc.longitude) {
-                                    toLat = Number(inc.latitude);
-                                    toLng = Number(inc.longitude);
-                                } else if (inc.location_address && inc.location_address.match(/\d+\.\d+,[ ]*\d+\.\d+/)) {
-                                    const parts = inc.location_address.split(',').map(Number);
-                                    toLat = parts[0];
-                                    toLng = parts[1];
-                                } else {
-                                    // Default fallback: QC Hall
-                                    toLat = 14.6760;
-                                    toLng = 121.0437;
-                                }
-                                // Fallbacks for unit location
-                                let fromLat = null, fromLng = null;
-                                if (u.latitude && u.longitude) {
-                                    fromLat = Number(u.latitude);
-                                    fromLng = Number(u.longitude);
-                                } else {
-                                    const type = selectedOption ? selectedOption.getAttribute('data-type') : (u.unit_type || 'other');
-                                    if (type === 'police') { fromLat = 14.6500; fromLng = 121.0300; }
-                                    else if (type === 'fire') { fromLat = 14.6700; fromLng = 121.0450; }
-                                    else if (type === 'ambulance') { fromLat = 14.6900; fromLng = 121.0600; }
-                                    else { fromLat = 14.6760; fromLng = 121.0437; }
-                                    // Optionally update unit location in DB
-                                    fetch('api/unit_location_update.php', {
-                                        method: 'POST',
-                                        headers: { 'Content-Type': 'application/json' },
-                                        body: JSON.stringify({ unit_id: unitId, latitude: fromLat, longitude: fromLng })
-                                    });
-                                }
-                                // Plot locally if possible
-                                if (typeof addRouteToIncident === 'function' && fromLat && fromLng && toLat && toLng) {
-                                    addRouteToIncident(fromLat, fromLng, toLat, toLng);
-                                }
-                                // Continue with dispatch
-                                return fetch('api/dispatch_unit.php', {
-                                    method: 'POST',
-                                    headers: { 'Content-Type': 'application/json' },
-                                    body: JSON.stringify({ incident_id: currentIncidentId, unit_id: unitId })
-                                }).then(r => r.json()).then(data => ({ data, fromLat, fromLng, toLat, toLng }));
-                            }).then(({ data, fromLat, fromLng, toLat, toLng }) => {
-                                if (data.ok) {
-                                    // Redirect to GPS with routing params
-                                    const qp = new URLSearchParams();
-                                    qp.set('unit_id', unitId);
-                                    if (unitIdentifier) qp.set('unit', unitIdentifier);
-                                    if (fromLat && fromLng && toLat && toLng) {
-                                        qp.set('from_lat', String(fromLat));
-                                        qp.set('from_lng', String(fromLng));
-                                        qp.set('to_lat', String(toLat));
-                                        qp.set('to_lng', String(toLng));
-                                    }
-                                    window.location.href = 'gps.php?' + qp.toString();
-                                } else {
-                                    alert('Failed to dispatch unit: ' + (data.error || 'Unknown error'));
-                                    btn.disabled = false;
-                                    btn.textContent = 'Confirm Dispatch';
-                                }
-                            }).catch(() => {
-                                alert('Network error.');
-                                btn.disabled = false;
-                                btn.textContent = 'Confirm Dispatch';
-                            });
-                        };
+            // Fallbacks for unit location
+            let fromLat = null, fromLng = null;
+            if (u.latitude && u.longitude) {
+                fromLat = Number(u.latitude);
+                fromLng = Number(u.longitude);
+            } else {
+                const type = selectedOption ? selectedOption.getAttribute('data-type') : (u.unit_type || 'other');
+                if (type === 'police') { fromLat = 14.6500; fromLng = 121.0300; }
+                else if (type === 'fire') { fromLat = 14.6700; fromLng = 121.0450; }
+                else if (type === 'ambulance') { fromLat = 14.6900; fromLng = 121.0600; }
+                else { fromLat = 14.6760; fromLng = 121.0437; }
+                // Optionally update unit location in DB
+                fetch('api/unit_location_update.php', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ unit_id: unitId, latitude: fromLat, longitude: fromLng })
+                });
+            }
+            // Plot locally if possible
+            // Continue with dispatch (only update map/UI if successful)
+            return fetch('api/dispatch_unit.php', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ incident_id: currentIncidentId, unit_id: unitId })
+            }).then(r => r.json()).then(data => {
+                if (data.ok) {
+                    // Plot locally if possible (optional, or just redirect)
+                    if (typeof addRouteToIncident === 'function' && fromLat && fromLng && toLat && toLng) {
+                        addRouteToIncident(fromLat, fromLng, toLat, toLng);
+                    }
+                    // Redirect to GPS with routing params
+                    const qp = new URLSearchParams();
+                    qp.set('unit_id', unitId);
+                    if (unitIdentifier) qp.set('unit', unitIdentifier);
+                    if (fromLat && fromLng && toLat && toLng) {
+                        qp.set('from_lat', String(fromLat));
+                        qp.set('from_lng', String(fromLng));
+                        qp.set('to_lat', String(toLat));
+                        qp.set('to_lng', String(toLng));
+                    }
+                    window.location.href = 'gps.php?' + qp.toString();
+                } else {
+                    alert('Failed to dispatch unit: ' + (data.error || 'Unknown error'));
+                    btn.disabled = false;
+                    btn.textContent = 'Confirm Dispatch';
+                }
+            }).catch(() => {
+                alert('Network error.');
+                btn.disabled = false;
+                btn.textContent = 'Confirm Dispatch';
+            });
         });
+    };
+});
+</script>
         </script>
 
         <!-- Uncomment if already have content -->
@@ -600,36 +524,14 @@ function initMap() {
             }).addTo(map);
         });
 
-    // Load real available units as markers
-    fetch('api/units_list.php?status=available')
-        .then(r => r.json())
-        .then(res => {
-            if (!res.ok) return;
-            const items = res.items || [];
-            items.forEach(u => {
-                const id = u.identifier;
-                const type = u.unit_type || 'other';
-                const lat = parseFloat(u.latitude);
-                const lng = parseFloat(u.longitude);
-                if (!isNaN(lat) && !isNaN(lng)) {
-                    addMarker(id, lat, lng, `${id} (${type})`, type);
-                }
-            });
-        });
-    // Load active incidents as markers
-    fetch('api/incidents_list.php?status=active')
-        .then(r => r.json())
-        .then(data => {
-            if (data.ok && data.items) {
-                data.items.forEach(inc => {
-                    if (inc.location && inc.location.match(/\d+\.\d+,[ ]*\d+\.\d+/)) {
-                        const [lat, lng] = inc.location.split(',').map(Number);
-                        addIncidentMarker(inc.incident_code, lat, lng, inc.type + ' - ' + (inc.description || ''));
-                    }
-                });
-            }
-        });
-    console.log("✅ Dispatch map loaded (Leaflet)");
+    // Load and render units and incidents using gps.php logic
+    loadDispatchedUnits();
+    loadAvailableUnits();
+    loadIncidentMarkers();
+    addLegendControl();
+    updateMapVisibility();
+    startLivePolling();
+    console.log("✅ Dispatch map loaded (Leaflet, real-time)");
 }
 
 function addIncidentMarker(id, lat, lng, info) {
@@ -642,16 +544,11 @@ function addIncidentMarker(id, lat, lng, info) {
     incidentMarkers[id] = marker;
 }
 
-function getIncidentIcon() {
-    return L.icon({
-        iconUrl: 'https://cdn-icons-png.flaticon.com/512/1828/1828884.png',
-        iconSize: [32, 32],
-        iconAnchor: [16, 32]
-    });
-}
+
+// Use the same getIcon as gps.php for all marker types
 
 // ===============================
-// ICONS
+// ICONS (sync with gps.php)
 // ===============================
 function getIcon(type) {
     const icons = {
@@ -660,23 +557,152 @@ function getIcon(type) {
         fire: "https://maps.google.com/mapfiles/ms/icons/red-dot.png",
         incident: "https://maps.google.com/mapfiles/ms/icons/yellow-dot.png"
     };
-
     return L.icon({
         iconUrl: icons[type] || icons.incident,
         iconSize: [32, 32],
         iconAnchor: [16, 32]
     });
 }
+// ===============================
+// LEGEND CONTROL (sync with gps.php)
+// ===============================
+function addLegendControl() {
+    const legend = L.control({ position: 'bottomright' });
+    legend.onAdd = function () {
+        const div = L.DomUtil.create('div', 'map-legend');
+        div.style.background = '#fff';
+        div.style.border = '1px solid #dadce0';
+        div.style.padding = '10px';
+        div.style.borderRadius = '8px';
+        div.style.boxShadow = '0 1px 3px rgba(0,0,0,0.2)';
+        div.style.fontSize = '12px';
+        div.innerHTML = `
+            <div style="font-weight:600;margin-bottom:6px">Legend</div>
+            <div style="display:flex;align-items:center;margin-bottom:4px"><img src="https://maps.google.com/mapfiles/ms/icons/green-dot.png" width="14" height="14" style="margin-right:6px">Ambulance</div>
+            <div style="display:flex;align-items:center;margin-bottom:4px"><img src="https://maps.google.com/mapfiles/ms/icons/blue-dot.png" width="14" height="14" style="margin-right:6px">Police</div>
+            <div style="display:flex;align-items:center;margin-bottom:4px"><img src="https://maps.google.com/mapfiles/ms/icons/red-dot.png" width="14" height="14" style="margin-right:6px">Fire</div>
+            <div style="display:flex;align-items:center"><img src="https://maps.google.com/mapfiles/ms/icons/yellow-dot.png" width="14" height="14" style="margin-right:6px">Incident</div>
+            <div style="margin-top:6px;font-size:11px;color:#666">Heatmap shows recent hotspots</div>
+        `;
+        return div;
+    };
+    legend.addTo(map);
+}
 
 // ===============================
-// MARKERS
+// MARKERS (sync with gps.php)
 // ===============================
-function addMarker(id, lat, lng, info, type) {
-  const marker = L.marker([lat, lng], { icon: getIcon(type) })
-    .addTo(map)
-    .bindPopup(`<strong>${info}</strong>`);
+function addUnitMarker(id, lat, lng, label, type, speedKph) {
+        const marker = L.marker([lat, lng], { icon: getIcon(type) })
+                .addTo(map)
+                .bindPopup(`
+                        <strong>${label}</strong><br>
+                        ${typeof speedKph === 'number' && isFinite(speedKph) ? `Speed: ${speedKph.toFixed(1)} km/h<br>` : ''}
+                        Coords: ${lat.toFixed(5)}, ${lng.toFixed(5)}
+                `);
+        markers[id] = { marker, type: "unit", unitType: (type || '').toLowerCase(), speedKph: speedKph };
+}
 
-  markers[id] = marker;
+function addIncidentMarker(id, lat, lng, label) {
+    const marker = L.marker([lat, lng], { icon: getIcon("incident") })
+        .addTo(map)
+        .bindPopup(`<strong>${label}</strong><br>🚨 Active Incident`);
+    markers[id] = { marker, type: "incident" };
+}
+
+function updateMapVisibility() {
+        Object.values(markers).forEach(item => {
+            let visible = true;
+            // Filtering logic placeholder (e.g., by unit type, status)
+            // Example: if (unitFilter && item.type === 'unit' && item.unitType !== unitFilter) visible = false;
+            visible ? map.addLayer(item.marker) : map.removeLayer(item.marker);
+        });
+}
+// ===============================
+// LOADERS (sync with gps.php)
+// ===============================
+function loadDispatchedUnits() {
+    fetch('api/units_list.php?status=dispatched')
+        .then(r => r.json())
+        .then(res => {
+            if (!res.ok) return;
+            const items = res.items || [];
+            syncUnitMarkers(items);
+        })
+        .catch(() => {});
+}
+
+function syncUnitMarkers(items) {
+    items.forEach(u => {
+        const id = u.identifier;
+        const type = u.unit_type || 'other';
+        const lat = parseFloat(u.latitude);
+        const lng = parseFloat(u.longitude);
+        const speed = (u.speed_kph !== undefined && u.speed_kph !== null) ? parseFloat(u.speed_kph) : null;
+        if (!isNaN(lat) && !isNaN(lng)) {
+            const label = `${id}`;
+            if (markers[id]) {
+                markers[id].marker.setLatLng([lat, lng]);
+                const popupHtml = `
+                    <strong>${label}</strong><br>
+                    ${typeof speed === 'number' && isFinite(speed) ? `Speed: ${speed.toFixed(1)} km/h<br>` : ''}
+                    Coords: ${lat.toFixed(5)}, ${lng.toFixed(5)}
+                `;
+                markers[id].marker.bindPopup(popupHtml);
+                markers[id].speedKph = speed;
+            } else {
+                addUnitMarker(id, lat, lng, label, type, speed);
+            }
+        }
+    });
+}
+
+function loadAvailableUnits() {
+    fetch('api/units_list.php?status=available')
+        .then(r => r.json())
+        .then(res => {
+            if (!res.ok) return;
+            const items = res.items || [];
+            items.forEach(u => {
+                const id = u.identifier;
+                const type = u.unit_type || 'other';
+                const lat = parseFloat(u.latitude);
+                const lng = parseFloat(u.longitude);
+                const speed = (u.speed_kph !== undefined && u.speed_kph !== null) ? parseFloat(u.speed_kph) : null;
+                if (!isNaN(lat) && !isNaN(lng)) {
+                    addUnitMarker(id, lat, lng, `${id}`, type, speed);
+                }
+            });
+        })
+        .catch(() => {});
+}
+
+function loadIncidentMarkers() {
+    fetch('api/incidents_list.php?status=active')
+        .then(r => r.json())
+        .then(res => {
+            if (!res.ok) return;
+            const items = res.items || [];
+            items.forEach(inc => {
+                if (inc.latitude && inc.longitude) {
+                    addIncidentMarker(
+                        'incident-' + inc.id,
+                        parseFloat(inc.latitude),
+                        parseFloat(inc.longitude),
+                        inc.title || inc.type || 'Incident'
+                    );
+                }
+            });
+        })
+        .catch(() => {});
+}
+
+function startLivePolling() {
+    setInterval(() => {
+        loadDispatchedUnits();
+        loadAvailableUnits();
+        loadIncidentMarkers();
+    }, 10000); // 10 seconds
 }
 
 // ===============================
@@ -825,7 +851,6 @@ function emergencyBroadcast() {
         .then(() => showNotification('Emergency broadcast sent', 'success'))
         .catch(() => showNotification('Broadcast failed', 'error'));
 }
-
 function lockdownProtocol() {
     if (!confirm('Activate lockdown protocol?')) return;
     postJSON('api/activity_event.php', { action: 'lockdown', entity_type: 'system', details: 'Lockdown initiated by dispatch' })
@@ -1016,9 +1041,6 @@ document.addEventListener('DOMContentLoaded', () => {
     function escapeHtml(s) { return String(s || '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','\"':'&quot;','\'':'&#39;'})[c] || c); }
     function escapeAttr(s) { return String(s || '').replace(/['"]/g, '_'); }
 });
-</script>
-</script>
-<script>
 // Quick Action Handlers
 function postJSON(url, payload) {
     return fetch(url, {
@@ -1217,7 +1239,7 @@ function refreshActiveCalls() {
       }).catch(() => {});
 }
 
-// refreshAvailableUnits removed (no longer needed)
+
 
 
 function resetLastUnits() {

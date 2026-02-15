@@ -431,15 +431,17 @@ try {
                                     $notes = $details['notes'] ?? '';
                                     $status = $row['status'] ?? 'pending';
                                     $decision = is_array($details) && isset($details['decision_reason']) ? $details['decision_reason'] : '';
+                                    $priority = $details['priority'] ?? '';
+                                    $urgency = $details['urgency'] ?? '';
                                     $statusClass = 'status-badge status-' . htmlspecialchars($status);
                                     echo '<tr data-id="' . (int)$row['id'] . '" data-notes="' . htmlspecialchars($notes) . '" data-decision-reason="' . htmlspecialchars($decision) . '" data-status="' . htmlspecialchars($status) . '">';
                                     echo '<td>' . htmlspecialchars($row['resource_name']) . '</td>';
-                                    echo '<td>' . htmlspecialchars(ucfirst($type)) . '</td>';
+                                    echo '<td>' . htmlspecialchars(ucfirst($type)) . '<br><span style="font-size:0.95em;color:#888;">Priority: ' . htmlspecialchars($priority) . ', Urgency: ' . htmlspecialchars($urgency) . '</span></td>';
                                     echo '<td>' . htmlspecialchars($quantity) . '</td>';
-                                    echo '<td>' . htmlspecialchars($location) . '</td>';
+                                    echo '<td>' . htmlspecialchars($location) . '<br><span style="font-size:0.95em;color:#888;">' . (!empty($notes) ? 'Notes: ' . htmlspecialchars($notes) : '') . '</span></td>';
                                     echo '<td><span class="' . $statusClass . '">' . htmlspecialchars(ucfirst($status)) . '</span></td>';
                                     echo '<td>';
-                                    echo '<button class="request-action-btn" onclick="viewRequestNotes(this)"><i class=\'fas fa-sticky-note\'></i> View Notes</button>';
+                                    echo '<button class="request-action-btn" onclick="viewRequestNotes(this)"><i class=\'fas fa-sticky-note\'></i> View Details</button>';
                                     if ($status === 'pending') {
                                         echo ' <button class="request-action-btn btn-approve" onclick="approveRequest(this)"><i class=\'fas fa-check\'></i> Approve</button>';
                                         echo ' <button class="request-action-btn btn-reject" onclick="rejectRequest(this)"><i class=\'fas fa-times\'></i> Reject</button>';
@@ -886,6 +888,7 @@ try {
             }
         }
 
+
         function approveRequest(btn) {
             const tr = btn.closest('tr');
             if (!tr) return;
@@ -912,17 +915,22 @@ try {
             const tr = btn.closest('tr');
             if (!tr) return;
             const id = tr.getAttribute('data-id');
-            const reason = prompt('Enter rejection reason:', '');
-            if (reason === null) return; // cancelled
+            let reason = '';
+            while (true) {
+                reason = prompt('Enter rejection reason (required):', '');
+                if (reason === null) return; // cancelled
+                if (reason.trim() !== '') break;
+                alert('Rejection reason is required.');
+            }
             const fd = new FormData();
             fd.append('id', id || '');
             fd.append('status', 'rejected');
-            fd.append('reason', reason || '');
+            fd.append('reason', reason);
             fetch('api/resource_request_update.php', { method: 'POST', body: fd })
                 .then(r => r.json())
                 .then(res => {
                     if (res && res.success) {
-                        updateRequestRowUI(tr, 'rejected', reason || '');
+                        updateRequestRowUI(tr, 'rejected', reason);
                         showNotification('Request rejected', 'error');
                     } else {
                         showNotification('Failed to reject: ' + (res && res.error ? res.error : 'Unknown error'), 'error');

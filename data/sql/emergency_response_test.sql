@@ -139,7 +139,7 @@ DELIMITER ;
 --
 
 CREATE TABLE `dispatches` (
-  `id` bigint(20) UNSIGNED NOT NULL,
+  `id` bigint(20) UNSIGNED NOT NULL AUTO_INCREMENT,
   `incident_id` bigint(20) UNSIGNED NOT NULL,
   `unit_id` bigint(20) UNSIGNED NOT NULL,
   `status` enum('assigned','acknowledged','enroute','on_scene','cleared','cancelled') NOT NULL DEFAULT 'assigned',

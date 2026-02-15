@@ -23,11 +23,9 @@
   const summaryDescription = qs('#summaryDescription');
 
   const feedbackList = qs('#feedbackList');
-  const feedbackForm = qs('#feedbackForm');
   const feedbackIncidentId = qs('#feedbackIncidentId');
-  const authorInput = qs('#authorInput');
-  const noteInput = qs('#noteInput');
   const cancelFeedbackBtn = qs('#cancelFeedbackBtn');
+  const confirmReviewBtn = qs('#confirmReviewBtn');
   // Tabs
   const tabFeedback = qs('#tabFeedback');
   const tabProof = qs('#tabProof');
@@ -35,15 +33,7 @@
   const panelProof = qs('#panelProof');
 
   // Proof capture elements
-  const proofFile = qs('#proofFile');
-  const uploadProofBtn = qs('#uploadProofBtn');
-  const proofVideo = qs('#proofVideo');
-  const proofCanvas = qs('#proofCanvas');
-  const startCameraBtn = qs('#startCameraBtn');
-  const capturePhotoBtn = qs('#capturePhotoBtn');
-  const stopCameraBtn = qs('#stopCameraBtn');
-  const saveCaptureBtn = qs('#saveCaptureBtn');
-  const discardCaptureBtn = qs('#discardCaptureBtn');
+  // Proof controls removed (no upload/camera)
   const proofGallery = qs('#proofGallery');
 
   let mediaStream = null;
@@ -151,18 +141,29 @@
       summaryStatus.textContent = inc.status || '—';
       summaryLocation.textContent = inc.location_address || '—';
       summaryDescription.textContent = inc.description || '—';
+      // New: Dispatch and Resolve times
+      const dispatchTime = inc.assigned_at || inc.dispatched_at || inc.created_at || '';
+      const resolveTime = inc.resolved_at || '';
+      const dispatchElem = document.getElementById('summaryDispatchTime');
+      const resolveElem = document.getElementById('summaryResolveTime');
+      if (dispatchElem) dispatchElem.textContent = dispatchTime ? formatDate(dispatchTime) : '—';
+      if (resolveElem) resolveElem.textContent = resolveTime ? formatDate(resolveTime) : '—';
 
-      // Set form incident id
-      feedbackIncidentId.value = incidentId;
-      authorInput.value = '';
-      noteInput.value = '';
+      // Set form incident id if present
+      if (feedbackIncidentId) feedbackIncidentId.value = incidentId;
 
-      // Load feedback list
-      await loadFeedbackList(incidentId);
-
-      // Load proofs
-      await loadProofs(incidentId);
-
+      // Load feedback list (safe)
+      try {
+        await loadFeedbackList(incidentId);
+      } catch (e) {
+        if (feedbackList) feedbackList.innerHTML = '<div class="feedback-item"><div class="meta">No feedback yet.</div></div>';
+      }
+      // Load proofs (safe)
+      try {
+        await loadProofs(incidentId);
+      } catch (e) {
+        if (proofGallery) proofGallery.innerHTML = '<div class="gallery-empty">No proofs yet.</div>';
+      }
       showModal();
     } catch (e) {
       alert('Failed to load incident details: ' + e.message);
@@ -209,29 +210,7 @@
     if (e.key === 'Escape' && !modal.hidden){ hideModal(); }
   });
 
-  feedbackForm.addEventListener('submit', async (e) => {
-    e.preventDefault();
-    const incident_id = parseInt(feedbackIncidentId.value, 10);
-    const author_name = authorInput.value.trim() || 'Anonymous';
-    const note = noteInput.value.trim();
-    if (!note){
-      alert('Please enter a feedback note.');
-      return;
-    }
-    try {
-      const res = await fetch('api/incident_feedback.php', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ incident_id, author_name, note })
-      });
-      const data = await res.json();
-      if (!data.ok) throw new Error(data.error || 'Submission failed');
-      noteInput.value = '';
-      await loadFeedbackList(incident_id);
-    } catch (e) {
-      alert('Failed to submit feedback: ' + e.message);
-    }
-  });
+
 
   // ----- Proofs -----
   async function loadProofs(incidentId){
@@ -360,12 +339,9 @@
     discardCaptureBtn.hidden = true;
   }
 
-  uploadProofBtn?.addEventListener('click', uploadProofFile);
-  startCameraBtn?.addEventListener('click', startCamera);
-  stopCameraBtn?.addEventListener('click', stopCamera);
-  capturePhotoBtn?.addEventListener('click', capturePhoto);
-  saveCaptureBtn?.addEventListener('click', saveCapture);
-  discardCaptureBtn?.addEventListener('click', discardCapture);
+
+  // Confirm button closes modal
+  confirmReviewBtn?.addEventListener('click', hideModal);
 
   applyFiltersBtn.addEventListener('click', loadIncidents);
   // Auto-apply on filter changes and Enter in search

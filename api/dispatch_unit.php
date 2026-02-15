@@ -32,5 +32,5 @@ try {
     echo json_encode(['ok'=>true]);
 } catch (Throwable $e) {
     try { $pdo->rollBack(); } catch (Throwable $e2) {}
-    echo json_encode(['ok'=>false,'error'=>'Dispatch failed']);
+    echo json_encode(['ok'=>false,'error'=>'Dispatch failed: ' . $e->getMessage()]);
 }
