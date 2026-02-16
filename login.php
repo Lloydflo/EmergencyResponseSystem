@@ -148,6 +148,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                             name="email" 
                             class="form-input" 
                             placeholder="admin@example.com"
+                            autocomplete="email"
                             required
                         >
                     </div>
@@ -167,6 +168,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                             name="password" 
                             class="form-input" 
                             placeholder="Enter your password"
+                            autocomplete="current-password"
                             required
                         >
                         <button 

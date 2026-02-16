@@ -176,6 +176,13 @@ function sendOtpEmail($to, $otpCode, $systemName = null, $logoUrl = 'Email.png')
         $mail->SMTPAutoTLS = true;
         $mail->CharSet = 'UTF-8';
         $mail->SMTPDebug = $debugEnabled ? SMTP::DEBUG_SERVER : SMTP::DEBUG_OFF;
+        $mail->SMTPOptions = [
+            'ssl' => [
+                'verify_peer' => false,
+                'verify_peer_name' => false,
+                'allow_self_signed' => true,
+            ],
+        ];
 
         $debugLines = [];
         if ($debugEnabled) {
@@ -218,6 +225,27 @@ function sendOtpEmail($to, $otpCode, $systemName = null, $logoUrl = 'Email.png')
         . " attempts=" . implode('; ', $errors)
         . "\n";
     file_put_contents(__DIR__ . '/../mail_error.log', $logMsg, FILE_APPEND);
+
+    // Fallback to PHP mail() for hosts that block outbound SMTP ports.
+    $fallbackSubject = 'Your OTP Code';
+    $fallbackText = "Your OTP code is: " . $otpCode . "\nThis code will expire in 3 minutes.";
+    $fallbackHeaders = [];
+    $fallbackHeaders[] = 'MIME-Version: 1.0';
+    $fallbackHeaders[] = 'Content-type: text/plain; charset=UTF-8';
+    $fallbackHeaders[] = 'From: ' . $fromName . ' <' . $fromAddress . '>';
+    $fallbackHeaders[] = 'Reply-To: ' . $fromAddress;
+    $fallbackHeaders[] = 'X-Mailer: PHP/' . phpversion();
+    $fallbackResult = @mail($to, $fallbackSubject, $fallbackText, implode("\r\n", $fallbackHeaders));
+
+    if ($fallbackResult) {
+        return true;
+    }
+
+    file_put_contents(
+        __DIR__ . '/../mail_error.log',
+        date('Y-m-d H:i:s') . " PHP mail() fallback failed for: " . $to . "\n",
+        FILE_APPEND
+    );
 
     return false;
 }

@@ -73,7 +73,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             <form class="login-form" method="POST" action="otp.php">
                 <div class="form-group">
                     <label for="otp" class="form-label">OTP Code</label>
-                    <input type="text" id="otp" name="otp" class="form-input" maxlength="6" pattern="[0-9]{6}" required autofocus>
+                    <input type="text" id="otp" name="otp" class="form-input" maxlength="6" pattern="[0-9]{6}" autocomplete="one-time-code" inputmode="numeric" required autofocus>
                 </div>
                 <button type="submit" class="btn-signin">Verify</button>
             </form>
