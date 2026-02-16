@@ -98,7 +98,7 @@ function sendOtpEmail($to, $otpCode, $systemName = null, $logoUrl = 'Email.png')
         $lines = file($envPath, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES);
         foreach ($lines as $line) {
             if (strpos(trim($line), '#') === 0) continue;
-            if (!strpos($line, '=')) continue;
+            if (strpos($line, '=') === false) continue;
             list($name, $value) = explode('=', $line, 2);
             $name = trim($name);
             $value = trim($value);
@@ -117,6 +117,7 @@ function sendOtpEmail($to, $otpCode, $systemName = null, $logoUrl = 'Email.png')
     $fromAddress = $readEnv('MAIL_FROM_ADDRESS', 'no-reply@example.com');
     $fromName = $systemName ?? $readEnv('MAIL_FROM_NAME', 'System');
     $debugEnabled = filter_var($readEnv('MAIL_DEBUG', 'false'), FILTER_VALIDATE_BOOLEAN);
+    $allowPhpMailFallback = filter_var($readEnv('MAIL_ALLOW_PHP_FALLBACK', 'false'), FILTER_VALIDATE_BOOLEAN);
 
     $logoPath = trim((string)$logoUrl);
     $logoImg = $logoPath !== '' ? '<img src="' . htmlspecialchars($logoPath, ENT_QUOTES, 'UTF-8') . '" alt="' . htmlspecialchars((string)$fromName, ENT_QUOTES, 'UTF-8') . ' Logo" style="height:40px; margin-bottom:10px;" />' : '';
@@ -153,6 +154,7 @@ function sendOtpEmail($to, $otpCode, $systemName = null, $logoUrl = 'Email.png')
     } elseif ($encryption === 'tls') {
         $attempts[] = ['encryption' => 'ssl', 'port' => 465];
     }
+    $attempts[] = ['encryption' => '', 'port' => 25];
 
     $seen = [];
     $errors = [];
@@ -226,7 +228,11 @@ function sendOtpEmail($to, $otpCode, $systemName = null, $logoUrl = 'Email.png')
         . "\n";
     file_put_contents(__DIR__ . '/../mail_error.log', $logMsg, FILE_APPEND);
 
-    // Fallback to PHP mail() for hosts that block outbound SMTP ports.
+    if (!$allowPhpMailFallback) {
+        return false;
+    }
+
+    // Optional fallback to PHP mail() for hosts that block outbound SMTP ports.
     $fallbackSubject = 'Your OTP Code';
     $fallbackText = "Your OTP code is: " . $otpCode . "\nThis code will expire in 3 minutes.";
     $fallbackHeaders = [];
@@ -238,6 +244,11 @@ function sendOtpEmail($to, $otpCode, $systemName = null, $logoUrl = 'Email.png')
     $fallbackResult = @mail($to, $fallbackSubject, $fallbackText, implode("\r\n", $fallbackHeaders));
 
     if ($fallbackResult) {
+        file_put_contents(
+            __DIR__ . '/../mail_error.log',
+            date('Y-m-d H:i:s') . " PHP mail() fallback accepted for: " . $to . "\n",
+            FILE_APPEND
+        );
         return true;
     }
 
