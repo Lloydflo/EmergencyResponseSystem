@@ -1,4 +1,7 @@
 <?php
+use PHPMailer\PHPMailer\PHPMailer;
+use PHPMailer\PHPMailer\SMTP;
+
 // Save OTP to database
 function saveOtpToDatabase($email, $otpCode, $expiryMinutes = 5) {
     require_once __DIR__ . '/db.php';
@@ -72,6 +75,23 @@ function sendOtpEmail($to, $otpCode, $systemName = null, $logoUrl = 'Email.png')
     require_once __DIR__ . '/../vendor/phpmailer/phpmailer/src/SMTP.php';
     require_once __DIR__ . '/../vendor/phpmailer/phpmailer/src/Exception.php';
 
+    $readEnv = function ($key, $default = null) {
+        $value = $_ENV[$key] ?? getenv($key) ?? $_SERVER[$key] ?? $default;
+        if (!is_string($value)) {
+            return $value;
+        }
+
+        $value = trim($value);
+        if (strlen($value) >= 2) {
+            $first = $value[0];
+            $last = $value[strlen($value) - 1];
+            if (($first === '"' && $last === '"') || ($first === "'" && $last === "'")) {
+                $value = substr($value, 1, -1);
+            }
+        }
+        return trim($value);
+    };
+
     // Load .env if exists
     $envPath = dirname(__DIR__) . '/.env';
     if (file_exists($envPath)) {
@@ -88,25 +108,19 @@ function sendOtpEmail($to, $otpCode, $systemName = null, $logoUrl = 'Email.png')
         }
     }
 
-    $mail = new PHPMailer\PHPMailer\PHPMailer();
-    $mail->isSMTP();
-    $mail->Host = $_ENV['MAIL_HOST'] ?? 'localhost';
-    $mail->SMTPAuth = true;
-    $mail->Username = $_ENV['MAIL_USERNAME'] ?? '';
-    $mail->Password = $_ENV['MAIL_PASSWORD'] ?? '';
-    $mail->SMTPSecure = $_ENV['MAIL_ENCRYPTION'] ?? 'tls';
-    $mail->Port = isset($_ENV['MAIL_PORT']) ? (int)$_ENV['MAIL_PORT'] : 587;
+    $host = $readEnv('MAIL_HOST', 'localhost');
+    $username = $readEnv('MAIL_USERNAME', '');
+    $password = $readEnv('MAIL_PASSWORD', '');
+    $passwordNoSpaces = preg_replace('/\s+/', '', (string)$password);
+    $encryption = strtolower((string)$readEnv('MAIL_ENCRYPTION', 'tls'));
+    $port = (int)$readEnv('MAIL_PORT', 587);
+    $fromAddress = $readEnv('MAIL_FROM_ADDRESS', 'no-reply@example.com');
+    $fromName = $systemName ?? $readEnv('MAIL_FROM_NAME', 'System');
+    $debugEnabled = filter_var($readEnv('MAIL_DEBUG', 'false'), FILTER_VALIDATE_BOOLEAN);
 
-    $fromAddress = $_ENV['MAIL_FROM_ADDRESS'] ?? 'no-reply@example.com';
-    $fromName = $systemName ?? ($_ENV['MAIL_FROM_NAME'] ?? 'System');
-    $mail->setFrom($fromAddress, $fromName);
-    $mail->addAddress($to);
-    $mail->isHTML(true);
-    $mail->Subject = 'Your OTP Code';
-
-    $logoImg = $logoUrl ? '<img src="Email.png"' . htmlspecialchars($logoUrl) . '" alt="' . htmlspecialchars($fromName) . ' Logo" style="height:40px; margin-bottom:10px;" />' : '';
-
-    $mail->Body = '
+    $logoPath = trim((string)$logoUrl);
+    $logoImg = $logoPath !== '' ? '<img src="' . htmlspecialchars($logoPath, ENT_QUOTES, 'UTF-8') . '" alt="' . htmlspecialchars((string)$fromName, ENT_QUOTES, 'UTF-8') . ' Logo" style="height:40px; margin-bottom:10px;" />' : '';
+    $body = '
     <div style="font-family: Arial, sans-serif; max-width: 400px; margin: auto; border-radius: 8px; background: #fff; padding: 24px; border: 1px solid #eee;">
         <div style="text-align:center;">'
         . $logoImg .
@@ -125,14 +139,87 @@ function sendOtpEmail($to, $otpCode, $systemName = null, $logoUrl = 'Email.png')
         <div style="text-align:center; color:#bbb; font-size:12px; margin-top:24px;">© ' . date('Y') . ' ' . htmlspecialchars($fromName) . '</div>
     </div>';
 
-        $result = $mail->send();
-        if (!$result) {
-            $logMsg = date('Y-m-d H:i:s') . " PHPMailer Error: " . $mail->ErrorInfo . "\n";
-            file_put_contents(__DIR__ . '/../mail_error.log', $logMsg, FILE_APPEND);
+    $attempts = [];
+    $attempts[] = ['encryption' => $encryption, 'port' => $port];
+
+    if ($encryption === 'ssl' && $port !== 465) {
+        $attempts[] = ['encryption' => 'ssl', 'port' => 465];
+    } elseif ($encryption === 'tls' && $port !== 587) {
+        $attempts[] = ['encryption' => 'tls', 'port' => 587];
+    }
+
+    if ($encryption === 'ssl') {
+        $attempts[] = ['encryption' => 'tls', 'port' => 587];
+    } elseif ($encryption === 'tls') {
+        $attempts[] = ['encryption' => 'ssl', 'port' => 465];
+    }
+
+    $seen = [];
+    $errors = [];
+
+    foreach ($attempts as $attempt) {
+        $key = $attempt['encryption'] . ':' . $attempt['port'];
+        if (isset($seen[$key])) {
+            continue;
         }
-        return $result;
+        $seen[$key] = true;
+
+        $mail = new PHPMailer(true);
+        $mail->isSMTP();
+        $mail->Host = $host;
+        $mail->SMTPAuth = true;
+        $mail->Username = (string)$username;
+        $mail->Password = (string)$passwordNoSpaces;
+        $mail->SMTPSecure = $attempt['encryption'];
+        $mail->Port = (int)$attempt['port'];
+        $mail->Timeout = 20;
+        $mail->SMTPAutoTLS = true;
+        $mail->CharSet = 'UTF-8';
+        $mail->SMTPDebug = $debugEnabled ? SMTP::DEBUG_SERVER : SMTP::DEBUG_OFF;
+
+        $debugLines = [];
+        if ($debugEnabled) {
+            $mail->Debugoutput = static function ($str, $level) use (&$debugLines) {
+                $debugLines[] = '[' . $level . '] ' . $str;
+            };
+        }
+
+        try {
+            $mail->setFrom((string)$fromAddress, (string)$fromName);
+            $mail->addAddress($to);
+            $mail->isHTML(true);
+            $mail->Subject = 'Your OTP Code';
+            $mail->Body = $body;
+
+            if ($mail->send()) {
+                return true;
+            }
+
+            $errors[] = $key . ' -> ' . $mail->ErrorInfo;
+        } catch (\Throwable $e) {
+            $errors[] = $key . ' -> ' . $e->getMessage();
+        }
+
+        if ($debugEnabled && !empty($debugLines)) {
+            $debugBlock = implode(" | ", $debugLines);
+            $errors[] = $key . ' debug -> ' . $debugBlock;
+        }
+    }
+
+    $safeUsername = (string)$username;
+    if (strlen($safeUsername) > 4) {
+        $safeUsername = substr($safeUsername, 0, 2) . str_repeat('*', max(0, strlen($safeUsername) - 4)) . substr($safeUsername, -2);
+    }
+
+    $logMsg = date('Y-m-d H:i:s')
+        . " PHPMailer Error: SMTP connect/send failed"
+        . " host=" . $host
+        . " user=" . $safeUsername
+        . " attempts=" . implode('; ', $errors)
+        . "\n";
+    file_put_contents(__DIR__ . '/../mail_error.log', $logMsg, FILE_APPEND);
+
+    return false;
 }
 // PHPMailer-based mail sender for OTP and notifications
-
-use PHPMailer\PHPMailer\PHPMailer;
 
