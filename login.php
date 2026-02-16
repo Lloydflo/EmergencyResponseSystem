@@ -45,13 +45,24 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $_SESSION['otp'] = $otp;
             $_SESSION['otp_email'] = $email;
             $_SESSION['otp_expiry'] = time() + 180; // 3 minutes
-            saveOtpToDatabase($email, $otp, 3);
-            debug_log('OTP generated and saved');
-            sendOtpEmail($email, $otp);
-            debug_log('OTP email sent (or attempted)');
-            header('Location: otp.php');
-            debug_log('Redirecting to otp.php');
-            exit;
+            $otpSaved = saveOtpToDatabase($email, $otp, 3);
+            if (!$otpSaved) {
+                debug_log('OTP save failed');
+                $error_message = 'Unable to save OTP. Please contact support.';
+                unset($_SESSION['otp'], $_SESSION['otp_email'], $_SESSION['otp_expiry']);
+            } else {
+                debug_log('OTP generated and saved');
+                $emailSent = sendOtpEmail($email, $otp);
+                debug_log($emailSent ? 'OTP email sent' : 'OTP email failed');
+                if (!$emailSent) {
+                    $error_message = 'OTP email sending failed. Please try again later.';
+                    unset($_SESSION['otp'], $_SESSION['otp_email'], $_SESSION['otp_expiry']);
+                } else {
+                    header('Location: otp.php');
+                    debug_log('Redirecting to otp.php');
+                    exit;
+                }
+            }
         } else {
             $error_message = $result['message'];
             debug_log('Login failed: ' . $error_message);

@@ -3,11 +3,68 @@
 function saveOtpToDatabase($email, $otpCode, $expiryMinutes = 5) {
     require_once __DIR__ . '/db.php';
     $pdo = get_db_connection();
-    if (!$pdo) return false;
+    if (!$pdo) {
+        error_log('OTP save failed: database connection not available');
+        return false;
+    }
+
     $expiresAt = date('Y-m-d H:i:s', time() + $expiryMinutes * 60);
-    $sql = "INSERT INTO otp_codes (email, otp_code, expires_at) VALUES (?, ?, ?)";
-    $stmt = $pdo->prepare($sql);
-    return $stmt->execute([$email, $otpCode, $expiresAt]);
+
+    try {
+        $stmt = $pdo->query("SHOW COLUMNS FROM otp_codes");
+        $columns = [];
+        while ($row = $stmt->fetch(PDO::FETCH_ASSOC)) {
+            $columns[$row['Field']] = true;
+        }
+
+        $otpColumnCandidates = ['otp_code', 'otp', 'code'];
+        $expiryColumnCandidates = ['expires_at', 'expiry_at', 'expiry', 'expired_at'];
+        $statusColumnCandidates = ['status'];
+
+        $otpColumn = null;
+        foreach ($otpColumnCandidates as $candidate) {
+            if (isset($columns[$candidate])) {
+                $otpColumn = $candidate;
+                break;
+            }
+        }
+
+        $expiryColumn = null;
+        foreach ($expiryColumnCandidates as $candidate) {
+            if (isset($columns[$candidate])) {
+                $expiryColumn = $candidate;
+                break;
+            }
+        }
+
+        if (!isset($columns['email']) || $otpColumn === null || $expiryColumn === null) {
+            error_log('OTP save failed: otp_codes schema mismatch');
+            return false;
+        }
+
+        $insertColumns = ['email', $otpColumn, $expiryColumn];
+        $insertValues = [$email, (string)$otpCode, $expiresAt];
+
+        foreach ($statusColumnCandidates as $statusColumn) {
+            if (isset($columns[$statusColumn])) {
+                $insertColumns[] = $statusColumn;
+                $insertValues[] = 'active';
+                break;
+            }
+        }
+
+        $columnSql = implode(', ', array_map(function ($column) {
+            return "`" . $column . "`";
+        }, $insertColumns));
+        $placeholders = implode(', ', array_fill(0, count($insertValues), '?'));
+        $sql = "INSERT INTO otp_codes (" . $columnSql . ") VALUES (" . $placeholders . ")";
+
+        $insertStmt = $pdo->prepare($sql);
+        return $insertStmt->execute($insertValues);
+    } catch (PDOException $e) {
+        error_log('OTP save failed: ' . $e->getMessage());
+        return false;
+    }
 }
 // Send OTP Email with HTML template
 function sendOtpEmail($to, $otpCode, $systemName = null, $logoUrl = 'Email.png') {
