@@ -132,6 +132,7 @@ let QC_BOUNDS_GLOBAL;
 let unitFilter = '';
 let heatLayer = null;
 let heatActive = false;
+let dispatchedUnitsByIdentifier = {};
 
 // ===============================
 // LEAFLET MAP INITIALIZATION
@@ -377,13 +378,98 @@ function trackUnit(unitId) {
 }
 
     // Quezon City bounds
-function unitHistory(unitId) {
-    alert(
-        `History for ${unitId.toUpperCase()}:\n\n` +
-        `• Calls Today: 5\n` +
-        `• GPS Uptime: 98%\n` +
-        `• Last Service: 2 weeks ago`
-    );
+function toNum(v) {
+    const n = parseFloat(v);
+    return Number.isFinite(n) ? n : null;
+}
+
+function formatDateTime(value) {
+    if (!value) return 'N/A';
+    const d = new Date(String(value).replace(' ', 'T'));
+    if (Number.isNaN(d.getTime())) return String(value);
+    return d.toLocaleString();
+}
+
+function showUnitRoute(unitId) {
+    const unit = dispatchedUnitsByIdentifier[unitId];
+    if (!unit) {
+        showNotification('Unable to find dispatched unit details', 'error');
+        return;
+    }
+
+    const fromLat = toNum(unit.latitude);
+    const fromLng = toNum(unit.longitude);
+    const toLat = toNum(unit.incident_latitude);
+    const toLng = toNum(unit.incident_longitude);
+
+    if (fromLat === null || fromLng === null || toLat === null || toLng === null) {
+        showNotification('Route unavailable: missing unit or incident coordinates', 'error');
+        return;
+    }
+    if (typeof addRouteToIncident !== 'function') {
+        showNotification('Routing is not ready yet', 'error');
+        return;
+    }
+
+    addRouteToIncident(fromLat, fromLng, toLat, toLng);
+}
+
+async function unitHistory(unitId) {
+    try {
+        const r = await fetch('api/unit_history.php?identifier=' + encodeURIComponent(unitId));
+        const res = await r.json();
+        if (!res.ok || !res.unit) {
+            showNotification('Unable to load unit history', 'error');
+            return;
+        }
+
+        const unit = res.unit || {};
+        const stats = res.stats || {};
+        const latest = res.latest_location || null;
+        const recent = Array.isArray(res.recent_dispatches) ? res.recent_dispatches : [];
+        const lines = [];
+
+        lines.push(`History for ${String(unit.identifier || unitId).toUpperCase()}`);
+        lines.push('');
+        lines.push(`Type: ${unit.unit_type || 'N/A'}`);
+        lines.push(`Current Status: ${String(unit.status || 'N/A').replace('_', ' ')}`);
+        lines.push(`Last Status Update: ${formatDateTime(unit.last_status_at)}`);
+        if (unit.current_incident_id) {
+            const currentTitle = unit.incident_title || unit.incident_type || 'Incident';
+            const currentCode = unit.incident_code ? ` (${unit.incident_code})` : '';
+            lines.push(`Current Incident: ${currentTitle}${currentCode}`);
+            lines.push(`Incident Location: ${unit.incident_location || 'N/A'}`);
+        } else {
+            lines.push('Current Incident: none');
+        }
+
+        lines.push('');
+        lines.push(`Total Dispatches: ${Number(stats.total_dispatches || 0)}`);
+        lines.push(`Dispatches Today: ${Number(stats.dispatches_today || 0)}`);
+        lines.push(`GPS Logs Today: ${Number(stats.location_points_today || 0)}`);
+
+        if (latest) {
+            const speed = toNum(latest.speed_kph);
+            const heading = toNum(latest.heading_deg);
+            lines.push(`Last GPS Ping: ${formatDateTime(latest.recorded_at)}`);
+            if (speed !== null) lines.push(`Latest Speed: ${speed.toFixed(1)} km/h`);
+            if (heading !== null) lines.push(`Latest Heading: ${heading.toFixed(0)}°`);
+        }
+
+        if (recent.length) {
+            lines.push('');
+            lines.push('Recent Dispatches:');
+            recent.forEach((d, i) => {
+                const inc = d.incident_title || d.incident_type || d.incident_code || `Incident #${d.incident_id || '?'}`;
+                const status = String(d.status || 'assigned').replace('_', ' ');
+                lines.push(`${i + 1}. ${formatDateTime(d.assigned_at)} | ${status} | ${inc}`);
+            });
+        }
+
+        alert(lines.join('\n'));
+    } catch (e) {
+        showNotification('Unable to load unit history', 'error');
+    }
 }
 
 // Lightweight notification helper
@@ -494,11 +580,21 @@ function loadDispatchedUnits() {
         .then(res => {
             if (!res.ok) return;
             const items = res.items || [];
+            indexDispatchedUnits(items);
             renderUnitCards(items);
             syncUnitMarkers(items);
             startLivePolling();
         })
         .catch(() => {});
+}
+
+function indexDispatchedUnits(items) {
+    dispatchedUnitsByIdentifier = {};
+    (items || []).forEach(u => {
+        if (u && u.identifier) {
+            dispatchedUnitsByIdentifier[String(u.identifier)] = u;
+        }
+    });
 }
 
 function renderUnitCards(items) {
@@ -544,6 +640,7 @@ function renderUnitCards(items) {
             </div>
             <div class="unit-actions">
                 <button class="btn-unit" onclick="trackUnit('${escapeAttr(u.identifier)}')"><i class="fas fa-location-arrow"></i> Track</button>
+                <button class="btn-unit" onclick="showUnitRoute('${escapeAttr(u.identifier)}')"><i class="fas fa-route"></i> Route</button>
                 <button class="btn-unit" onclick="unitHistory('${escapeAttr(u.identifier)}')"><i class="fas fa-history"></i> History</button>
             </div>
         `;
@@ -577,7 +674,7 @@ function syncUnitMarkers(items) {
 }
 
 function escapeHtml(s) {
-    return String(s || '').replace(/[&<>"] /g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',' ':' '})[c] || c);
+    return String(s || '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'})[c] || c);
 }
 function escapeAttr(s) {
     return String(s || '').replace(/['"]/g, '_');
@@ -675,6 +772,7 @@ function startLivePolling() {
             .then(res => {
                 if (!res.ok) return;
                 const items = res.items || [];
+                indexDispatchedUnits(items);
                 syncUnitMarkers(items);
             })
             .catch(() => {});
