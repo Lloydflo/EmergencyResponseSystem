@@ -226,6 +226,16 @@ try {
 let currentIncidentId = null;
 let currentIncidentLat = null;
 let currentIncidentLng = null;
+const sampleUnitProfilesByType = {
+    police: { driver: 'Officer Cruz', plate: 'PN-1281' },
+    fire: { driver: 'FF Santos', plate: 'FT-3482' },
+    ambulance: { driver: 'EMT Dela Cruz', plate: 'AB-5523' },
+    other: { driver: 'Responder Team', plate: 'TMP-0001' }
+};
+function getSampleUnitProfile(unitType) {
+    const key = String(unitType || '').toLowerCase();
+    return sampleUnitProfilesByType[key] || sampleUnitProfilesByType.other;
+}
 function openDispatchModal(incidentId) {
     currentIncidentId = incidentId;
     document.getElementById('dispatch-modal').style.display = 'flex';
@@ -266,7 +276,6 @@ function openDispatchModal(incidentId) {
                     select.innerHTML += `<option value="${u.id}" data-type="${u.unit_type}" data-identifier="${u.identifier}">${u.identifier} (${u.unit_type})</option>`;
                 });
             }
-            document.getElementById('unit-details').innerHTML = '';
         });
 }
 function closeDispatchModal() {
@@ -278,6 +287,8 @@ function closeDispatchModal() {
 document.addEventListener('DOMContentLoaded', function() {
     document.getElementById('unit-select').addEventListener('change', function() {
         const unitId = this.value;
+        const selectedOption = this.options[this.selectedIndex];
+        const selectedType = selectedOption ? selectedOption.getAttribute('data-type') : '';
         if (!unitId) {
             document.getElementById('unit-details').innerHTML = '';
             return;
@@ -312,9 +323,10 @@ document.addEventListener('DOMContentLoaded', function() {
                 .then(data => {
                     if (data.unit) {
                         const u = data.unit;
+                        const sampleProfile = getSampleUnitProfile(u.unit_type || selectedType);
                         let html =
-                            `<strong>Driver:</strong> ${u.driver_name || 'N/A'}<br>` +
-                            `<strong>Plate #:</strong> ${u.plate_number || 'N/A'}<br>` +
+                            `<strong>Driver:</strong> ${u.driver_name || sampleProfile.driver}<br>` +
+                            `<strong>Plate #:</strong> ${u.plate_number || sampleProfile.plate}<br>` +
                             `<strong>Type:</strong> ${u.unit_type || ''}<br>` +
                             `<strong>Status:</strong> ${u.status || ''}`;
                         if (currentIncidentLat && currentIncidentLng && u.latitude && u.longitude) {
@@ -323,7 +335,13 @@ document.addEventListener('DOMContentLoaded', function() {
                         }
                         document.getElementById('unit-details').innerHTML = html;
                     } else {
-                        document.getElementById('unit-details').innerHTML = '<span style="color:red">Unit not found.</span>';
+                        const sampleProfile = getSampleUnitProfile(selectedType);
+                        const typeLabel = selectedType || 'N/A';
+                        document.getElementById('unit-details').innerHTML =
+                            `<strong>Driver:</strong> ${sampleProfile.driver}<br>` +
+                            `<strong>Plate #:</strong> ${sampleProfile.plate}<br>` +
+                            `<strong>Type:</strong> ${typeLabel}<br>` +
+                            `<strong>Status:</strong> unavailable`;
                     }
                 });
         }
