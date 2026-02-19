@@ -226,6 +226,13 @@ try {
 let currentIncidentId = null;
 let currentIncidentLat = null;
 let currentIncidentLng = null;
+function toIncidentId(value) {
+    if (value === null || value === undefined) return null;
+    const raw = String(value).trim();
+    if (raw === '') return null;
+    const n = Number(raw);
+    return Number.isInteger(n) ? n : null;
+}
 const sampleUnitProfilesByType = {
     police: { driver: 'Officer Cruz', plate: 'PN-1281' },
     fire: { driver: 'FF Santos', plate: 'FT-3482' },
@@ -237,10 +244,14 @@ function getSampleUnitProfile(unitType) {
     return sampleUnitProfilesByType[key] || sampleUnitProfilesByType.other;
 }
 function openDispatchModal(incidentId) {
-    currentIncidentId = incidentId;
+    currentIncidentId = toIncidentId(incidentId);
     document.getElementById('dispatch-modal').style.display = 'flex';
+    if (currentIncidentId === null) {
+        document.getElementById('modal-incident-details').innerHTML = '<span style="color:red">Incident not found.</span>';
+        return;
+    }
     // Fetch incident details and available units
-    fetch('api/incident_details.php?id=' + encodeURIComponent(incidentId))
+    fetch('api/incident_details.php?id=' + encodeURIComponent(currentIncidentId))
         .then(r => r.json())
         .then(data => {
             if (data.incident) {
@@ -365,7 +376,7 @@ document.addEventListener('DOMContentLoaded', function() {
         const unitId = unitSelect.value;
         const selectedOption = unitSelect.options[unitSelect.selectedIndex];
         const unitIdentifier = selectedOption ? selectedOption.getAttribute('data-identifier') : '';
-        if (!unitId || !currentIncidentId) {
+        if (!unitId || currentIncidentId === null) {
             alert('Please select a unit.');
             btn.disabled = false;
             btn.textContent = 'Confirm Dispatch';
@@ -913,8 +924,8 @@ function viewDetails(btn) {
     const card = btn.closest('.call-card');
     // Try to extract incident id
     const idAttr = btn.getAttribute('data-incident-id');
-    const incidentId = idAttr ? Number(idAttr) : currentIncidentId;
-    if (!incidentId) { alert('Incident not found'); return; }
+    const incidentId = idAttr !== null ? toIncidentId(idAttr) : currentIncidentId;
+    if (incidentId === null) { alert('Incident not found'); return; }
     fetch('api/incident_details.php?id=' + encodeURIComponent(incidentId))
         .then(r => r.json())
         .then(data => {
@@ -964,8 +975,8 @@ function refreshAIRecommendations() {
 function deployUnitToIncident(unitId) {
     if (!unitId) { alert('Unit ID missing'); return; }
     const incidentIdStr = prompt('Enter Incident ID to dispatch this unit (leave blank to just mark Assigned):');
-    const incidentId = incidentIdStr ? Number(incidentIdStr) : null;
-    if (incidentId) {
+    const incidentId = (incidentIdStr && incidentIdStr.trim() !== '') ? toIncidentId(incidentIdStr) : null;
+    if (incidentId !== null) {
         fetch('api/dispatch_unit.php', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -1193,8 +1204,8 @@ function refreshAIRecommendations() {
 
 // Resolve incident and refresh panels
 function resolveIncident(btn) {
-    const id = btn && btn.dataset ? Number(btn.dataset.incidentId) : null;
-    if (!id) { alert('Incident ID missing'); return; }
+    const id = btn && btn.dataset ? toIncidentId(btn.dataset.incidentId) : null;
+    if (id === null) { alert('Incident ID missing'); return; }
     const note = `Resolved via Dispatch UI at ${new Date().toLocaleString()}`;
     fetch('api/incident_resolve.php', {
         method: 'POST',

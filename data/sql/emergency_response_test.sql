@@ -392,6 +392,15 @@ CREATE TABLE `resources` (
   `updated_at` datetime DEFAULT NULL ON UPDATE current_timestamp()
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
+--
+-- Dumping data for table `resources`
+--
+
+INSERT INTO `resources` (`id`, `type`, `name`, `code`, `status`, `location`, `notes`, `created_at`, `updated_at`) VALUES
+(1, 'equipment', 'Portable Defibrillator', 'EQ-SEED-001', 'available', 'Station 1', 'Seeded resource data', '2026-02-19 00:00:00', NULL),
+(2, 'equipment', 'Trauma Kit', 'EQ-SEED-002', 'available', 'Station 2', 'Seeded resource data', '2026-02-19 00:00:00', NULL),
+(3, 'equipment', 'Oxygen Tank', 'EQ-SEED-003', 'available', 'Station 3', 'Seeded resource data', '2026-02-19 00:00:00', NULL);
+
 -- --------------------------------------------------------
 
 --
@@ -462,6 +471,15 @@ CREATE TABLE `staff` (
   `created_at` datetime NOT NULL DEFAULT current_timestamp(),
   `updated_at` datetime DEFAULT NULL ON UPDATE current_timestamp()
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+--
+-- Dumping data for table `staff`
+--
+
+INSERT INTO `staff` (`id`, `name`, `role`, `phone`, `email`, `status`, `assigned_resource_id`, `created_at`, `updated_at`) VALUES
+(1, 'Responder Ana Reyes', 'Paramedic', NULL, NULL, 'available', NULL, '2026-02-19 00:00:00', NULL),
+(2, 'Responder Mark Santos', 'EMT', NULL, NULL, 'available', NULL, '2026-02-19 00:00:00', NULL),
+(3, 'Responder Leo Cruz', 'Nurse', NULL, NULL, 'available', NULL, '2026-02-19 00:00:00', NULL);
 
 --
 -- Triggers `staff`
@@ -677,6 +695,12 @@ ALTER TABLE `resource_requests`
   ADD KEY `idx_rr_date_requested` (`date_requested`);
 
 --
+-- Indexes for table `staff`
+--
+ALTER TABLE `staff`
+  ADD PRIMARY KEY (`id`);
+
+--
 -- Indexes for table `units`
 --
 ALTER TABLE `units`
@@ -691,6 +715,24 @@ ALTER TABLE `units`
 --
 ALTER TABLE `otp_codes`
   MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=28;
+
+--
+-- AUTO_INCREMENT for table `resource_requests`
+--
+ALTER TABLE `resource_requests`
+  MODIFY `id` bigint(20) UNSIGNED NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=3;
+
+--
+-- AUTO_INCREMENT for table `resources`
+--
+ALTER TABLE `resources`
+  MODIFY `id` bigint(20) UNSIGNED NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=4;
+
+--
+-- AUTO_INCREMENT for table `staff`
+--
+ALTER TABLE `staff`
+  MODIFY `id` bigint(20) UNSIGNED NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=4;
 
 --
 -- AUTO_INCREMENT for table `units`

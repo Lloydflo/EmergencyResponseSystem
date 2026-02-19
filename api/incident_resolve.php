@@ -16,10 +16,14 @@ if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
 }
 
 $input = json_decode(file_get_contents('php://input'), true);
-$incidentId = isset($input['incident_id']) ? (int)$input['incident_id'] : 0;
+$hasIncidentId = is_array($input)
+    && array_key_exists('incident_id', $input)
+    && $input['incident_id'] !== ''
+    && is_numeric((string)$input['incident_id']);
+$incidentId = $hasIncidentId ? (int)$input['incident_id'] : null;
 $note = isset($input['note']) ? trim((string)$input['note']) : '';
 
-if (!$incidentId) {
+if ($incidentId === null) {
     http_response_code(400);
     echo json_encode(['ok' => false, 'error' => 'Missing incident_id']);
     exit;

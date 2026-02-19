@@ -258,16 +258,34 @@ try {
                 <script>
                 // Resource data loaded from backend
                 let RESOURCES = [];
+                const SAMPLE_RESOURCES = [
+                    { id: 910001, type: 'personnel', name: 'Responder Ana Reyes', role: 'Paramedic', status: 'available', location: 'station-1', actions: ['deploy', 'contact', 'schedule', 'details'] },
+                    { id: 910002, type: 'personnel', name: 'Responder Mark Santos', role: 'EMT', status: 'available', location: 'station-2', actions: ['deploy', 'contact', 'schedule', 'details'] },
+                    { id: 910003, type: 'personnel', name: 'Responder Leo Cruz', role: 'Nurse', status: 'available', location: 'station-3', actions: ['deploy', 'contact', 'schedule', 'details'] },
+                    { id: 920001, type: 'equipment', name: 'Portable Defibrillator', role: 'Medical Equipment', status: 'available', location: 'station-1', actions: ['deploy', 'assign', 'check', 'details'] },
+                    { id: 920002, type: 'equipment', name: 'Trauma Kit', role: 'Medical Equipment', status: 'available', location: 'station-2', actions: ['deploy', 'assign', 'check', 'details'] },
+                    { id: 920003, type: 'equipment', name: 'Oxygen Tank', role: 'Medical Equipment', status: 'available', location: 'station-3', actions: ['deploy', 'assign', 'check', 'details'] }
+                ];
+
+                function mergeSampleResources(items) {
+                    if (Array.isArray(items) && items.length > 0) {
+                        return items;
+                    }
+                    return SAMPLE_RESOURCES.map(sample => ({ ...sample, actions: sample.actions.slice() }));
+                }
+
                 async function loadResources() {
                     const container = document.getElementById('resource-list-dynamic');
                     if (container) container.innerHTML = '<tr><td colspan="6" style="text-align:center;color:#888;">Loading resources…</td></tr>';
                     try {
                         const res = await fetch('api/resources_combined.php');
                         const data = await res.json();
-                        RESOURCES = (data.ok && Array.isArray(data.items)) ? data.items : [];
+                        const fetchedItems = (data.ok && Array.isArray(data.items)) ? data.items : [];
+                        RESOURCES = mergeSampleResources(fetchedItems);
                         renderDynamicResources();
                     } catch (e) {
-                        if (container) container.innerHTML = '<tr><td colspan="6" style="text-align:center;color:#888;">Failed to load resources</td></tr>';
+                        RESOURCES = mergeSampleResources([]);
+                        renderDynamicResources();
                     }
                 }
 
@@ -300,15 +318,18 @@ try {
                     let statusLabel = r.status === 'available' ? 'Avail' : (r.status === 'inuse' ? 'Busy' : 'Offline');
                     // Build actions and render inline (up to 4)
                     const btns = [];
-                    if (r.actions.includes('deploy')) btns.push(`<button class=\"resource-action-btn deploy\" title=\"Deploy\" aria-label=\"Deploy\" onclick=\"deployResource(this)\"><i class=\"fas fa-play\"></i></button>`);
-                    if (r.actions.includes('track')) btns.push(`<button class=\"resource-action-btn track\" title=\"Track\" aria-label=\"Track\" onclick=\"trackResource(this)\"><i class=\"fas fa-location-arrow\"></i></button>`);
-                    if (r.actions.includes('service')) btns.push(`<button class=\"resource-action-btn service\" title=\"Service\" aria-label=\"Service\" onclick=\"serviceResource(this)\"><i class=\"fas fa-wrench\"></i></button>`);
-                    if (r.actions.includes('details')) btns.push(`<button class=\"resource-action-btn details\" title=\"Details\" aria-label=\"Details\" onclick=\"resourceDetails(this)\"><i class=\"fas fa-info-circle\"></i></button>`);
-                    if (r.actions.includes('contact')) btns.push(`<button class=\"resource-action-btn contact\" title=\"Contact\" aria-label=\"Contact\" onclick=\"contactPersonnel(this)\"><i class=\"fas fa-phone\"></i></button>`);
-                    if (r.actions.includes('schedule')) btns.push(`<form style=\"display:inline;\" onsubmit=\"event.preventDefault(); openScheduleModal('${r.name}');\"><button type=\"submit\" class=\"resource-action-btn schedule\" title=\"Schedule\" aria-label=\"Schedule\"><i class=\"fas fa-calendar\"></i></button></form>`);
-                    if (r.actions.includes('assign')) btns.push(`<button class=\"resource-action-btn assign\" title=\"Assign\" aria-label=\"Assign\" onclick=\"assignEquipment(this)\"><i class=\"fas fa-link\"></i></button>`);
-                    if (r.actions.includes('check')) btns.push(`<button class=\"resource-action-btn check\" title=\"Check\" aria-label=\"Check\" onclick=\"checkEquipment(this)\"><i class=\"fas fa-check-circle\"></i></button>`);
-                    if (r.actions.includes('calibrate')) btns.push(`<button class=\"resource-action-btn calibrate\" title=\"Calibrate\" aria-label=\"Calibrate\" onclick=\"calibrateEquipment(this)\"><i class=\"fas fa-tools\"></i></button>`);
+                    const resourceActions = Array.isArray(r.actions) ? r.actions.slice() : [];
+                    if (!resourceActions.includes('deploy')) resourceActions.unshift('deploy');
+                    const actionSet = new Set(resourceActions);
+                    if (actionSet.has('deploy')) btns.push(`<button class=\"resource-action-btn deploy\" title=\"Deploy\" aria-label=\"Deploy\" onclick=\"deployResource(this)\"><i class=\"fas fa-play\"></i></button>`);
+                    if (actionSet.has('track')) btns.push(`<button class=\"resource-action-btn track\" title=\"Track\" aria-label=\"Track\" onclick=\"trackResource(this)\"><i class=\"fas fa-location-arrow\"></i></button>`);
+                    if (actionSet.has('service')) btns.push(`<button class=\"resource-action-btn service\" title=\"Service\" aria-label=\"Service\" onclick=\"serviceResource(this)\"><i class=\"fas fa-wrench\"></i></button>`);
+                    if (actionSet.has('details')) btns.push(`<button class=\"resource-action-btn details\" title=\"Details\" aria-label=\"Details\" onclick=\"resourceDetails(this)\"><i class=\"fas fa-info-circle\"></i></button>`);
+                    if (actionSet.has('contact')) btns.push(`<button class=\"resource-action-btn contact\" title=\"Contact\" aria-label=\"Contact\" onclick=\"contactPersonnel(this)\"><i class=\"fas fa-phone\"></i></button>`);
+                    if (actionSet.has('schedule')) btns.push(`<form style=\"display:inline;\" onsubmit=\"event.preventDefault(); openScheduleModal('${r.name}');\"><button type=\"submit\" class=\"resource-action-btn schedule\" title=\"Schedule\" aria-label=\"Schedule\"><i class=\"fas fa-calendar\"></i></button></form>`);
+                    if (actionSet.has('assign')) btns.push(`<button class=\"resource-action-btn assign\" title=\"Assign\" aria-label=\"Assign\" onclick=\"assignEquipment(this)\"><i class=\"fas fa-link\"></i></button>`);
+                    if (actionSet.has('check')) btns.push(`<button class=\"resource-action-btn check\" title=\"Check\" aria-label=\"Check\" onclick=\"checkEquipment(this)\"><i class=\"fas fa-check-circle\"></i></button>`);
+                    if (actionSet.has('calibrate')) btns.push(`<button class=\"resource-action-btn calibrate\" title=\"Calibrate\" aria-label=\"Calibrate\" onclick=\"calibrateEquipment(this)\"><i class=\"fas fa-tools\"></i></button>`);
                     const visibleBtns = btns.slice(0, Math.min(btns.length, 4));
                     const actionsHtml = `<div class=\"actions-inline\">${visibleBtns.join('')}</div>`;
                     // Icon by type
@@ -562,6 +583,42 @@ try {
         </div>
     </div>
 
+    <!-- Deploy Resource Modal -->
+    <div class="resource-request-modal" id="deployModal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3>Deploy Resource</h3>
+                <button class="modal-close" onclick="closeDeployModal()">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+            <div class="modal-body">
+                <form id="deployForm" onsubmit="submitDeployForm(event)">
+                    <div class="form-group">
+                        <label for="deploy-resource-name">Resource</label>
+                        <input type="text" id="deploy-resource-name" readonly>
+                    </div>
+                    <div class="form-group">
+                        <label for="deploy-location">Location <span class="required">*</span></label>
+                        <input type="text" id="deploy-location" name="location" placeholder="Enter deployment location" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="deploy-quantity">Quantity <span class="required">*</span></label>
+                        <input type="number" id="deploy-quantity" name="quantity" min="1" value="1" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="deploy-notes">Notes</label>
+                        <textarea id="deploy-notes" name="notes" rows="3" placeholder="Add deployment notes..."></textarea>
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn-cancel" onclick="closeDeployModal()">Cancel</button>
+                        <button type="submit" class="btn-submit">Deploy</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
     <script>
         // Scheduling Modal Logic
         function openScheduleModal(personnelName) {
@@ -651,27 +708,91 @@ try {
         }
 
         // Resource deployment functionality
+        let pendingDeployContext = null;
+
         function deployResource(button) {
             const row = button.closest('tr');
             if (!row) return;
             const resourceName = row.querySelector('.resource-title') ? row.querySelector('.resource-title').textContent : 'Resource';
             const resourceId = row.getAttribute('data-resource-id');
             const resourceType = row.getAttribute('data-type');
+            const resourceLocation = row.querySelector('.detail-value') ? row.querySelector('.detail-value').textContent.trim() : '';
             if (!resourceId) { showNotification('Missing resource id', 'error'); return; }
-            if (!confirm(`Deploy ${resourceName} to emergency response?`)) return;
+            openDeployModal({
+                id: Number(resourceId),
+                type: resourceType || '',
+                name: resourceName.trim(),
+                location: resourceLocation
+            });
+        }
+
+        function openDeployModal(context) {
+            const modal = document.getElementById('deployModal');
+            const form = document.getElementById('deployForm');
+            if (!modal || !form) return;
+            pendingDeployContext = context;
+            document.getElementById('deploy-resource-name').value = context.name || 'Resource';
+            document.getElementById('deploy-location').value = context.location || '';
+            document.getElementById('deploy-quantity').value = '1';
+            document.getElementById('deploy-notes').value = '';
+            modal.classList.add('show');
+            document.body.style.overflow = 'hidden';
+        }
+
+        function closeDeployModal() {
+            const modal = document.getElementById('deployModal');
+            const form = document.getElementById('deployForm');
+            if (modal) modal.classList.remove('show');
+            if (form) form.reset();
+            document.body.style.overflow = '';
+            pendingDeployContext = null;
+        }
+
+        function submitDeployForm(event) {
+            event.preventDefault();
+            if (!pendingDeployContext) {
+                showNotification('No resource selected for deployment', 'error');
+                return;
+            }
+            const formData = new FormData(event.target);
+            const location = String(formData.get('location') || '').trim();
+            const quantity = Number(formData.get('quantity') || 0);
+            const notes = String(formData.get('notes') || '').trim();
+
+            if (!location) {
+                showNotification('Location is required', 'error');
+                return;
+            }
+            if (!Number.isFinite(quantity) || quantity < 1) {
+                showNotification('Quantity must be at least 1', 'error');
+                return;
+            }
+
+            const payload = {
+                id: Number(pendingDeployContext.id),
+                type: pendingDeployContext.type,
+                action: 'deploy',
+                location: location,
+                quantity: quantity,
+                notes: notes
+            };
+
             fetch('api/deploy_resource.php', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ id: Number(resourceId), type: resourceType || '', action: 'deploy' })
-            }).then(r => r.json())
+                body: JSON.stringify(payload)
+            })
+            .then(r => r.json())
             .then(data => {
                 if (data && data.ok) {
-                    showNotification(`${resourceName} deployed successfully`, 'success');
+                    showNotification(`${pendingDeployContext.name} deployed to ${location}`, 'success');
+                    closeDeployModal();
                     loadResources();
                 } else {
                     showNotification('Failed to deploy resource' + (data && data.error ? ': ' + data.error : ''), 'error');
                 }
-            }).catch(() => showNotification('Network error', 'error'));
+            })
+            .catch(() => showNotification('Network error', 'error'));
         }
 
         // Resource tracking functionality
@@ -904,6 +1025,8 @@ try {
                     if (res && res.success) {
                         updateRequestRowUI(tr, 'approved', reason || '');
                         showNotification('Request approved', 'success');
+                        // Refresh overview cards and tables so DB-backed counts reflect newly provisioned resources.
+                        setTimeout(() => { window.location.reload(); }, 700);
                     } else {
                         showNotification('Failed to approve: ' + (res && res.error ? res.error : 'Unknown error'), 'error');
                     }
@@ -1301,11 +1424,20 @@ try {
         // Initialize
         document.addEventListener('DOMContentLoaded', function() {
             // Close modal when clicking outside
-            const modal = document.getElementById('resourceRequestModal');
-            if (modal) {
-                modal.addEventListener('click', function(e) {
-                    if (e.target === modal) {
+            const requestModal = document.getElementById('resourceRequestModal');
+            if (requestModal) {
+                requestModal.addEventListener('click', function(e) {
+                    if (e.target === requestModal) {
                         closeResourceModal();
+                    }
+                });
+            }
+
+            const deployModal = document.getElementById('deployModal');
+            if (deployModal) {
+                deployModal.addEventListener('click', function(e) {
+                    if (e.target === deployModal) {
+                        closeDeployModal();
                     }
                 });
             }
@@ -1313,8 +1445,13 @@ try {
             // Close modal on Escape key
             document.addEventListener('keydown', function(e) {
                 if (e.key === 'Escape') {
-                    const modal = document.getElementById('resourceRequestModal');
-                    if (modal && modal.classList.contains('show')) {
+                    const deployModalEl = document.getElementById('deployModal');
+                    if (deployModalEl && deployModalEl.classList.contains('show')) {
+                        closeDeployModal();
+                        return;
+                    }
+                    const requestModalEl = document.getElementById('resourceRequestModal');
+                    if (requestModalEl && requestModalEl.classList.contains('show')) {
                         closeResourceModal();
                     }
                 }

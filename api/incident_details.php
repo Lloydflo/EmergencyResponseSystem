@@ -3,13 +3,14 @@
 header('Content-Type: application/json');
 require_once __DIR__ . '/../includes/db.php';
 $pdo = get_db_connection();
-$id = isset($_GET['id']) ? (int)$_GET['id'] : 0;
+$hasId = array_key_exists('id', $_GET) && $_GET['id'] !== '' && is_numeric((string)$_GET['id']);
+$id = $hasId ? (int)$_GET['id'] : null;
 $code = isset($_GET['code']) ? trim((string)$_GET['code']) : '';
 
 $out = ["ok"=>false, "incident"=>null, "units"=>[]];
 if ($pdo) {
     try {
-        if ($id) {
+        if ($hasId) {
             $stmt = $pdo->prepare("SELECT * FROM incidents WHERE id=? LIMIT 1");
             $stmt->execute([$id]);
         } elseif ($code !== '') {

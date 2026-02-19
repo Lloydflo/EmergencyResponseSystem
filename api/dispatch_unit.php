@@ -2,9 +2,13 @@
 // Dispatch a unit to an incident
 header('Content-Type: application/json');
 $data = json_decode(file_get_contents('php://input'), true);
-$incident_id = isset($data['incident_id']) ? (int)$data['incident_id'] : 0;
+$hasIncidentId = is_array($data)
+    && array_key_exists('incident_id', $data)
+    && $data['incident_id'] !== ''
+    && is_numeric((string)$data['incident_id']);
+$incident_id = $hasIncidentId ? (int)$data['incident_id'] : null;
 $unit_id = isset($data['unit_id']) ? (int)$data['unit_id'] : 0;
-if (!$incident_id || !$unit_id) {
+if ($incident_id === null || !$unit_id) {
     echo json_encode(['ok'=>false,'error'=>'Missing data']);
     exit;
 }
