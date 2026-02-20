@@ -8,6 +8,8 @@ function attachPlaceAutocomplete(inputId, onSelect) {
     input.setAttribute('autocomplete', 'off');
     input.addEventListener('input', async function() {
         const val = input.value.trim();
+        delete input.dataset.lat;
+        delete input.dataset.lon;
         if (dropdown) dropdown.remove();
         if (val.length < 3) {
             return;
@@ -50,6 +52,10 @@ function attachPlaceAutocomplete(inputId, onSelect) {
                         item.addEventListener('mousedown', function(e) {
                             e.preventDefault();
                             input.value = place.display_name;
+                            if (place.lat && place.lon) {
+                                input.dataset.lat = String(place.lat);
+                                input.dataset.lon = String(place.lon);
+                            }
                             if (onSelect) onSelect(place);
                             dropdown.remove();
                         });

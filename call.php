@@ -489,17 +489,72 @@ $pageTitle = 'Emergency Call Center';
         renderIncidents();
     }
 
+    function parseCoordinateText(value) {
+        const text = String(value || '').trim();
+        const match = text.match(/^(-?\d+(?:\.\d+)?)\s*,\s*(-?\d+(?:\.\d+)?)$/);
+        if (!match) return null;
+        const lat = Number(match[1]);
+        const lng = Number(match[2]);
+        if (!Number.isFinite(lat) || !Number.isFinite(lng)) return null;
+        if (lat < -90 || lat > 90 || lng < -180 || lng > 180) return null;
+        return { lat, lng };
+    }
+
+    function getIncidentCoordsFromInput() {
+        const input = document.getElementById('incidentLocation');
+        if (!input) return null;
+        const lat = Number(input.dataset.lat);
+        const lng = Number(input.dataset.lon);
+        if (Number.isFinite(lat) && Number.isFinite(lng)) {
+            return { lat, lng };
+        }
+        return parseCoordinateText(input.value);
+    }
+
+    async function geocodeIncidentLocation(locationText) {
+        const q = String(locationText || '').trim();
+        if (!q) return null;
+        try {
+            const url = 'https://nominatim.openstreetmap.org/search?format=json&countrycodes=PH&limit=1&q=' + encodeURIComponent(q);
+            const res = await fetch(url, { headers: { 'Accept': 'application/json' } });
+            if (!res.ok) return null;
+            const data = await res.json();
+            if (!Array.isArray(data) || data.length === 0) return null;
+            const first = data[0] || {};
+            const lat = Number(first.lat);
+            const lng = Number(first.lon);
+            if (!Number.isFinite(lat) || !Number.isFinite(lng)) return null;
+            const input = document.getElementById('incidentLocation');
+            if (input) {
+                input.dataset.lat = String(lat);
+                input.dataset.lon = String(lng);
+            }
+            return { lat, lng };
+        } catch (e) {
+            return null;
+        }
+    }
+
     async function submitIncident(e) {
         e.preventDefault();
+        const locationText = document.getElementById('incidentLocation').value.trim();
+        let coords = getIncidentCoordsFromInput();
+        if (!coords) {
+            coords = await geocodeIncidentLocation(locationText);
+        }
         const payload = {
             caller_name: document.getElementById('callerName').value.trim(),
             caller_phone: document.getElementById('callerPhone').value.trim(),
             type: document.getElementById('incidentType').value,
-            location: document.getElementById('incidentLocation').value.trim(),
+            location: locationText,
             description: document.getElementById('incidentDescription').value.trim(),
             priority: document.getElementById('incidentPriority').value,
             status: document.getElementById('status').value
         };
+        if (coords) {
+            payload.latitude = coords.lat;
+            payload.longitude = coords.lng;
+        }
 
         if (!payload.priority) {
             alert('Please select a priority.');

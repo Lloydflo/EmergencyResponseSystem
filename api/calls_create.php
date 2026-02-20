@@ -31,6 +31,19 @@ $location = trim((string)($input['location'] ?? ''));
 $description = trim((string)($input['description'] ?? ''));
 $priority = trim((string)($input['priority'] ?? ''));
 $status = trim((string)($input['status'] ?? 'pending'));
+$latitude = array_key_exists('latitude', $input) && $input['latitude'] !== '' ? (float)$input['latitude'] : null;
+$longitude = array_key_exists('longitude', $input) && $input['longitude'] !== '' ? (float)$input['longitude'] : null;
+
+if ($latitude !== null && ($latitude < -90 || $latitude > 90)) {
+    $latitude = null;
+}
+if ($longitude !== null && ($longitude < -180 || $longitude > 180)) {
+    $longitude = null;
+}
+if (($latitude === null) xor ($longitude === null)) {
+    $latitude = null;
+    $longitude = null;
+}
 
 if ($caller_name === '' || $caller_phone === '' || $type === '' || $location === '' || $description === '' || $priority === '') {
     http_response_code(422);
@@ -65,13 +78,15 @@ $reference_no = 'REF-' . date('YmdHis') . '-' . str_pad((string)random_int(0, 99
 try {
     $pdo->beginTransaction();
     $sql = 'INSERT INTO calls (reference_no, caller_name, caller_phone, caller_email, location_address, latitude, longitude, incident_type, priority, status, description, received_at) 
-            VALUES (:reference_no, :caller_name, :caller_phone, NULL, :location_address, NULL, NULL, :incident_type, :priority, :status, :description, NOW())';
+            VALUES (:reference_no, :caller_name, :caller_phone, NULL, :location_address, :latitude, :longitude, :incident_type, :priority, :status, :description, NOW())';
     $stmt = $pdo->prepare($sql);
     $stmt->execute([
         ':reference_no' => $reference_no,
         ':caller_name' => $caller_name,
         ':caller_phone' => $caller_phone,
         ':location_address' => $location,
+        ':latitude' => $latitude,
+        ':longitude' => $longitude,
         ':incident_type' => $type,
         ':priority' => $priority,
         ':status' => $status === 'pending' ? 'new' : 'triaged', // map to calls.status domain

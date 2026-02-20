@@ -20,6 +20,7 @@ $day = isset($_GET['day']) ? trim((string)$_GET['day']) : ''; // YYYY-MM-DD
 $month = isset($_GET['month']) ? trim((string)$_GET['month']) : ''; // YYYY-MM
 
 $sql = 'SELECT i.id, i.reference_no, i.type, i.priority, i.status, i.location_address, i.description, i.created_at,
+        COALESCE(i.latitude, c.latitude) AS latitude, COALESCE(i.longitude, c.longitude) AS longitude,
         u.identifier AS unit_identifier, u.unit_type AS unit_type,
         c.caller_name AS caller_name, c.caller_phone AS caller_phone, i.title AS title,
         CASE WHEN ld.assigned_at IS NOT NULL AND ld.on_scene_at IS NOT NULL 
@@ -98,6 +99,8 @@ try {
             'priority' => $r['priority'],
             'status' => $r['status'],
             'created_at' => $r['created_at'],
+            'latitude' => isset($r['latitude']) && $r['latitude'] !== null ? (float)$r['latitude'] : null,
+            'longitude' => isset($r['longitude']) && $r['longitude'] !== null ? (float)$r['longitude'] : null,
             'assigned_unit' => $r['unit_identifier'] ?? null,
             'assigned_unit_type' => $r['unit_type'] ?? null,
             'caller_name' => $r['caller_name'] ?? null,
