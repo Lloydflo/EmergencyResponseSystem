@@ -7,10 +7,6 @@ $email = $input['email'] ?? '';
 
 echo json_encode([
     "success" => true,
-    "message" => "Login endpoint working",
-    "user" => [
-        "id" => 1,
-        "name" => "Test User",
-        "email" => $email
-    ]
+    "message" => "OTP sent",
+    "otp" => "123456"
 ]);
