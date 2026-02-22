@@ -1,20 +1,17 @@
 <?php
-// emergency_app/connect.php
+// connect.php
 function db(): PDO {
-  $host = getenv("DB_HOST") ?: "127.0.0.1";
-  $db   = getenv("DB_NAME") ?: "emergency_response_test";
-  $user = getenv("DB_USER") ?: "root";
-  $pass = getenv("DB_PASS") ?: "";
-  $port = getenv("DB_PORT") ?: "3306";
+    $cfg = require __DIR__ . '/db.config.php';
 
-  $dsn = "mysql:host=$host;port=$port;dbname=$db;charset=utf8mb4";
-  return new PDO($dsn, $user, $pass, [
-    PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
-    PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC
-  ]);
-}
-$env = parse_ini_file(__DIR__ . '/.env');
+    $host = $cfg['DB_HOST'];
+    $port = $cfg['DB_PORT'];
+    $db   = $cfg['DB_NAME'];
+    $user = $cfg['DB_USER'];
+    $pass = $cfg['DB_PASS'];
 
-foreach ($env as $key => $value) {
-    putenv("$key=$value");
+    $dsn = "mysql:host=$host;port=$port;dbname=$db;charset=utf8mb4";
+    return new PDO($dsn, $user, $pass, [
+        PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
+        PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC
+    ]);
 }

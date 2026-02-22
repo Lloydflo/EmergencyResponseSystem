@@ -11,13 +11,21 @@ require __DIR__ . '/PHPMailer/src/SMTP.php';
 use PHPMailer\PHPMailer\PHPMailer;
 use PHPMailer\PHPMailer\Exception;
 
-$input = json_decode(file_get_contents("php://input"), true);
-$email = trim($input["email"] ?? "");
+$raw = file_get_contents("php://input");
+$input = json_decode($raw, true);
+
+$email = "";
+if (is_array($input) && isset($input["email"])) {
+    $email = trim($input["email"]);
+} elseif (isset($_POST["email"])) {
+    $email = trim($_POST["email"]);
+}
 
 if ($email === "") {
   echo json_encode(["success"=>false, "message"=>"Email is required", "otp"=>null]);
   exit;
 }
+
 
 try {
   $pdo = db();
