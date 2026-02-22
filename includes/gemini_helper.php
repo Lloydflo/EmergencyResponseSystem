@@ -51,6 +51,119 @@ if (!function_exists('ers_clean_ai_text')) {
     }
 }
 
+if (!function_exists('ers_read_env_value_from_file')) {
+    function ers_read_env_value_from_file($filePath, $key) {
+        if (!is_string($filePath) || $filePath === '' || !file_exists($filePath)) {
+            return '';
+        }
+        $lines = @file($filePath, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES);
+        if (!is_array($lines)) {
+            return '';
+        }
+        foreach ($lines as $line) {
+            $line = trim((string)$line);
+            if ($line === '' || strpos($line, '#') === 0 || strpos($line, '=') === false) {
+                continue;
+            }
+            list($name, $value) = explode('=', $line, 2);
+            if (trim((string)$name) !== $key) {
+                continue;
+            }
+            $value = trim((string)$value);
+            $len = strlen($value);
+            if ($len >= 2) {
+                $first = $value[0];
+                $last = $value[$len - 1];
+                if (($first === '"' && $last === '"') || ($first === "'" && $last === "'")) {
+                    $value = substr($value, 1, -1);
+                }
+            }
+            return trim((string)$value);
+        }
+        return '';
+    }
+}
+
+if (!function_exists('ers_resolve_gemini_key')) {
+    function ers_resolve_gemini_key() {
+        // Keep same fallback as config.php so live deploy still works even without .env
+        $fallbackKey = 'AIzaSyBPOc-zdM3skz187ovVyjRnJW1tQHzJkH8';
+
+        $candidates = [];
+        if (defined('GEMINI_API_KEY')) {
+            $candidates[] = (string)GEMINI_API_KEY;
+        }
+        $candidates[] = (string)($_ENV['GEMINI_API_KEY'] ?? '');
+        $candidates[] = (string)getenv('GEMINI_API_KEY');
+        $candidates[] = (string)($_SERVER['GEMINI_API_KEY'] ?? '');
+        $candidates[] = (string)($_ENV['GOOGLE_API_KEY'] ?? '');
+        $candidates[] = (string)getenv('GOOGLE_API_KEY');
+        $candidates[] = (string)($_SERVER['GOOGLE_API_KEY'] ?? '');
+
+        foreach ($candidates as $candidate) {
+            $candidate = trim((string)$candidate);
+            if ($candidate !== '') {
+                return $candidate;
+            }
+        }
+
+        $envPaths = [
+            dirname(__DIR__) . '/.env',
+            __DIR__ . '/.env',
+            __DIR__ . '/../.env',
+            dirname(__DIR__, 2) . '/.env',
+        ];
+
+        foreach ($envPaths as $envPath) {
+            $value = ers_read_env_value_from_file($envPath, 'GEMINI_API_KEY');
+            if ($value !== '') {
+                return $value;
+            }
+            $value = ers_read_env_value_from_file($envPath, 'GOOGLE_API_KEY');
+            if ($value !== '') {
+                return $value;
+            }
+        }
+
+        return $fallbackKey;
+    }
+}
+
+if (!function_exists('ers_resolve_gemini_url')) {
+    function ers_resolve_gemini_url() {
+        $defaultUrl = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent';
+        $candidates = [];
+        if (defined('GEMINI_API_URL')) {
+            $candidates[] = (string)GEMINI_API_URL;
+        }
+        $candidates[] = (string)($_ENV['GEMINI_API_URL'] ?? '');
+        $candidates[] = (string)getenv('GEMINI_API_URL');
+        $candidates[] = (string)($_SERVER['GEMINI_API_URL'] ?? '');
+
+        foreach ($candidates as $candidate) {
+            $candidate = trim((string)$candidate);
+            if ($candidate !== '') {
+                return $candidate;
+            }
+        }
+
+        $envPaths = [
+            dirname(__DIR__) . '/.env',
+            __DIR__ . '/.env',
+            __DIR__ . '/../.env',
+            dirname(__DIR__, 2) . '/.env',
+        ];
+        foreach ($envPaths as $envPath) {
+            $value = ers_read_env_value_from_file($envPath, 'GEMINI_API_URL');
+            if ($value !== '') {
+                return $value;
+            }
+        }
+
+        return $defaultUrl;
+    }
+}
+
 /**
  * Make a request to Gemini AI API
  * @param string $prompt The prompt to send to AI
@@ -59,11 +172,16 @@ if (!function_exists('ers_clean_ai_text')) {
 function callGeminiAPI($prompt) {
     setGeminiLastError('');
 
-    $apiKey = defined('GEMINI_API_KEY') ? trim((string) GEMINI_API_KEY) : '';
-    $apiBaseUrl = defined('GEMINI_API_URL') ? trim((string) GEMINI_API_URL) : '';
+    $apiKey = trim((string)ers_resolve_gemini_key());
+    $apiBaseUrl = trim((string)ers_resolve_gemini_url());
     $prompt = trim((string) $prompt);
 
-    if ($apiKey === '' || $apiBaseUrl === '' || $prompt === '') {
+    if ($prompt === '') {
+        setGeminiLastError('Gemini prompt is empty.');
+        return null;
+    }
+
+    if ($apiKey === '' || $apiBaseUrl === '') {
         setGeminiLastError('Gemini configuration is missing.');
         return null;
     }
