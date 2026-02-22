@@ -184,7 +184,7 @@ $pageTitle = 'Emergency Call Center';
                                     <div class="form-group">
                                         <label for="status">Status</label>
                                         <select id="status" name="status" required>
-                                            <option value="pending">Active</option>
+                                            <option value="pending">Pending</option>
                                             <option value="dispatched">Dispatched</option>
                                             <option value="resolved">Resolved</option>
                                         </select>
@@ -251,6 +251,8 @@ $pageTitle = 'Emergency Call Center';
     let currentSearch = '';
     let filterDay = '';
     let filterMonth = '';
+    const QC_VIEWBOX = '121.0000,14.7500,121.1000,14.6000';
+    const incidentGeocodeCache = {};
 
     document.addEventListener('DOMContentLoaded', () => {
         initPrioritySelect();
@@ -264,6 +266,7 @@ $pageTitle = 'Emergency Call Center';
         }
         // Hook suggestion on description input
         const descEl = document.getElementById('incidentDescription');
+        const typeEl = document.getElementById('incidentType');
         if (descEl) {
             descEl.addEventListener('input', (e) => {
                 const val = e.target.value;
@@ -274,6 +277,12 @@ $pageTitle = 'Emergency Call Center';
             if ((descEl.value || '').trim().length >= 3) {
                 updatePrioritySuggestion(descEl.value);
             }
+        }
+        if (typeEl) {
+            typeEl.addEventListener('change', () => {
+                const currentDescription = descEl ? descEl.value : '';
+                updatePrioritySuggestion(currentDescription);
+            });
         }
     });
 
@@ -362,62 +371,56 @@ $pageTitle = 'Emergency Call Center';
     }
 
     function suggestPriorityFromDescription(desc) {
-        const text = (desc || '').toLowerCase();
+        const text = ` ${(desc || '').toLowerCase()} `;
+        const incidentType = (document.getElementById('incidentType')?.value || '').toLowerCase();
 
-        // High severity keywords (EN + Tagalog)
         const high = [
-            // English
-            'unconscious','non-responsive','not breathing','difficulty breathing','chest pain','severe bleeding',
-            'gunshot','shot','stab','stabbing','weapon','armed','fire','explosion','earthquake','flood','collapsed',
-            'stroke','seizure','multi-vehicle','mass casualty','cardiac arrest','resuscitation','burns','critical','life-threatening',
-            // Tagalog
-            'walang malay','hindi humihinga','nahihirapang huminga','matinding pagdurugo','barilan','binaril','saksak',
-            'may armas','sunog','pagsabog','lindol','baha','gumuho','stroke','kombulsyon','maramihang sasakyan','maraming nasugatan',
-            'tumigil ang puso','hinto ang puso','delikado','malubha','grabe','seryoso'
+            'unconscious', 'non-responsive', 'not breathing', 'difficulty breathing', 'chest pain', 'severe bleeding',
+            'gunshot', 'shot', 'stab', 'stabbing', 'weapon', 'armed', 'fire', 'explosion', 'earthquake', 'flood', 'collapsed',
+            'stroke', 'seizure', 'mass casualty', 'cardiac arrest', 'resuscitation', 'burns', 'critical', 'life-threatening',
+            'walang malay', 'hindi humihinga', 'nahihirapang huminga', 'matinding pagdurugo', 'barilan', 'binaril', 'saksak',
+            'may armas', 'sunog', 'pagsabog', 'lindol', 'baha', 'gumuho', 'kombulsyon', 'maraming nasugatan',
+            'tumigil ang puso', 'hinto ang puso', 'delikado', 'malubha', 'grabe', 'seryoso'
         ];
 
-        // Medium severity keywords (EN + Tagalog)
         const medium = [
-            // English
-            'injury','fracture','sprain','minor bleeding','assault','robbery','burglary','smoke','collision','accident',
-            'traffic','missing','distress','dizziness','fever','vomiting','pregnant','labor','child','elderly',
-            // Tagalog
-            'sugat','pilay','bukol','bahagyang pagdurugo','bugbog','aksidente','banggaan','trapiko','nawawala',
-            'nahilo','lagnat','pagsusuka','buntis','manganganak','bata','matanda'
+            'injury', 'fracture', 'sprain', 'minor bleeding', 'assault', 'robbery', 'burglary', 'smoke', 'collision', 'accident',
+            'traffic', 'missing', 'distress', 'dizziness', 'fever', 'vomiting', 'pregnant', 'labor', 'child', 'elderly',
+            'sugat', 'pilay', 'bukol', 'bahagyang pagdurugo', 'bugbog', 'aksidente', 'banggaan', 'trapiko', 'nawawala',
+            'nahilo', 'lagnat', 'pagsusuka', 'buntis', 'manganganak', 'bata', 'matanda'
         ];
 
-        // Negative/low indicators to reduce severity
         const negative = [
-            'minor','bahagya','walang sugat','hindi seryoso','okay na','stable','stable na','mild'
+            'minor', 'bahagya', 'walang sugat', 'hindi seryoso', 'okay na', 'stable', 'stable na', 'mild'
         ];
 
-        // Intensifiers boost
         const intensifiers = [
-            'critical','life-threatening','delikado','malubha','grabe','seryoso','urgent','agarang'
+            'critical', 'life-threatening', 'delikado', 'malubha', 'grabe', 'seryoso', 'urgent', 'agarang', 'immediate'
         ];
 
-        // Count-based escalation (EN + Tagalog)
         const manyPattern = /(\d+|multiple|many|several|marami|ilan)\s+(nasugatan|injured|pasiente|patients|tao|people|biktima|victims|sasakyan|vehicles|kotse|cars)/;
+        const unconsciousPattern = /(walang malay|unconscious|not breathing|hindi humihinga)/;
+        const majorFirePattern = /(sunog|fire)\s+(sa|in|with|na)?\s*(bahay|building|mall|school|hospital|warehouse)?/;
 
-        // Scoring model
-        let score = 0;
-        const hasAny = (arr) => arr.some(k => text.includes(k));
-        const addIf = (arr, pts) => { if (hasAny(arr)) score += pts; };
+        const countHits = (keywords) => keywords.reduce((total, keyword) => total + (text.includes(keyword) ? 1 : 0), 0);
+        const highHits = countHits(high);
+        const mediumHits = countHits(medium);
+        const negativeHits = countHits(negative);
+        const intensifierHits = countHits(intensifiers);
 
-        // Apply weights
-        addIf(high, 3);
-        addIf(medium, 2);
-        addIf(intensifiers, 2);
+        let score = (highHits * 3) + (mediumHits * 1.5) + (intensifierHits * 1.5) - (negativeHits * 2);
+
         if (manyPattern.test(text)) score += 2;
-        if (hasAny(negative)) score -= 2;
+        if (unconsciousPattern.test(text)) score += 3;
+        if (majorFirePattern.test(text)) score += 2;
 
-        // Specific lethal patterns
-        const arrestPatterns = ['cardiac arrest','tumigil ang puso','hinto ang puso'];
-        if (hasAny(arrestPatterns)) score += 3;
+        if (incidentType === 'fire' && (highHits > 0 || mediumHits > 0)) score += 1;
+        if (incidentType === 'medical' && unconsciousPattern.test(text)) score += 2;
+        if (incidentType === 'police' && /(armed|may armas|weapon|barilan|binaril)/.test(text)) score += 2;
+        if (incidentType === 'traffic' && /(multi-vehicle|maramihang sasakyan|multiple|many)/.test(text)) score += 2;
 
-        // Determine priority
-        if (score >= 5) return 'high';
-        if (score >= 2) return 'medium';
+        if (highHits >= 2 || score >= 6) return 'high';
+        if (mediumHits >= 1 || score >= 2) return 'medium';
         return 'low';
     }
 
@@ -457,8 +460,7 @@ $pageTitle = 'Emergency Call Center';
                     filterMonth = '';
                     if (monthEl) monthEl.value = '';
                 }
-                loadIncidentsFromLocalStorage();
-                renderIncidents();
+                loadIncidentsFromServer();
             });
         }
         if (monthEl) {
@@ -469,8 +471,7 @@ $pageTitle = 'Emergency Call Center';
                     filterDay = '';
                     if (dayEl) dayEl.value = '';
                 }
-                loadIncidentsFromLocalStorage();
-                renderIncidents();
+                loadIncidentsFromServer();
             });
         }
     }
@@ -485,13 +486,12 @@ $pageTitle = 'Emergency Call Center';
         if (searchEl) searchEl.value = '';
         if (dayEl) dayEl.value = '';
         if (monthEl) monthEl.value = '';
-        loadIncidentsFromLocalStorage();
-        renderIncidents();
+        loadIncidentsFromServer();
     }
 
     function parseCoordinateText(value) {
         const text = String(value || '').trim();
-        const match = text.match(/^(-?\d+(?:\.\d+)?)\s*,\s*(-?\d+(?:\.\d+)?)$/);
+        const match = text.match(/^\s*(?:lat(?:itude)?\s*[:=]\s*)?(-?\d+(?:\.\d+)?)\s*[, ]\s*(?:lon(?:gitude)?\s*[:=]\s*)?(-?\d+(?:\.\d+)?)\s*$/i);
         if (!match) return null;
         const lat = Number(match[1]);
         const lng = Number(match[2]);
@@ -511,26 +511,87 @@ $pageTitle = 'Emergency Call Center';
         return parseCoordinateText(input.value);
     }
 
+    function hasLocationContext(text) {
+        return /(quezon city|qc|metro manila|philippines)\b/i.test(String(text || ''));
+    }
+
+    async function geocodeOnce(query, strictViewbox) {
+        const params = new URLSearchParams({
+            format: 'jsonv2',
+            countrycodes: 'PH',
+            limit: '6',
+            addressdetails: '1',
+            q: query
+        });
+        params.set('viewbox', QC_VIEWBOX);
+        if (strictViewbox) {
+            params.set('bounded', '1');
+        }
+        const url = `https://nominatim.openstreetmap.org/search?${params.toString()}`;
+        const res = await fetch(url, { headers: { Accept: 'application/json' } });
+        if (!res.ok) return [];
+        const data = await res.json();
+        return Array.isArray(data) ? data : [];
+    }
+
+    function selectBestGeocodeCandidate(items, originalQuery) {
+        if (!Array.isArray(items) || items.length === 0) return null;
+        const q = String(originalQuery || '').toLowerCase();
+        const scored = items.map((item) => {
+            const label = String(item.display_name || '').toLowerCase();
+            let score = Number(item.importance || 0);
+            if (label.includes('quezon city')) score += 2;
+            if (q && label.includes(q)) score += 1.5;
+            return { item, score };
+        });
+        scored.sort((a, b) => b.score - a.score);
+        return scored[0].item || null;
+    }
+
     async function geocodeIncidentLocation(locationText) {
-        const q = String(locationText || '').trim();
-        if (!q) return null;
+        const raw = String(locationText || '').trim();
+        if (!raw) return null;
+
+        const direct = parseCoordinateText(raw);
+        if (direct) return direct;
+
+        const cacheKey = raw.toLowerCase();
+        if (Object.prototype.hasOwnProperty.call(incidentGeocodeCache, cacheKey)) {
+            return incidentGeocodeCache[cacheKey];
+        }
+
+        const normalizedQuery = hasLocationContext(raw)
+            ? raw
+            : `${raw}, Quezon City, Metro Manila, Philippines`;
+
         try {
-            const url = 'https://nominatim.openstreetmap.org/search?format=json&countrycodes=PH&limit=1&q=' + encodeURIComponent(q);
-            const res = await fetch(url, { headers: { 'Accept': 'application/json' } });
-            if (!res.ok) return null;
-            const data = await res.json();
-            if (!Array.isArray(data) || data.length === 0) return null;
-            const first = data[0] || {};
-            const lat = Number(first.lat);
-            const lng = Number(first.lon);
-            if (!Number.isFinite(lat) || !Number.isFinite(lng)) return null;
+            let candidates = await geocodeOnce(normalizedQuery, true);
+            if (!candidates.length) {
+                candidates = await geocodeOnce(normalizedQuery, false);
+            }
+            if (!candidates.length && normalizedQuery !== raw) {
+                candidates = await geocodeOnce(raw, false);
+            }
+            const best = selectBestGeocodeCandidate(candidates, raw);
+            const lat = Number(best?.lat);
+            const lng = Number(best?.lon);
+            if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
+                incidentGeocodeCache[cacheKey] = null;
+                return null;
+            }
+            const result = { lat, lng };
             const input = document.getElementById('incidentLocation');
             if (input) {
                 input.dataset.lat = String(lat);
                 input.dataset.lon = String(lng);
+                if (best && best.display_name) {
+                    input.value = String(best.display_name);
+                }
             }
-            return { lat, lng };
+            incidentGeocodeCache[cacheKey] = result;
+            return result;
         } catch (e) {
+            incidentGeocodeCache[cacheKey] = null;
             return null;
         }
     }
@@ -538,15 +599,25 @@ $pageTitle = 'Emergency Call Center';
     async function submitIncident(e) {
         e.preventDefault();
         const locationText = document.getElementById('incidentLocation').value.trim();
+        if (!locationText) {
+            alert('Please provide an incident location.');
+            return;
+        }
         let coords = getIncidentCoordsFromInput();
         if (!coords) {
             coords = await geocodeIncidentLocation(locationText);
         }
+        if (!coords) {
+            alert('Unable to verify this location. Please choose from suggestions or enter valid coordinates (lat, lon).');
+            document.getElementById('incidentLocation').focus();
+            return;
+        }
+        const finalLocationText = document.getElementById('incidentLocation').value.trim() || locationText;
         const payload = {
             caller_name: document.getElementById('callerName').value.trim(),
             caller_phone: document.getElementById('callerPhone').value.trim(),
             type: document.getElementById('incidentType').value,
-            location: locationText,
+            location: finalLocationText,
             description: document.getElementById('incidentDescription').value.trim(),
             priority: document.getElementById('incidentPriority').value,
             status: document.getElementById('status').value
@@ -579,6 +650,14 @@ $pageTitle = 'Emergency Call Center';
             e.target.reset();
             document.querySelectorAll('#prioritySelect .priority-option').forEach(o => o.classList.remove('active'));
             document.getElementById('incidentPriority').value = '';
+            const locationInput = document.getElementById('incidentLocation');
+            if (locationInput) {
+                delete locationInput.dataset.lat;
+                delete locationInput.dataset.lon;
+            }
+            priorityAuto = true;
+            const badge = document.getElementById('prioritySuggestion');
+            if (badge) badge.textContent = '';
             await loadIncidentsFromServer();
             // Log activity event for dashboard Recent Activity
             try {
@@ -673,7 +752,26 @@ $pageTitle = 'Emergency Call Center';
     function openIncident(code) {
         const item = incidentItems.find(x => x.incident_code === code);
         if (!item) return;
-        alert(`${item.incident_code}\n${labelForType(item.type)}\n${item.location}\nPriority: ${item.priority}\nStatus: ${item.status}`);
+        const lines = [];
+        lines.push(`Incident: ${item.incident_code || 'N/A'}`);
+        lines.push(`Type: ${labelForType(item.type)}`);
+        lines.push(`Location: ${item.location || 'N/A'}`);
+        if (Number.isFinite(Number(item.latitude)) && Number.isFinite(Number(item.longitude))) {
+            lines.push(`Coordinates: ${Number(item.latitude).toFixed(6)}, ${Number(item.longitude).toFixed(6)}`);
+        }
+        lines.push(`Priority: ${(item.priority || 'N/A').toUpperCase()}`);
+        lines.push(`Status: ${item.status || 'N/A'}`);
+        if (item.caller_name) lines.push(`Caller: ${item.caller_name}`);
+        if (item.caller_phone) lines.push(`Phone: ${item.caller_phone}`);
+        if (item.assigned_unit) {
+            const unitType = item.assigned_unit_type ? ` (${item.assigned_unit_type})` : '';
+            lines.push(`Assigned Unit: ${item.assigned_unit}${unitType}`);
+        }
+        if (item.response_time_min !== null && item.response_time_min !== undefined) {
+            lines.push(`Response Time: ${item.response_time_min} min`);
+        }
+        if (item.description) lines.push(`Description: ${item.description}`);
+        alert(lines.join('\n'));
     }
 
     function exportIncidents() {
