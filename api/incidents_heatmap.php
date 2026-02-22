@@ -13,6 +13,7 @@ $type = isset($_GET['type']) ? trim((string)$_GET['type']) : '';
 $days = isset($_GET['days']) ? max(1, min(365, (int)$_GET['days'])) : 90; // default 90 days
 $hours = isset($_GET['hours']) ? max(1, min(720, (int)$_GET['hours'])) : 0; // optional hours window
 $priority = isset($_GET['priority']) ? trim((string)$_GET['priority']) : '';
+$status = isset($_GET['status']) ? trim((string)$_GET['status']) : '';
 
 $where = [
     'i.latitude IS NOT NULL',
@@ -39,6 +40,14 @@ if ($type !== '') {
 if ($priority !== '') {
     $where[] = 'i.priority = :priority';
     $params[':priority'] = $priority;
+}
+if ($status !== '') {
+    if (strcasecmp($status, 'active') === 0) {
+        $where[] = "i.status IN ('pending','dispatched')";
+    } else {
+        $where[] = 'i.status = :status';
+        $params[':status'] = $status;
+    }
 }
 
 $sql = 'SELECT i.latitude, i.longitude, i.priority FROM incidents i';

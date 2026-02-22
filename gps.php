@@ -129,6 +129,7 @@ let QC_BOUNDS_GLOBAL;
 let unitFilter = '';
 let heatLayer = null;
 let heatActive = false;
+let heatHotspotMarker = null;
 let dispatchedUnitsByIdentifier = {};
 let incidentGeocodeCache = {};
 let searchLocationMarker = null;
@@ -863,35 +864,101 @@ function toggleHeatmap(el) {
         showNotification('Heatmap enabled', 'info');
     } else {
         if (heatLayer) { map.removeLayer(heatLayer); heatLayer = null; }
+        if (heatHotspotMarker) { map.removeLayer(heatHotspotMarker); heatHotspotMarker = null; }
         showNotification('Heatmap disabled', 'info');
     }
 }
 
-function loadHeatmap(initial) {
-    const timeSel = document.getElementById('time-range');
-    const val = timeSel ? timeSel.value : 'live';
-    const params = new URLSearchParams({ type: 'accident' });
-    if (val === '1hour') {
-        params.set('hours', '1');
-    } else if (val === '24hours') {
-        params.set('days', '1');
-    } else if (val === '7days') {
-        params.set('days', '7');
-    } else {
-        // live tracking: use recent month window
-        params.set('days', '30');
+function clearHeatmapOverlays() {
+    if (heatLayer) {
+        map.removeLayer(heatLayer);
+        heatLayer = null;
     }
+    if (heatHotspotMarker) {
+        map.removeLayer(heatHotspotMarker);
+        heatHotspotMarker = null;
+    }
+}
+
+function findHeatHotspot(points) {
+    const gridSize = 0.003; // ~300m buckets in Metro Manila latitude
+    const buckets = new Map();
+    (points || []).forEach((point) => {
+        const lat = parseFloat(point[0]);
+        const lng = parseFloat(point[1]);
+        if (!Number.isFinite(lat) || !Number.isFinite(lng)) return;
+        const intensity = parseFloat(point[2]);
+        const weight = Number.isFinite(intensity) ? intensity : 1;
+        const bucketLat = Math.round(lat / gridSize) * gridSize;
+        const bucketLng = Math.round(lng / gridSize) * gridSize;
+        const key = `${bucketLat.toFixed(6)},${bucketLng.toFixed(6)}`;
+        if (!buckets.has(key)) {
+            buckets.set(key, { latSum: 0, lngSum: 0, count: 0, weight: 0 });
+        }
+        const bucket = buckets.get(key);
+        bucket.latSum += lat;
+        bucket.lngSum += lng;
+        bucket.count += 1;
+        bucket.weight += weight;
+    });
+
+    let best = null;
+    buckets.forEach((bucket) => {
+        if (!best || bucket.weight > best.weight || (bucket.weight === best.weight && bucket.count > best.count)) {
+            best = bucket;
+        }
+    });
+
+    if (!best || !best.count) return null;
+    return {
+        lat: best.latSum / best.count,
+        lng: best.lngSum / best.count,
+        count: best.count,
+        weight: best.weight
+    };
+}
+
+function loadHeatmap(initial) {
+    const params = new URLSearchParams();
+    // Heatmap is always shown from the broadest available incident set.
+    // This removes dependency on the time-range dropdown.
+    params.set('days', '365');
     fetch('api/incidents_heatmap.php?' + params.toString())
         .then(r => r.json())
         .then(res => {
-            if (!res.ok) return;
+            if (!res.ok) {
+                if (initial) showNotification('Unable to load incident heatmap', 'error');
+                return;
+            }
             const points = res.points || [];
-            if (heatLayer) { map.removeLayer(heatLayer); heatLayer = null; }
-            if (!points.length) return;
+            clearHeatmapOverlays();
+            if (!points.length) {
+                if (initial) showNotification('No hotspot data found for incidents with coordinates', 'info');
+                return;
+            }
             heatLayer = L.heatLayer(points, { radius: 25, blur: 15, maxZoom: 17, minOpacity: 0.4 });
             heatLayer.addTo(map);
+
+            const hotspot = findHeatHotspot(points);
+            if (hotspot) {
+                heatHotspotMarker = L.circleMarker([hotspot.lat, hotspot.lng], {
+                    radius: 10,
+                    color: '#ef4444',
+                    weight: 2,
+                    fillColor: '#ef4444',
+                    fillOpacity: 0.35
+                }).addTo(map).bindPopup(
+                    `<strong>Top Incident Hotspot</strong><br>Incidents in area: ${hotspot.count}`
+                );
+                if (initial) {
+                    map.flyTo([hotspot.lat, hotspot.lng], Math.max(map.getZoom(), 14), { duration: 0.6 });
+                    heatHotspotMarker.openPopup();
+                }
+            }
         })
-        .catch(() => {});
+        .catch(() => {
+            if (initial) showNotification('Unable to load incident heatmap', 'error');
+        });
 }
 
 // Live polling to update unit positions/speeds every 5s
