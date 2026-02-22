@@ -60,10 +60,27 @@ if (!function_exists('ers_env')) {
     }
 }
 
-ers_load_env_file(dirname(__DIR__) . '/.env');
+// Try multiple .env locations because some deployments place env files in different paths
+$ersEnvPaths = [
+    dirname(__DIR__) . '/.env',
+    __DIR__ . '/.env',
+    __DIR__ . '/../.env',
+    dirname(__DIR__, 2) . '/.env',
+];
+foreach ($ersEnvPaths as $ersEnvPath) {
+    ers_load_env_file($ersEnvPath);
+}
+
+// Fallback key for deployments where .env is not uploaded (e.g. git-only deploy).
+// You can still override this using GEMINI_API_KEY environment variable.
+$geminiFallbackKey = 'AIzaSyBPOc-zdM3skz187ovVyjRnJW1tQHzJkH8';
 
 if (!defined('GEMINI_API_KEY')) {
-    define('GEMINI_API_KEY', (string) ers_env('GEMINI_API_KEY', ''));
+    $resolvedGeminiKey = (string) ers_env(
+        'GEMINI_API_KEY',
+        ers_env('GOOGLE_API_KEY', $geminiFallbackKey)
+    );
+    define('GEMINI_API_KEY', trim($resolvedGeminiKey));
 }
 
 if (!defined('GEMINI_API_URL')) {
