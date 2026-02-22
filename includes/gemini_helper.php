@@ -86,9 +86,6 @@ if (!function_exists('ers_read_env_value_from_file')) {
 
 if (!function_exists('ers_resolve_gemini_key')) {
     function ers_resolve_gemini_key() {
-        // Keep same fallback as config.php so live deploy still works even without .env
-        $fallbackKey = 'AIzaSyBPOc-zdM3skz187ovVyjRnJW1tQHzJkH8';
-
         $candidates = [];
         if (defined('GEMINI_API_KEY')) {
             $candidates[] = (string)GEMINI_API_KEY;
@@ -125,7 +122,7 @@ if (!function_exists('ers_resolve_gemini_key')) {
             }
         }
 
-        return $fallbackKey;
+        return '';
     }
 }
 
@@ -250,7 +247,8 @@ function callGeminiAPI($prompt) {
         $friendly = 'Gemini request failed (HTTP ' . $httpCode . ').';
     }
 
-    if ($apiError !== '') {
+    // Do not expose raw auth/quota provider messages directly to UI.
+    if ($apiError !== '' && !in_array($httpCode, [401, 403, 429], true)) {
         $friendly .= ' ' . $apiError;
     }
     setGeminiLastError($friendly);

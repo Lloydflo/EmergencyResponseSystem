@@ -71,15 +71,8 @@ foreach ($ersEnvPaths as $ersEnvPath) {
     ers_load_env_file($ersEnvPath);
 }
 
-// Fallback key for deployments where .env is not uploaded (e.g. git-only deploy).
-// You can still override this using GEMINI_API_KEY environment variable.
-$geminiFallbackKey = 'AIzaSyBPOc-zdM3skz187ovVyjRnJW1tQHzJkH8';
-
 if (!defined('GEMINI_API_KEY')) {
-    $resolvedGeminiKey = (string) ers_env(
-        'GEMINI_API_KEY',
-        ers_env('GOOGLE_API_KEY', $geminiFallbackKey)
-    );
+    $resolvedGeminiKey = (string) ers_env('GEMINI_API_KEY', ers_env('GOOGLE_API_KEY', ''));
     define('GEMINI_API_KEY', trim($resolvedGeminiKey));
 }
 
