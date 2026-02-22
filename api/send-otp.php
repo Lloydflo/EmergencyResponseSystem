@@ -1,6 +1,15 @@
 <?php
 header("Content-Type: application/json");
 
+echo json_encode([
+  "env_file" => __DIR__ . "/.env",
+  "DB_HOST" => getenv("DB_HOST"),
+  "DB_NAME" => getenv("DB_NAME"),
+  "DB_USER" => getenv("DB_USER"),
+  "DB_PASS_SET" => getenv("DB_PASS") ? true : false,
+]);
+exit;
+
 require __DIR__ . "/connect.php";
 
 // 👉 DITO MO ILALAGAY

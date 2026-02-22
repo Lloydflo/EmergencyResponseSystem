@@ -29,6 +29,12 @@ if (file_exists($envPath)) {
     }
 }
 
+error_log("ENV_PATH=" . __DIR__ . "/.env");
+error_log("DB_HOST=" . var_export(getenv("DB_HOST"), true));
+error_log("DB_NAME=" . var_export(getenv("DB_NAME"), true));
+error_log("DB_USER=" . var_export(getenv("DB_USER"), true));
+error_log("DB_PASS_SET=" . (getenv("DB_PASS") ? "yes" : "no"));
+
 function db(): PDO {
   $host = getenv("DB_HOST") ?: "127.0.0.1";
   $db   = getenv("DB_NAME") ?: "";
