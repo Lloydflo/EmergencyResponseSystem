@@ -5,6 +5,7 @@
 .env
 config.php
 db.config.php
+api/.env
 
 # Mail configuration (prevent accidental commit)
 mail.env
