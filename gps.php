@@ -920,9 +920,8 @@ function findHeatHotspot(points) {
 
 function loadHeatmap(initial) {
     const params = new URLSearchParams();
-    // Heatmap is always shown from the broadest available incident set.
-    // This removes dependency on the time-range dropdown.
-    params.set('days', '365');
+    // Use all available coordinates from database-backed records.
+    params.set('all', '1');
     fetch('api/incidents_heatmap.php?' + params.toString())
         .then(r => r.json())
         .then(res => {
@@ -938,6 +937,10 @@ function loadHeatmap(initial) {
             }
             heatLayer = L.heatLayer(points, { radius: 25, blur: 15, maxZoom: 17, minOpacity: 0.4 });
             heatLayer.addTo(map);
+            if (initial) {
+                const count = Number.isFinite(Number(res.count)) ? Number(res.count) : points.length;
+                showNotification(`Heatmap loaded (${count} records)`, 'success');
+            }
 
             const hotspot = findHeatHotspot(points);
             if (hotspot) {
