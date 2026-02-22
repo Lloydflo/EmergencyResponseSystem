@@ -1,6 +1,15 @@
 <?php
 // connect.php
 
+echo json_encode([
+  "env_file" => __DIR__ . "/.env",
+  "DB_HOST" => getenv("DB_HOST"),
+  "DB_NAME" => getenv("DB_NAME"),
+  "DB_USER" => getenv("DB_USER"),
+  "DB_PASS_SET" => getenv("DB_PASS") ? true : false,
+]);
+exit;
+
 // ✅ load .env BEFORE db()
 $envPath = __DIR__ . '/.env';
 if (file_exists($envPath)) {
