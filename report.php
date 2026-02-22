@@ -177,6 +177,9 @@ try {
                         <button class="btn-report primary" onclick="applyFilters()">
                             <i class="fas fa-search"></i> Apply Filters
                         </button>
+                        <button class="btn-report" onclick="clearFilters()">
+                            <i class="fas fa-eraser"></i> Clear Filters
+                        </button>
                     </div>
                 </div>
             </div>
@@ -780,6 +783,28 @@ try {
             setTimeout(() => {
                 showNotification('Filters applied', 'success');
             }, 500);
+        }
+
+        function clearFilters() {
+            const reportType = document.getElementById('report-type');
+            const timePeriod = document.getElementById('time-period');
+            const incidentType = document.getElementById('incident-type');
+            const priorityLevel = document.getElementById('priority-level');
+            const startDate = document.getElementById('start-date');
+            const endDate = document.getElementById('end-date');
+
+            if (reportType) reportType.value = '';
+            if (timePeriod) timePeriod.value = 'month';
+            if (incidentType) incidentType.value = '';
+            if (priorityLevel) priorityLevel.value = '';
+            if (startDate) startDate.value = '';
+            if (endDate) endDate.value = '';
+
+            currentFilters = getFilters();
+            refreshMetrics(currentFilters);
+            refreshCharts(currentFilters);
+            loadRecentIncidents(currentFilters);
+            showNotification('Filters cleared', 'success');
         }
 
         // Export functions

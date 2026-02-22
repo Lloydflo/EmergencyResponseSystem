@@ -129,8 +129,11 @@ let QC_BOUNDS_GLOBAL;
 let unitFilter = '';
 let heatLayer = null;
 let heatActive = false;
+let heatHotspotMarker = null;
 let dispatchedUnitsByIdentifier = {};
 let incidentGeocodeCache = {};
+let searchLocationMarker = null;
+const QC_VIEWBOX = '121.0000,14.7500,121.1000,14.6000';
 
 // ===============================
 // LEAFLET MAP INITIALIZATION
@@ -393,6 +396,44 @@ function parseCoordsFromText(value) {
     return { lat, lng };
 }
 
+function hasLocationContext(text) {
+    return /(quezon city|qc|metro manila|philippines)\b/i.test(String(text || ''));
+}
+
+async function geocodeOnce(query, strictViewbox) {
+    const params = new URLSearchParams({
+        format: 'jsonv2',
+        limit: '6',
+        countrycodes: 'ph',
+        addressdetails: '1',
+        q: query
+    });
+    params.set('viewbox', QC_VIEWBOX);
+    if (strictViewbox) {
+        params.set('bounded', '1');
+    }
+    const response = await fetch(`https://nominatim.openstreetmap.org/search?${params.toString()}`, {
+        headers: { Accept: 'application/json' }
+    });
+    if (!response.ok) return [];
+    const data = await response.json();
+    return Array.isArray(data) ? data : [];
+}
+
+function selectBestGeocodeCandidate(items, originalQuery) {
+    if (!Array.isArray(items) || !items.length) return null;
+    const q = String(originalQuery || '').toLowerCase();
+    const scored = items.map((item) => {
+        const label = String(item.display_name || '').toLowerCase();
+        let score = Number(item.importance || 0);
+        if (label.includes('quezon city')) score += 2;
+        if (q && label.includes(q)) score += 1.5;
+        return { item, score };
+    });
+    scored.sort((a, b) => b.score - a.score);
+    return scored[0].item || null;
+}
+
 async function geocodeIncidentLocation(locationText) {
     const raw = String(locationText || '').trim();
     if (!raw) return null;
@@ -405,31 +446,26 @@ async function geocodeIncidentLocation(locationText) {
         return incidentGeocodeCache[cacheKey];
     }
 
-    const query = /(quezon city|metro manila|philippines)\b/i.test(raw)
+    const query = hasLocationContext(raw)
         ? raw
         : `${raw}, Quezon City, Metro Manila, Philippines`;
 
     try {
-        const params = new URLSearchParams({
-            format: 'json',
-            limit: '1',
-            countrycodes: 'ph',
-            q: query
-        });
-        const response = await fetch(`https://nominatim.openstreetmap.org/search?${params.toString()}`);
-        if (!response.ok) {
-            return null;
+        let candidates = await geocodeOnce(query, true);
+        if (!candidates.length) {
+            candidates = await geocodeOnce(query, false);
         }
-        const data = await response.json();
-        const top = Array.isArray(data) ? data[0] : null;
-        const lat = top ? toNum(top.lat) : null;
-        const lng = top ? toNum(top.lon) : null;
+        if (!candidates.length && query !== raw) {
+            candidates = await geocodeOnce(raw, false);
+        }
+        const best = selectBestGeocodeCandidate(candidates, raw);
+        const lat = best ? toNum(best.lat) : null;
+        const lng = best ? toNum(best.lon) : null;
         const result = (lat !== null && lng !== null) ? { lat, lng } : null;
-        if (result) {
-            incidentGeocodeCache[cacheKey] = result;
-        }
+        incidentGeocodeCache[cacheKey] = result;
         return result;
     } catch (e) {
+        incidentGeocodeCache[cacheKey] = null;
         return null;
     }
 }
@@ -557,6 +593,47 @@ function showNotification(msg, type) {
     setTimeout(() => n.remove(), 2500);
 }
 
+function focusMapToLocation(lat, lng) {
+    if (!map || !Number.isFinite(lat) || !Number.isFinite(lng)) return;
+    map.setView([lat, lng], 16, { animate: true });
+    if (!searchLocationMarker) {
+        searchLocationMarker = L.marker([lat, lng], {
+            icon: getIcon('incident')
+        }).addTo(map);
+    } else {
+        searchLocationMarker.setLatLng([lat, lng]);
+    }
+    searchLocationMarker.bindPopup(`<strong>Search Result</strong><br>Coords: ${lat.toFixed(6)}, ${lng.toFixed(6)}`);
+}
+
+function initSearchLocationControls() {
+    const input = document.getElementById('search-location');
+    if (!input) return;
+
+    const handleSearch = async () => {
+        const raw = String(input.value || '').trim();
+        if (!raw) return;
+        let coords = parseCoordsFromText(raw);
+        if (!coords) {
+            showNotification('Searching location...', 'info');
+            coords = await geocodeIncidentLocation(raw);
+        }
+        if (!coords) {
+            showNotification('Unable to locate this search in Quezon City', 'error');
+            return;
+        }
+        input.dataset.lat = String(coords.lat);
+        input.dataset.lon = String(coords.lng);
+        focusMapToLocation(coords.lat, coords.lng);
+    };
+
+    input.addEventListener('keydown', (e) => {
+        if (e.key !== 'Enter') return;
+        e.preventDefault();
+        handleSearch();
+    });
+}
+
 // ===============================
 // LEGEND CONTROL
 // ===============================
@@ -587,6 +664,7 @@ function addLegendControl() {
 // INIT MAP
 // ===============================
 document.addEventListener("DOMContentLoaded", initMap);
+document.addEventListener("DOMContentLoaded", initSearchLocationControls);
 // Focus a unit from URL after init
 document.addEventListener("DOMContentLoaded", () => {
     try {
@@ -627,26 +705,6 @@ document.addEventListener('DOMContentLoaded', () => {
 <script src="https://unpkg.com/leaflet-routing-machine@latest/dist/leaflet-routing-machine.js"></script>
 <script src="js/routing.js"></script>
 <script src="js/place-autocomplete.js"></script>
-<script>
-// Ensure place autocomplete is initialized for search-location
-if (window.attachPlaceAutocomplete) {
-    attachPlaceAutocomplete('search-location', function(place) {
-        if (window.map && place && place.lat && place.lon) {
-            window.map.setView([parseFloat(place.lat), parseFloat(place.lon)], 16, { animate: true });
-        }
-    });
-} else {
-    document.addEventListener('DOMContentLoaded', function() {
-        if (window.attachPlaceAutocomplete) {
-            attachPlaceAutocomplete('search-location', function(place) {
-                if (window.map && place && place.lat && place.lon) {
-                    window.map.setView([parseFloat(place.lat), parseFloat(place.lon)], 16, { animate: true });
-                }
-            });
-        }
-    });
-}
-</script>
 <script>
 // Load dispatched units and render list + map markers
 function loadDispatchedUnits() {
@@ -806,35 +864,104 @@ function toggleHeatmap(el) {
         showNotification('Heatmap enabled', 'info');
     } else {
         if (heatLayer) { map.removeLayer(heatLayer); heatLayer = null; }
+        if (heatHotspotMarker) { map.removeLayer(heatHotspotMarker); heatHotspotMarker = null; }
         showNotification('Heatmap disabled', 'info');
     }
 }
 
-function loadHeatmap(initial) {
-    const timeSel = document.getElementById('time-range');
-    const val = timeSel ? timeSel.value : 'live';
-    const params = new URLSearchParams({ type: 'accident' });
-    if (val === '1hour') {
-        params.set('hours', '1');
-    } else if (val === '24hours') {
-        params.set('days', '1');
-    } else if (val === '7days') {
-        params.set('days', '7');
-    } else {
-        // live tracking: use recent month window
-        params.set('days', '30');
+function clearHeatmapOverlays() {
+    if (heatLayer) {
+        map.removeLayer(heatLayer);
+        heatLayer = null;
     }
+    if (heatHotspotMarker) {
+        map.removeLayer(heatHotspotMarker);
+        heatHotspotMarker = null;
+    }
+}
+
+function findHeatHotspot(points) {
+    const gridSize = 0.003; // ~300m buckets in Metro Manila latitude
+    const buckets = new Map();
+    (points || []).forEach((point) => {
+        const lat = parseFloat(point[0]);
+        const lng = parseFloat(point[1]);
+        if (!Number.isFinite(lat) || !Number.isFinite(lng)) return;
+        const intensity = parseFloat(point[2]);
+        const weight = Number.isFinite(intensity) ? intensity : 1;
+        const bucketLat = Math.round(lat / gridSize) * gridSize;
+        const bucketLng = Math.round(lng / gridSize) * gridSize;
+        const key = `${bucketLat.toFixed(6)},${bucketLng.toFixed(6)}`;
+        if (!buckets.has(key)) {
+            buckets.set(key, { latSum: 0, lngSum: 0, count: 0, weight: 0 });
+        }
+        const bucket = buckets.get(key);
+        bucket.latSum += lat;
+        bucket.lngSum += lng;
+        bucket.count += 1;
+        bucket.weight += weight;
+    });
+
+    let best = null;
+    buckets.forEach((bucket) => {
+        if (!best || bucket.weight > best.weight || (bucket.weight === best.weight && bucket.count > best.count)) {
+            best = bucket;
+        }
+    });
+
+    if (!best || !best.count) return null;
+    return {
+        lat: best.latSum / best.count,
+        lng: best.lngSum / best.count,
+        count: best.count,
+        weight: best.weight
+    };
+}
+
+function loadHeatmap(initial) {
+    const params = new URLSearchParams();
+    // Use all available coordinates from database-backed records.
+    params.set('all', '1');
     fetch('api/incidents_heatmap.php?' + params.toString())
         .then(r => r.json())
         .then(res => {
-            if (!res.ok) return;
+            if (!res.ok) {
+                if (initial) showNotification('Unable to load incident heatmap', 'error');
+                return;
+            }
             const points = res.points || [];
-            if (heatLayer) { map.removeLayer(heatLayer); heatLayer = null; }
-            if (!points.length) return;
+            clearHeatmapOverlays();
+            if (!points.length) {
+                if (initial) showNotification('No hotspot data found for incidents with coordinates', 'info');
+                return;
+            }
             heatLayer = L.heatLayer(points, { radius: 25, blur: 15, maxZoom: 17, minOpacity: 0.4 });
             heatLayer.addTo(map);
+            if (initial) {
+                const count = Number.isFinite(Number(res.count)) ? Number(res.count) : points.length;
+                showNotification(`Heatmap loaded (${count} records)`, 'success');
+            }
+
+            const hotspot = findHeatHotspot(points);
+            if (hotspot) {
+                heatHotspotMarker = L.circleMarker([hotspot.lat, hotspot.lng], {
+                    radius: 10,
+                    color: '#ef4444',
+                    weight: 2,
+                    fillColor: '#ef4444',
+                    fillOpacity: 0.35
+                }).addTo(map).bindPopup(
+                    `<strong>Top Incident Hotspot</strong><br>Incidents in area: ${hotspot.count}`
+                );
+                if (initial) {
+                    map.flyTo([hotspot.lat, hotspot.lng], Math.max(map.getZoom(), 14), { duration: 0.6 });
+                    heatHotspotMarker.openPopup();
+                }
+            }
         })
-        .catch(() => {});
+        .catch(() => {
+            if (initial) showNotification('Unable to load incident heatmap', 'error');
+        });
 }
 
 // Live polling to update unit positions/speeds every 5s
