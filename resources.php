@@ -10,6 +10,22 @@ $requestor_name = $current_user ? ($current_user['name'] ?? ($current_user['emai
 $totalVehicles = 0;
 $activePersonnel = 0;
 $equipmentItems = 0;
+$resourceAiData = [
+    'vehicles_total' => 0,
+    'vehicles_available' => 0,
+    'vehicles_inuse' => 0,
+    'vehicles_offline' => 0,
+    'personnel_total' => 0,
+    'personnel_available' => 0,
+    'personnel_inuse' => 0,
+    'personnel_offline' => 0,
+    'equipment_total' => 0,
+    'equipment_available' => 0,
+    'equipment_inuse' => 0,
+    'equipment_offline' => 0,
+    'active_incidents' => 0,
+    'pending_request_summary' => 'vehicle=0, personnel=0, equipment=0, other=0',
+];
 
 // Fetch resource data from database
 try {
@@ -25,6 +41,60 @@ try {
         
         // Get equipment items (resources of type equipment)
         $equipmentItems = (int)$pdo->query("SELECT COUNT(*) AS c FROM resources WHERE type = 'equipment' AND status != 'maintenance'")->fetch()['c'];
+
+        $vehiclesTotal = (int)$pdo->query("SELECT COUNT(*) AS c FROM units")->fetch()['c'];
+        $vehiclesAvailable = (int)$pdo->query("SELECT COUNT(*) AS c FROM units WHERE status='available'")->fetch()['c'];
+        $vehiclesInUse = (int)$pdo->query("SELECT COUNT(*) AS c FROM units WHERE status IN ('assigned','acknowledged','enroute','on_scene')")->fetch()['c'];
+        $vehiclesOffline = max(0, $vehiclesTotal - $vehiclesAvailable - $vehiclesInUse);
+
+        $personnelTotal = (int)$pdo->query("SELECT COUNT(*) AS c FROM staff")->fetch()['c'];
+        $personnelAvailable = (int)$pdo->query("SELECT COUNT(*) AS c FROM staff WHERE status IN ('available','on_duty')")->fetch()['c'];
+        $personnelOffline = (int)$pdo->query("SELECT COUNT(*) AS c FROM staff WHERE status IN ('off_duty','leave')")->fetch()['c'];
+        $personnelInUse = max(0, $personnelTotal - $personnelAvailable - $personnelOffline);
+
+        $equipmentTotal = (int)$pdo->query("SELECT COUNT(*) AS c FROM resources WHERE type='equipment'")->fetch()['c'];
+        $equipmentAvailable = (int)$pdo->query("SELECT COUNT(*) AS c FROM resources WHERE type='equipment' AND status IN ('available','ready')")->fetch()['c'];
+        $equipmentInUse = (int)$pdo->query("SELECT COUNT(*) AS c FROM resources WHERE type='equipment' AND status IN ('deployed','in_use','assigned')")->fetch()['c'];
+        $equipmentOffline = max(0, $equipmentTotal - $equipmentAvailable - $equipmentInUse);
+
+        $activeIncidents = (int)$pdo->query("SELECT COUNT(*) AS c FROM incidents WHERE status IN ('pending','dispatched','active','in_progress')")->fetch()['c'];
+
+        $pendingRows = [];
+        try {
+            $pendingRows = $pdo->query("SELECT details FROM resource_requests WHERE status='pending' ORDER BY date_requested DESC LIMIT 100")->fetchAll();
+        } catch (Throwable $e) {
+            $pendingRows = [];
+        }
+        $byType = ['vehicle' => 0, 'personnel' => 0, 'equipment' => 0, 'other' => 0];
+        foreach ($pendingRows as $row) {
+            $details = json_decode((string)($row['details'] ?? ''), true);
+            $type = strtolower((string)($details['type'] ?? 'other'));
+            $qty = (int)($details['quantity'] ?? 1);
+            if ($qty < 1) $qty = 1;
+            if (!isset($byType[$type])) $type = 'other';
+            $byType[$type] += $qty;
+        }
+        $pendingSummary = 'vehicle=' . $byType['vehicle']
+            . ', personnel=' . $byType['personnel']
+            . ', equipment=' . $byType['equipment']
+            . ', other=' . $byType['other'];
+
+        $resourceAiData = [
+            'vehicles_total' => $vehiclesTotal,
+            'vehicles_available' => $vehiclesAvailable,
+            'vehicles_inuse' => $vehiclesInUse,
+            'vehicles_offline' => $vehiclesOffline,
+            'personnel_total' => $personnelTotal,
+            'personnel_available' => $personnelAvailable,
+            'personnel_inuse' => $personnelInUse,
+            'personnel_offline' => $personnelOffline,
+            'equipment_total' => $equipmentTotal,
+            'equipment_available' => $equipmentAvailable,
+            'equipment_inuse' => $equipmentInUse,
+            'equipment_offline' => $equipmentOffline,
+            'active_incidents' => $activeIncidents,
+            'pending_request_summary' => $pendingSummary,
+        ];
     }
 } catch (Throwable $e) {
     // Keep default values if database query fails
@@ -482,36 +552,37 @@ try {
                 </div>
             </div>
 
-            <!-- AI-Powered Predictive Analytics -->
+            <!-- AI-Powered Resource Gap Recommendations -->
             <div class="ai-predictive-section">
                 <div class="ai-predictive-card">
                     <div class="ai-predictive-header">
-                        <h2><i class="fas fa-brain"></i> AI Predictive Resource Analytics</h2>
+                        <h2><i class="fas fa-brain"></i> AI Resource Gap Recommendations</h2>
                         <span class="ai-badge"><i class="fas fa-robot"></i> Powered by Gemini AI</span>
+                    </div>
+                    <div class="ai-snapshot" id="ai-resource-snapshot">
+                        <span class="ai-chip"><strong>Vehicles Avail:</strong> <?php echo (int)$resourceAiData['vehicles_available']; ?></span>
+                        <span class="ai-chip"><strong>Personnel Avail:</strong> <?php echo (int)$resourceAiData['personnel_available']; ?></span>
+                        <span class="ai-chip"><strong>Equipment Avail:</strong> <?php echo (int)$resourceAiData['equipment_available']; ?></span>
+                        <span class="ai-chip"><strong>Active Incidents:</strong> <?php echo (int)$resourceAiData['active_incidents']; ?></span>
                     </div>
                     <div class="ai-predictive-content" id="ai-predictive-content">
                         <?php
                         include 'includes/gemini_helper.php';
-
-                        // Sample historical data - replace with actual historical data
-                        $historicalData = [
-                            'weekly_incidents' => null,
-                            'peak_hours' => '',
-                            'common_types' => 'Medical emergencies, traffic accidents',
-                            'current_resources' => ''
-                        ];
-
-                        $predictions = predictResourceNeeds($historicalData);
-                        if ($predictions) {
-                            echo '<div class="ai-predictive-text">' . nl2br(htmlspecialchars($predictions)) . '</div>';
+                        $recommendations = getResourceGapRecommendations($resourceAiData);
+                        if ($recommendations) {
+                            echo '<div class="ai-predictive-text">' . nl2br(htmlspecialchars($recommendations)) . '</div>';
                         } else {
-                            echo '<div class="ai-error"><i class="fas fa-exclamation-triangle"></i> Unable to generate AI predictions at this time.</div>';
+                            $aiError = function_exists('getGeminiLastError') ? trim((string)getGeminiLastError()) : '';
+                            if ($aiError === '') {
+                                $aiError = 'Unable to generate AI resource recommendations at this time.';
+                            }
+                            echo '<div class="ai-error"><i class="fas fa-exclamation-triangle"></i> ' . htmlspecialchars($aiError) . '</div>';
                         }
                         ?>
                     </div>
                     <div class="ai-predictive-actions">
                         <button class="btn-ai-refresh" onclick="refreshAIPredictions()">
-                            <i class="fas fa-sync"></i> Generate Predictions
+                            <i class="fas fa-sync"></i> Refresh Recommendations
                         </button>
                     </div>
                 </div>
@@ -620,6 +691,42 @@ try {
     </div>
 
     <script>
+        function refreshAIPredictions() {
+            const container = document.getElementById('ai-predictive-content');
+            if (container) {
+                container.innerHTML = '<div class="ai-loading"><i class="fas fa-spinner"></i> Generating recommendations...</div>';
+            }
+            fetch('api/ai_resource_recommendations.php')
+                .then(r => r.json())
+                .then(data => {
+                    if (!container) return;
+                    if (data && data.ok && data.text) {
+                        container.innerHTML = '<div class="ai-predictive-text">' + String(data.text).replace(/\n/g, '<br>') + '</div>';
+                        if (data.snapshot) {
+                            const snap = document.getElementById('ai-resource-snapshot');
+                            if (snap) {
+                                snap.innerHTML =
+                                    '<span class="ai-chip"><strong>Vehicles Avail:</strong> ' + Number(data.snapshot.vehicles_available || 0) + '</span>' +
+                                    '<span class="ai-chip"><strong>Personnel Avail:</strong> ' + Number(data.snapshot.personnel_available || 0) + '</span>' +
+                                    '<span class="ai-chip"><strong>Equipment Avail:</strong> ' + Number(data.snapshot.equipment_available || 0) + '</span>' +
+                                    '<span class="ai-chip"><strong>Active Incidents:</strong> ' + Number(data.snapshot.active_incidents || 0) + '</span>';
+                            }
+                        }
+                        showNotification('AI resource recommendations updated', 'success');
+                    } else {
+                        const msg = (data && data.error) ? String(data.error) : 'Unable to generate AI resource recommendations at this time.';
+                        container.innerHTML = '<div class="ai-error"><i class="fas fa-exclamation-triangle"></i> ' + msg.replace(/\n/g, '<br>') + '</div>';
+                        showNotification(msg, 'error');
+                    }
+                })
+                .catch(() => {
+                    if (container) {
+                        container.innerHTML = '<div class="ai-error"><i class="fas fa-exclamation-triangle"></i> Network error while generating recommendations.</div>';
+                    }
+                    showNotification('Network error', 'error');
+                });
+        }
+
         // Scheduling Modal Logic
         function openScheduleModal(personnelName) {
             document.getElementById('schedule-personnel-name').value = personnelName;

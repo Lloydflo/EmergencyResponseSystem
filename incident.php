@@ -2,8 +2,42 @@
 require_once __DIR__ . '/includes/auth.php';
 // Require full login (including OTP verification) before loading page
 require_login('incident.php');
+require_once __DIR__ . '/includes/db.php';
 
 $pageTitle = 'Incident Priority Management';
+$aiIncidentData = [
+    'type' => 'Unknown',
+    'location' => 'Unknown',
+    'description' => 'No active incident data',
+    'severity' => 'Unknown',
+];
+
+try {
+    $pdo = get_db_connection();
+    if ($pdo) {
+        $incident = $pdo->query("SELECT type, location_address, description, priority
+                                 FROM incidents
+                                 WHERE status IN ('pending','dispatched','active','in_progress')
+                                 ORDER BY FIELD(LOWER(priority),'critical','high','medium','low'), created_at DESC
+                                 LIMIT 1")->fetch();
+        if (!$incident) {
+            $incident = $pdo->query("SELECT type, location_address, description, priority
+                                     FROM incidents
+                                     ORDER BY created_at DESC
+                                     LIMIT 1")->fetch();
+        }
+        if ($incident) {
+            $aiIncidentData = [
+                'type' => (string)($incident['type'] ?? 'Unknown'),
+                'location' => (string)($incident['location_address'] ?? 'Unknown'),
+                'description' => (string)($incident['description'] ?? 'No description'),
+                'severity' => strtoupper((string)($incident['priority'] ?? 'Unknown')),
+            ];
+        }
+    }
+} catch (Throwable $e) {
+    // Keep fallback AI incident data
+}
 ?>
 
 <!DOCTYPE html>
@@ -143,20 +177,15 @@ $pageTitle = 'Incident Priority Management';
                     <div class="ai-analysis-content" id="ai-analysis-content">
                         <?php
                         include 'includes/gemini_helper.php';
-
-                        // Sample incident data - replace with actual incident data
-                        $incidentData = [
-                            'type' => 'Cardiac Arrest',
-                            'location' => 'Downtown Hospital',
-                            'description' => 'Patient experiencing cardiac arrest in emergency room',
-                            'severity' => 'Critical'
-                        ];
-
-                        $analysis = analyzeIncident($incidentData);
+                        $analysis = analyzeIncident($aiIncidentData);
                         if ($analysis) {
                             echo '<div class="ai-analysis-text">' . nl2br(htmlspecialchars($analysis)) . '</div>';
                         } else {
-                            echo '<div class="ai-error"><i class="fas fa-exclamation-triangle"></i> Unable to generate AI analysis at this time.</div>';
+                            $aiError = function_exists('getGeminiLastError') ? trim((string) getGeminiLastError()) : '';
+                            if ($aiError === '') {
+                                $aiError = 'Unable to generate AI analysis at this time.';
+                            }
+                            echo '<div class="ai-error"><i class="fas fa-exclamation-triangle"></i> ' . htmlspecialchars($aiError) . '</div>';
                         }
                         ?>
                     </div>
@@ -344,13 +373,14 @@ $pageTitle = 'Incident Priority Management';
         function refreshAIAnalysis() {
             const container = document.getElementById('ai-analysis-content');
             container.innerHTML = '<div class="ai-loading"><i class="fas fa-spinner"></i> Generating analysis...</div>';
-            fetch('api/ai_recommendations.php')
+            fetch('api/ai_incident_analysis.php')
             .then(r => r.json())
             .then(json => {
                 if (json.ok && json.text) {
                     container.innerHTML = '<div class="ai-analysis-text">' + String(json.text).replace(/\n/g,'<br>') + '</div>';
                 } else {
-                    container.innerHTML = '<div class="ai-error"><i class="fas fa-exclamation-triangle"></i> Unable to generate AI analysis at this time.</div>';
+                    const msg = (json && json.error) ? String(json.error) : 'Unable to generate AI analysis at this time.';
+                    container.innerHTML = '<div class="ai-error"><i class="fas fa-exclamation-triangle"></i> ' + msg.replace(/\n/g,'<br>') + '</div>';
                 }
             })
             .catch(() => {

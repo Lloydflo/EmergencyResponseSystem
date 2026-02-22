@@ -10,6 +10,7 @@ $activeIncidents = 0;
 $availableUnits = 0;
 $pendingCalls = 0;
 $systemStatus = 'All systems operational';
+$currentIncidentSummary = 'No active incident context';
 
 // Fetch accurate data from database
 try {
@@ -25,6 +26,20 @@ try {
         
         // Get pending calls
         $pendingCalls = (int)$pdo->query("SELECT COUNT(*) AS c FROM incidents WHERE status='pending'")->fetch()['c'];
+
+        $topIncident = $pdo->query("SELECT reference_no, type, location_address, priority
+                                    FROM incidents
+                                    WHERE status IN ('pending','dispatched','active','in_progress')
+                                    ORDER BY FIELD(LOWER(priority),'critical','high','medium','low'), created_at DESC
+                                    LIMIT 1")->fetch();
+        if ($topIncident) {
+            $currentIncidentSummary = trim(
+                (string)($topIncident['reference_no'] ?? '') . ' ' .
+                (string)($topIncident['type'] ?? '') . ' ' .
+                (string)($topIncident['location_address'] ?? '') . ' ' .
+                strtoupper((string)($topIncident['priority'] ?? ''))
+            );
+        }
         
         // Determine system status based on available units and active incidents
         if ($availableUnits === 0 && $activeIncidents > 0) {
@@ -170,14 +185,18 @@ try {
                             'active_incidents' => $activeIncidents,
                             'available_units' => $availableUnits,
                             'pending_calls' => $pendingCalls,
-                            'current_incident' => 'Cardiac Arrest - Downtown Hospital'
+                            'current_incident' => $currentIncidentSummary
                         ];
 
                         $recommendations = getDispatchRecommendations($dispatchData);
                         if ($recommendations) {
                             echo '<div class="ai-recommendation-text">' . nl2br(htmlspecialchars($recommendations)) . '</div>';
                         } else {
-                            echo '<div class="ai-error"><i class="fas fa-exclamation-triangle"></i> Unable to generate AI recommendations at this time.</div>';
+                            $aiError = function_exists('getGeminiLastError') ? trim((string) getGeminiLastError()) : '';
+                            if ($aiError === '') {
+                                $aiError = 'Unable to generate AI recommendations at this time.';
+                            }
+                            echo '<div class="ai-error"><i class="fas fa-exclamation-triangle"></i> ' . htmlspecialchars($aiError) . '</div>';
                         }
                         ?>
                     </div>
@@ -965,7 +984,9 @@ function refreshAIRecommendations() {
                     res.text.replace(/\n/g, '<br>') + '</div>';
                 showNotification('AI recommendations updated', 'success');
             } else {
-                showNotification('AI service unavailable', 'error');
+                const msg = (res && res.error) ? String(res.error) : 'AI service unavailable';
+                el.innerHTML = '<div class="ai-error"><i class="fas fa-exclamation-triangle"></i> ' + msg.replace(/\n/g, '<br>') + '</div>';
+                showNotification(msg, 'error');
             }
         })
         .catch(() => showNotification('Network error', 'error'));
@@ -1196,7 +1217,8 @@ function refreshAIRecommendations() {
         if (data.ok && data.text) {
             el.innerHTML = '<div class="ai-recommendation-text">' + (data.text || '').replace(/\n/g, '<br>') + '</div>';
         } else {
-            el.innerHTML = '<div class="ai-error"><i class="fas fa-exclamation-triangle"></i> Unable to generate AI recommendations at this time.</div>';
+            const msg = (data && data.error) ? String(data.error) : 'Unable to generate AI recommendations at this time.';
+            el.innerHTML = '<div class="ai-error"><i class="fas fa-exclamation-triangle"></i> ' + msg.replace(/\n/g, '<br>') + '</div>';
         }
       })
       .catch(() => alert('Network error'));

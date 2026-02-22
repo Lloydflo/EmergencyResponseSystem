@@ -4,7 +4,52 @@
  * Utility functions for integrating Gemini AI into the ERS system
  */
 
-include 'config.php';
+require_once __DIR__ . '/config.php';
+
+if (!function_exists('setGeminiLastError')) {
+    function setGeminiLastError($message) {
+        $GLOBALS['ERS_GEMINI_LAST_ERROR'] = $message ? trim((string) $message) : '';
+    }
+}
+
+if (!function_exists('getGeminiLastError')) {
+    function getGeminiLastError() {
+        return isset($GLOBALS['ERS_GEMINI_LAST_ERROR']) ? (string) $GLOBALS['ERS_GEMINI_LAST_ERROR'] : '';
+    }
+}
+
+if (!function_exists('ers_clean_ai_text')) {
+    function ers_clean_ai_text($text, $maxLines = 7, $maxChars = 900) {
+        $text = str_replace(["\r\n", "\r"], "\n", (string) $text);
+        $text = preg_replace('/[`*_#]/', '', $text);
+        $text = preg_replace('/^\s*[-•]+\s*/m', '- ', $text);
+        $text = preg_replace("/\n{3,}/", "\n\n", $text);
+        $lines = explode("\n", $text);
+        $clean = [];
+        foreach ($lines as $line) {
+            $line = trim($line);
+            if ($line === '') {
+                continue;
+            }
+            $clean[] = $line;
+        }
+        if (count($clean) > $maxLines) {
+            $clean = array_slice($clean, 0, $maxLines);
+        }
+        $out = trim(implode("\n", $clean));
+        if ($out === '') {
+            return '';
+        }
+        if (function_exists('mb_strlen') && function_exists('mb_substr')) {
+            if (mb_strlen($out) > $maxChars) {
+                $out = rtrim(mb_substr($out, 0, $maxChars - 3)) . '...';
+            }
+        } elseif (strlen($out) > $maxChars) {
+            $out = rtrim(substr($out, 0, $maxChars - 3)) . '...';
+        }
+        return $out;
+    }
+}
 
 /**
  * Make a request to Gemini AI API
@@ -12,7 +57,18 @@ include 'config.php';
  * @return string|null The AI response or null on error
  */
 function callGeminiAPI($prompt) {
-    $apiUrl = GEMINI_API_URL . '?key=' . GEMINI_API_KEY;
+    setGeminiLastError('');
+
+    $apiKey = defined('GEMINI_API_KEY') ? trim((string) GEMINI_API_KEY) : '';
+    $apiBaseUrl = defined('GEMINI_API_URL') ? trim((string) GEMINI_API_URL) : '';
+    $prompt = trim((string) $prompt);
+
+    if ($apiKey === '' || $apiBaseUrl === '' || $prompt === '') {
+        setGeminiLastError('Gemini configuration is missing.');
+        return null;
+    }
+
+    $apiUrl = $apiBaseUrl . '?key=' . urlencode($apiKey);
 
     $data = [
         'contents' => [
@@ -31,19 +87,60 @@ function callGeminiAPI($prompt) {
     curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
     curl_setopt($ch, CURLOPT_POST, true);
     curl_setopt($ch, CURLOPT_POSTFIELDS, $jsonData);
+    curl_setopt($ch, CURLOPT_CONNECTTIMEOUT, 10);
+    curl_setopt($ch, CURLOPT_TIMEOUT, 25);
     curl_setopt($ch, CURLOPT_HTTPHEADER, [
         'Content-Type: application/json'
     ]);
 
     $response = curl_exec($ch);
     $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+    $curlError = curl_error($ch);
     curl_close($ch);
 
+    if ($response === false) {
+        $msg = $curlError !== '' ? $curlError : 'Unknown cURL error';
+        setGeminiLastError('Gemini request failed: ' . $msg);
+        error_log('Gemini API request failed: ' . $msg);
+        return null;
+    }
+
+    $responseData = json_decode((string) $response, true);
+
     if ($httpCode === 200) {
-        $responseData = json_decode($response, true);
         if (isset($responseData['candidates'][0]['content']['parts'][0]['text'])) {
-            return $responseData['candidates'][0]['content']['parts'][0]['text'];
+            return ers_clean_ai_text($responseData['candidates'][0]['content']['parts'][0]['text']);
         }
+
+        setGeminiLastError('Gemini returned an empty response.');
+        error_log('Gemini API returned HTTP 200 with no candidate text.');
+        return null;
+    }
+
+    $apiError = '';
+    if (is_array($responseData) && isset($responseData['error']['message'])) {
+        $apiError = trim((string) $responseData['error']['message']);
+    }
+
+    if ($httpCode === 429) {
+        $friendly = 'Gemini quota exceeded. Check API plan/billing or wait then retry.';
+    } elseif ($httpCode === 401 || $httpCode === 403) {
+        $friendly = 'Gemini key is invalid or not authorized for this API/project.';
+    } elseif ($httpCode >= 500) {
+        $friendly = 'Gemini service is temporarily unavailable. Please retry.';
+    } else {
+        $friendly = 'Gemini request failed (HTTP ' . $httpCode . ').';
+    }
+
+    if ($apiError !== '') {
+        $friendly .= ' ' . $apiError;
+    }
+    setGeminiLastError($friendly);
+
+    if ($apiError !== '') {
+        error_log('Gemini API error HTTP ' . $httpCode . ': ' . $apiError);
+    } else {
+        error_log('Gemini API error HTTP ' . $httpCode . '.');
     }
 
     return null;
@@ -55,12 +152,20 @@ function callGeminiAPI($prompt) {
  * @return string AI analysis
  */
 function analyzeIncident($incidentData) {
-    $prompt = "As an emergency response AI assistant, analyze this incident and provide recommendations:\n\n";
+    $prompt = "You are the ERS incident assistant. Use only the given data.\n";
+    $prompt .= "If a field is missing, say 'Data unavailable' only.\n";
+    $prompt .= "Keep output short, practical, and no markdown.\n\n";
+    $prompt .= "Incident Data:\n";
     $prompt .= "Type: " . ($incidentData['type'] ?? 'Unknown') . "\n";
     $prompt .= "Location: " . ($incidentData['location'] ?? 'Unknown') . "\n";
     $prompt .= "Description: " . ($incidentData['description'] ?? 'No description') . "\n";
-    $prompt .= "Severity: " . ($incidentData['severity'] ?? 'Unknown') . "\n\n";
-    $prompt .= "Provide: 1) Risk assessment, 2) Recommended response actions, 3) Resource needs, 4) Safety considerations";
+    $prompt .= "Severity/Priority: " . ($incidentData['severity'] ?? 'Unknown') . "\n\n";
+    $prompt .= "Return max 5 lines:\n";
+    $prompt .= "1) Situation summary\n";
+    $prompt .= "2) Top action now\n";
+    $prompt .= "3) Next action\n";
+    $prompt .= "4) Safety note\n";
+    $prompt .= "5) Resource gap";
 
     return callGeminiAPI($prompt);
 }
@@ -71,12 +176,22 @@ function analyzeIncident($incidentData) {
  * @return string AI insights
  */
 function generateReportInsights($reportData) {
-    $prompt = "Analyze these emergency response metrics and provide insights:\n\n";
+    $prompt = "You are the ERS reporting assistant. Use only provided metrics.\n";
+    $prompt .= "Keep output concise and no markdown.\n\n";
+    $prompt .= "Metrics:\n";
     $prompt .= "Total Incidents: " . ($reportData['total_incidents'] ?? 0) . "\n";
     $prompt .= "Average Response Time: " . ($reportData['avg_response_time'] ?? 'Unknown') . "\n";
     $prompt .= "Resource Utilization: " . ($reportData['resource_utilization'] ?? 'Unknown') . "\n";
-    $prompt .= "Active Responders: " . ($reportData['active_responders'] ?? 0) . "\n\n";
-    $prompt .= "Provide: 1) Performance analysis, 2) Trends identification, 3) Improvement recommendations, 4) Predictive insights";
+    $prompt .= "Active Responders: " . ($reportData['active_responders'] ?? 0) . "\n";
+    $prompt .= "Resolved Incidents: " . ($reportData['resolved_incidents'] ?? 0) . "\n";
+    $prompt .= "Success Rate: " . ($reportData['success_rate'] ?? 'Unknown') . "\n\n";
+    $prompt .= "Return max 6 short lines:\n";
+    $prompt .= "1) Overall performance\n";
+    $prompt .= "2) Positive signal\n";
+    $prompt .= "3) Main risk\n";
+    $prompt .= "4) Resource focus\n";
+    $prompt .= "5) Immediate improvement\n";
+    $prompt .= "6) Next 24h priority";
 
     return callGeminiAPI($prompt);
 }
@@ -87,12 +202,19 @@ function generateReportInsights($reportData) {
  * @return string AI recommendations
  */
 function getDispatchRecommendations($dispatchData) {
-    $prompt = "As an emergency dispatch AI assistant, provide recommendations for this situation:\n\n";
+    $prompt = "You are the ERS dispatch assistant. Use only provided values.\n";
+    $prompt .= "Keep output short and action-oriented. No markdown.\n\n";
+    $prompt .= "Dispatch Snapshot:\n";
     $prompt .= "Active Incidents: " . ($dispatchData['active_incidents'] ?? 0) . "\n";
     $prompt .= "Available Units: " . ($dispatchData['available_units'] ?? 0) . "\n";
     $prompt .= "Pending Calls: " . ($dispatchData['pending_calls'] ?? 0) . "\n";
     $prompt .= "Current Incident: " . ($dispatchData['current_incident'] ?? 'None') . "\n\n";
-    $prompt .= "Recommend: 1) Resource allocation, 2) Priority assignments, 3) Response strategies";
+    $prompt .= "Return max 5 short lines:\n";
+    $prompt .= "1) Current load assessment\n";
+    $prompt .= "2) Dispatch priority\n";
+    $prompt .= "3) Unit allocation suggestion\n";
+    $prompt .= "4) Queue/backlog action\n";
+    $prompt .= "5) Escalation trigger";
 
     return callGeminiAPI($prompt);
 }
@@ -102,15 +224,56 @@ function getDispatchRecommendations($dispatchData) {
  * @param array $historicalData Historical incident data
  * @return string AI predictions
  */
-function predictResourceNeeds($historicalData) {
-    $prompt = "Based on historical emergency data, predict resource needs:\n\n";
-    $prompt .= "Past Week Incidents: " . ($historicalData['weekly_incidents'] ?? 0) . "\n";
-    $prompt .= "Peak Hours: " . ($historicalData['peak_hours'] ?? 'Unknown') . "\n";
-    $prompt .= "Common Incident Types: " . ($historicalData['common_types'] ?? 'Unknown') . "\n";
-    $prompt .= "Current Resources: " . ($historicalData['current_resources'] ?? 'Unknown') . "\n\n";
-    $prompt .= "Predict: 1) Future demand, 2) Optimal resource allocation, 3) Preparedness recommendations";
+function getResourceGapRecommendations($resourceData) {
+    $prompt = "You are the ERS resource recommendation assistant.\n";
+    $prompt .= "Analyze shortages using only the data below. No markdown.\n";
+    $prompt .= "Keep output short and specific.\n\n";
+    $prompt .= "Resource Snapshot:\n";
+    $prompt .= "Vehicles total: " . ($resourceData['vehicles_total'] ?? 0) . "\n";
+    $prompt .= "Vehicles available: " . ($resourceData['vehicles_available'] ?? 0) . "\n";
+    $prompt .= "Vehicles in use: " . ($resourceData['vehicles_inuse'] ?? 0) . "\n";
+    $prompt .= "Vehicles offline: " . ($resourceData['vehicles_offline'] ?? 0) . "\n";
+    $prompt .= "Personnel total: " . ($resourceData['personnel_total'] ?? 0) . "\n";
+    $prompt .= "Personnel available: " . ($resourceData['personnel_available'] ?? 0) . "\n";
+    $prompt .= "Personnel in use: " . ($resourceData['personnel_inuse'] ?? 0) . "\n";
+    $prompt .= "Personnel offline: " . ($resourceData['personnel_offline'] ?? 0) . "\n";
+    $prompt .= "Equipment total: " . ($resourceData['equipment_total'] ?? 0) . "\n";
+    $prompt .= "Equipment available: " . ($resourceData['equipment_available'] ?? 0) . "\n";
+    $prompt .= "Equipment in use: " . ($resourceData['equipment_inuse'] ?? 0) . "\n";
+    $prompt .= "Equipment offline: " . ($resourceData['equipment_offline'] ?? 0) . "\n";
+    $prompt .= "Active incidents: " . ($resourceData['active_incidents'] ?? 0) . "\n";
+    $prompt .= "Pending resource requests summary: " . ($resourceData['pending_request_summary'] ?? 'None') . "\n\n";
+    $prompt .= "Return max 6 short lines:\n";
+    $prompt .= "1) Biggest current shortage\n";
+    $prompt .= "2) Secondary shortage\n";
+    $prompt .= "3) Immediate reallocation action\n";
+    $prompt .= "4) What to request now\n";
+    $prompt .= "5) Risk if no action\n";
+    $prompt .= "6) Priority order (1-3)";
 
     return callGeminiAPI($prompt);
+}
+
+function predictResourceNeeds($historicalData) {
+    $normalized = [
+        'vehicles_total' => $historicalData['vehicles_total'] ?? 0,
+        'vehicles_available' => $historicalData['vehicles_available'] ?? 0,
+        'vehicles_inuse' => $historicalData['vehicles_inuse'] ?? 0,
+        'vehicles_offline' => $historicalData['vehicles_offline'] ?? 0,
+        'personnel_total' => $historicalData['personnel_total'] ?? 0,
+        'personnel_available' => $historicalData['personnel_available'] ?? 0,
+        'personnel_inuse' => $historicalData['personnel_inuse'] ?? 0,
+        'personnel_offline' => $historicalData['personnel_offline'] ?? 0,
+        'equipment_total' => $historicalData['equipment_total'] ?? 0,
+        'equipment_available' => $historicalData['equipment_available'] ?? 0,
+        'equipment_inuse' => $historicalData['equipment_inuse'] ?? 0,
+        'equipment_offline' => $historicalData['equipment_offline'] ?? 0,
+        'active_incidents' => $historicalData['active_incidents'] ?? ($historicalData['weekly_incidents'] ?? 0),
+        'pending_request_summary' => $historicalData['pending_request_summary'] ?? ($historicalData['current_resources'] ?? 'None'),
+    ];
+
+    return getResourceGapRecommendations($normalized);
+
 }
 
 /**
