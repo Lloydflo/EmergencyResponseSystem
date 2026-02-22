@@ -11,16 +11,20 @@ $totalIncidentsMonth = 0;
 $lastMonthIncidents = 0;
 $resourceUtilization = 0.0;
 $successRate = 0.0;
+$resolvedCountMonth = 0;
+$activeResponders = 0;
 try {
     $pdo = get_db_connection();
     if ($pdo) {
         $totalIncidentsMonth = (int)$pdo->query("SELECT COUNT(*) AS c FROM incidents WHERE YEAR(created_at)=YEAR(CURDATE()) AND MONTH(created_at)=MONTH(CURDATE())")->fetch()['c'];
         $lastMonthIncidents = (int)$pdo->query("SELECT COUNT(*) AS c FROM incidents WHERE YEAR(created_at)=YEAR(DATE_SUB(CURDATE(), INTERVAL 1 MONTH)) AND MONTH(created_at)=MONTH(DATE_SUB(CURDATE(), INTERVAL 1 MONTH))")->fetch()['c'];
         $resolvedCount = (int)$pdo->query("SELECT COUNT(*) AS c FROM incidents WHERE status='resolved'")->fetch()['c'];
+        $resolvedCountMonth = (int)$pdo->query("SELECT COUNT(*) AS c FROM incidents WHERE status='resolved' AND YEAR(created_at)=YEAR(CURDATE()) AND MONTH(created_at)=MONTH(CURDATE())")->fetch()['c'];
         $totalIncidentsAll = (int)$pdo->query("SELECT COUNT(*) AS c FROM incidents")->fetch()['c'];
         $successRate = $totalIncidentsAll > 0 ? round(($resolvedCount / $totalIncidentsAll) * 100, 1) : 0.0;
         $totalUnits = (int)$pdo->query("SELECT COUNT(*) AS c FROM units")->fetch()['c'];
         $busyUnits = (int)$pdo->query("SELECT COUNT(*) AS c FROM units WHERE status IN ('assigned','enroute','on_scene')")->fetch()['c'];
+        $activeResponders = (int)$pdo->query("SELECT COUNT(*) AS c FROM staff WHERE status IN ('available','on_duty')")->fetch()['c'];
         $resourceUtilization = $totalUnits > 0 ? round(($busyUnits / $totalUnits) * 100, 1) : 0.0;
         $row = $pdo->query("SELECT AVG(TIMESTAMPDIFF(MINUTE, assigned_at, on_scene_at)) AS avg_min FROM dispatches WHERE assigned_at IS NOT NULL AND on_scene_at IS NOT NULL AND YEAR(assigned_at)=YEAR(CURDATE()) AND MONTH(assigned_at)=MONTH(CURDATE())")->fetch();
         if ($row && $row['avg_min'] !== null) { $avgResponseTime = round((float)$row['avg_min'], 1); }
@@ -187,20 +191,24 @@ try {
                     <div class="ai-insights-content" id="ai-insights-content">
                         <?php
                         include 'includes/gemini_helper.php';
-
-                        // Sample data - replace with actual data from your database
                         $reportData = [
-                            'total_incidents' => null,
-                            'avg_response_time' => '',
-                            'resource_utilization' => '',
-                            'active_responders' => null
+                            'total_incidents' => $totalIncidentsMonth,
+                            'avg_response_time' => number_format($avgResponseTime, 1) . ' minutes',
+                            'resource_utilization' => number_format($resourceUtilization, 1) . '%',
+                            'active_responders' => $activeResponders,
+                            'resolved_incidents' => $resolvedCountMonth,
+                            'success_rate' => number_format($successRate, 1) . '%',
                         ];
 
                         $insights = generateReportInsights($reportData);
                         if ($insights) {
                             echo '<div class="ai-insight-text">' . nl2br(htmlspecialchars($insights)) . '</div>';
                         } else {
-                            echo '<div class="ai-error"><i class="fas fa-exclamation-triangle"></i> Unable to generate AI insights at this time.</div>';
+                            $aiError = function_exists('getGeminiLastError') ? trim((string) getGeminiLastError()) : '';
+                            if ($aiError === '') {
+                                $aiError = 'Unable to generate AI insights at this time.';
+                            }
+                            echo '<div class="ai-error"><i class="fas fa-exclamation-triangle"></i> ' . htmlspecialchars($aiError) . '</div>';
                         }
                         ?>
                     </div>
@@ -597,16 +605,18 @@ try {
                 if (container) {
                     container.innerHTML = '<div class="ai-loading"><i class="fas fa-spinner"></i> Refreshing insights…</div>';
                 }
-                const res = await fetch('api/ai_recommendations.php');
+                const res = await fetch('api/ai_report_insights.php');
                 const data = await res.json();
                 if (container) {
                     if (data.ok && data.text) {
                         container.innerHTML = '<div class="ai-insight-text">' + (data.text || '').replace(/\n/g,'<br>') + '</div>';
+                        showNotification('AI insights refreshed', 'success');
                     } else {
-                        container.innerHTML = '<div class="ai-error"><i class="fas fa-exclamation-triangle"></i> Unable to generate AI insights at this time.</div>';
+                        const msg = (data && data.error) ? String(data.error) : 'Unable to generate AI insights at this time.';
+                        container.innerHTML = '<div class="ai-error"><i class="fas fa-exclamation-triangle"></i> ' + msg.replace(/\n/g,'<br>') + '</div>';
+                        showNotification('AI insights unavailable: ' + msg, 'error');
                     }
                 }
-                showNotification('AI insights refreshed', 'success');
             } catch (e) {
                 showNotification('Failed to refresh AI insights', 'error');
             }

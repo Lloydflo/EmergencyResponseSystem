@@ -82,9 +82,6 @@ $pageTitle = 'GPS Tracking System';
                             <button class="map-btn" onclick="toggleLayer('incident', this)">
                                 <i class="fas fa-exclamation-triangle"></i> Incidents
                             </button>
-                            <button class="map-btn" onclick="toggleLayer('routes', this)">
-                                <i class="fas fa-route"></i> Routes
-                            </button>
                             <button class="map-btn" onclick="toggleHeatmap(this)">
                                 <i class="fas fa-fire-alt"></i> Heatmap
                             </button>
@@ -133,6 +130,7 @@ let unitFilter = '';
 let heatLayer = null;
 let heatActive = false;
 let dispatchedUnitsByIdentifier = {};
+let incidentGeocodeCache = {};
 
 // ===============================
 // LEAFLET MAP INITIALIZATION
@@ -383,6 +381,59 @@ function toNum(v) {
     return Number.isFinite(n) ? n : null;
 }
 
+function parseCoordsFromText(value) {
+    const text = String(value || '').trim();
+    if (!text) return null;
+    const match = text.match(/(-?\d+(?:\.\d+)?)\s*,\s*(-?\d+(?:\.\d+)?)/);
+    if (!match) return null;
+    const lat = toNum(match[1]);
+    const lng = toNum(match[2]);
+    if (lat === null || lng === null) return null;
+    if (lat < -90 || lat > 90 || lng < -180 || lng > 180) return null;
+    return { lat, lng };
+}
+
+async function geocodeIncidentLocation(locationText) {
+    const raw = String(locationText || '').trim();
+    if (!raw) return null;
+
+    const directCoords = parseCoordsFromText(raw);
+    if (directCoords) return directCoords;
+
+    const cacheKey = raw.toLowerCase();
+    if (Object.prototype.hasOwnProperty.call(incidentGeocodeCache, cacheKey)) {
+        return incidentGeocodeCache[cacheKey];
+    }
+
+    const query = /(quezon city|metro manila|philippines)\b/i.test(raw)
+        ? raw
+        : `${raw}, Quezon City, Metro Manila, Philippines`;
+
+    try {
+        const params = new URLSearchParams({
+            format: 'json',
+            limit: '1',
+            countrycodes: 'ph',
+            q: query
+        });
+        const response = await fetch(`https://nominatim.openstreetmap.org/search?${params.toString()}`);
+        if (!response.ok) {
+            return null;
+        }
+        const data = await response.json();
+        const top = Array.isArray(data) ? data[0] : null;
+        const lat = top ? toNum(top.lat) : null;
+        const lng = top ? toNum(top.lon) : null;
+        const result = (lat !== null && lng !== null) ? { lat, lng } : null;
+        if (result) {
+            incidentGeocodeCache[cacheKey] = result;
+        }
+        return result;
+    } catch (e) {
+        return null;
+    }
+}
+
 function formatDateTime(value) {
     if (!value) return 'N/A';
     const d = new Date(String(value).replace(' ', 'T'));
@@ -390,7 +441,7 @@ function formatDateTime(value) {
     return d.toLocaleString();
 }
 
-function showUnitRoute(unitId) {
+async function showUnitRoute(unitId) {
     const unit = dispatchedUnitsByIdentifier[unitId];
     if (!unit) {
         showNotification('Unable to find dispatched unit details', 'error');
@@ -399,11 +450,35 @@ function showUnitRoute(unitId) {
 
     const fromLat = toNum(unit.latitude);
     const fromLng = toNum(unit.longitude);
-    const toLat = toNum(unit.incident_latitude);
-    const toLng = toNum(unit.incident_longitude);
+    let toLat = toNum(unit.incident_latitude);
+    let toLng = toNum(unit.incident_longitude);
 
-    if (fromLat === null || fromLng === null || toLat === null || toLng === null) {
-        showNotification('Route unavailable: missing unit or incident coordinates', 'error');
+    if (fromLat === null || fromLng === null) {
+        showNotification('Route unavailable: missing unit coordinates', 'error');
+        return;
+    }
+
+    if (toLat === null || toLng === null) {
+        const parsed = parseCoordsFromText(unit.incident_location);
+        if (parsed) {
+            toLat = parsed.lat;
+            toLng = parsed.lng;
+        }
+    }
+
+    if ((toLat === null || toLng === null) && unit.incident_location) {
+        showNotification('Locating incident address...', 'info');
+        const geocoded = await geocodeIncidentLocation(unit.incident_location);
+        if (geocoded) {
+            toLat = geocoded.lat;
+            toLng = geocoded.lng;
+            unit.incident_latitude = String(toLat);
+            unit.incident_longitude = String(toLng);
+        }
+    }
+
+    if (toLat === null || toLng === null) {
+        showNotification('Route unavailable: unable to locate incident address', 'error');
         return;
     }
     if (typeof addRouteToIncident !== 'function') {
