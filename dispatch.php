@@ -864,7 +864,6 @@ document.addEventListener('DOMContentLoaded', () => {
                             </div>
                         </div>
                         <div class="unit-actions">
-                            <button class="btn-action-small" onclick="deployUnitToIncident(${u.id})"><i class="fas fa-play"></i> Deploy</button>
                             <button class="btn-action-small" onclick="unitLocation(this)" data-unit-id="${u.id}" data-identifier="${escapeAttr(u.identifier)}"><i class="fas fa-location-arrow"></i> Track</button>
                         </div>
                     `;
@@ -1080,7 +1079,6 @@ document.addEventListener('DOMContentLoaded', () => {
                             <button class="btn-dispatch" onclick="openDispatchModal(${it.id})">Dispatch Unit</button>
                             <button class="btn-action-small" onclick="viewDetails(this)" data-incident-id="${it.id}"><i class="fas fa-eye"></i> Details</button>
                             ${phone ? `<button class=\"btn-action-small\" onclick=\"contactCaller(this)\" data-phone=\"${escapeAttr(phone)}\"><i class=\"fas fa-phone\"></i> Call</button>` : ''}
-                            <button class="btn-action-small" onclick="resolveIncident(this)" data-incident-id="${it.id}"><i class="fas fa-check"></i> Resolve</button>
                         </div>`;
                     container.appendChild(card);
                 });
@@ -1283,7 +1281,6 @@ function refreshActiveCalls() {
                     <button class=\"btn-dispatch\" onclick=\"openDispatchModal(${it.id})\">Dispatch Unit</button>
                     <button class=\"btn-action-small\" onclick=\"viewDetails(this)\" data-incident-id=\"${it.id}\"><i class=\"fas fa-eye\"></i> Details</button>
                     ${phone ? `<button class=\\\"btn-action-small\\\" onclick=\\\"contactCaller(this)\\\" data-phone=\\\"${escapeAttr(phone)}\\\"><i class=\\\"fas fa-phone\\\"></i> Call</button>` : ''}
-                    <button class=\"btn-action-small\" onclick=\"resolveIncident(this)\" data-incident-id=\"${it.id}\"><i class=\"fas fa-check\"></i> Resolve</button>
                 </div>`;
             container.appendChild(card);
         });
