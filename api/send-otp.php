@@ -12,15 +12,19 @@ use PHPMailer\PHPMailer\PHPMailer;
 use PHPMailer\PHPMailer\Exception;
 
 $raw = file_get_contents("php://input");
-echo json_encode([
-  "success" => false,
-  "message" => "DEBUG",
-  "POST" => $_POST,
-  "RAW" => $raw,
-  "CONTENT_TYPE" => $_SERVER["CONTENT_TYPE"] ?? null,
-  "METHOD" => $_SERVER["REQUEST_METHOD"] ?? null
-]);
-exit;
+$input = json_decode($raw, true);
+
+$email = "";
+if (is_array($input) && isset($input["email"])) {
+    $email = trim($input["email"]);
+} elseif (isset($_POST["email"])) {
+    $email = trim($_POST["email"]);
+}
+
+if ($email === "") {
+  echo json_encode(["success"=>false, "message"=>"Email is required", "otp"=>null]);
+  exit;
+}
 
 
 try {
