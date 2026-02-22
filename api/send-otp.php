@@ -1,6 +1,18 @@
 <?php
 header("Content-Type: application/json");
 
+header("Content-Type: application/json");
+
+echo json_encode([
+  "sendotp_realpath" => realpath(__FILE__),
+  "connect_realpath" => realpath(__DIR__ . "/connect.php"),
+  "env_realpath" => realpath(__DIR__ . "/.env"),
+  "env_exists" => file_exists(__DIR__ . "/.env"),
+  "env_readable" => is_readable(__DIR__ . "/.env"),
+  "env_first_200_chars" => substr(@file_get_contents(__DIR__ . "/.env"), 0, 200),
+]);
+exit;
+
 require __DIR__ . "/connect.php";
 
 // 👉 DITO MO ILALAGAY
