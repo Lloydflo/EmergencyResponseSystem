@@ -12,20 +12,16 @@ use PHPMailer\PHPMailer\PHPMailer;
 use PHPMailer\PHPMailer\Exception;
 
 $raw = file_get_contents("php://input");
-$input = json_decode($raw, true);
+echo json_encode([
+  "success" => false,
+  "message" => "DEBUG",
+  "POST" => $_POST,
+  "RAW" => $raw,
+  "CONTENT_TYPE" => $_SERVER["CONTENT_TYPE"] ?? null,
+  "METHOD" => $_SERVER["REQUEST_METHOD"] ?? null
+]);
+exit;
 
-// Accept JSON OR form-urlencoded
-$email = "";
-if (is_array($input) && isset($input["email"])) {
-    $email = trim($input["email"]);
-} else if (isset($_POST["email"])) {
-    $email = trim($_POST["email"]);
-}
-
-if ($email === "") {
-  echo json_encode(["success"=>false, "message"=>"Email is required", "otp"=>null]);
-  exit;
-}
 
 try {
   $pdo = db();
