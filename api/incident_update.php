@@ -10,13 +10,25 @@ if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
 }
 
 $input = json_decode(file_get_contents('php://input'), true);
-if (!is_array($input) || !isset($input['id'])) {
+if (!is_array($input)) {
     http_response_code(400);
-    echo json_encode(['ok' => false, 'error' => 'Missing incident id']);
+    echo json_encode(['ok' => false, 'error' => 'Invalid request payload']);
     exit;
 }
 
-$id = (int)$input['id'];
+$id = isset($input['id']) ? (int)$input['id'] : 0;
+$incidentCode = '';
+if (array_key_exists('incident_code', $input)) {
+    $incidentCode = trim((string)$input['incident_code']);
+} elseif (array_key_exists('reference_no', $input)) {
+    $incidentCode = trim((string)$input['reference_no']);
+}
+
+if ($id <= 0 && $incidentCode === '') {
+    http_response_code(400);
+    echo json_encode(['ok' => false, 'error' => 'Missing incident identifier']);
+    exit;
+}
 // Accept optional fields; update only provided values
 $type = isset($input['type']) ? trim((string)$input['type']) : null;
 $priority = isset($input['priority']) ? trim((string)$input['priority']) : null;
@@ -32,6 +44,26 @@ $status = isset($input['status']) ? trim((string)$input['status']) : null;
 
 try {
     $pdo = get_db_connection();
+    if ($id <= 0 && $incidentCode !== '') {
+        $lookupStmt = $pdo->prepare('SELECT id FROM incidents WHERE reference_no = :ref LIMIT 1');
+        $lookupStmt->execute([':ref' => $incidentCode]);
+        $resolvedId = $lookupStmt->fetchColumn();
+        $id = $resolvedId ? (int)$resolvedId : 0;
+    }
+    if ($id <= 0) {
+        http_response_code(404);
+        echo json_encode(['ok' => false, 'error' => 'Incident not found']);
+        exit;
+    }
+
+    $existsStmt = $pdo->prepare('SELECT id FROM incidents WHERE id = :id LIMIT 1');
+    $existsStmt->execute([':id' => $id]);
+    if (!$existsStmt->fetchColumn()) {
+        http_response_code(404);
+        echo json_encode(['ok' => false, 'error' => 'Incident not found']);
+        exit;
+    }
+
     $fields = [];
     $params = [':id' => $id];
     // Validate enums if provided

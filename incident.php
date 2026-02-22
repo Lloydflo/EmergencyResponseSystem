@@ -164,7 +164,6 @@ try {
                 </div>
                 <div id="incident-list-dynamic"></div>
                 <!-- Table will be rendered here by JS -->
-                <div id="incident-list-dynamic"></div>
             </div>
 
             <!-- AI-Powered Incident Analysis -->
@@ -247,9 +246,11 @@ try {
             const btn = e.target.closest('button');
             if (!btn) return;
             const tr = btn.closest('tr');
-            if (!tr || !tr.hasAttribute('data-ref')) return;
-            const ref = tr.getAttribute('data-ref');
-            const incident = INCIDENTS.find(i => (i.incident_code || i.reference_no || '') == ref);
+            if (!tr) return;
+            const rowIncidentId = Number(tr.getAttribute('data-id') || '0');
+            const rowRef = (tr.getAttribute('data-ref') || '').trim();
+            const incident = INCIDENTS.find(i => Number(i.id || 0) === rowIncidentId)
+                || INCIDENTS.find(i => String(i.incident_code || i.reference_no || '') === rowRef);
             if (!incident) return;
 
             // Priority button
@@ -262,12 +263,16 @@ try {
                 incident.priority = newPriority;
                 renderDynamicIncidents();
 
-                const incidentId = incident.id || null;
-                if (incidentId) {
+                const incidentId = Number(incident.id || 0);
+                const incidentCode = String(incident.incident_code || incident.reference_no || '').trim();
+                if (incidentId > 0 || incidentCode) {
+                    const body = { priority: newPriority };
+                    if (incidentId > 0) body.id = incidentId;
+                    if (incidentCode) body.incident_code = incidentCode;
                     fetch('api/incident_update.php', {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ id: incidentId, priority: newPriority })
+                        body: JSON.stringify(body)
                     })
                     .then(r => r.json())
                     .then(res => {
@@ -299,16 +304,10 @@ try {
 
             // Contact button
             if (btn.querySelector('.fa-phone')) {
-                // Try to get a phone number from incident (if available)
-                let phone = '';
-                if (incident.caller_phone) phone = incident.caller_phone;
-                else if (incident.contact) phone = incident.contact;
-                else if (incident.description) {
-                    const match = incident.description.match(/(\+?\d{1,3}[-.\s]?\d{1,4}[-.\s]?\d{1,4}[-.\s]?\d{1,4})/);
-                    if (match) phone = match[1];
-                }
+                const phone = getIncidentPhone(incident);
                 if (phone) {
                     if (confirm(`Call ${phone}?`)) {
+                        window.location.href = 'tel:' + encodeURIComponent(phone);
                         showNotification(`Initiating call to ${phone}`, 'info');
                     }
                 } else {
@@ -320,13 +319,17 @@ try {
             // Resolve button
             if (btn.querySelector('.fa-check')) {
                 if (confirm('Are you sure you want to resolve this incident?')) {
-                    const incidentId = incident.id || null;
+                    const incidentId = Number(incident.id || 0);
+                    const incidentCode = String(incident.incident_code || incident.reference_no || '').trim();
                     const note = `Resolved via UI at ${new Date().toLocaleString()}`;
-                    if (incidentId) {
+                    if (incidentId > 0 || incidentCode) {
+                        const body = { note };
+                        if (incidentId > 0) body.incident_id = incidentId;
+                        if (incidentCode) body.incident_code = incidentCode;
                         fetch('api/incident_resolve.php', {
                             method: 'POST',
                             headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify({ incident_id: incidentId, note })
+                            body: JSON.stringify(body)
                         })
                         .then(r => r.json())
                         .then(res => {
@@ -334,6 +337,8 @@ try {
                                 incident.status = 'resolved';
                                 renderDynamicIncidents();
                                 showNotification('Incident resolved. Units released to available.', 'success');
+                                try { localStorage.setItem('ers_incidents_changed', String(Date.now())); } catch (e) {}
+                                try { fetchIncidents(); } catch (e) {}
                             } else {
                                 showNotification('Failed to resolve incident', 'error');
                             }
@@ -348,25 +353,6 @@ try {
                 }
                 return;
             }
-        });
-
-        // Contact functionality
-        document.querySelectorAll('.btn-action .fa-phone').forEach(icon => {
-            icon.parentElement.addEventListener('click', function() {
-                const incidentCard = this.closest('.incident-card');
-                const callerInfo = incidentCard.querySelector('.detail-value').textContent;
-                const phoneMatch = callerInfo.match(/(\+?\d{1,3}[-.\s]?\d{1,4}[-.\s]?\d{1,4}[-.\s]?\d{1,4})/);
-
-                if (phoneMatch) {
-                    const phoneNumber = phoneMatch[1];
-                    if (confirm(`Call ${phoneNumber}?`)) {
-                        // In a real system, this would initiate a phone call
-                        showNotification(`Initiating call to ${phoneNumber}`, 'info');
-                    }
-                } else {
-                    showNotification('Phone number not found', 'error');
-                }
-            });
         });
 
         // AI refresh for incident analysis
@@ -393,24 +379,9 @@ try {
         });
 
         window.addEventListener('storage', function(e) {
-            if (e.key === 'ers_incidents') {
+            if (e.key === 'ers_incidents' || e.key === 'ers_incidents_changed') {
                 refreshAIAnalysis();
             }
-        });
-
-        // Update incident functionality
-        document.querySelectorAll('.btn-action .fa-edit').forEach(icon => {
-            icon.parentElement.addEventListener('click', function() {
-                const incidentCard = this.closest('.incident-card');
-                const incidentTitle = incidentCard.querySelector('.incident-title').textContent;
-
-                // Simple update dialog (in a real system, this would open a modal)
-                const newDescription = prompt('Update incident description:', incidentTitle);
-                if (newDescription && newDescription !== incidentTitle) {
-                    incidentCard.querySelector('.incident-title').textContent = newDescription;
-                    showNotification('Incident updated successfully', 'success');
-                }
-            });
         });
 
         // Filter functionality
@@ -477,14 +448,40 @@ try {
 
         function capitalize(s) { return (s || '').charAt(0).toUpperCase() + (s || '').slice(1); }
 
+        function normalizeIncidentStatus(value) {
+            const raw = String(value || '').trim().toLowerCase();
+            if (raw === 'active') return 'pending';
+            if (raw === 'pending' || raw === 'dispatched' || raw === 'resolved' || raw === 'cancelled') return raw;
+            return 'pending';
+        }
+
+        function getIncidentPhone(incident) {
+            if (!incident) return '';
+            if (incident.caller_phone) return String(incident.caller_phone).trim();
+            if (incident.contact) return String(incident.contact).trim();
+            const text = [incident.description, incident.notes].map(v => String(v || '')).join(' ');
+            const match = text.match(/(\+?\d{1,3}[-.\s]?\d{1,4}[-.\s]?\d{1,4}[-.\s]?\d{1,4})/);
+            return match ? String(match[1]).trim() : '';
+        }
+
+        function escapeHtml(value) {
+            return String(value === null || value === undefined ? '' : value)
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;')
+                .replace(/"/g, '&quot;')
+                .replace(/'/g, '&#39;');
+        }
+
         function incidentCardHtml(i) {
             const priority = (i.priority || 'low').toLowerCase();
             const statusInfo = mapStatusToBadge(i.status);
             const created = new Date(i.created_at || Date.now());
             const location = i.location || i.location_address || 'Unknown location';
             const ref = i.incident_code || i.reference_no || '';
+            const id = Number(i.id || 0);
             return `
-                <tr class="priority-${priority}" data-ref="${ref}">
+                <tr class="priority-${priority}" data-id="${id}" data-ref="${escapeHtml(ref)}">
                     <td>${ref}</td>
                     <td>${capitalize(i.type)}</td>
                     <td>${capitalize(priority)}</td>
@@ -727,7 +724,9 @@ try {
                     <div class="modal-content" style="min-width:480px;max-width:700px;">
                         <h3>Update Incident Details</h3>
                         <form id="modal-update-form">
-                            <lab el>Type<br>
+                            <input id="modal-incident-id" type="hidden">
+                            <input id="modal-incident-code" type="hidden">
+                            <label>Type<br>
                                 <input id="modal-type-input" type="text" required style="width:100%">
                             </label><br><br>
                             <label>Priority<br>
@@ -746,9 +745,10 @@ try {
                             <!-- Map picker removed: now in call.php only -->
                             <label>Status<br>
                                 <select id="modal-status-input" style="width:100%">
-                                    <option value="active">Active</option>
+                                    <option value="pending">Active</option>
                                     <option value="dispatched">Dispatched</option>
                                     <option value="resolved">Resolved</option>
+                                    <option value="cancelled">Cancelled</option>
                                 </select>
                             </label><br><br>
                             <div style="margin-top:1em;text-align:right;">
@@ -776,11 +776,14 @@ try {
                 document.head.appendChild(style);
             }
             modal.style.display = 'flex';
+            const resolvedIncidentCode = String(incident.incident_code || incident.reference_no || '').trim();
+            document.getElementById('modal-incident-id').value = String(Number(incident.id || 0));
+            document.getElementById('modal-incident-code').value = resolvedIncidentCode;
             document.getElementById('modal-type-input').value = incident.type || '';
             document.getElementById('modal-priority-input').value = (incident.priority || 'low').toLowerCase();
             document.getElementById('modal-desc-input').value = incident.description || '';
             document.getElementById('modal-location-input').value = incident.location || incident.location_address || '';
-            document.getElementById('modal-status-input').value = (incident.status || 'active').toLowerCase();
+            document.getElementById('modal-status-input').value = normalizeIncidentStatus(incident.status || 'pending');
             // Add Leaflet map picker for location
             function initIncidentMap() {
                 if (window.L && document.getElementById('incident-location-map')) {
@@ -815,19 +818,100 @@ try {
             document.getElementById('modal-cancel-btn').onclick = function() {
                 modal.style.display = 'none';
             };
+            const modalBackdrop = modal.querySelector('.modal-backdrop');
+            if (modalBackdrop) {
+                modalBackdrop.onclick = function() {
+                    modal.style.display = 'none';
+                };
+            }
             // Save button (form submit)
-            document.getElementById('modal-update-form').onsubmit = function(e) {
+            document.getElementById('modal-update-form').onsubmit = async function(e) {
                 e.preventDefault();
-                incident.type = document.getElementById('modal-type-input').value;
-                incident.priority = document.getElementById('modal-priority-input').value;
-                incident.description = document.getElementById('modal-desc-input').value;
-                let loc = document.getElementById('modal-location-input').value;
-                if (incident.location !== undefined) incident.location = loc;
-                else if (incident.location_address !== undefined) incident.location_address = loc;
-                incident.status = document.getElementById('modal-status-input').value;
-                renderDynamicIncidents();
-                showNotification('Incident updated successfully', 'success');
-                modal.style.display = 'none';
+                const saveBtn = document.getElementById('modal-save-btn');
+                const modalIncidentId = Number(document.getElementById('modal-incident-id').value || '0');
+                const modalIncidentCode = String(document.getElementById('modal-incident-code').value || '').trim();
+                const payload = {
+                    id: modalIncidentId,
+                    incident_code: modalIncidentCode,
+                    type: document.getElementById('modal-type-input').value.trim(),
+                    priority: document.getElementById('modal-priority-input').value.trim().toLowerCase(),
+                    description: document.getElementById('modal-desc-input').value.trim(),
+                    location_address: document.getElementById('modal-location-input').value.trim(),
+                    status: normalizeIncidentStatus(document.getElementById('modal-status-input').value)
+                };
+                if (payload.id <= 0 && !payload.incident_code) {
+                    showNotification('Unable to update: missing incident identifier. Please refresh the page.', 'error');
+                    return;
+                }
+                if (!payload.type || !payload.priority || !payload.description) {
+                    showNotification('Type, priority, and description are required', 'error');
+                    return;
+                }
+
+                if (saveBtn) saveBtn.disabled = true;
+                try {
+                    const wasResolved = normalizeIncidentStatus(incident.status) === 'resolved';
+                    if (payload.status === 'resolved' && !wasResolved) {
+                        const updateBody = {
+                            incident_code: payload.incident_code,
+                            type: payload.type,
+                            priority: payload.priority,
+                            description: payload.description,
+                            location_address: payload.location_address
+                        };
+                        if (payload.id > 0) updateBody.id = payload.id;
+                        const updateRes = await fetch('api/incident_update.php', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify(updateBody)
+                        });
+                        const updateJson = await updateRes.json();
+                        if (!(updateJson && updateJson.ok)) {
+                            throw new Error((updateJson && updateJson.error) ? String(updateJson.error) : 'Update failed');
+                        }
+
+                        const resolveBody = {
+                            incident_code: payload.incident_code,
+                            note: `Resolved via Incident modal at ${new Date().toLocaleString()}`
+                        };
+                        if (payload.id > 0) resolveBody.incident_id = payload.id;
+                        const resolveRes = await fetch('api/incident_resolve.php', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify(resolveBody)
+                        });
+                        const resolveJson = await resolveRes.json();
+                        if (!(resolveJson && resolveJson.ok)) {
+                            throw new Error((resolveJson && resolveJson.error) ? String(resolveJson.error) : 'Resolve failed');
+                        }
+                    } else {
+                        const updateRes = await fetch('api/incident_update.php', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify(payload)
+                        });
+                        const updateJson = await updateRes.json();
+                        if (!(updateJson && updateJson.ok)) {
+                            throw new Error((updateJson && updateJson.error) ? String(updateJson.error) : 'Update failed');
+                        }
+                    }
+
+                    incident.type = payload.type;
+                    incident.priority = payload.priority;
+                    incident.description = payload.description;
+                    incident.location = payload.location_address;
+                    incident.location_address = payload.location_address;
+                    incident.status = payload.status;
+                    renderDynamicIncidents();
+                    showNotification('Incident updated successfully', 'success');
+                    try { localStorage.setItem('ers_incidents_changed', String(Date.now())); } catch (e) {}
+                    try { await fetchIncidents(); } catch (e) {}
+                    modal.style.display = 'none';
+                } catch (err) {
+                    showNotification(`Update failed: ${err.message || 'Unknown error'}`, 'error');
+                } finally {
+                    if (saveBtn) saveBtn.disabled = false;
+                }
             };
         }
     </script>
@@ -922,6 +1006,12 @@ try {
                 document.getElementById('resolved-close-btn').onclick = function() {
                     modal.style.display = 'none';
                 };
+                const backdrop = modal.querySelector('.modal-backdrop');
+                if (backdrop) {
+                    backdrop.addEventListener('click', function() {
+                        modal.style.display = 'none';
+                    });
+                }
                 // Details click delegation
                 modal.addEventListener('click', function(e) {
                     const btn = e.target.closest('button');

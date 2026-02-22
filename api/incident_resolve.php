@@ -21,15 +21,35 @@ $hasIncidentId = is_array($input)
     && $input['incident_id'] !== ''
     && is_numeric((string)$input['incident_id']);
 $incidentId = $hasIncidentId ? (int)$input['incident_id'] : null;
-$note = isset($input['note']) ? trim((string)$input['note']) : '';
+$incidentCode = '';
+if (is_array($input)) {
+    if (array_key_exists('incident_code', $input)) {
+        $incidentCode = trim((string)$input['incident_code']);
+    } elseif (array_key_exists('reference_no', $input)) {
+        $incidentCode = trim((string)$input['reference_no']);
+    }
+}
+$note = is_array($input) && isset($input['note']) ? trim((string)$input['note']) : '';
 
-if ($incidentId === null) {
+if ($incidentId === null && $incidentCode === '') {
     http_response_code(400);
-    echo json_encode(['ok' => false, 'error' => 'Missing incident_id']);
+    echo json_encode(['ok' => false, 'error' => 'Missing incident identifier']);
     exit;
 }
 
 try {
+    if ($incidentId === null && $incidentCode !== '') {
+        $lookup = $pdo->prepare('SELECT id FROM incidents WHERE reference_no = :ref LIMIT 1');
+        $lookup->execute([':ref' => $incidentCode]);
+        $resolvedId = $lookup->fetchColumn();
+        $incidentId = $resolvedId ? (int)$resolvedId : null;
+    }
+    if ($incidentId === null) {
+        http_response_code(404);
+        echo json_encode(['ok' => false, 'error' => 'Incident not found']);
+        exit;
+    }
+
     $pdo->beginTransaction();
 
     // Update all dispatches for this incident to 'cleared' (will trigger unit availability via DB trigger)
