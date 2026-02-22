@@ -82,9 +82,6 @@ $pageTitle = 'GPS Tracking System';
                             <button class="map-btn" onclick="toggleLayer('incident', this)">
                                 <i class="fas fa-exclamation-triangle"></i> Incidents
                             </button>
-                            <button class="map-btn" onclick="toggleLayer('routes', this)">
-                                <i class="fas fa-route"></i> Routes
-                            </button>
                             <button class="map-btn" onclick="toggleHeatmap(this)">
                                 <i class="fas fa-fire-alt"></i> Heatmap
                             </button>
