@@ -2,9 +2,19 @@
 header("Content-Type: application/json");
 require __DIR__ . "/connect.php";
 
-$input = json_decode(file_get_contents("php://input"), true);
-$email = trim($input["email"] ?? "");
-$otp   = trim($input["otp"] ?? "");
+$raw = file_get_contents("php://input");
+
+// Try JSON first
+$input = json_decode($raw, true);
+
+// If not JSON, try x-www-form-urlencoded (email=...&otp=...)
+if (!is_array($input)) {
+  $input = [];
+  parse_str($raw, $input);
+}
+
+$email = trim((string)($input["email"] ?? ($_POST["email"] ?? "")));
+$otp   = trim((string)($input["otp"]   ?? ($_POST["otp"]   ?? "")));
 
 if ($email === "" || $otp === "") {
   echo json_encode(["success"=>false, "message"=>"Email and OTP are required", "user"=>null]);
@@ -35,7 +45,7 @@ try {
     exit;
   }
 
-  if ($row["otp"] !== $otp) {
+  if ((string)$row["otp"] !== (string)$otp) {
     echo json_encode(["success"=>false, "message"=>"Invalid OTP", "user"=>null]);
     exit;
   }
@@ -61,5 +71,9 @@ try {
   ]);
 
 } catch (Throwable $e) {
-  echo json_encode(["success"=>false, "message"=>"Server error", "user"=>null]);
+  echo json_encode([
+    "success"=>false,
+    "message"=>"Server error: " . $e->getMessage(),
+    "user"=>null
+  ]);
 }
