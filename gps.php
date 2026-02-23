@@ -130,10 +130,20 @@ let unitFilter = '';
 let heatLayer = null;
 let heatActive = false;
 let heatHotspotMarker = null;
+let heatLegendControl = null;
 let dispatchedUnitsByIdentifier = {};
 let incidentGeocodeCache = {};
 let searchLocationMarker = null;
 const QC_VIEWBOX = '121.0000,14.7500,121.1000,14.6000';
+const HEATMAP_GRADIENT = {
+    0.12: '#2d5be3',
+    0.28: '#00b5ff',
+    0.45: '#39ff6a',
+    0.62: '#d9ff2f',
+    0.78: '#ffb300',
+    0.92: '#ff4b3e',
+    1.0: '#ff2da1'
+};
 
 // ===============================
 // LEAFLET MAP INITIALIZATION
@@ -209,6 +219,12 @@ function loadIncidentMarkers() {
     updateMapVisibility();
 
     console.log("✅ Leaflet map initialized");
+    map.on('zoomend', () => {
+        if (!heatLayer || !heatActive) return;
+        const z = map.getZoom();
+        const radius = z >= 16 ? 32 : (z >= 14 ? 40 : 52);
+        heatLayer.setOptions({ radius: radius, blur: radius * 0.9 });
+    });
 
     // Plot route if parameters provided
     try {
@@ -878,6 +894,10 @@ function clearHeatmapOverlays() {
         map.removeLayer(heatHotspotMarker);
         heatHotspotMarker = null;
     }
+    if (heatLegendControl) {
+        map.removeControl(heatLegendControl);
+        heatLegendControl = null;
+    }
 }
 
 function findHeatHotspot(points) {
@@ -920,11 +940,24 @@ function findHeatHotspot(points) {
 
 function loadHeatmap(initial) {
     const params = new URLSearchParams();
-    // Use all available coordinates from database-backed records.
-    params.set('all', '1');
+    const range = String(document.getElementById('time-range')?.value || 'live');
+    if (range === 'live' || range === '1hour') {
+        params.set('hours', '1');
+    } else if (range === '24hours') {
+        params.set('hours', '24');
+    } else if (range === '7days') {
+        params.set('days', '7');
+    } else {
+        params.set('days', '90');
+    }
+    fetchHeatmap(params, initial, true);
+}
+
+function fetchHeatmap(params, initial, allowFallbackToAll) {
     fetch('api/incidents_heatmap.php?' + params.toString())
         .then(r => r.json())
         .then(res => {
+            if (!heatActive) return;
             if (!res.ok) {
                 if (initial) showNotification('Unable to load incident heatmap', 'error');
                 return;
@@ -932,11 +965,27 @@ function loadHeatmap(initial) {
             const points = res.points || [];
             clearHeatmapOverlays();
             if (!points.length) {
+                if (allowFallbackToAll) {
+                    const allParams = new URLSearchParams();
+                    allParams.set('all', '1');
+                    fetchHeatmap(allParams, initial, false);
+                    return;
+                }
                 if (initial) showNotification('No hotspot data found for incidents with coordinates', 'info');
                 return;
             }
-            heatLayer = L.heatLayer(points, { radius: 25, blur: 15, maxZoom: 17, minOpacity: 0.4 });
+            const zoom = map ? map.getZoom() : 13;
+            const radius = zoom >= 16 ? 32 : (zoom >= 14 ? 40 : 52);
+            heatLayer = L.heatLayer(points, {
+                radius: radius,
+                blur: radius * 0.9,
+                maxZoom: 18,
+                minOpacity: 0.35,
+                max: 1.0,
+                gradient: HEATMAP_GRADIENT
+            });
             heatLayer.addTo(map);
+            addHeatLegendControl();
             if (initial) {
                 const count = Number.isFinite(Number(res.count)) ? Number(res.count) : points.length;
                 showNotification(`Heatmap loaded (${count} records)`, 'success');
@@ -962,6 +1011,48 @@ function loadHeatmap(initial) {
         .catch(() => {
             if (initial) showNotification('Unable to load incident heatmap', 'error');
         });
+}
+
+function addHeatLegendControl() {
+    if (!map) return;
+    if (heatLegendControl) {
+        map.removeControl(heatLegendControl);
+    }
+    heatLegendControl = L.control({ position: 'topright' });
+    heatLegendControl.onAdd = function () {
+        const div = L.DomUtil.create('div', 'heatmap-legend');
+        div.style.background = 'rgba(255,255,255,0.95)';
+        div.style.border = '1px solid #d1d5db';
+        div.style.borderRadius = '8px';
+        div.style.padding = '8px 10px';
+        div.style.boxShadow = '0 4px 12px rgba(0,0,0,0.12)';
+        div.style.fontSize = '11px';
+        div.style.lineHeight = '1.2';
+        div.innerHTML = `
+            <div style="font-weight:700; margin-bottom:6px; color:#111827;">Heat Intensity</div>
+            <div style="
+                width: 140px;
+                height: 10px;
+                border-radius: 999px;
+                border: 1px solid rgba(0,0,0,0.12);
+                background: linear-gradient(90deg,
+                    #2d5be3 0%,
+                    #00b5ff 20%,
+                    #39ff6a 40%,
+                    #d9ff2f 60%,
+                    #ffb300 78%,
+                    #ff4b3e 92%,
+                    #ff2da1 100%);
+            "></div>
+            <div style="display:flex; justify-content:space-between; margin-top:4px; color:#374151;">
+                <span>Low</span><span>High</span>
+            </div>
+        `;
+        L.DomEvent.disableClickPropagation(div);
+        L.DomEvent.disableScrollPropagation(div);
+        return div;
+    };
+    heatLegendControl.addTo(map);
 }
 
 // Live polling to update unit positions/speeds every 5s
