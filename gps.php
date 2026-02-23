@@ -136,13 +136,13 @@ let incidentGeocodeCache = {};
 let searchLocationMarker = null;
 const QC_VIEWBOX = '121.0000,14.7500,121.1000,14.6000';
 const HEATMAP_GRADIENT = {
-    0.12: '#2d5be3',
-    0.28: '#00b5ff',
-    0.45: '#39ff6a',
-    0.62: '#d9ff2f',
-    0.78: '#ffb300',
-    0.92: '#ff4b3e',
-    1.0: '#ff2da1'
+    0.18: '#2d5be3',
+    0.35: '#18b7ff',
+    0.52: '#4ef542',
+    0.68: '#ddff40',
+    0.82: '#ffbb2f',
+    0.94: '#ff7043',
+    1.0: '#f44336'
 };
 
 // ===============================
@@ -959,6 +959,12 @@ function fetchHeatmap(params, initial, allowFallbackToAll) {
         .then(res => {
             if (!heatActive) return;
             if (!res.ok) {
+                if (allowFallbackToAll) {
+                    const allParams = new URLSearchParams();
+                    allParams.set('all', '1');
+                    fetchHeatmap(allParams, initial, false);
+                    return;
+                }
                 if (initial) showNotification('Unable to load incident heatmap', 'error');
                 return;
             }
@@ -975,12 +981,13 @@ function fetchHeatmap(params, initial, allowFallbackToAll) {
                 return;
             }
             const zoom = map ? map.getZoom() : 13;
-            const radius = zoom >= 16 ? 32 : (zoom >= 14 ? 40 : 52);
-            heatLayer = L.heatLayer(points, {
+            const radius = zoom >= 16 ? 34 : (zoom >= 14 ? 44 : 58);
+            const blobPoints = buildHeatBlobPoints(points, res.hotspots);
+            heatLayer = L.heatLayer(blobPoints, {
                 radius: radius,
-                blur: radius * 0.9,
+                blur: radius * 1.05,
                 maxZoom: 18,
-                minOpacity: 0.35,
+                minOpacity: 0.32,
                 max: 1.0,
                 gradient: HEATMAP_GRADIENT
             });
@@ -988,10 +995,27 @@ function fetchHeatmap(params, initial, allowFallbackToAll) {
             addHeatLegendControl();
             if (initial) {
                 const count = Number.isFinite(Number(res.count)) ? Number(res.count) : points.length;
-                showNotification(`Heatmap loaded (${count} records)`, 'success');
+                const clusters = Number.isFinite(Number(res.cluster_count)) ? Number(res.cluster_count) : points.length;
+                showNotification(`Heatmap loaded (${count} incidents, ${clusters} hotspot zones)`, 'success');
             }
 
-            const hotspot = findHeatHotspot(points);
+            let hotspot = null;
+            if (Array.isArray(res.hotspots) && res.hotspots.length) {
+                const top = res.hotspots[0];
+                const hLat = parseFloat(top.latitude);
+                const hLng = parseFloat(top.longitude);
+                if (Number.isFinite(hLat) && Number.isFinite(hLng)) {
+                    hotspot = {
+                        lat: hLat,
+                        lng: hLng,
+                        count: parseInt(top.incident_count, 10) || 0,
+                        weight: parseFloat(top.score) || 0
+                    };
+                }
+            }
+            if (!hotspot) {
+                hotspot = findHeatHotspot(points);
+            }
             if (hotspot) {
                 heatHotspotMarker = L.circleMarker([hotspot.lat, hotspot.lng], {
                     radius: 10,
@@ -1011,6 +1035,60 @@ function fetchHeatmap(params, initial, allowFallbackToAll) {
         .catch(() => {
             if (initial) showNotification('Unable to load incident heatmap', 'error');
         });
+}
+
+function buildHeatBlobPoints(points, hotspots) {
+    const sourcePoints = Array.isArray(points) ? points : [];
+    const sourceHotspots = Array.isArray(hotspots) ? hotspots : [];
+    const expanded = [];
+
+    // Keep base points so exact event locations still contribute.
+    sourcePoints.forEach((p) => {
+        const lat = parseFloat(p[0]);
+        const lng = parseFloat(p[1]);
+        const intensity = parseFloat(p[2]);
+        if (!Number.isFinite(lat) || !Number.isFinite(lng)) return;
+        const w = Number.isFinite(intensity) ? Math.max(0.08, Math.min(1, intensity)) : 0.25;
+        expanded.push([lat, lng, w]);
+    });
+
+    const rings = [
+        { meters: 140, points: 8, weight: 0.92 },
+        { meters: 280, points: 10, weight: 0.76 },
+        { meters: 460, points: 14, weight: 0.56 },
+        { meters: 700, points: 18, weight: 0.36 },
+        { meters: 940, points: 22, weight: 0.2 }
+    ];
+
+    sourceHotspots.slice(0, 50).forEach((h) => {
+        const lat = parseFloat(h.latitude);
+        const lng = parseFloat(h.longitude);
+        if (!Number.isFinite(lat) || !Number.isFinite(lng)) return;
+
+        const baseIntensityRaw = parseFloat(h.intensity);
+        const baseIntensity = Number.isFinite(baseIntensityRaw) ? baseIntensityRaw : 0.5;
+        const count = parseFloat(h.incident_count);
+        const densityBoost = Number.isFinite(count) ? Math.min(1.8, 1 + (Math.log(count + 1) * 0.42)) : 1;
+        const centerWeight = Math.max(0.12, Math.min(1, baseIntensity * densityBoost));
+
+        expanded.push([lat, lng, centerWeight]);
+
+        rings.forEach((ring) => {
+            const meters = ring.meters * densityBoost;
+            const latDelta = meters / 111320;
+            const cosLat = Math.cos((lat * Math.PI) / 180) || 1;
+            const lngDelta = meters / (111320 * cosLat);
+            for (let i = 0; i < ring.points; i += 1) {
+                const angle = (Math.PI * 2 * i) / ring.points;
+                const lat2 = lat + (latDelta * Math.sin(angle));
+                const lng2 = lng + (lngDelta * Math.cos(angle));
+                const weight = Math.max(0.05, Math.min(1, centerWeight * ring.weight));
+                expanded.push([lat2, lng2, weight]);
+            }
+        });
+    });
+
+    return expanded;
 }
 
 function addHeatLegendControl() {
