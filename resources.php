@@ -386,6 +386,10 @@ try {
                     let rowClass = r.type === 'vehicles' ? 'resource-row-vehicle' : (r.type === 'personnel' ? 'resource-row-personnel' : 'resource-row-equipment');
                     let statusClass = r.status === 'available' ? 'resource-status-available' : (r.status === 'inuse' ? 'resource-status-inuse' : 'resource-status-offline');
                     let statusLabel = r.status === 'available' ? 'Avail' : (r.status === 'inuse' ? 'Busy' : 'Offline');
+                    const resourceName = String(r.name || '');
+                    const unitIdentifier = r.type === 'vehicles'
+                        ? String(r.identifier || r.name || '')
+                        : '';
                     // Build actions and render inline (up to 4)
                     const btns = [];
                     const resourceActions = Array.isArray(r.actions) ? r.actions.slice() : [];
@@ -407,7 +411,7 @@ try {
                     if (r.type === 'vehicles') iconHtml = '<i class="fas fa-truck-medical" style="color:#dc3545;"></i>';
                     else if (r.type === 'personnel') iconHtml = '<i class="fas fa-user" style="color:#28a745;"></i>';
                     else iconHtml = '<i class="fas fa-toolbox" style="color:#e83e8c;"></i>';
-                    return `<tr class=\"${rowClass}\" data-type=\"${r.type}\" data-status=\"${r.status}\" data-location=\"${r.location || ''}\" data-resource-id=\"${r.id}\">\n`+
+                    return `<tr class=\"${rowClass}\" data-type=\"${r.type}\" data-status=\"${r.status}\" data-location=\"${escapeAttrValue(r.location || '')}\" data-resource-id=\"${escapeAttrValue(r.id)}\" data-resource-name=\"${escapeAttrValue(resourceName)}\" data-unit-identifier=\"${escapeAttrValue(unitIdentifier)}\">\n`+
                         `<td>${iconHtml} ${r.type.charAt(0).toUpperCase() + r.type.slice(1)}</td>`+
                         `<td class=\"resource-title\">${r.name}${r.role ? ' <br><span style=\\"font-size:0.95em;color:#888;\\">'+r.role+'</span>' : ''}</td>`+
                         `<td><span class=\"${statusClass}\">${statusLabel}</span></td>`+
@@ -906,7 +910,8 @@ try {
         function trackResource(button) {
             const row = button.closest('tr');
             if (!row) return;
-            const resourceName = row.querySelector('.resource-title') ? row.querySelector('.resource-title').textContent : 'Resource';
+            const resourceName = row.getAttribute('data-resource-name') || (row.querySelector('.resource-title') ? row.querySelector('.resource-title').textContent : 'Resource');
+            const unitIdentifier = row.getAttribute('data-unit-identifier') || resourceName;
             const resourceId = row.getAttribute('data-resource-id');
             const resourceType = row.getAttribute('data-type');
             if (!resourceId) { showNotification('Missing resource id', 'error'); return; }
@@ -914,14 +919,16 @@ try {
                 fetch('api/get_resource_location.php?id=' + encodeURIComponent(resourceId))
                     .then(r => r.json())
                     .then(data => {
-                        if (data && data.ok && data.latitude && data.longitude) {
-                            window.location.href = 'gps.php?unit_id=' + encodeURIComponent(resourceId) + '&unit=' + encodeURIComponent(resourceName) + '&from_lat=' + encodeURIComponent(data.latitude) + '&from_lng=' + encodeURIComponent(data.longitude);
+                        const lat = data && data.ok ? Number(data.latitude) : NaN;
+                        const lng = data && data.ok ? Number(data.longitude) : NaN;
+                        if (data && data.ok && Number.isFinite(lat) && Number.isFinite(lng)) {
+                            window.location.href = 'gps.php?unit_id=' + encodeURIComponent(resourceId) + '&unit=' + encodeURIComponent(unitIdentifier) + '&from_lat=' + encodeURIComponent(lat) + '&from_lng=' + encodeURIComponent(lng);
                         } else {
                             showNotification('Location data unavailable', 'info');
-                            window.location.href = 'gps.php?unit_id=' + encodeURIComponent(resourceId) + '&unit=' + encodeURIComponent(resourceName);
+                            window.location.href = 'gps.php?unit_id=' + encodeURIComponent(resourceId) + '&unit=' + encodeURIComponent(unitIdentifier);
                         }
                     }).catch(() => {
-                        window.location.href = 'gps.php?unit_id=' + encodeURIComponent(resourceId) + '&unit=' + encodeURIComponent(resourceName);
+                        window.location.href = 'gps.php?unit_id=' + encodeURIComponent(resourceId) + '&unit=' + encodeURIComponent(unitIdentifier);
                     });
             } else {
                 showNotification(`Tracking ${resourceName}...`, 'info');
@@ -1187,6 +1194,15 @@ try {
         }
 
         function escapeHtml(str) {
+            return String(str)
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;')
+                .replace(/"/g, '&quot;')
+                .replace(/'/g, '&#039;');
+        }
+
+        function escapeAttrValue(str) {
             return String(str)
                 .replace(/&/g, '&amp;')
                 .replace(/</g, '&lt;')

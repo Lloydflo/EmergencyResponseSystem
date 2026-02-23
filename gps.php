@@ -132,8 +132,12 @@ let heatActive = false;
 let heatHotspotMarker = null;
 let heatLegendControl = null;
 let dispatchedUnitsByIdentifier = {};
+let unitIdentifierById = {};
 let incidentGeocodeCache = {};
 let searchLocationMarker = null;
+let pendingTrackRequest = null;
+let pendingTrackAttempts = 0;
+const MAX_PENDING_TRACK_ATTEMPTS = 20;
 const QC_VIEWBOX = '121.0000,14.7500,121.1000,14.6000';
 const HEATMAP_GRADIENT = {
     0.18: '#2d5be3',
@@ -265,7 +269,7 @@ function getIcon(type) {
     });
 }
 
-function addUnitMarker(id, lat, lng, label, type, speedKph) {
+function addUnitMarker(id, lat, lng, label, type, speedKph, unitDbId) {
     const marker = L.marker([lat, lng], { icon: getIcon(type) })
         .addTo(map)
         .bindPopup(`
@@ -274,7 +278,13 @@ function addUnitMarker(id, lat, lng, label, type, speedKph) {
             Coords: ${lat.toFixed(5)}, ${lng.toFixed(5)}
         `);
 
-    markers[id] = { marker, type: "unit", unitType: (type || '').toLowerCase(), speedKph: speedKph };
+    markers[id] = {
+        marker,
+        type: "unit",
+        unitType: (type || '').toLowerCase(),
+        speedKph: speedKph,
+        unitDbId: unitDbId !== undefined && unitDbId !== null ? String(unitDbId) : ''
+    };
 }
 
 function addIncidentMarker(id, lat, lng, label) {
@@ -385,13 +395,104 @@ function selectRoute(routeId) {
     }
 }
 
-function trackUnit(unitId) {
-    const entry = markers[unitId];
-    if (!entry) { showNotification('Unit not found', 'error'); return; }
+function normalizeUnitIdentifier(value) {
+    const text = String(value || '').trim();
+    if (!text) return '';
+    const firstToken = text.split(/\s+/)[0];
+    return firstToken.trim();
+}
+
+function rememberUnitIdentity(unit) {
+    const identifier = String(unit && unit.identifier ? unit.identifier : '').trim();
+    const unitId = String(unit && unit.id !== undefined && unit.id !== null ? unit.id : '').trim();
+    if (identifier && unitId) {
+        unitIdentifierById[unitId] = identifier;
+    }
+}
+
+function resolveTrackTargetFromRequest() {
+    if (!pendingTrackRequest) return '';
+
+    const rawUnit = normalizeUnitIdentifier(pendingTrackRequest.unit || '');
+    if (rawUnit) {
+        if (markers[rawUnit]) return rawUnit;
+        const upperRaw = rawUnit.toUpperCase();
+        const markerKey = Object.keys(markers).find((key) => String(key).toUpperCase() === upperRaw);
+        if (markerKey) return markerKey;
+    }
+
+    const rawUnitId = String(pendingTrackRequest.unitId || '').trim();
+    if (rawUnitId) {
+        if (unitIdentifierById[rawUnitId]) {
+            return unitIdentifierById[rawUnitId];
+        }
+        const markerByDbId = Object.keys(markers).find((key) => String(markers[key]?.unitDbId || '') === rawUnitId);
+        if (markerByDbId) return markerByDbId;
+    }
+
+    return rawUnit;
+}
+
+function trackUnit(unitId, options) {
+    const silent = !!(options && options.silent);
+    const normalized = normalizeUnitIdentifier(unitId);
+    if (!normalized) {
+        if (!silent) showNotification('Unit not found', 'error');
+        return false;
+    }
+
+    let resolvedKey = normalized;
+    let entry = markers[resolvedKey];
+    if (!entry) {
+        const upperNormalized = normalized.toUpperCase();
+        const matchedKey = Object.keys(markers).find((key) => String(key).toUpperCase() === upperNormalized);
+        if (matchedKey) {
+            resolvedKey = matchedKey;
+            entry = markers[resolvedKey];
+        }
+    }
+
+    if (!entry) {
+        if (!silent) showNotification('Unit not found', 'error');
+        return false;
+    }
+
     const pos = entry.marker.getLatLng();
     map.setView(pos, 15);
     entry.marker.openPopup();
-    showNotification(`Tracking ${unitId.toUpperCase()}`, 'success');
+    if (!silent) showNotification(`Tracking ${resolvedKey.toUpperCase()}`, 'success');
+    return true;
+}
+
+function tryTrackPendingUnit() {
+    if (!pendingTrackRequest) return;
+    const target = resolveTrackTargetFromRequest();
+    if (!target) return;
+
+    const tracked = trackUnit(target, { silent: true });
+    if (tracked) {
+        const displayName = normalizeUnitIdentifier(target) || 'unit';
+        showNotification(`Tracking ${displayName.toUpperCase()}`, 'success');
+        pendingTrackRequest = null;
+        pendingTrackAttempts = 0;
+        return;
+    }
+
+    pendingTrackAttempts += 1;
+    if (pendingTrackAttempts >= MAX_PENDING_TRACK_ATTEMPTS) {
+        const fallbackLat = Number(pendingTrackRequest.fromLat);
+        const fallbackLng = Number(pendingTrackRequest.fromLng);
+        if (Number.isFinite(fallbackLat) && Number.isFinite(fallbackLng)) {
+            focusMapToLocation(fallbackLat, fallbackLng);
+            showNotification('Unit marker unavailable. Showing last known location.', 'info');
+        } else {
+            showNotification('Unit not found on map', 'error');
+        }
+        pendingTrackRequest = null;
+        pendingTrackAttempts = 0;
+        return;
+    }
+    setTimeout(tryTrackPendingUnit, 400);
 }
 
     // Quezon City bounds
@@ -686,10 +787,18 @@ document.addEventListener("DOMContentLoaded", () => {
     try {
         const params = new URLSearchParams(window.location.search);
         const unit = params.get('unit');
-        if (unit) {
-            // Wait for units to load then focus
-            const attempt = () => { try { trackUnit(unit); } catch (e) {} };
-            setTimeout(attempt, 800);
+        const unitId = params.get('unit_id');
+        const fromLat = params.get('from_lat');
+        const fromLng = params.get('from_lng');
+        if (unit || unitId || (fromLat && fromLng)) {
+            pendingTrackRequest = {
+                unit: unit || '',
+                unitId: unitId || '',
+                fromLat: fromLat || '',
+                fromLng: fromLng || ''
+            };
+            pendingTrackAttempts = 0;
+            setTimeout(tryTrackPendingUnit, 300);
         }
     } catch (e) {}
 });
@@ -742,8 +851,10 @@ function indexDispatchedUnits(items) {
     (items || []).forEach(u => {
         if (u && u.identifier) {
             dispatchedUnitsByIdentifier[String(u.identifier)] = u;
+            rememberUnitIdentity(u);
         }
     });
+    tryTrackPendingUnit();
 }
 
 function renderUnitCards(items) {
@@ -815,11 +926,14 @@ function syncUnitMarkers(items) {
                 `;
                 markers[id].marker.bindPopup(popupHtml);
                 markers[id].speedKph = speed;
+                markers[id].unitDbId = u.id !== undefined && u.id !== null ? String(u.id) : markers[id].unitDbId;
             } else {
-                addUnitMarker(id, lat, lng, label, type, speed);
+                addUnitMarker(id, lat, lng, label, type, speed, u.id);
             }
         }
+        rememberUnitIdentity(u);
     });
+    tryTrackPendingUnit();
 }
 
 function escapeHtml(s) {
@@ -860,9 +974,11 @@ function loadAvailableUnits() {
                 const lng = parseFloat(u.longitude);
                 const speed = (u.speed_kph !== undefined && u.speed_kph !== null) ? parseFloat(u.speed_kph) : null;
                 if (!isNaN(lat) && !isNaN(lng)) {
-                    addUnitMarker(id, lat, lng, `${id}`, type, speed);
+                    addUnitMarker(id, lat, lng, `${id}`, type, speed, u.id);
                 }
+                rememberUnitIdentity(u);
             });
+            tryTrackPendingUnit();
         })
         .catch(() => {});
 }

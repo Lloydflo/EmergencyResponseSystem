@@ -49,6 +49,7 @@ try {
         $items[] = [
             'type' => 'vehicles',
             'name' => (string)$r['identifier'],
+            'identifier' => (string)$r['identifier'],
             'status' => $statusLabel,
             'location' => ($r['incident_location'] ?? '') ?: ((isset($r['latitude']) && isset($r['longitude']) && $r['latitude'] !== null && $r['longitude'] !== null) ? (string)$r['latitude'] . ',' . (string)$r['longitude'] : ''),
             'details' => $details,
