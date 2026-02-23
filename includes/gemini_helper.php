@@ -128,7 +128,7 @@ if (!function_exists('ers_resolve_gemini_key')) {
 
 if (!function_exists('ers_resolve_gemini_url')) {
     function ers_resolve_gemini_url() {
-        $defaultUrl = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent';
+        $defaultUrl = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent';
         $candidates = [];
         if (defined('GEMINI_API_URL')) {
             $candidates[] = (string)GEMINI_API_URL;
@@ -158,6 +158,63 @@ if (!function_exists('ers_resolve_gemini_url')) {
         }
 
         return $defaultUrl;
+    }
+}
+
+if (!function_exists('ers_gemini_url_candidates')) {
+    function ers_gemini_url_candidates($configuredUrl) {
+        $urls = [];
+        $configuredUrl = trim((string)$configuredUrl);
+        if ($configuredUrl !== '') {
+            $urls[] = $configuredUrl;
+        }
+
+        $fallbackModels = [
+            'gemini-2.0-flash',
+            'gemini-1.5-flash',
+        ];
+        foreach ($fallbackModels as $model) {
+            $urls[] = 'https://generativelanguage.googleapis.com/v1beta/models/' . $model . ':generateContent';
+        }
+
+        return array_values(array_unique($urls));
+    }
+}
+
+if (!function_exists('ers_should_retry_gemini_with_fallback_model')) {
+    function ers_should_retry_gemini_with_fallback_model($httpCode, $apiError) {
+        $apiError = strtolower(trim((string)$apiError));
+
+        if ($httpCode === 404) {
+            return true;
+        }
+
+        if ($httpCode === 400) {
+            return (
+                strpos($apiError, 'model') !== false &&
+                (
+                    strpos($apiError, 'not found') !== false ||
+                    strpos($apiError, 'unsupported') !== false ||
+                    strpos($apiError, 'not available') !== false
+                )
+            );
+        }
+
+        if ($httpCode === 403) {
+            if (
+                strpos($apiError, 'api key not valid') !== false ||
+                strpos($apiError, 'invalid api key') !== false
+            ) {
+                return false;
+            }
+            return (
+                strpos($apiError, 'model') !== false ||
+                strpos($apiError, 'permission') !== false ||
+                strpos($apiError, 'access') !== false
+            );
+        }
+
+        return false;
     }
 }
 
