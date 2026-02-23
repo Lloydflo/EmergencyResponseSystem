@@ -24,6 +24,7 @@ MAIL_DEBUG=
 # Logs & cache
 *.log
 /cache/
+data/geocode_cache.json
 
 # IDE files
 .vscode/

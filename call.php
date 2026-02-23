@@ -251,7 +251,6 @@ $pageTitle = 'Emergency Call Center';
     let currentSearch = '';
     let filterDay = '';
     let filterMonth = '';
-    const QC_VIEWBOX = '121.0000,14.7500,121.1000,14.6000';
     const incidentGeocodeCache = {};
 
     document.addEventListener('DOMContentLoaded', () => {
@@ -517,21 +516,18 @@ $pageTitle = 'Emergency Call Center';
 
     async function geocodeOnce(query, strictViewbox) {
         const params = new URLSearchParams({
-            format: 'jsonv2',
-            countrycodes: 'PH',
+            q: query,
             limit: '6',
-            addressdetails: '1',
-            q: query
+            strict: strictViewbox ? '1' : '0'
         });
-        params.set('viewbox', QC_VIEWBOX);
-        if (strictViewbox) {
-            params.set('bounded', '1');
-        }
-        const url = `https://nominatim.openstreetmap.org/search?${params.toString()}`;
+        const url = `api/geocode_proxy.php?${params.toString()}`;
         const res = await fetch(url, { headers: { Accept: 'application/json' } });
         if (!res.ok) return [];
-        const data = await res.json();
-        return Array.isArray(data) ? data : [];
+        const payload = await res.json();
+        if (!payload || !payload.ok || !Array.isArray(payload.items)) {
+            return [];
+        }
+        return payload.items;
     }
 
     function selectBestGeocodeCandidate(items, originalQuery) {
@@ -608,9 +604,8 @@ $pageTitle = 'Emergency Call Center';
             coords = await geocodeIncidentLocation(locationText);
         }
         if (!coords) {
-            alert('Unable to verify this location. Please choose from suggestions or enter valid coordinates (lat, lon).');
-            document.getElementById('incidentLocation').focus();
-            return;
+            // Allow logging even when autocomplete/geocoding is unavailable.
+            console.warn('Proceeding without verified coordinates for location:', locationText);
         }
         const finalLocationText = document.getElementById('incidentLocation').value.trim() || locationText;
         const payload = {
@@ -637,12 +632,18 @@ $pageTitle = 'Emergency Call Center';
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(payload)
             });
-            const data = await res.json();
-            if (!data.ok) {
-                if (data.error && data.error === 'Duplicate incident detected') {
+            let data = null;
+            try {
+                data = await res.json();
+            } catch (parseErr) {
+                data = null;
+            }
+            if (!res.ok || !data || !data.ok) {
+                const errorText = data && data.error ? String(data.error) : '';
+                if (errorText === 'Duplicate incident detected') {
                     alert('Duplicate incident detected!\nA similar incident was already reported recently.');
                 } else {
-                    alert('Failed to log incident.');
+                    alert(errorText ? `Failed to log incident: ${errorText}` : 'Failed to log incident.');
                 }
                 return;
             }

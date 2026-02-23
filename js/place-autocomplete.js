@@ -1,7 +1,6 @@
-// Location autocomplete using Nominatim API with Quezon City bias.
+// Location autocomplete via backend geocode proxy (Nominatim + cache).
 // Usage: attachPlaceAutocomplete(inputId, onSelect, options)
 (function () {
-    const QC_VIEWBOX = '121.0000,14.7500,121.1000,14.6000'; // left,top,right,bottom
     const DEFAULT_LIMIT = 6;
 
     function toNum(value) {
@@ -28,21 +27,12 @@
         return /(quezon city|qc|metro manila|philippines)\b/i.test(text);
     }
 
-    function buildSearchParams(query, options) {
-        const params = new URLSearchParams({
-            format: 'jsonv2',
-            addressdetails: '1',
+    function buildProxyParams(query, options) {
+        return new URLSearchParams({
+            q: query,
             limit: String(options.limit || DEFAULT_LIMIT),
-            countrycodes: 'ph',
-            q: query
+            strict: options.strictViewbox ? '1' : '0'
         });
-        if (options.preferViewbox || options.strictViewbox) {
-            params.set('viewbox', QC_VIEWBOX);
-        }
-        if (options.strictViewbox) {
-            params.set('bounded', '1');
-        }
-        return params;
     }
 
     function scoreSuggestion(place, query) {
@@ -70,46 +60,20 @@
         const input = normalizeText(query);
         if (!input) return [];
 
-        const localizedQuery = hasQcContext(input)
-            ? input
-            : `${input}, Quezon City, Metro Manila, Philippines`;
-
-        const attempts = [
-            { q: localizedQuery, strict: !!options.strictViewbox },
-            { q: localizedQuery, strict: false },
-            { q: input, strict: false }
-        ];
-
-        let last = [];
-        for (let i = 0; i < attempts.length; i += 1) {
-            const attempt = attempts[i];
-            const params = buildSearchParams(attempt.q, {
-                limit: options.limit,
-                preferViewbox: true,
-                strictViewbox: attempt.strict
-            });
-            const url = `https://nominatim.openstreetmap.org/search?${params.toString()}`;
-            const res = await fetch(url, {
-                signal: signal,
-                headers: { Accept: 'application/json' }
-            });
-            if (!res.ok) {
-                continue;
-            }
-            const data = await res.json();
-            if (!Array.isArray(data) || !data.length) {
-                continue;
-            }
-            last = data;
-            if (attempt.strict) {
-                break;
-            }
-            if (data.some((p) => String(p.display_name || '').toLowerCase().includes('quezon city'))) {
-                break;
-            }
+        const localizedQuery = hasQcContext(input) ? input : `${input}, Quezon City`;
+        const params = buildProxyParams(localizedQuery, options);
+        const url = `api/geocode_proxy.php?${params.toString()}`;
+        const res = await fetch(url, {
+            signal: signal,
+            headers: { Accept: 'application/json' }
+        });
+        if (!res.ok) {
+            return [];
         }
+        const payload = await res.json();
+        const list = (payload && payload.ok && Array.isArray(payload.items)) ? payload.items : [];
 
-        return dedupePlaces(last)
+        return dedupePlaces(list)
             .sort((a, b) => scoreSuggestion(b, input) - scoreSuggestion(a, input))
             .slice(0, options.limit || DEFAULT_LIMIT);
     }
@@ -258,7 +222,7 @@
             } catch (error) {
                 if (error && error.name === 'AbortError') return;
                 if (currentSeq !== requestSeq) return;
-                renderMessage('Error loading suggestions. Try again.');
+                renderMessage('Suggestions unavailable. You can still type location manually.');
             }
         }
 
