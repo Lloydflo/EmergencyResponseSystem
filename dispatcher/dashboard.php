@@ -1,18 +1,10 @@
 <?php
 $rootDir = dirname(__DIR__);
 require_once $rootDir . '/includes/auth.php';
-
-if (!is_logged_in()) {
-    header('Location: ../login.php?redirect=' . urlencode('dispatcher/dashboard.php'));
-    exit;
-}
+require_role('dispatcher', 'dispatcher/dashboard.php');
 
 $current_user = get_logged_in_user();
 $current_role = strtolower((string)($current_user['role'] ?? ''));
-if (!in_array($current_role, ['dispatcher', 'admin'], true)) {
-    header('Location: ../index.php');
-    exit;
-}
 
 $pageTitle = 'Dispatcher Dashboard';
 $pending_incidents = 0;
@@ -244,7 +236,7 @@ $type_total = array_sum($type_counts);
                 <article class="metric-block response">
                     <div class="metric-label">Avg Response (7d)</div>
                     <div class="metric-value"><?php echo number_format($avg_response_min, 1); ?>m</div>
-                    <a href="report.php" class="metric-link">View reports</a>
+                    <a href="review.php" class="metric-link">View reviews</a>
                 </article>
             </section>
 

@@ -2,7 +2,7 @@
 $rootDir = dirname(__DIR__);
 require_once $rootDir . '/includes/auth.php';
 // Require full login (including OTP verification) before loading page
-require_login('incident.php');
+require_role('dispatcher', 'dispatcher/incident.php');
 require_once $rootDir . '/includes/db.php';
 
 $pageTitle = 'Incident Priority Management';

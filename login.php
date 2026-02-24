@@ -28,8 +28,8 @@ if (is_logged_in()) {
         debug_log('Already logged in, redirecting to dispatcher dashboard');
         header('Location: dispatcher/dashboard.php');
     } else {
-        debug_log('Already logged in, redirecting to index');
-        header('Location: index.php');
+        debug_log('Already logged in, redirecting to admin index');
+        header('Location: admin/index.php');
     }
     exit;
 }

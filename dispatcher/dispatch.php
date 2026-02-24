@@ -3,7 +3,7 @@
 $rootDir = dirname(__DIR__);
 require_once $rootDir . '/includes/auth.php';
 // Require full login (including OTP verification) before loading page
-require_login('dispatch.php');
+require_role('dispatcher', 'dispatcher/dispatch.php');
 $pageTitle = 'Emergency Dispatch Center';
 
 // Initialize default values

@@ -2,7 +2,7 @@
 $rootDir = dirname(__DIR__);
 require_once $rootDir . '/includes/auth.php';
 // Require full login (including OTP verification) before loading page
-require_login('report.php');
+require_role('admin', 'admin/report.php');
 require_once $rootDir . '/includes/db.php';
 $pageTitle = 'Analytics & Reporting';
 

@@ -2,7 +2,7 @@
 $rootDir = dirname(__DIR__);
 require_once $rootDir . '/includes/auth.php';
 // Require full login (including OTP verification) before loading page
-require_login('gps.php');
+require_role('dispatcher', 'dispatcher/gps.php');
 
 $pageTitle = 'GPS Tracking System';
 ?>

@@ -45,7 +45,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             if ($selectedRole === 'dispatcher' || $accountRole === 'dispatcher' || $accountRole === 'operator') {
                 header('Location: dispatcher/dashboard.php');
             } else {
-                header('Location: index.php');
+                header('Location: admin/index.php');
             }
             exit;
         } else {

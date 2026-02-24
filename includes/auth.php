@@ -84,6 +84,36 @@ function canonical_role(?string $role): string {
 }
 
 /**
+ * Get canonical role of current session.
+ * @return string admin|dispatcher|viewer|unknown
+ */
+function current_session_role(): string {
+    if (!is_logged_in()) {
+        return 'unknown';
+    }
+    return canonical_role((string)($_SESSION['login_role'] ?? $_SESSION['user_role'] ?? ''));
+}
+
+/**
+ * Build role home path considering current folder depth.
+ * @param string $role
+ * @return string
+ */
+function role_home_path(string $role): string {
+    $scriptName = str_replace('\\', '/', (string)($_SERVER['SCRIPT_NAME'] ?? ''));
+    $isSubfolderPage = (strpos($scriptName, '/admin/') !== false || strpos($scriptName, '/dispatcher/') !== false);
+    $prefix = $isSubfolderPage ? '../' : '';
+
+    if ($role === 'admin') {
+        return $prefix . 'admin/index.php';
+    }
+    if ($role === 'dispatcher') {
+        return $prefix . 'dispatcher/dashboard.php';
+    }
+    return $prefix . 'login.php';
+}
+
+/**
  * Require login - redirect to login page if not logged in
  * @param string $redirect_url Optional redirect URL after login
  */
@@ -103,6 +133,21 @@ function require_login(string $redirect_url = ''): void {
 
         $redirect = $target !== '' ? '?redirect=' . urlencode($target) : '';
         header('Location: ' . $loginPath . $redirect);
+        exit;
+    }
+}
+
+/**
+ * Require a specific role. Redirects logged-in user to own home if role mismatched.
+ * @param string $requiredRole admin|dispatcher
+ * @param string $redirect_url Optional redirect URL after login
+ */
+function require_role(string $requiredRole, string $redirect_url = ''): void {
+    require_login($redirect_url);
+    $required = canonical_role($requiredRole);
+    $current = current_session_role();
+    if ($required !== $current) {
+        header('Location: ' . role_home_path($current));
         exit;
     }
 }
@@ -167,8 +212,7 @@ function login_user(string $email, string $password, ?string $requiredRole = nul
             if ($expectedRole === 'admin') {
                 $allowed = ($accountRole === 'admin');
             } elseif ($expectedRole === 'dispatcher') {
-                // Admin can access dispatcher tools; operator/dispatcher accounts too.
-                $allowed = ($accountRole === 'dispatcher' || $accountRole === 'admin');
+                $allowed = ($accountRole === 'dispatcher');
             } else {
                 $allowed = false;
             }

@@ -3,7 +3,7 @@ $pageTitle = 'Resources Status Management';
 $rootDir = dirname(__DIR__);
 require_once $rootDir . '/includes/auth.php';
 // Require full login (including OTP verification) before loading page
-require_login('resources.php');
+require_role('dispatcher', 'dispatcher/resources.php');
 $current_user = function_exists('get_logged_in_user') ? get_logged_in_user() : null;
 $requestor_name = $current_user ? ($current_user['name'] ?? ($current_user['email'] ?? '')) : '';
 

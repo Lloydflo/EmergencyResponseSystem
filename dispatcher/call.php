@@ -2,7 +2,7 @@
 $rootDir = dirname(__DIR__);
 require_once $rootDir . '/includes/auth.php';
 // Require full login (including OTP verification) before loading page
-require_login('call.php');
+require_role('dispatcher', 'dispatcher/call.php');
 
 $pageTitle = 'Emergency Call Center';
 ?>

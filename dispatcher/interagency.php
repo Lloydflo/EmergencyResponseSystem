@@ -5,7 +5,7 @@
 $pageTitle = 'Inter-Agency Coordination';
 $rootDir = dirname(__DIR__);
 require_once $rootDir . '/includes/auth.php';
-require_login('interagency.php');
+require_role('dispatcher', 'dispatcher/interagency.php');
 ?>
 
 <!DOCTYPE html>
