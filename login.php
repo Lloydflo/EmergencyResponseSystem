@@ -12,9 +12,14 @@ debug_log('--- LOGIN.PHP START ---');
 require_once __DIR__ . '/includes/auth.php';
 debug_log('auth.php loaded');
 
-$pageTitle = 'Admin Login';
+$pageTitle = 'Role-Based Login';
 $error_message = '';
 $success_message = '';
+$allowed_roles = [
+    'admin' => 'Admin',
+    'dispatcher' => 'Dispatcher'
+];
+$selected_role = 'admin';
 
 // If already logged in, redirect to index
 if (is_logged_in()) {
@@ -30,14 +35,19 @@ if (isset($_GET['logged_out']) && $_GET['logged_out'] == '1') {
 // Handle login form submission
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     debug_log('POST request received');
+    $selected_role = strtolower(trim($_POST['role'] ?? ''));
     $email = trim($_POST['email'] ?? '');
     $password = $_POST['password'] ?? '';
     debug_log('Email: ' . $email);
-    if (empty($email) || empty($password)) {
+    debug_log('Role: ' . $selected_role);
+    if (!array_key_exists($selected_role, $allowed_roles)) {
+        $error_message = 'Please select a valid role.';
+        debug_log('Invalid role selected');
+    } elseif (empty($email) || empty($password)) {
         $error_message = 'Please enter both email and password.';
         debug_log('Missing email or password');
     } else {
-        $result = login_user($email, $password);
+        $result = login_user($email, $password, $selected_role);
         debug_log('login_user result: ' . json_encode($result));
         if ($result['success']) {
             require_once __DIR__ . '/includes/mail_helper.php';
@@ -91,7 +101,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
             <!-- Header -->
             <div class="login-header">
-                <h1 class="login-title">Admin Login</h1>
+                <h1 class="login-title">Role-Based Login</h1>
                 <p class="login-subtitle">
                     Emergency Response System<br>
                     Administrative Panel
@@ -119,7 +129,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 <!-- Secure Access Box -->
                 <div class="info-box info-box-secure">
                     <i class="fas fa-shield-alt"></i>
-                    <span>Secure Admin Access Only</span>
+                    <span>Secure System Access</span>
                     <i class="fas fa-lock"></i>
                 </div>
 
@@ -134,6 +144,24 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
             <!-- Login Form -->
             <form class="login-form" method="POST" action="login.php">
+                <!-- Role Field -->
+                <div class="form-group">
+                    <label for="role" class="form-label">
+                        <i class="fas fa-user-shield"></i>
+                        Role
+                    </label>
+                    <div class="input-wrapper">
+                        <i class="fas fa-user-shield input-icon"></i>
+                        <select id="role" name="role" class="form-input" required>
+                            <?php foreach ($allowed_roles as $role_value => $role_label): ?>
+                                <option value="<?php echo htmlspecialchars($role_value); ?>" <?php echo $selected_role === $role_value ? 'selected' : ''; ?>>
+                                    <?php echo htmlspecialchars($role_label); ?>
+                                </option>
+                            <?php endforeach; ?>
+                        </select>
+                    </div>
+                </div>
+
                 <!-- Email Field -->
                 <div class="form-group">
                     <label for="email" class="form-label">
@@ -148,6 +176,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                             name="email" 
                             class="form-input" 
                             placeholder="admin@example.com"
+                            value="<?php echo htmlspecialchars($email ?? ''); ?>"
                             autocomplete="email"
                             required
                         >

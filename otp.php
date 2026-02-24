@@ -39,8 +39,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             unset($_SESSION['otp'], $_SESSION['otp_expiry']);
             // Set a flag to indicate OTP is verified
             $_SESSION['otp_verified'] = true;
-            // Redirect to index or intended page
-            header('Location: index.php');
+            // Role-based redirect after OTP verification
+            $selectedRole = strtolower(trim((string)($_SESSION['login_role'] ?? '')));
+            $accountRole = strtolower(trim((string)($_SESSION['user_role'] ?? '')));
+            if ($selectedRole === 'dispatcher' || $accountRole === 'dispatcher' || $accountRole === 'operator') {
+                header('Location: dispatcher/dashboard.php');
+            } else {
+                header('Location: index.php');
+            }
             exit;
         } else {
             $error_message = 'Invalid OTP. Please try again.';

@@ -35,6 +35,12 @@
                             <span>Dashboard</span>
                         </a>
                     </li>
+                    <li class="sidebar-menu-item">
+                        <a href="dispatcher/dashboard.php" class="sidebar-link <?php echo basename($_SERVER['PHP_SELF']) == 'dashboard.php' ? 'active' : ''; ?>" aria-current="<?php echo basename($_SERVER['PHP_SELF']) == 'dashboard.php' ? 'page' : 'false'; ?>">
+                            <i class="fa-solid fa-headset"></i>
+                            <span>Dispatcher Dashboard</span>
+                        </a>
+                    </li>
                 </ul>
             </div>
 

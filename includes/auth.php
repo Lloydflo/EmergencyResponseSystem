@@ -33,12 +33,54 @@ function get_logged_in_user(): ?array {
         return null;
     }
     
+    $effectiveRole = $_SESSION['login_role'] ?? $_SESSION['user_role'] ?? 'viewer';
+
     return [
         'id' => $_SESSION['user_id'],
         'email' => $_SESSION['user_email'],
         'name' => $_SESSION['user_name'] ?? 'User',
-        'role' => $_SESSION['user_role'] ?? 'viewer'
+        'role' => $effectiveRole
     ];
+}
+
+/**
+ * Normalize a role string.
+ * @param string|null $role
+ * @return string
+ */
+function normalize_role(?string $role): string {
+    $value = strtolower(trim((string)$role));
+    $value = str_replace(['-', '_'], ' ', $value);
+    $value = preg_replace('/\s+/', ' ', $value ?? '');
+    return trim((string)$value);
+}
+
+/**
+ * Convert role labels/aliases to canonical roles used by UI flow.
+ * @param string|null $role
+ * @return string admin|dispatcher|viewer|unknown
+ */
+function canonical_role(?string $role): string {
+    $normalized = normalize_role($role);
+
+    if ($normalized === 'admin' || $normalized === 'administrator') {
+        return 'admin';
+    }
+
+    if (
+        $normalized === 'dispatcher' ||
+        $normalized === 'dispatch' ||
+        $normalized === 'dispatch operator' ||
+        $normalized === 'operator'
+    ) {
+        return 'dispatcher';
+    }
+
+    if ($normalized === 'viewer') {
+        return 'viewer';
+    }
+
+    return 'unknown';
 }
 
 /**
@@ -57,9 +99,10 @@ function require_login(string $redirect_url = ''): void {
  * Login user
  * @param string $email
  * @param string $password
+ * @param string|null $requiredRole
  * @return array ['success' => bool, 'message' => string, 'user' => array|null]
  */
-function login_user(string $email, string $password): array {
+function login_user(string $email, string $password, ?string $requiredRole = null): array {
     require_once __DIR__ . '/db.php';
     
     $pdo = get_db_connection();
@@ -103,11 +146,36 @@ function login_user(string $email, string $password): array {
             ];
         }
         
+        // Ensure selected role is compatible with account role before creating session
+        if ($requiredRole !== null) {
+            $expectedRole = canonical_role($requiredRole);
+            $accountRole = canonical_role((string)($user['role'] ?? ''));
+            $allowed = false;
+
+            if ($expectedRole === 'admin') {
+                $allowed = ($accountRole === 'admin');
+            } elseif ($expectedRole === 'dispatcher') {
+                // Admin can access dispatcher tools; operator/dispatcher accounts too.
+                $allowed = ($accountRole === 'dispatcher' || $accountRole === 'admin');
+            } else {
+                $allowed = false;
+            }
+
+            if (!$allowed) {
+                return [
+                    'success' => false,
+                    'message' => 'Selected role does not match your account role.',
+                    'user' => null
+                ];
+            }
+        }
+
         // Set session variables
         $_SESSION['user_id'] = $user['id'];
         $_SESSION['user_email'] = $user['email'];
         $_SESSION['user_name'] = $user['name'];
         $_SESSION['user_role'] = $user['role'];
+        $_SESSION['login_role'] = $requiredRole ? canonical_role($requiredRole) : canonical_role((string)$user['role']);
         $_SESSION['logged_in'] = true;
         
         // Update last login
