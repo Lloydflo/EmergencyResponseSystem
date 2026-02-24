@@ -23,8 +23,14 @@ $selected_role = 'admin';
 
 // If already logged in, redirect to index
 if (is_logged_in()) {
-    debug_log('Already logged in, redirecting to index');
-    header('Location: index.php');
+    $existingRole = strtolower(trim((string)($_SESSION['login_role'] ?? $_SESSION['user_role'] ?? '')));
+    if ($existingRole === 'dispatcher' || $existingRole === 'operator') {
+        debug_log('Already logged in, redirecting to dispatcher dashboard');
+        header('Location: dispatcher/dashboard.php');
+    } else {
+        debug_log('Already logged in, redirecting to index');
+        header('Location: index.php');
+    }
     exit;
 }
 

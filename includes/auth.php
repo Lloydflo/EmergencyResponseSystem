@@ -89,8 +89,20 @@ function canonical_role(?string $role): string {
  */
 function require_login(string $redirect_url = ''): void {
     if (!is_logged_in()) {
-        $redirect = $redirect_url ? '?redirect=' . urlencode($redirect_url) : '';
-        header('Location: login.php' . $redirect);
+        $scriptName = str_replace('\\', '/', (string)($_SERVER['SCRIPT_NAME'] ?? ''));
+        $isSubfolderPage = (strpos($scriptName, '/admin/') !== false || strpos($scriptName, '/dispatcher/') !== false);
+        $loginPath = $isSubfolderPage ? '../login.php' : 'login.php';
+
+        $target = $redirect_url;
+        if ($target === '') {
+            $target = ltrim($scriptName, '/');
+        } elseif ($isSubfolderPage && strpos($target, '/') === false) {
+            $folder = basename(dirname($scriptName));
+            $target = $folder . '/' . $target;
+        }
+
+        $redirect = $target !== '' ? '?redirect=' . urlencode($target) : '';
+        header('Location: ' . $loginPath . $redirect);
         exit;
     }
 }
