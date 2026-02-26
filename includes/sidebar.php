@@ -54,6 +54,42 @@ $isDispatcherSidebar = $sidebarRole === 'dispatcher';
                         </li>
                     </ul>
                 </div>
+
+                <div class="sidebar-section">
+                    <div class="sidebar-section-title">Management</div>
+                    <ul class="sidebar-menu">
+                        <li class="sidebar-menu-item">
+                            <a href="admin/resources.php" class="sidebar-link <?php echo basename($_SERVER['PHP_SELF']) == 'resources.php' ? 'active' : ''; ?>" aria-current="<?php echo basename($_SERVER['PHP_SELF']) == 'resources.php' ? 'page' : 'false'; ?>">
+                                <i class="fa-solid fa-truck-medical"></i>
+                                <span>Resources Status</span>
+                            </a>
+                        </li>
+                        <li class="sidebar-menu-item">
+                            <a href="admin/interagency.php" class="sidebar-link <?php echo basename($_SERVER['PHP_SELF']) == 'interagency.php' ? 'active' : ''; ?>" aria-current="<?php echo basename($_SERVER['PHP_SELF']) == 'interagency.php' ? 'page' : 'false'; ?>">
+                                <i class="fa-solid fa-people-arrows"></i>
+                                <span>Inter-Agency</span>
+                            </a>
+                        </li>
+                        <li class="sidebar-menu-item">
+                            <a href="admin/review.php" class="sidebar-link <?php echo basename($_SERVER['PHP_SELF']) == 'review.php' ? 'active' : ''; ?>" aria-current="<?php echo basename($_SERVER['PHP_SELF']) == 'review.php' ? 'page' : 'false'; ?>">
+                                <i class="fa-solid fa-comment-dots"></i>
+                                <span>Review &amp; Feedback</span>
+                            </a>
+                        </li>
+                        <li class="sidebar-menu-item">
+                            <a href="admin/user_management.php" class="sidebar-link <?php echo basename($_SERVER['PHP_SELF']) == 'user_management.php' ? 'active' : ''; ?>" aria-current="<?php echo basename($_SERVER['PHP_SELF']) == 'user_management.php' ? 'page' : 'false'; ?>">
+                                <i class="fa-solid fa-users-gear"></i>
+                                <span>User Management</span>
+                            </a>
+                        </li>
+                        <li class="sidebar-menu-item">
+                            <a href="admin/system_settings.php" class="sidebar-link <?php echo basename($_SERVER['PHP_SELF']) == 'system_settings.php' ? 'active' : ''; ?>" aria-current="<?php echo basename($_SERVER['PHP_SELF']) == 'system_settings.php' ? 'page' : 'false'; ?>">
+                                <i class="fa-solid fa-sliders"></i>
+                                <span>System Settings</span>
+                            </a>
+                        </li>
+                    </ul>
+                </div>
             <?php endif; ?>
 
             <?php if ($isDispatcherSidebar): ?>

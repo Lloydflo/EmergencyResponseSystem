@@ -107,7 +107,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
             <!-- Header -->
             <div class="login-header">
-                <h1 class="login-title">Role-Based Login</h1>
+                <h1 class="login-title">Login</h1>
                 <p class="login-subtitle">
                     Emergency Response System<br>
                     Administrative Panel
