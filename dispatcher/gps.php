@@ -20,9 +20,11 @@ $pageTitle = 'GPS Tracking System';
     <link rel="stylesheet" href="css/sidebar.css">
     <link rel="stylesheet" href="css/admin-header.css">
     <link rel="stylesheet" href="css/sidebar-footer.css">
-    <link rel="stylesheet" href="CSS/cards.css">
+    <link rel="stylesheet" href="css/cards.css">
     <link rel="stylesheet" href="css/gps.css">
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <link rel="stylesheet" href="css/dispatcher-module-dark.css?v=20260226h">
+    <script>document.documentElement.setAttribute('data-theme','dark'); localStorage.setItem('ers-theme','dark');</script>
 </head>
 <body>
     <!-- Include Sidebar Component -->
@@ -35,7 +37,7 @@ $pageTitle = 'GPS Tracking System';
        MAIN CONTENT - GPS Tracking System
        =================================== -->
     <div class="main-content">
-        <div class="main-container">
+        <div class="main-container dispatcher-shell">
 
 
             <!-- Tracking Controls -->
@@ -170,7 +172,7 @@ function initMap() {
 
   // OpenStreetMap tiles
   L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
-    attribution: "© OpenStreetMap contributors"
+    attribution: "OpenStreetMap contributors"
   }).addTo(map);
 
     // Load and display Quezon City border from GeoJSON
@@ -224,7 +226,7 @@ function loadIncidentMarkers() {
     // Ensure visibility respects current activeLayers on load
     updateMapVisibility();
 
-    console.log("✅ Leaflet map initialized");
+    console.log("Leaflet map initialized");
     map.on('zoomend', () => {
         if (!heatLayer || !heatActive) return;
         const z = map.getZoom();
@@ -292,7 +294,7 @@ function addUnitMarker(id, lat, lng, label, type, speedKph, unitDbId) {
 function addIncidentMarker(id, lat, lng, label) {
   const marker = L.marker([lat, lng], { icon: getIcon("incident") })
     .addTo(map)
-    .bindPopup(`<strong>${label}</strong><br>🚨 Active Incident`);
+    .bindPopup(`<strong>${label}</strong><br>Alert: Active Incident`);
 
   markers[id] = { marker, type: "incident" };
 }
@@ -683,7 +685,7 @@ async function unitHistory(unitId) {
             const heading = toNum(latest.heading_deg);
             lines.push(`Last GPS Ping: ${formatDateTime(latest.recorded_at)}`);
             if (speed !== null) lines.push(`Latest Speed: ${speed.toFixed(1)} km/h`);
-            if (heading !== null) lines.push(`Latest Heading: ${heading.toFixed(0)}°`);
+            if (heading !== null) lines.push(`Latest Heading: ${heading.toFixed(0)} deg`);
         }
 
         if (recent.length) {
@@ -864,7 +866,7 @@ function renderUnitCards(items) {
     if (!container) return;
     container.innerHTML = '';
     if (!items.length) {
-        container.innerHTML = '<div class="unit-card"><div class="unit-header"><div><h4 class="unit-name">No dispatched units</h4><span class="unit-status">—</span></div></div></div>';
+        container.innerHTML = '<div class="unit-card"><div class="unit-header"><div><h4 class="unit-name">No dispatched units</h4><span class="unit-status">--</span></div></div></div>';
         return;
     }
     const statusClass = s => (
@@ -1292,3 +1294,4 @@ function startLivePolling() {
 }
 </style>
 </html>
+

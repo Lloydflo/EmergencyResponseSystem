@@ -15,9 +15,10 @@
     background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
     border-radius: 12px;
     color: white;
-
+        background: var(--card-bg-1);
 }
-
+        color: var(--text-color-1);
+        box-shadow: 0 2px 8px var(--shadow-1);
 .dashboard-title {
     font-size: 2rem;
     font-weight: 700;
@@ -39,9 +40,9 @@
     padding: 0.75rem 1.5rem;
     background: rgba(255,255,255,0.2);
     color: white;
-    border: 1px solid rgba(255,255,255,0.3);
-    border-radius: 8px;
-    cursor: pointer;
+        background: var(--primary-color-1, #4c8a89);
+        color: #fff;
+        border: 1px solid var(--primary-color-1, #4c8a89);
     font-weight: 600;
     transition: all 0.3s ease;
 }
@@ -49,7 +50,7 @@
 .btn-dashboard:hover {
     background: rgba(255,255,255,0.3);
     transform: translateY(-2px);
-}
+        background: var(--secondary-color-1, #3a506b);
 
 .metrics-grid {
     display: grid;
@@ -62,11 +63,10 @@
     background: var(--card-bg-1);
     border-radius: 12px;
     padding: 1.5rem;  /* FIXED: Changed from 4.5rem to 1.5rem */
-    box-shadow: 0 2px 8px rgba(0,0,0,0.1);
     border-left: 4px solid #007bff;
     transition: all 0.3s ease;
     position: relative;
-    overflow: hidden;
+        border-left: 4px solid var(--primary-color-1, #4c8a89);
 }
 
 .metric-card:hover {
@@ -91,7 +91,7 @@
     color: #666;
     font-weight: 600;
     text-transform: uppercase;
-    margin: 0;
+        color: var(--text-secondary-1);
 }
 
 .metric-icon {
@@ -115,11 +115,20 @@
 .metric-value {
     font-size: 2.5rem;
     font-weight: 700;
+    @media (prefers-color-scheme: dark), [data-theme="dark"] {
+      .metric-icon.fire { background-color: #2d161a; color: #ff8a80; }
+      .metric-icon.medical { background-color: #16202a; color: #90caf9; }
+      .metric-icon.time { background-color: #2a2116; color: #ffd180; }
+      .metric-icon.phone { background-color: #23162a; color: #ce93d8; }
+      .metric-icon.chart { background-color: #162a1a; color: #a5d6a7; }
+      .metric-icon.server { background-color: #2a2116; color: #ffcc80; }
+      .metric-icon.users { background-color: #2a1620; color: #f8bbd0; }
+    }
     color: #333;
     margin: 0.5rem 0;
 }
 
-.metric-change {
+        color: var(--text-color-1);
     display: flex;
     align-items: center;
     gap: 0.5rem;
@@ -133,7 +142,7 @@
 
 .metric-actions {
     margin-top: 1rem;
-    display: flex;
+    .metric-change.neutral { color: var(--text-secondary-1); }
     gap: 0.5rem;
     flex-wrap: wrap;
 }

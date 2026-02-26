@@ -69,7 +69,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             <div class="login-header">
                 <h1 class="login-title">OTP Verification</h1>
                 <p class="login-subtitle">Enter the 6-digit code sent to your email.</p>
-                <div id="otp-timer" style="text-align:center; margin-top:4px; font-size:13px; color:#888;"></div>
+                <div id="otp-timer" style="text-align:center; margin-top:4px; font-size:13px; color:var(--text-secondary-1);"></div>
             </div>
             <?php if (!empty($error_message)): ?>
                 <div class="login-error-message">
@@ -79,13 +79,21 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             <form class="login-form" method="POST" action="otp.php">
                 <div class="form-group">
                     <label for="otp" class="form-label">OTP Code</label>
-                    <input type="text" id="otp" name="otp" class="form-input" maxlength="6" pattern="[0-9]{6}" autocomplete="one-time-code" inputmode="numeric" required autofocus>
+                    <div id="otp-inputs" style="display:flex; gap:16px; justify-content:center; margin-top:8px;">
+                        <input type="text" inputmode="numeric" pattern="[0-9]*" maxlength="1" class="otp-box" name="otp1" id="otp1" autocomplete="one-time-code" required autofocus>
+                        <input type="text" inputmode="numeric" pattern="[0-9]*" maxlength="1" class="otp-box" name="otp2" id="otp2" required>
+                        <input type="text" inputmode="numeric" pattern="[0-9]*" maxlength="1" class="otp-box" name="otp3" id="otp3" required>
+                        <input type="text" inputmode="numeric" pattern="[0-9]*" maxlength="1" class="otp-box" name="otp4" id="otp4" required>
+                        <input type="text" inputmode="numeric" pattern="[0-9]*" maxlength="1" class="otp-box" name="otp5" id="otp5" required>
+                        <input type="text" inputmode="numeric" pattern="[0-9]*" maxlength="1" class="otp-box" name="otp6" id="otp6" required>
+                    </div>
+                    <input type="hidden" id="otp" name="otp">
                 </div>
                 <button type="submit" class="btn-signin">Verify</button>
             </form>
             <div style="text-align:center; margin-top:10px;">
                 <form method="post" action="otp.php" style="display:inline;">
-                    <button type="submit" name="resend_otp" style="font-size:12px; padding:4px 16px; border-radius:5px; background:#e0e0e0; color:#333; border:none; cursor:pointer; margin-bottom:8px;">Resend Code</button>
+                    <button type="submit" name="resend_otp" style="font-size:12px; padding:4px 16px; border-radius:5px; background:var(--card-bg-1); color:var(--text-color-1); border:none; cursor:pointer; margin-bottom:8px;">Resend Code</button>
                 </form>
             </div>
             <div class="login-footer">
@@ -95,7 +103,46 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     </div>
 </body>
 </body>
+<style>
+    .otp-box {
+        width: 48px;
+        height: 48px;
+        font-size: 2rem;
+        text-align: center;
+        border: 2px solid #b3c6e0;
+        border-radius: 8px;
+        outline: none;
+        transition: border-color 0.2s, box-shadow 0.2s;
+        box-shadow: 0 0 0 0 rgba(0,123,255,0);
+        margin: 0;
+        background: #fff;
+    }
+    .otp-box:focus {
+        border-color: #4285f4;
+        box-shadow: 0 0 4px 1px #b3d1ff;
+    }
+</style>
 <script>
+// OTP input auto-focus and value collection
+const otpInputs = document.querySelectorAll('.otp-box');
+otpInputs.forEach((input, idx) => {
+    input.addEventListener('input', function(e) {
+        this.value = this.value.replace(/[^0-9]/g, '');
+        if (this.value && idx < otpInputs.length - 1) {
+            otpInputs[idx + 1].focus();
+        }
+        updateOtpHidden();
+    });
+    input.addEventListener('keydown', function(e) {
+        if (e.key === 'Backspace' && !this.value && idx > 0) {
+            otpInputs[idx - 1].focus();
+        }
+    });
+});
+function updateOtpHidden() {
+    const otp = Array.from(otpInputs).map(i => i.value).join('');
+    document.getElementById('otp').value = otp;
+}
 // Countdown timer for OTP expiration
 const expiryTimestamp = <?php echo isset($_SESSION['otp_expiry']) ? $_SESSION['otp_expiry'] : 'null'; ?>;
 if (expiryTimestamp) {

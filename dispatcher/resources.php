@@ -116,8 +116,61 @@ try {
     <link rel="stylesheet" href="css/sidebar.css">
     <link rel="stylesheet" href="css/admin-header.css">
     <link rel="stylesheet" href="css/sidebar-footer.css">
-    <link rel="stylesheet" href="CSS/cards.css">
+    <link rel="stylesheet" href="css/cards.css">
     <link rel="stylesheet" href="css/resources.css">
+    <link rel="stylesheet" href="css/dispatcher-module-dark.css?v=20260226h">
+    <script>document.documentElement.setAttribute('data-theme','dark'); localStorage.setItem('ers-theme','dark');</script>
+    <style>
+    /* resources.php hard override (dark only) */
+    [data-theme="dark"] .main-content .resource-filters,
+    [data-theme="dark"] .main-content .resources-table-section,
+    [data-theme="dark"] .main-content .resources-table-section > div {
+        background: #000 !important;
+        color: #fff !important;
+    }
+    [data-theme="dark"] .main-content .resource-filters h2,
+    [data-theme="dark"] .main-content .resource-filters label,
+    [data-theme="dark"] .main-content .resources-table-section h2 {
+        color: #fff !important;
+    }
+    [data-theme="dark"] .main-content .resource-filters select,
+    [data-theme="dark"] .main-content .resource-filters input {
+        background: #000 !important;
+        color: #fff !important;
+        border: 1px solid #2f2f2f !important;
+    }
+    [data-theme="dark"] .main-content .resource-filters select option {
+        background: #000 !important;
+        color: #fff !important;
+    }
+    [data-theme="dark"] .main-content .resource-table,
+    [data-theme="dark"] .main-content .resource-table thead,
+    [data-theme="dark"] .main-content .resource-table tbody,
+    [data-theme="dark"] .main-content .resource-table tr,
+    [data-theme="dark"] .main-content .resource-table th,
+    [data-theme="dark"] .main-content .resource-table td {
+        background: #000 !important;
+        color: #fff !important;
+        border-color: #2f2f2f !important;
+    }
+    [data-theme="dark"] .main-content .resource-table tr.resource-row-vehicle,
+    [data-theme="dark"] .main-content .resource-table tr.resource-row-personnel,
+    [data-theme="dark"] .main-content .resource-table tr.resource-row-equipment {
+        background: #000 !important;
+    }
+    [data-theme="dark"] .main-content .resource-table .resource-status-available,
+    [data-theme="dark"] .main-content .resource-table .resource-status-inuse,
+    [data-theme="dark"] .main-content .resource-table .resource-status-offline {
+        background: #111 !important;
+        color: #fff !important;
+        border: 1px solid #3f3f46 !important;
+    }
+    [data-theme="dark"] .main-content .resource-table .resource-action-btn {
+        background: #000 !important;
+        color: #fff !important;
+        border: 1px solid #3f3f46 !important;
+    }
+    </style>
 </head>
 <body>
     <!-- Include Sidebar Component -->
@@ -130,9 +183,8 @@ try {
        MAIN CONTENT - Emergency Resources Status
        =================================== -->
     <div class="main-content">
-        <div class="main-container">
+        <div class="main-container dispatcher-shell">
             <div style="height: 3.5rem;"></div>
-                        </div>
 
                         
             <!-- Resource Overview -->
@@ -348,7 +400,7 @@ try {
 
                 async function loadResources() {
                     const container = document.getElementById('resource-list-dynamic');
-                    if (container) container.innerHTML = '<tr><td colspan="6" style="text-align:center;color:#888;">Loading resources…</td></tr>';
+                    if (container) container.innerHTML = '<tr><td colspan="6" style="text-align:center;color:#888;">Loading resources...</td></tr>';
                     try {
                         const res = await fetch('api/resources_combined.php');
                         const data = await res.json();
@@ -958,11 +1010,11 @@ try {
             let details = `Resource: ${resourceName}\nType: ${resourceType}\n\n`;
 
             if (resourceType === 'vehicles') {
-                details += '• Vehicle specifications\n• Maintenance history\n• Fuel efficiency\n• Usage statistics\n• GPS tracking data';
+                details += '- Vehicle specifications\n- Maintenance history\n- Fuel efficiency\n- Usage statistics\n- GPS tracking data';
             } else if (resourceType === 'personnel') {
-                details += '• Certification details\n• Training records\n• Performance metrics\n• Shift schedule\n• Contact information';
+                details += '- Certification details\n- Training records\n- Performance metrics\n- Shift schedule\n- Contact information';
             } else if (resourceType === 'equipment') {
-                details += '• Equipment specifications\n• Calibration records\n• Usage history\n• Maintenance schedule\n• Storage location';
+                details += '- Equipment specifications\n- Calibration records\n- Usage history\n- Maintenance schedule\n- Storage location';
             }
 
             alert(details);
@@ -990,7 +1042,7 @@ try {
         function personnelSchedule(button) {
             const row = button.closest('tr');
             const personnelName = row && row.querySelector('.resource-title') ? row.querySelector('.resource-title').textContent : 'Personnel';
-            alert(`${personnelName} Schedule:\n\n• Monday-Friday: Day Shift\n• Weekends: On-call rotation\n• Next shift: Tomorrow\n• Vacation: Pending`);
+            alert(`${personnelName} Schedule:\n\n- Monday-Friday: Day Shift\n- Weekends: On-call rotation\n- Next shift: Tomorrow\n- Vacation: Pending`);
         }
 
         // Equipment management functions
@@ -1599,3 +1651,4 @@ try {
     </script>
 </body>
 </html>
+

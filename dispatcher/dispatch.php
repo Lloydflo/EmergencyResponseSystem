@@ -76,6 +76,8 @@ try {
     <link rel="stylesheet" href="css/dispatch.css">
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
     <link rel="stylesheet" href="https://unpkg.com/leaflet-routing-machine@latest/dist/leaflet-routing-machine.css"/>
+    <link rel="stylesheet" href="css/dispatcher-module-dark.css?v=20260226h">
+    <script>document.documentElement.setAttribute('data-theme','dark'); localStorage.setItem('ers-theme','dark');</script>
 </head>
 <body>
     <!-- Include Sidebar Component -->
@@ -88,7 +90,7 @@ try {
        MAIN CONTENT - Emergency Dispatch Center
        =================================== -->
     <div class="main-content">
-        <div class="main-container">
+        <div class="main-container dispatcher-shell">
 
 
             <!-- System Alerts -->
@@ -558,7 +560,7 @@ function initMap() {
         maxBoundsViscosity: 1.0
     });
     L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
-        attribution: "© OpenStreetMap contributors"
+        attribution: "OpenStreetMap contributors"
     }).addTo(map);
 
     // Load and display Quezon City border from GeoJSON
@@ -581,7 +583,7 @@ function initMap() {
     addLegendControl();
     updateMapVisibility();
     startLivePolling();
-    console.log("✅ Dispatch map loaded (Leaflet, real-time)");
+    console.log("Dispatch map loaded (Leaflet, real-time)");
 }
 
 function addIncidentMarker(id, lat, lng, info) {
@@ -656,7 +658,7 @@ function addUnitMarker(id, lat, lng, label, type, speedKph) {
 function addIncidentMarker(id, lat, lng, label) {
     const marker = L.marker([lat, lng], { icon: getIcon("incident") })
         .addTo(map)
-        .bindPopup(`<strong>${label}</strong><br>🚨 Active Incident`);
+        .bindPopup(`<strong>${label}</strong><br>Alert: Active Incident`);
     markers[id] = { marker, type: "incident" };
 }
 
@@ -1308,3 +1310,4 @@ function resetLastUnits() {
 </script>
 </body>
 </html>
+

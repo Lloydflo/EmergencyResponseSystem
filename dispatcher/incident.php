@@ -54,9 +54,11 @@ try {
     <link rel="stylesheet" href="css/sidebar.css">
     <link rel="stylesheet" href="css/admin-header.css">
     <link rel="stylesheet" href="css/sidebar-footer.css">
-    <link rel="stylesheet" href="CSS/cards.css">
+    <link rel="stylesheet" href="css/cards.css">
     <link rel="stylesheet" href="css/incident.css">
 
+    <link rel="stylesheet" href="css/dispatcher-module-dark.css?v=20260226h">
+    <script>document.documentElement.setAttribute('data-theme','dark'); localStorage.setItem('ers-theme','dark');</script>
 </head>
 <body>
     <!-- Include Sidebar Component -->
@@ -69,7 +71,7 @@ try {
        MAIN CONTENT - Incident Priority Management
        =================================== -->
     <div class="main-content">
-        <div class="main-container">
+        <div class="main-container dispatcher-shell">
 
             <div style="height: 3.5rem;"></div>
 
@@ -791,7 +793,7 @@ try {
                 if (window.L && document.getElementById('incident-location-map')) {
                     var map = L.map('incident-location-map').setView([14.6760, 121.0437], 13);
                     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-                        attribution: '© OpenStreetMap contributors'
+                        attribution: 'OpenStreetMap contributors'
                     }).addTo(map);
                     var marker;
                     // If existing location, show marker
@@ -1078,7 +1080,7 @@ try {
                                         <div class="resolved-item">
                                             <div class="resolved-main">
                                                 <span class="ref">${ref}</span>
-                                                <span class="badge badge-type">${type || '—'}</span>
+                                                <span class="badge badge-type">${type || '--'}</span>
                                                 <span class="badge badge-resolved"><i class="fas fa-check-circle"></i> Resolved</span>
                                                 <span class="meta"><i class="fas fa-clock"></i> Created: ${created}</span>
                                             </div>
@@ -1113,12 +1115,12 @@ try {
                         return;
                     }
                     const safe = v => (v === null || v === undefined) ? '' : String(v).replace(/</g,'&lt;');
-                    const resolvedAt = inc.resolved_at ? new Date(inc.resolved_at).toLocaleString() : '—';
-                    const createdAt = inc.created_at ? new Date(inc.created_at).toLocaleString() : '—';
-                    const updatedAt = inc.updated_at ? new Date(inc.updated_at).toLocaleString() : '—';
+                    const resolvedAt = inc.resolved_at ? new Date(inc.resolved_at).toLocaleString() : '--';
+                    const createdAt = inc.created_at ? new Date(inc.created_at).toLocaleString() : '--';
+                    const updatedAt = inc.updated_at ? new Date(inc.updated_at).toLocaleString() : '--';
                     detailsEl.innerHTML = `
                         <div class="details-header">
-                            <div class="title"><i class="fas fa-hashtag"></i> ${safe(inc.reference_no)} — ${safe(inc.type)}</div>
+                            <div class="title"><i class="fas fa-hashtag"></i> ${safe(inc.reference_no)} -- ${safe(inc.type)}</div>
                             <span class="badge badge-resolved"><i class="fas fa-check-circle"></i> Resolved</span>
                         </div>
                         <div class="details-grid">
@@ -1139,3 +1141,4 @@ try {
     </script>
 </body>
 </html>
+
