@@ -1,0 +1,443 @@
+﻿/* Shared dark-mode polishing for dispatcher modules */
+.dispatcher-shell {
+    margin-top: 4.2rem;
+    padding-bottom: 2rem;
+}
+
+[data-theme="dark"] .main-content,
+[data-theme="dark"] .main-container,
+[data-theme="dark"] .dispatcher-shell {
+    background: var(--bg-color-1) !important;
+    color: var(--text-color-1);
+}
+
+[data-theme="dark"] .dispatcher-shell .stats-bar,
+[data-theme="dark"] .dispatcher-shell .stats-cards,
+[data-theme="dark"] .dispatcher-shell .stats-card,
+[data-theme="dark"] .dispatcher-shell .stat-card,
+[data-theme="dark"] .dispatcher-shell .tracking-controls,
+[data-theme="dark"] .dispatcher-shell .filters-section,
+[data-theme="dark"] .dispatcher-shell .resource-filters,
+[data-theme="dark"] .dispatcher-shell .resource-overview,
+[data-theme="dark"] .dispatcher-shell .dispatch-panel,
+[data-theme="dark"] .dispatcher-shell .coordination-panel,
+[data-theme="dark"] .dispatcher-shell .unit-panel,
+[data-theme="dark"] .dispatcher-shell .map-container,
+[data-theme="dark"] .dispatcher-shell .recent-incidents,
+[data-theme="dark"] .dispatcher-shell .chat-container,
+[data-theme="dark"] .dispatcher-shell .chat-messages,
+[data-theme="dark"] .dispatcher-shell .message,
+[data-theme="dark"] .dispatcher-shell .message.system,
+[data-theme="dark"] .dispatcher-shell .resource-request-modal .modal-content,
+[data-theme="dark"] .dispatcher-shell .ai-analysis-card,
+[data-theme="dark"] .dispatcher-shell .ai-recommendations-card,
+[data-theme="dark"] .dispatcher-shell .incident-card,
+[data-theme="dark"] .dispatcher-shell .overview-card,
+[data-theme="dark"] .dispatcher-shell .status-card,
+[data-theme="dark"] .dispatcher-shell .agency-card,
+[data-theme="dark"] .dispatcher-shell .resource-card,
+[data-theme="dark"] .dispatcher-shell .call-card,
+[data-theme="dark"] .dispatcher-shell .unit-card,
+[data-theme="dark"] .dispatcher-shell .active-call-panel,
+[data-theme="dark"] .dispatcher-shell .incident-form,
+[data-theme="dark"] .dispatcher-shell .maintenance-schedule,
+[data-theme="dark"] .dispatcher-shell .resources-table-section,
+[data-theme="dark"] .dispatcher-shell .priority-section {
+    background: var(--card-bg-1) !important;
+    color: var(--text-color-1) !important;
+    border-color: var(--border-color-1) !important;
+    box-shadow: 0 2px 10px var(--shadow-1) !important;
+}
+
+[data-theme="dark"] .dispatcher-shell .panel-header,
+[data-theme="dark"] .dispatcher-shell .section-header,
+[data-theme="dark"] .dispatcher-shell .map-header,
+[data-theme="dark"] .dispatcher-shell .sidebar-header {
+    background: rgba(148, 163, 184, 0.06) !important;
+    border-color: var(--border-color-1) !important;
+}
+
+[data-theme="dark"] .dispatcher-shell h1,
+[data-theme="dark"] .dispatcher-shell h2,
+[data-theme="dark"] .dispatcher-shell h3,
+[data-theme="dark"] .dispatcher-shell h4,
+[data-theme="dark"] .dispatcher-shell h5,
+[data-theme="dark"] .dispatcher-shell h6,
+[data-theme="dark"] .dispatcher-shell p,
+[data-theme="dark"] .dispatcher-shell label,
+[data-theme="dark"] .dispatcher-shell .panel-title,
+[data-theme="dark"] .dispatcher-shell .section-title,
+[data-theme="dark"] .dispatcher-shell .resource-title,
+[data-theme="dark"] .dispatcher-shell .incident-title,
+[data-theme="dark"] .dispatcher-shell .unit-name,
+[data-theme="dark"] .dispatcher-shell .call-title,
+[data-theme="dark"] .dispatcher-shell .detail-value,
+[data-theme="dark"] .dispatcher-shell .overview-value,
+[data-theme="dark"] .dispatcher-shell .stats-content h3,
+[data-theme="dark"] .dispatcher-shell .status-content h3,
+[data-theme="dark"] .dispatcher-shell .agency-info h4 {
+    color: var(--text-color-1) !important;
+}
+
+[data-theme="dark"] .dispatcher-shell .detail-label,
+[data-theme="dark"] .dispatcher-shell .metric-label,
+[data-theme="dark"] .dispatcher-shell .stats-content p,
+[data-theme="dark"] .dispatcher-shell .status-content p,
+[data-theme="dark"] .dispatcher-shell .incident-meta,
+[data-theme="dark"] .dispatcher-shell .unit-meta,
+[data-theme="dark"] .dispatcher-shell .call-meta,
+[data-theme="dark"] .dispatcher-shell .maintenance-details {
+    color: var(--text-secondary-1) !important;
+}
+
+[data-theme="dark"] .dispatcher-shell input,
+[data-theme="dark"] .dispatcher-shell select,
+[data-theme="dark"] .dispatcher-shell textarea,
+[data-theme="dark"] .dispatcher-shell .resource-tab,
+[data-theme="dark"] .dispatcher-shell .btn-action,
+[data-theme="dark"] .dispatcher-shell .btn-action-small,
+[data-theme="dark"] .dispatcher-shell .btn-resource,
+[data-theme="dark"] .dispatcher-shell .btn-control {
+    background: #101214 !important;
+    color: var(--text-color-1) !important;
+    border-color: var(--border-color-1) !important;
+}
+
+[data-theme="dark"] .dispatcher-shell .form-group input:focus,
+[data-theme="dark"] .dispatcher-shell .form-group select:focus,
+[data-theme="dark"] .dispatcher-shell .form-group textarea:focus,
+[data-theme="dark"] .dispatcher-shell input:focus,
+[data-theme="dark"] .dispatcher-shell select:focus,
+[data-theme="dark"] .dispatcher-shell textarea:focus {
+    border-color: #0369a1 !important;
+    box-shadow: 0 0 0 2px rgba(3, 105, 161, 0.25) !important;
+}
+
+[data-theme="dark"] .dispatcher-shell .resource-metrics,
+[data-theme="dark"] .dispatcher-shell .maintenance-item,
+[data-theme="dark"] .dispatcher-shell .queue-item,
+[data-theme="dark"] .dispatcher-shell .feedback-item {
+    background: #101214 !important;
+    border-color: var(--border-color-1) !important;
+}
+
+[data-theme="dark"] .dispatcher-shell .resource-tab.active,
+[data-theme="dark"] .dispatcher-shell .btn-control.active,
+[data-theme="dark"] .dispatcher-shell .btn-resource.active {
+    border-color: #0369a1 !important;
+}
+
+[data-theme="dark"] .dispatcher-shell .quick-action-btn,
+[data-theme="dark"] .dispatcher-shell .btn-dispatch,
+[data-theme="dark"] .dispatcher-shell .btn-send,
+[data-theme="dark"] .dispatcher-shell .btn-resource-request,
+[data-theme="dark"] .dispatcher-shell .btn-approve,
+[data-theme="dark"] .dispatcher-shell .btn-reject,
+[data-theme="dark"] .dispatcher-shell .submit-incident-btn,
+[data-theme="dark"] .dispatcher-shell .call-btn,
+[data-theme="dark"] .dispatcher-shell .accept-btn,
+[data-theme="dark"] .dispatcher-shell .reject-btn,
+[data-theme="dark"] .dispatcher-shell .end-call-btn,
+[data-theme="dark"] .dispatcher-shell .btn-high,
+[data-theme="dark"] .dispatcher-shell .btn-medium,
+[data-theme="dark"] .dispatcher-shell .btn-low,
+[data-theme="dark"] .dispatcher-shell .btn-resolved-details,
+[data-theme="dark"] .dispatcher-shell .map-btn.active,
+[data-theme="dark"] .dispatcher-shell .btn-unit.active,
+[data-theme="dark"] .dispatcher-shell .btn-control.active {
+    color: #ffffff !important;
+}
+
+[data-theme="dark"] .dispatcher-shell .chat-messages {
+    background: #0f1318 !important;
+}
+
+[data-theme="dark"] .dispatcher-shell .message-content,
+[data-theme="dark"] .dispatcher-shell .timestamp,
+[data-theme="dark"] .dispatcher-shell .message.system .message-content {
+    color: var(--text-color-1) !important;
+}
+
+[data-theme="dark"] .dispatcher-shell .unit-status,
+[data-theme="dark"] .dispatcher-shell .status-active,
+[data-theme="dark"] .dispatcher-shell .status-enroute,
+[data-theme="dark"] .dispatcher-shell .status-emergency,
+[data-theme="dark"] .dispatcher-shell .status-available,
+[data-theme="dark"] .dispatcher-shell .status-busy,
+[data-theme="dark"] .dispatcher-shell .status-unavailable {
+    color: #ffffff !important;
+}
+
+[data-theme="dark"] .dispatcher-shell table,
+[data-theme="dark"] .dispatcher-shell .table,
+[data-theme="dark"] .dispatcher-shell .request-table,
+[data-theme="dark"] .dispatcher-shell .resource-table {
+    background: var(--card-bg-1) !important;
+    color: var(--text-color-1) !important;
+    border-color: var(--border-color-1) !important;
+}
+
+[data-theme="dark"] .dispatcher-shell thead,
+[data-theme="dark"] .dispatcher-shell tbody,
+[data-theme="dark"] .dispatcher-shell tr,
+[data-theme="dark"] .dispatcher-shell th,
+[data-theme="dark"] .dispatcher-shell td {
+    background: transparent !important;
+    color: var(--text-color-1) !important;
+    border-color: var(--border-color-1) !important;
+}
+
+[data-theme="dark"] .dispatcher-shell thead th,
+[data-theme="dark"] .dispatcher-shell .request-table th {
+    background: #111418 !important;
+    color: var(--text-color-1) !important;
+}
+
+[data-theme="dark"] .dispatcher-shell tbody tr:nth-child(even) {
+    background: rgba(148, 163, 184, 0.04) !important;
+}
+
+[data-theme="dark"] .dispatcher-shell [style*="background:#fff"],
+[data-theme="dark"] .dispatcher-shell [style*="background: #fff"],
+[data-theme="dark"] .dispatcher-shell [style*="background:#ffffff"],
+[data-theme="dark"] .dispatcher-shell [style*="background: #ffffff"],
+[data-theme="dark"] .dispatcher-shell [style*="background:#fafafa"],
+[data-theme="dark"] .dispatcher-shell [style*="background: #fafafa"],
+[data-theme="dark"] .dispatcher-shell [style*="background:#f7f7f7"],
+[data-theme="dark"] .dispatcher-shell [style*="background: #f7f7f7"],
+[data-theme="dark"] .dispatcher-shell [style*="background-color:#fff"],
+[data-theme="dark"] .dispatcher-shell [style*="background-color: #fff"],
+[data-theme="dark"] .dispatcher-shell [style*="background-color:#ffffff"],
+[data-theme="dark"] .dispatcher-shell [style*="background-color: #ffffff"] {
+    background: #0f1318 !important;
+    color: var(--text-color-1) !important;
+}
+
+/* Last-resort hard overrides for module-level light styles */
+[data-theme="dark"] .dispatcher-shell button,
+[data-theme="dark"] .dispatcher-shell .btn,
+[data-theme="dark"] .dispatcher-shell [class^="btn-"],
+[data-theme="dark"] .dispatcher-shell [class*=" btn-"] {
+    color: #f8fafc !important;
+}
+
+[data-theme="dark"] .dispatcher-shell .stat-card,
+[data-theme="dark"] .dispatcher-shell .stats-card,
+[data-theme="dark"] .dispatcher-shell .incident-card,
+[data-theme="dark"] .dispatcher-shell .unit-card,
+[data-theme="dark"] .dispatcher-shell .call-card,
+[data-theme="dark"] .dispatcher-shell .agency-card,
+[data-theme="dark"] .dispatcher-shell .status-card,
+[data-theme="dark"] .dispatcher-shell .resource-card,
+[data-theme="dark"] .dispatcher-shell .dispatch-panel,
+[data-theme="dark"] .dispatcher-shell .coordination-panel,
+[data-theme="dark"] .dispatcher-shell .active-call-panel,
+[data-theme="dark"] .dispatcher-shell .recent-incidents {
+    background: #0f1318 !important;
+    border-color: #27272a !important;
+}
+
+[data-theme="dark"] .dispatcher-shell .chat-container,
+[data-theme="dark"] .dispatcher-shell .chat-messages,
+[data-theme="dark"] .dispatcher-shell .chat-input,
+[data-theme="dark"] .dispatcher-shell .message,
+[data-theme="dark"] .dispatcher-shell .message.system {
+    background: #0f1318 !important;
+    color: #f8fafc !important;
+    border-color: #27272a !important;
+}
+
+[data-theme="dark"] .dispatcher-shell .agency-select,
+[data-theme="dark"] .dispatcher-shell .message-field {
+    background: #101214 !important;
+    color: #f8fafc !important;
+    border-color: #27272a !important;
+}
+
+[data-theme="dark"] .dispatcher-shell .stats-card .stats-content h3,
+[data-theme="dark"] .dispatcher-shell .stats-card .stats-content p {
+    color: #f8fafc !important;
+}
+
+/* resources.php: Resource Filters and All Resources table */
+[data-theme="dark"] .dispatcher-shell .resource-filters,
+[data-theme="dark"] .dispatcher-shell .resource-filters .filter-grid,
+[data-theme="dark"] .dispatcher-shell .resources-table-section,
+[data-theme="dark"] .dispatcher-shell .resources-table-section > div {
+    background: #000000 !important;
+    color: #ffffff !important;
+}
+
+[data-theme="dark"] .dispatcher-shell .resource-filters label,
+[data-theme="dark"] .dispatcher-shell .resource-filters h2,
+[data-theme="dark"] .dispatcher-shell .resources-table-section h2 {
+    color: #ffffff !important;
+}
+
+[data-theme="dark"] .dispatcher-shell .resource-filters select,
+[data-theme="dark"] .dispatcher-shell .resource-filters input {
+    background: #000000 !important;
+    color: #ffffff !important;
+    border-color: #27272a !important;
+}
+
+[data-theme="dark"] .dispatcher-shell .resource-table,
+[data-theme="dark"] .dispatcher-shell .resource-table thead,
+[data-theme="dark"] .dispatcher-shell .resource-table tbody,
+[data-theme="dark"] .dispatcher-shell .resource-table tr,
+[data-theme="dark"] .dispatcher-shell .resource-table th,
+[data-theme="dark"] .dispatcher-shell .resource-table td {
+    background: #000000 !important;
+    color: #ffffff !important;
+    border-color: #27272a !important;
+}
+
+[data-theme="dark"] .dispatcher-shell .resource-table tr.resource-row-vehicle,
+[data-theme="dark"] .dispatcher-shell .resource-table tr.resource-row-personnel,
+[data-theme="dark"] .dispatcher-shell .resource-table tr.resource-row-equipment {
+    background: #000000 !important;
+}
+
+[data-theme="dark"] .dispatcher-shell .resource-table .resource-title span {
+    color: #d1d5db !important;
+}
+
+[data-theme="dark"] .dispatcher-shell .resource-table .resource-status-available,
+[data-theme="dark"] .dispatcher-shell .resource-table .resource-status-inuse,
+[data-theme="dark"] .dispatcher-shell .resource-table .resource-status-offline {
+    background: #111111 !important;
+    color: #ffffff !important;
+    border: 1px solid #3f3f46 !important;
+}
+
+[data-theme="dark"] .dispatcher-shell .resource-table .resource-action-btn {
+    background: #000000 !important;
+    color: #ffffff !important;
+    border: 1px solid #3f3f46 !important;
+}
+
+[data-theme="dark"] .dispatcher-shell .resource-table .resource-action-btn:hover {
+    background: #1f2937 !important;
+    color: #ffffff !important;
+}
+
+/* call.php: force white foreground text in dark mode */
+[data-theme="dark"] .dispatcher-shell .stats-bar *,
+[data-theme="dark"] .dispatcher-shell .call-center-grid *,
+[data-theme="dark"] .dispatcher-shell .active-call-panel *,
+[data-theme="dark"] .dispatcher-shell .incident-form *,
+[data-theme="dark"] .dispatcher-shell .recent-incidents * {
+    color: #f8fafc !important;
+}
+
+[data-theme="dark"] .dispatcher-shell .form-group input::placeholder,
+[data-theme="dark"] .dispatcher-shell .form-group textarea::placeholder,
+[data-theme="dark"] .dispatcher-shell #incidentSearch::placeholder {
+    color: #9ca3af !important;
+}
+
+/* incident.php: dark status badge with white text */
+[data-theme="dark"] .dispatcher-shell .status-badge,
+[data-theme="dark"] .dispatcher-shell .status-active,
+[data-theme="dark"] .dispatcher-shell .status-dispatched,
+[data-theme="dark"] .dispatcher-shell .status-resolved {
+    background: #1f2937 !important;
+    color: #f8fafc !important;
+    border: 1px solid #374151 !important;
+}
+
+/* call.php priority options: black bg + white text */
+[data-theme="dark"] .dispatcher-shell .priority-select .priority-option {
+    background: #000000 !important;
+    color: #ffffff !important;
+    border: 1px solid #27272a !important;
+}
+
+[data-theme="dark"] .dispatcher-shell .priority-select .priority-option:hover {
+    background: #111111 !important;
+    color: #ffffff !important;
+    border-color: #3f3f46 !important;
+}
+
+/* Keep visible color differences for auto/manual selected priority in dark mode */
+[data-theme="dark"] .dispatcher-shell .priority-select .priority-option.high.active {
+    background: #dc2626 !important;
+    color: #ffffff !important;
+    border-color: #dc2626 !important;
+}
+
+[data-theme="dark"] .dispatcher-shell .priority-select .priority-option.medium.active {
+    background: #f59e0b !important;
+    color: #ffffff !important;
+    border-color: #f59e0b !important;
+}
+
+[data-theme="dark"] .dispatcher-shell .priority-select .priority-option.low.active {
+    background: #10b981 !important;
+    color: #ffffff !important;
+    border-color: #10b981 !important;
+}
+
+[data-theme="dark"] .dispatcher-shell .priority-suggestion-badge {
+    display: inline-block !important;
+    margin-left: 8px !important;
+    font-size: 12px !important;
+    font-weight: 700 !important;
+    padding: 2px 8px !important;
+    border-radius: 999px !important;
+    color: #e5e7eb !important;
+    background: #111827 !important;
+    border: 1px solid #374151 !important;
+    min-height: 20px;
+}
+
+[data-theme="dark"] .dispatcher-shell .priority-suggestion-badge:empty {
+    display: none !important;
+}
+
+[data-theme="dark"] .dispatcher-shell .priority-suggestion-badge.suggest-high {
+    color: #fecaca !important;
+    border-color: #7f1d1d !important;
+    background: #2b0b0b !important;
+}
+
+[data-theme="dark"] .dispatcher-shell .priority-suggestion-badge.suggest-medium {
+    color: #fde68a !important;
+    border-color: #78350f !important;
+    background: #2a1b08 !important;
+}
+
+[data-theme="dark"] .dispatcher-shell .priority-suggestion-badge.suggest-low {
+    color: #bbf7d0 !important;
+    border-color: #14532d !important;
+    background: #0c2517 !important;
+}
+
+/* Restore call.php stat icon visibility/colors */
+[data-theme="dark"] .dispatcher-shell .stat-card .stat-icon-box {
+    background: #111418 !important;
+}
+
+[data-theme="dark"] .dispatcher-shell .stat-card .stat-icon-box.active-calls {
+    background: rgba(34, 197, 94, 0.15) !important;
+    color: #22c55e !important;
+}
+
+[data-theme="dark"] .dispatcher-shell .stat-card .stat-icon-box.pending {
+    background: rgba(239, 68, 68, 0.15) !important;
+    color: #ef4444 !important;
+}
+
+[data-theme="dark"] .dispatcher-shell .stat-card .stat-icon-box.resolved {
+    background: rgba(245, 158, 11, 0.15) !important;
+    color: #f59e0b !important;
+}
+
+[data-theme="dark"] .dispatcher-shell .stat-card .stat-icon-box.total {
+    background: rgba(14, 165, 233, 0.15) !important;
+    color: #0ea5e9 !important;
+}
+
+[data-theme="dark"] .dispatcher-shell .stat-card .stat-icon-box i {
+    color: inherit !important;
+}

@@ -21,8 +21,10 @@ require_role('dispatcher', 'dispatcher/interagency.php');
     <link rel="stylesheet" href="css/sidebar.css">
     <link rel="stylesheet" href="css/admin-header.css">
     <link rel="stylesheet" href="css/sidebar-footer.css">
-    <link rel="stylesheet" href="CSS/cards.css">
+    <link rel="stylesheet" href="css/cards.css">
     <link rel="stylesheet" href="css/interagency.css">
+    <link rel="stylesheet" href="css/dispatcher-module-dark.css?v=20260226i">
+    <script>document.documentElement.setAttribute('data-theme','dark'); localStorage.setItem('ers-theme','dark');</script>
 </head>
 <body>
     <!-- Include Sidebar Component -->
@@ -35,7 +37,7 @@ require_role('dispatcher', 'dispatcher/interagency.php');
        MAIN CONTENT - Inter-Agency Coordination Center
        =================================== -->
     <div class="main-content">
-        <div class="main-container">
+        <div class="main-container dispatcher-shell">
 
             <div style="height: 3.5rem;"></div>
 
@@ -568,3 +570,4 @@ function deptToEntityId(dept) {
 
 </body>
 </html>
+

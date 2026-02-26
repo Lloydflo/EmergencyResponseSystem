@@ -2,7 +2,7 @@
 .account-settings-container {
     max-width: 420px;
     margin: 48px auto;
-    background: #fff;
+    background: var(--card-bg-1);
     padding: 32px 28px;
     border-radius: 10px;
     box-shadow: 0 4px 16px rgba(0,0,0,0.10);
@@ -11,7 +11,7 @@
 .account-settings-container h2 {
     margin-bottom: 24px;
     font-size: 1.6rem;
-    color: #333;
+    color: var(--text-color-1);
     text-align: center;
 }
 .account-settings-container label {
@@ -19,26 +19,26 @@
     margin-top: 18px;
     margin-bottom: 6px;
     font-weight: 500;
-    color: #555;
+    color: var(--text-secondary-1);
 }
 .account-settings-container input {
     width: 100%;
     padding: 10px;
-    border: 1px solid #d1d5db;
+    border: 1px solid var(--border-color-1);
     border-radius: 5px;
     font-size: 1rem;
-    background: #f9f9f9;
+    background: var(--bg-color-1);
     transition: border-color 0.2s;
 }
 .account-settings-container input:focus {
-    border-color: #007bff;
+    border-color: var(--primary-color-1);
     outline: none;
 }
 .account-settings-container button {
     margin-top: 24px;
     padding: 12px 0;
     width: 100%;
-    background: #007bff;
+    background: var(--primary-color-1);
     color: #fff;
     border: none;
     border-radius: 5px;
@@ -48,7 +48,7 @@
     transition: background 0.2s;
 }
 .account-settings-container button:hover {
-    background: #0056b3;
+    background: var(--secondary-color-1);
 }
 .success-message {
     color: #28a745;

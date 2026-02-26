@@ -1,4 +1,22 @@
 <?php
+// Helper function to get environment variables with defaults
+if (!function_exists('ers_env')) {
+    function ers_env($key, $default = null) {
+        $value = getenv($key);
+        if ($value === false) {
+            return $default;
+        }
+        return $value;
+    }
+}
+
+// Gemini AI API Configuration
+if (!defined('GEMINI_API_KEY')) define('GEMINI_API_KEY', 'AIzaSyA0LID-8uE2NUmezZhK4s8BkIfVTfHeJIk');
+
+// Other configuration settings can go here
+if (!defined('GEMINI_API_URL')) define('GEMINI_API_URL', 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent');
+
+// Database/environment config
 /**
  * Shared application configuration.
  * Loads optional .env values before defining runtime constants.
@@ -87,4 +105,3 @@ if (!defined('GEMINI_API_URL')) {
 }
 
 return require __DIR__ . '/db.config.php';
-?>

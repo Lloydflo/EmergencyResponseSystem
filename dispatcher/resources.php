@@ -116,8 +116,61 @@ try {
     <link rel="stylesheet" href="css/sidebar.css">
     <link rel="stylesheet" href="css/admin-header.css">
     <link rel="stylesheet" href="css/sidebar-footer.css">
-    <link rel="stylesheet" href="CSS/cards.css">
+    <link rel="stylesheet" href="css/cards.css">
     <link rel="stylesheet" href="css/resources.css">
+    <link rel="stylesheet" href="css/dispatcher-module-dark.css?v=20260226i">
+    <script>document.documentElement.setAttribute('data-theme','dark'); localStorage.setItem('ers-theme','dark');</script>
+    <style>
+    /* resources.php hard override (dark only) */
+    [data-theme="dark"] .main-content .resource-filters,
+    [data-theme="dark"] .main-content .resources-table-section,
+    [data-theme="dark"] .main-content .resources-table-section > div {
+        background: #000 !important;
+        color: #fff !important;
+    }
+    [data-theme="dark"] .main-content .resource-filters h2,
+    [data-theme="dark"] .main-content .resource-filters label,
+    [data-theme="dark"] .main-content .resources-table-section h2 {
+        color: #fff !important;
+    }
+    [data-theme="dark"] .main-content .resource-filters select,
+    [data-theme="dark"] .main-content .resource-filters input {
+        background: #000 !important;
+        color: #fff !important;
+        border: 1px solid #2f2f2f !important;
+    }
+    [data-theme="dark"] .main-content .resource-filters select option {
+        background: #000 !important;
+        color: #fff !important;
+    }
+    [data-theme="dark"] .main-content .resource-table,
+    [data-theme="dark"] .main-content .resource-table thead,
+    [data-theme="dark"] .main-content .resource-table tbody,
+    [data-theme="dark"] .main-content .resource-table tr,
+    [data-theme="dark"] .main-content .resource-table th,
+    [data-theme="dark"] .main-content .resource-table td {
+        background: #000 !important;
+        color: #fff !important;
+        border-color: #2f2f2f !important;
+    }
+    [data-theme="dark"] .main-content .resource-table tr.resource-row-vehicle,
+    [data-theme="dark"] .main-content .resource-table tr.resource-row-personnel,
+    [data-theme="dark"] .main-content .resource-table tr.resource-row-equipment {
+        background: #000 !important;
+    }
+    [data-theme="dark"] .main-content .resource-table .resource-status-available,
+    [data-theme="dark"] .main-content .resource-table .resource-status-inuse,
+    [data-theme="dark"] .main-content .resource-table .resource-status-offline {
+        background: #111 !important;
+        color: #fff !important;
+        border: 1px solid #3f3f46 !important;
+    }
+    [data-theme="dark"] .main-content .resource-table .resource-action-btn {
+        background: #000 !important;
+        color: #fff !important;
+        border: 1px solid #3f3f46 !important;
+    }
+    </style>
 </head>
 <body>
     <!-- Include Sidebar Component -->
@@ -130,9 +183,8 @@ try {
        MAIN CONTENT - Emergency Resources Status
        =================================== -->
     <div class="main-content">
-        <div class="main-container">
+        <div class="main-container dispatcher-shell">
             <div style="height: 3.5rem;"></div>
-                        </div>
 
                         
             <!-- Resource Overview -->
@@ -242,17 +294,15 @@ try {
                 .resource-table.scrollable thead, .resource-table.scrollable tbody { display: block; }
                 .resource-table.scrollable tbody { max-height: 380px; overflow-y: auto; }
                 .resource-table.scrollable thead tr, .resource-table.scrollable tbody tr { display: table; width: 100%; table-layout: fixed; }
-                /* Column widths: Type, Name/Description, Status, Location, Actions */
+                /* Column widths: Type, Name/Description, Status, Actions */
                 .resource-table.scrollable thead th:nth-child(1),
-                .resource-table.scrollable tbody td:nth-child(1) { width: 12%; }
+                .resource-table.scrollable tbody td:nth-child(1) { width: 14%; }
                 .resource-table.scrollable thead th:nth-child(2),
-                .resource-table.scrollable tbody td:nth-child(2) { width: 36%; }
+                .resource-table.scrollable tbody td:nth-child(2) { width: 46%; }
                 .resource-table.scrollable thead th:nth-child(3),
-                .resource-table.scrollable tbody td:nth-child(3) { width: 12%; }
+                .resource-table.scrollable tbody td:nth-child(3) { width: 16%; }
                 .resource-table.scrollable thead th:nth-child(4),
-                .resource-table.scrollable tbody td:nth-child(4) { width: 20%; }
-                .resource-table.scrollable thead th:nth-child(5),
-                .resource-table.scrollable tbody td:nth-child(5) { width: 20%; }
+                .resource-table.scrollable tbody td:nth-child(4) { width: 24%; }
                 .resource-table tr.resource-row-vehicle { background: #eafaf1; }
                 .resource-table tr.resource-row-personnel { background: #fffbe7; }
                 .resource-table tr.resource-row-equipment { background: #f9eaf6; }
@@ -286,8 +336,8 @@ try {
                     white-space: nowrap;
                     display: inline-block;
                 }
-                /* Truncate long text in Name/Description and Location */
-                td.resource-title, td.detail-value { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+                /* Truncate long text in Name/Description */
+                td.resource-title { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
                 .resource-action-btn {
                     border: none;
                     border-radius: 6px;
@@ -319,7 +369,6 @@ try {
                             <th>Type</th>
                             <th>Name/Description</th>
                             <th>Status</th>
-                            <th>Location</th>
                             <th>Actions</th>
                         </tr>
                     </thead>
@@ -348,7 +397,7 @@ try {
 
                 async function loadResources() {
                     const container = document.getElementById('resource-list-dynamic');
-                    if (container) container.innerHTML = '<tr><td colspan="6" style="text-align:center;color:#888;">Loading resources…</td></tr>';
+                    if (container) container.innerHTML = '<tr><td colspan="4" style="text-align:center;color:#888;">Loading resources...</td></tr>';
                     try {
                         const res = await fetch('api/resources_combined.php');
                         const data = await res.json();
@@ -417,7 +466,6 @@ try {
                         `<td>${iconHtml} ${r.type.charAt(0).toUpperCase() + r.type.slice(1)}</td>`+
                         `<td class=\"resource-title\">${r.name}${r.role ? ' <br><span style=\\"font-size:0.95em;color:#888;\\">'+r.role+'</span>' : ''}</td>`+
                         `<td><span class=\"${statusClass}\">${statusLabel}</span></td>`+
-                        `<td class=\"detail-value\">${r.location || ''}</td>`+
                         `<td>${actionsHtml}</td>`+
                     `</tr>`;
                 }
@@ -427,7 +475,7 @@ try {
                     if (!container) return;
                     const filtered = RESOURCES.filter(passFilters);
                     if (!filtered.length) {
-                        container.innerHTML = '<tr><td colspan="6" style="text-align:center;color:#888;">No resources found.</td></tr>';
+                        container.innerHTML = '<tr><td colspan="4" style="text-align:center;color:#888;">No resources found.</td></tr>';
                     } else {
                         container.innerHTML = filtered.map(resourceRowHtml).join('');
                     }
@@ -829,7 +877,7 @@ try {
             const resourceName = row.querySelector('.resource-title') ? row.querySelector('.resource-title').textContent : 'Resource';
             const resourceId = row.getAttribute('data-resource-id');
             const resourceType = row.getAttribute('data-type');
-            const resourceLocation = row.querySelector('.detail-value') ? row.querySelector('.detail-value').textContent.trim() : '';
+            const resourceLocation = row.getAttribute('data-location') ? String(row.getAttribute('data-location')).trim() : '';
             if (!resourceId) { showNotification('Missing resource id', 'error'); return; }
             openDeployModal({
                 id: Number(resourceId),
@@ -958,11 +1006,11 @@ try {
             let details = `Resource: ${resourceName}\nType: ${resourceType}\n\n`;
 
             if (resourceType === 'vehicles') {
-                details += '• Vehicle specifications\n• Maintenance history\n• Fuel efficiency\n• Usage statistics\n• GPS tracking data';
+                details += '- Vehicle specifications\n- Maintenance history\n- Fuel efficiency\n- Usage statistics\n- GPS tracking data';
             } else if (resourceType === 'personnel') {
-                details += '• Certification details\n• Training records\n• Performance metrics\n• Shift schedule\n• Contact information';
+                details += '- Certification details\n- Training records\n- Performance metrics\n- Shift schedule\n- Contact information';
             } else if (resourceType === 'equipment') {
-                details += '• Equipment specifications\n• Calibration records\n• Usage history\n• Maintenance schedule\n• Storage location';
+                details += '- Equipment specifications\n- Calibration records\n- Usage history\n- Maintenance schedule\n- Storage location';
             }
 
             alert(details);
@@ -990,7 +1038,7 @@ try {
         function personnelSchedule(button) {
             const row = button.closest('tr');
             const personnelName = row && row.querySelector('.resource-title') ? row.querySelector('.resource-title').textContent : 'Personnel';
-            alert(`${personnelName} Schedule:\n\n• Monday-Friday: Day Shift\n• Weekends: On-call rotation\n• Next shift: Tomorrow\n• Vacation: Pending`);
+            alert(`${personnelName} Schedule:\n\n- Monday-Friday: Day Shift\n- Weekends: On-call rotation\n- Next shift: Tomorrow\n- Vacation: Pending`);
         }
 
         // Equipment management functions
@@ -1599,3 +1647,4 @@ try {
     </script>
 </body>
 </html>
+

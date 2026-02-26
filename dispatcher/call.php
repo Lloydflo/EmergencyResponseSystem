@@ -23,6 +23,8 @@ $pageTitle = 'Emergency Call Center';
     <link rel="stylesheet" href="css/cards.css">
     <link rel="stylesheet" href="css/call.css">
     <script src="js/place-autocomplete.js"></script>
+    <link rel="stylesheet" href="css/dispatcher-module-dark.css?v=20260226i">
+    <script>document.documentElement.setAttribute('data-theme','dark'); localStorage.setItem('ers-theme','dark');</script>
 </head>
 <body>
     <!-- Include Sidebar Component -->
@@ -35,7 +37,7 @@ $pageTitle = 'Emergency Call Center';
        MAIN CONTENT - Call Receiving and Logging
        =================================== -->
     <div class="main-content">
-        <div class="main-container">
+        <div class="main-container dispatcher-shell">
             <div style="height: 1rem;"></div>
 
             <!-- Stats Bar -->
@@ -163,7 +165,7 @@ $pageTitle = 'Emergency Call Center';
                                 </div>
                                     <!-- Map picker removed as requested -->
                                 <div class="form-group">
-                                    <label>Priority <span id="prioritySuggestion" style="margin-left:8px;font-size:12px;color:#6b7280;"></span></label>
+                                    <label>Priority <span id="prioritySuggestion" class="priority-suggestion-badge"></span></label>
                                     <div class="priority-select" id="prioritySelect">
                                         <div class="priority-option high" data-value="high">High</div>
                                         <div class="priority-option medium" data-value="medium">Medium</div>
@@ -430,13 +432,17 @@ $pageTitle = 'Emergency Call Center';
         const badge = document.getElementById('prioritySuggestion');
         // Show suggestion only after user types some description
         if (!text || text.length < 3) {
-            if (badge) badge.textContent = '';
+            if (badge) {
+                badge.textContent = '';
+                badge.className = 'priority-suggestion-badge';
+            }
             return;
         }
         const suggested = suggestPriorityFromDescription(text);
         if (badge) {
             const label = suggested.charAt(0).toUpperCase() + suggested.slice(1);
             badge.textContent = `(Suggested: ${label})`;
+            badge.className = `priority-suggestion-badge suggest-${suggested}`;
         }
         if (priorityAuto) {
             setPrioritySelection(suggested);
@@ -660,7 +666,10 @@ $pageTitle = 'Emergency Call Center';
             }
             priorityAuto = true;
             const badge = document.getElementById('prioritySuggestion');
-            if (badge) badge.textContent = '';
+            if (badge) {
+                badge.textContent = '';
+                badge.className = 'priority-suggestion-badge';
+            }
             await loadIncidentsFromServer();
             // Log activity event for dashboard Recent Activity
             try {
@@ -830,3 +839,4 @@ $pageTitle = 'Emergency Call Center';
         
 </body>
 </html>
+

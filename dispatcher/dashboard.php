@@ -178,6 +178,8 @@ $type_total = array_sum($type_counts);
     <link rel="stylesheet" href="css/sidebar-footer.css">
     <link rel="stylesheet" href="css/cards.css">
     <link rel="stylesheet" href="css/dispatcher-dashboard.css">
+    <link rel="stylesheet" href="css/dispatcher-module-dark.css?v=20260226i">
+    <script>document.documentElement.setAttribute('data-theme','dark'); localStorage.setItem('ers-theme','dark');</script>
 </head>
 <body>
     <?php include $rootDir . '/includes/sidebar.php'; ?>
@@ -412,3 +414,4 @@ $type_total = array_sum($type_counts);
     </script>
 </body>
 </html>
+

@@ -23,12 +23,14 @@ $pageTitle = 'Emergency Call Center';
     <link rel="stylesheet" href="css/call.css">
     <link rel="stylesheet" href="css/dashboard.css">
     <link rel="stylesheet" href="css/review.css">
+    <link rel="stylesheet" href="css/dispatcher-module-dark.css?v=20260226i">
+    <script>document.documentElement.setAttribute('data-theme','dark'); localStorage.setItem('ers-theme','dark');</script>
 </head>
 <body>
     <?php include $rootDir . '/includes/sidebar.php'; ?>
     <?php include $rootDir . '/includes/admin-header.php'; ?>
     <main class="main-content">
-        <div class="main-container">
+        <div class="main-container dispatcher-shell">
             <div class="page-header">
                 <h2>Review & Feedback</h2>
                 <p class="text-muted">Review resolved incidents and submit feedback to improve response quality.</p>
@@ -56,8 +58,8 @@ $pageTitle = 'Emergency Call Center';
                     <label for="sortSelect">Sort</label>
                     <select id="sortSelect" aria-label="Sort incidents">
                         <option value="recent" selected>Most Recent</option>
-                        <option value="priority_desc">Priority (High → Low)</option>
-                        <option value="code_asc">Incident Code (A → Z)</option>
+                        <option value="priority_desc">Priority (High -> Low)</option>
+                        <option value="code_asc">Incident Code (A -> Z)</option>
                     </select>
                 </div>
                 <div class="filter-actions">
@@ -82,41 +84,41 @@ $pageTitle = 'Emergency Call Center';
                 <div class="summary-row">
                     <div>
                         <div class="summary-label"><i class="fa fa-hashtag"></i> Incident Code</div>
-                        <div id="summaryCode" class="summary-value">—</div>
+                        <div id="summaryCode" class="summary-value">--</div>
                     </div>
                     <div>
                         <div class="summary-label"><i class="fa fa-list"></i> Type</div>
-                        <div id="summaryType" class="summary-value">—</div>
+                        <div id="summaryType" class="summary-value">--</div>
                     </div>
                     <div>
                         <div class="summary-label"><i class="fa fa-signal"></i> Priority</div>
-                        <div id="summaryPriority" class="summary-value">—</div>
+                        <div id="summaryPriority" class="summary-value">--</div>
                     </div>
                     <div>
                         <div class="summary-label"><i class="fa fa-check-circle"></i> Status</div>
-                        <div id="summaryStatus" class="summary-value">—</div>
+                        <div id="summaryStatus" class="summary-value">--</div>
                     </div>
                 </div>
                 <div class="summary-row">
                     <div>
                         <div class="summary-label"><i class="fa fa-clock"></i> Dispatch Time</div>
-                        <div id="summaryDispatchTime" class="summary-value">—</div>
+                        <div id="summaryDispatchTime" class="summary-value">--</div>
                     </div>
                     <div>
                         <div class="summary-label"><i class="fa fa-hourglass-end"></i> Resolve Time</div>
-                        <div id="summaryResolveTime" class="summary-value">—</div>
+                        <div id="summaryResolveTime" class="summary-value">--</div>
                     </div>
                 </div>
                 <div class="summary-row">
                     <div class="summary-col">
                         <div class="summary-label"><i class="fa fa-location-dot"></i> Location</div>
-                        <div id="summaryLocation" class="summary-value">—</div>
+                        <div id="summaryLocation" class="summary-value">--</div>
                     </div>
                 </div>
                 <div class="summary-row">
                     <div class="summary-col">
                         <div class="summary-label"><i class="fa fa-align-left"></i> Description</div>
-                        <div id="summaryDescription" class="summary-value">—</div>
+                        <div id="summaryDescription" class="summary-value">--</div>
                     </div>
                 </div>
             </section>
@@ -164,3 +166,4 @@ $pageTitle = 'Emergency Call Center';
     <script src="js/review-feedback.js"></script>
 </body>
 </html>
+
