@@ -118,7 +118,7 @@ try {
     <link rel="stylesheet" href="css/sidebar-footer.css">
     <link rel="stylesheet" href="css/cards.css">
     <link rel="stylesheet" href="css/resources.css">
-    <link rel="stylesheet" href="css/dispatcher-module-dark.css?v=20260226h">
+    <link rel="stylesheet" href="css/dispatcher-module-dark.css?v=20260226i">
     <script>document.documentElement.setAttribute('data-theme','dark'); localStorage.setItem('ers-theme','dark');</script>
     <style>
     /* resources.php hard override (dark only) */
@@ -294,17 +294,15 @@ try {
                 .resource-table.scrollable thead, .resource-table.scrollable tbody { display: block; }
                 .resource-table.scrollable tbody { max-height: 380px; overflow-y: auto; }
                 .resource-table.scrollable thead tr, .resource-table.scrollable tbody tr { display: table; width: 100%; table-layout: fixed; }
-                /* Column widths: Type, Name/Description, Status, Location, Actions */
+                /* Column widths: Type, Name/Description, Status, Actions */
                 .resource-table.scrollable thead th:nth-child(1),
-                .resource-table.scrollable tbody td:nth-child(1) { width: 12%; }
+                .resource-table.scrollable tbody td:nth-child(1) { width: 14%; }
                 .resource-table.scrollable thead th:nth-child(2),
-                .resource-table.scrollable tbody td:nth-child(2) { width: 36%; }
+                .resource-table.scrollable tbody td:nth-child(2) { width: 46%; }
                 .resource-table.scrollable thead th:nth-child(3),
-                .resource-table.scrollable tbody td:nth-child(3) { width: 12%; }
+                .resource-table.scrollable tbody td:nth-child(3) { width: 16%; }
                 .resource-table.scrollable thead th:nth-child(4),
-                .resource-table.scrollable tbody td:nth-child(4) { width: 20%; }
-                .resource-table.scrollable thead th:nth-child(5),
-                .resource-table.scrollable tbody td:nth-child(5) { width: 20%; }
+                .resource-table.scrollable tbody td:nth-child(4) { width: 24%; }
                 .resource-table tr.resource-row-vehicle { background: #eafaf1; }
                 .resource-table tr.resource-row-personnel { background: #fffbe7; }
                 .resource-table tr.resource-row-equipment { background: #f9eaf6; }
@@ -338,8 +336,8 @@ try {
                     white-space: nowrap;
                     display: inline-block;
                 }
-                /* Truncate long text in Name/Description and Location */
-                td.resource-title, td.detail-value { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+                /* Truncate long text in Name/Description */
+                td.resource-title { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
                 .resource-action-btn {
                     border: none;
                     border-radius: 6px;
@@ -371,7 +369,6 @@ try {
                             <th>Type</th>
                             <th>Name/Description</th>
                             <th>Status</th>
-                            <th>Location</th>
                             <th>Actions</th>
                         </tr>
                     </thead>
@@ -400,7 +397,7 @@ try {
 
                 async function loadResources() {
                     const container = document.getElementById('resource-list-dynamic');
-                    if (container) container.innerHTML = '<tr><td colspan="6" style="text-align:center;color:#888;">Loading resources...</td></tr>';
+                    if (container) container.innerHTML = '<tr><td colspan="4" style="text-align:center;color:#888;">Loading resources...</td></tr>';
                     try {
                         const res = await fetch('api/resources_combined.php');
                         const data = await res.json();
@@ -469,7 +466,6 @@ try {
                         `<td>${iconHtml} ${r.type.charAt(0).toUpperCase() + r.type.slice(1)}</td>`+
                         `<td class=\"resource-title\">${r.name}${r.role ? ' <br><span style=\\"font-size:0.95em;color:#888;\\">'+r.role+'</span>' : ''}</td>`+
                         `<td><span class=\"${statusClass}\">${statusLabel}</span></td>`+
-                        `<td class=\"detail-value\">${r.location || ''}</td>`+
                         `<td>${actionsHtml}</td>`+
                     `</tr>`;
                 }
@@ -479,7 +475,7 @@ try {
                     if (!container) return;
                     const filtered = RESOURCES.filter(passFilters);
                     if (!filtered.length) {
-                        container.innerHTML = '<tr><td colspan="6" style="text-align:center;color:#888;">No resources found.</td></tr>';
+                        container.innerHTML = '<tr><td colspan="4" style="text-align:center;color:#888;">No resources found.</td></tr>';
                     } else {
                         container.innerHTML = filtered.map(resourceRowHtml).join('');
                     }
@@ -881,7 +877,7 @@ try {
             const resourceName = row.querySelector('.resource-title') ? row.querySelector('.resource-title').textContent : 'Resource';
             const resourceId = row.getAttribute('data-resource-id');
             const resourceType = row.getAttribute('data-type');
-            const resourceLocation = row.querySelector('.detail-value') ? row.querySelector('.detail-value').textContent.trim() : '';
+            const resourceLocation = row.getAttribute('data-location') ? String(row.getAttribute('data-location')).trim() : '';
             if (!resourceId) { showNotification('Missing resource id', 'error'); return; }
             openDeployModal({
                 id: Number(resourceId),
