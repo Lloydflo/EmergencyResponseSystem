@@ -1,13 +1,36 @@
 <?php
-require_once __DIR__ . '/includes/auth.php';
+// DEBUG: Enable error reporting for troubleshooting on remote server
+ini_set('display_errors', 1);
+ini_set('display_startup_errors', 1);
+error_reporting(E_ALL);
 
-$pageTitle = 'Admin Login';
+function debug_log($msg) {
+    file_put_contents(__DIR__ . '/debug_login.log', date('Y-m-d H:i:s') . ' ' . $msg . "\n", FILE_APPEND);
+}
+debug_log('--- LOGIN.PHP START ---');
+
+require_once __DIR__ . '/includes/auth.php';
+debug_log('auth.php loaded');
+
+$pageTitle = 'Role-Based Login';
 $error_message = '';
 $success_message = '';
+$allowed_roles = [
+    'admin' => 'Admin',
+    'dispatcher' => 'Dispatcher'
+];
+$selected_role = 'admin';
 
 // If already logged in, redirect to index
 if (is_logged_in()) {
-    header('Location: index.php');
+    $existingRole = strtolower(trim((string)($_SESSION['login_role'] ?? $_SESSION['user_role'] ?? '')));
+    if ($existingRole === 'dispatcher' || $existingRole === 'operator') {
+        debug_log('Already logged in, redirecting to dispatcher dashboard');
+        header('Location: dispatcher/dashboard.php');
+    } else {
+        debug_log('Already logged in, redirecting to admin index');
+        header('Location: admin/index.php');
+    }
     exit;
 }
 
@@ -15,33 +38,50 @@ if (is_logged_in()) {
 if (isset($_GET['logged_out']) && $_GET['logged_out'] == '1') {
     $success_message = 'You have been successfully logged out.';
 }
-
 // Handle login form submission
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    debug_log('POST request received');
+    $selected_role = strtolower(trim($_POST['role'] ?? ''));
     $email = trim($_POST['email'] ?? '');
     $password = $_POST['password'] ?? '';
-    
-    if (empty($email) || empty($password)) {
+    debug_log('Email: ' . $email);
+    debug_log('Role: ' . $selected_role);
+    if (!array_key_exists($selected_role, $allowed_roles)) {
+        $error_message = 'Please select a valid role.';
+        debug_log('Invalid role selected');
+    } elseif (empty($email) || empty($password)) {
         $error_message = 'Please enter both email and password.';
+        debug_log('Missing email or password');
     } else {
-        $result = login_user($email, $password);
+        $result = login_user($email, $password, $selected_role);
+        debug_log('login_user result: ' . json_encode($result));
         if ($result['success']) {
-            // OTP step: generate, save to DB, and send OTP email, then redirect to OTP page
             require_once __DIR__ . '/includes/mail_helper.php';
             $otp = rand(100000, 999999);
             $_SESSION['otp'] = $otp;
             $_SESSION['otp_email'] = $email;
             $_SESSION['otp_expiry'] = time() + 180; // 3 minutes
-            saveOtpToDatabase($email, $otp, 3);
-            $mailSent = sendOtpEmail($email, $otp);
-            if ($mailSent) {
-                header('Location: otp.php');
-                exit;
+            $otpSaved = saveOtpToDatabase($email, $otp, 3);
+            if (!$otpSaved) {
+                debug_log('OTP save failed');
+                $error_message = 'Unable to save OTP. Please contact support.';
+                unset($_SESSION['otp'], $_SESSION['otp_email'], $_SESSION['otp_expiry']);
             } else {
-                $error_message = 'Failed to send OTP email. Please contact admin or try again later.';
+                debug_log('OTP generated and saved');
+                $emailSent = sendOtpEmail($email, $otp);
+                debug_log($emailSent ? 'OTP email sent' : 'OTP email failed');
+                if (!$emailSent) {
+                    $error_message = 'OTP email sending failed. Please try again later.';
+                    unset($_SESSION['otp'], $_SESSION['otp_email'], $_SESSION['otp_expiry']);
+                } else {
+                    header('Location: otp.php');
+                    debug_log('Redirecting to otp.php');
+                    exit;
+                }
             }
         } else {
             $error_message = $result['message'];
+            debug_log('Login failed: ' . $error_message);
         }
     }
 }
@@ -67,7 +107,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
             <!-- Header -->
             <div class="login-header">
-                <h1 class="login-title">Admin Login</h1>
+                <h1 class="login-title">Role-Based Login</h1>
                 <p class="login-subtitle">
                     Emergency Response System<br>
                     Administrative Panel
@@ -95,7 +135,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 <!-- Secure Access Box -->
                 <div class="info-box info-box-secure">
                     <i class="fas fa-shield-alt"></i>
-                    <span>Secure Admin Access Only</span>
+                    <span>Secure System Access</span>
                     <i class="fas fa-lock"></i>
                 </div>
 
@@ -110,6 +150,24 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
             <!-- Login Form -->
             <form class="login-form" method="POST" action="login.php">
+                <!-- Role Field -->
+                <div class="form-group">
+                    <label for="role" class="form-label">
+                        <i class="fas fa-user-shield"></i>
+                        Role
+                    </label>
+                    <div class="input-wrapper">
+                        <i class="fas fa-user-shield input-icon"></i>
+                        <select id="role" name="role" class="form-input" required>
+                            <?php foreach ($allowed_roles as $role_value => $role_label): ?>
+                                <option value="<?php echo htmlspecialchars($role_value); ?>" <?php echo $selected_role === $role_value ? 'selected' : ''; ?>>
+                                    <?php echo htmlspecialchars($role_label); ?>
+                                </option>
+                            <?php endforeach; ?>
+                        </select>
+                    </div>
+                </div>
+
                 <!-- Email Field -->
                 <div class="form-group">
                     <label for="email" class="form-label">
@@ -124,6 +182,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                             name="email" 
                             class="form-input" 
                             placeholder="admin@example.com"
+                            value="<?php echo htmlspecialchars($email ?? ''); ?>"
+                            autocomplete="email"
                             required
                         >
                     </div>
@@ -143,6 +203,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                             name="password" 
                             class="form-input" 
                             placeholder="Enter your password"
+                            autocomplete="current-password"
                             required
                         >
                         <button 
@@ -158,11 +219,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
                 <!-- Remember Me & Forgot Password -->
                 <div class="form-options">
-                    <label class="checkbox-label">
-                        <input type="checkbox" name="remember" id="remember" class="checkbox-input">
-                        <span class="checkbox-text">Remember me</span>
-                    </label>
-                    <a href="#" class="forgot-password">Forgot Password?</a>
+                    <a href="forgot_password.php" class="forgot-password">Forgot Password?</a>
                 </div>
 
                 <!-- Sign In Button -->

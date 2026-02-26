@@ -33,12 +33,84 @@ function get_logged_in_user(): ?array {
         return null;
     }
     
+    $effectiveRole = $_SESSION['login_role'] ?? $_SESSION['user_role'] ?? 'viewer';
+
     return [
         'id' => $_SESSION['user_id'],
         'email' => $_SESSION['user_email'],
         'name' => $_SESSION['user_name'] ?? 'User',
-        'role' => $_SESSION['user_role'] ?? 'viewer'
+        'role' => $effectiveRole
     ];
+}
+
+/**
+ * Normalize a role string.
+ * @param string|null $role
+ * @return string
+ */
+function normalize_role(?string $role): string {
+    $value = strtolower(trim((string)$role));
+    $value = str_replace(['-', '_'], ' ', $value);
+    $value = preg_replace('/\s+/', ' ', $value ?? '');
+    return trim((string)$value);
+}
+
+/**
+ * Convert role labels/aliases to canonical roles used by UI flow.
+ * @param string|null $role
+ * @return string admin|dispatcher|viewer|unknown
+ */
+function canonical_role(?string $role): string {
+    $normalized = normalize_role($role);
+
+    if ($normalized === 'admin' || $normalized === 'administrator') {
+        return 'admin';
+    }
+
+    if (
+        $normalized === 'dispatcher' ||
+        $normalized === 'dispatch' ||
+        $normalized === 'dispatch operator' ||
+        $normalized === 'operator'
+    ) {
+        return 'dispatcher';
+    }
+
+    if ($normalized === 'viewer') {
+        return 'viewer';
+    }
+
+    return 'unknown';
+}
+
+/**
+ * Get canonical role of current session.
+ * @return string admin|dispatcher|viewer|unknown
+ */
+function current_session_role(): string {
+    if (!is_logged_in()) {
+        return 'unknown';
+    }
+    return canonical_role((string)($_SESSION['login_role'] ?? $_SESSION['user_role'] ?? ''));
+}
+
+/**
+ * Build role home path considering current folder depth.
+ * @param string $role
+ * @return string
+ */
+function role_home_path(string $role): string {
+    $scriptName = str_replace('\\', '/', (string)($_SERVER['SCRIPT_NAME'] ?? ''));
+    $isSubfolderPage = (strpos($scriptName, '/admin/') !== false || strpos($scriptName, '/dispatcher/') !== false);
+    $prefix = $isSubfolderPage ? '../' : '';
+
+    if ($role === 'admin') {
+        return $prefix . 'admin/index.php';
+    }
+    if ($role === 'dispatcher') {
+        return $prefix . 'dispatcher/dashboard.php';
+    }
+    return $prefix . 'login.php';
 }
 
 /**
@@ -47,8 +119,35 @@ function get_logged_in_user(): ?array {
  */
 function require_login(string $redirect_url = ''): void {
     if (!is_logged_in()) {
-        $redirect = $redirect_url ? '?redirect=' . urlencode($redirect_url) : '';
-        header('Location: login.php' . $redirect);
+        $scriptName = str_replace('\\', '/', (string)($_SERVER['SCRIPT_NAME'] ?? ''));
+        $isSubfolderPage = (strpos($scriptName, '/admin/') !== false || strpos($scriptName, '/dispatcher/') !== false);
+        $loginPath = $isSubfolderPage ? '../login.php' : 'login.php';
+
+        $target = $redirect_url;
+        if ($target === '') {
+            $target = ltrim($scriptName, '/');
+        } elseif ($isSubfolderPage && strpos($target, '/') === false) {
+            $folder = basename(dirname($scriptName));
+            $target = $folder . '/' . $target;
+        }
+
+        $redirect = $target !== '' ? '?redirect=' . urlencode($target) : '';
+        header('Location: ' . $loginPath . $redirect);
+        exit;
+    }
+}
+
+/**
+ * Require a specific role. Redirects logged-in user to own home if role mismatched.
+ * @param string $requiredRole admin|dispatcher
+ * @param string $redirect_url Optional redirect URL after login
+ */
+function require_role(string $requiredRole, string $redirect_url = ''): void {
+    require_login($redirect_url);
+    $required = canonical_role($requiredRole);
+    $current = current_session_role();
+    if ($required !== $current) {
+        header('Location: ' . role_home_path($current));
         exit;
     }
 }
@@ -57,9 +156,10 @@ function require_login(string $redirect_url = ''): void {
  * Login user
  * @param string $email
  * @param string $password
+ * @param string|null $requiredRole
  * @return array ['success' => bool, 'message' => string, 'user' => array|null]
  */
-function login_user(string $email, string $password): array {
+function login_user(string $email, string $password, ?string $requiredRole = null): array {
     require_once __DIR__ . '/db.php';
     
     $pdo = get_db_connection();
@@ -103,11 +203,35 @@ function login_user(string $email, string $password): array {
             ];
         }
         
+        // Ensure selected role is compatible with account role before creating session
+        if ($requiredRole !== null) {
+            $expectedRole = canonical_role($requiredRole);
+            $accountRole = canonical_role((string)($user['role'] ?? ''));
+            $allowed = false;
+
+            if ($expectedRole === 'admin') {
+                $allowed = ($accountRole === 'admin');
+            } elseif ($expectedRole === 'dispatcher') {
+                $allowed = ($accountRole === 'dispatcher');
+            } else {
+                $allowed = false;
+            }
+
+            if (!$allowed) {
+                return [
+                    'success' => false,
+                    'message' => 'Selected role does not match your account role.',
+                    'user' => null
+                ];
+            }
+        }
+
         // Set session variables
         $_SESSION['user_id'] = $user['id'];
         $_SESSION['user_email'] = $user['email'];
         $_SESSION['user_name'] = $user['name'];
         $_SESSION['user_role'] = $user['role'];
+        $_SESSION['login_role'] = $requiredRole ? canonical_role($requiredRole) : canonical_role((string)$user['role']);
         $_SESSION['logged_in'] = true;
         
         // Update last login

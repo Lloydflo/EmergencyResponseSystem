@@ -70,7 +70,7 @@ $user_role = $current_user ? ucfirst($current_user['role']) : 'Administrator';
             <i class="fas fa-chevron-down dropdown-icon"></i>
         </div>
     </div>
-    <script src="CSS/theme-switcher.js"></script>
+    <script src="css/theme-switcher.js"></script>
 </header>
 
 <!-- User Profile Dropdown -->

@@ -14,14 +14,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if (isset($_POST['resend_otp'])) {
         // Generate new OTP, save to DB, send email, reset timer
         $otp = rand(100000, 999999);
-        $_SESSION['otp'] = $otp;
-        $_SESSION['otp_expiry'] = time() + 180; // 3 minutes
-        saveOtpToDatabase($_SESSION['otp_email'], $otp, 3);
-        $mailSent = sendOtpEmail($_SESSION['otp_email'], $otp);
-        if ($mailSent) {
-            $error_message = 'A new OTP has been sent to your email.';
+        $otpSaved = saveOtpToDatabase($_SESSION['otp_email'], $otp, 3);
+        if (!$otpSaved) {
+            $error_message = 'Failed to save OTP to database. Please try again later.';
         } else {
-            $error_message = 'Failed to resend OTP. Please try again later.';
+            $_SESSION['otp'] = $otp;
+            $_SESSION['otp_expiry'] = time() + 180; // 3 minutes
+            $mailSent = sendOtpEmail($_SESSION['otp_email'], $otp);
+            if ($mailSent) {
+                $error_message = 'A new OTP has been sent to your email.';
+            } else {
+                $error_message = 'Failed to resend OTP. Please try again later.';
+            }
         }
     } else {
         $input_otp = trim($_POST['otp'] ?? '');
@@ -35,8 +39,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             unset($_SESSION['otp'], $_SESSION['otp_expiry']);
             // Set a flag to indicate OTP is verified
             $_SESSION['otp_verified'] = true;
-            // Redirect to index or intended page
-            header('Location: index.php');
+            // Role-based redirect after OTP verification
+            $selectedRole = strtolower(trim((string)($_SESSION['login_role'] ?? '')));
+            $accountRole = strtolower(trim((string)($_SESSION['user_role'] ?? '')));
+            if ($selectedRole === 'dispatcher' || $accountRole === 'dispatcher' || $accountRole === 'operator') {
+                header('Location: dispatcher/dashboard.php');
+            } else {
+                header('Location: admin/index.php');
+            }
             exit;
         } else {
             $error_message = 'Invalid OTP. Please try again.';
@@ -69,7 +79,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             <form class="login-form" method="POST" action="otp.php">
                 <div class="form-group">
                     <label for="otp" class="form-label">OTP Code</label>
-                    <input type="text" id="otp" name="otp" class="form-input" maxlength="6" pattern="[0-9]{6}" required autofocus>
+                    <input type="text" id="otp" name="otp" class="form-input" maxlength="6" pattern="[0-9]{6}" autocomplete="one-time-code" inputmode="numeric" required autofocus>
                 </div>
                 <button type="submit" class="btn-signin">Verify</button>
             </form>

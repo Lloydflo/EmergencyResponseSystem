@@ -5,10 +5,26 @@
 .env
 config.php
 db.config.php
+gemini_helper.php
+api/.env
+
+# Mail configuration (prevent accidental commit)
+mail.env
+MAIL_MAILER=
+MAIL_HOST=
+MAIL_PORT=
+MAIL_ENCRYPTION=
+MAIL_USERNAME=
+MAIL_PASSWORD=
+MAIL_FROM_ADDRESS=
+MAIL_FROM_NAME=
+MAIL_DEBUG=
+
 
 # Logs & cache
 *.log
 /cache/
+data/geocode_cache.json
 
 # IDE files
 .vscode/

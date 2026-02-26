@@ -3,17 +3,24 @@
 header('Content-Type: application/json');
 require_once __DIR__ . '/../includes/db.php';
 $pdo = get_db_connection();
-$id = isset($_GET['id']) ? (int)$_GET['id'] : 0;
+$hasId = array_key_exists('id', $_GET) && $_GET['id'] !== '' && is_numeric((string)$_GET['id']);
+$id = $hasId ? (int)$_GET['id'] : null;
 $code = isset($_GET['code']) ? trim((string)$_GET['code']) : '';
 
 $out = ["ok"=>false, "incident"=>null, "units"=>[]];
 if ($pdo) {
     try {
-        if ($id) {
-            $stmt = $pdo->prepare("SELECT * FROM incidents WHERE id=? LIMIT 1");
+        if ($hasId) {
+            $stmt = $pdo->prepare("SELECT i.*, c.latitude AS call_latitude, c.longitude AS call_longitude
+                                   FROM incidents i
+                                   LEFT JOIN calls c ON c.id = i.reported_by_call_id
+                                   WHERE i.id=? LIMIT 1");
             $stmt->execute([$id]);
         } elseif ($code !== '') {
-            $stmt = $pdo->prepare("SELECT * FROM incidents WHERE reference_no=? LIMIT 1");
+            $stmt = $pdo->prepare("SELECT i.*, c.latitude AS call_latitude, c.longitude AS call_longitude
+                                   FROM incidents i
+                                   LEFT JOIN calls c ON c.id = i.reported_by_call_id
+                                   WHERE i.reference_no=? LIMIT 1");
             $stmt->execute([$code]);
         } else {
             $stmt = null;
@@ -22,6 +29,13 @@ if ($pdo) {
         if ($stmt) {
             $incident = $stmt->fetch(PDO::FETCH_ASSOC);
             if ($incident) {
+                if ((!isset($incident['latitude']) || $incident['latitude'] === null || $incident['latitude'] === '') && isset($incident['call_latitude']) && $incident['call_latitude'] !== null && $incident['call_latitude'] !== '') {
+                    $incident['latitude'] = $incident['call_latitude'];
+                }
+                if ((!isset($incident['longitude']) || $incident['longitude'] === null || $incident['longitude'] === '') && isset($incident['call_longitude']) && $incident['call_longitude'] !== null && $incident['call_longitude'] !== '') {
+                    $incident['longitude'] = $incident['call_longitude'];
+                }
+                unset($incident['call_latitude'], $incident['call_longitude']);
                 $out['incident'] = $incident;
                 $out['ok'] = true;
             }
