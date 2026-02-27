@@ -2,8 +2,8 @@
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
 
 /* ===================================
-    CSS VARIABLES - COLOR SCHEME
-    =================================== */
+   CSS VARIABLES - COLOR SCHEME
+   =================================== */
 :root {
     --primary-color-1: #4c8a89;
     --secondary-color-1: #3a506b;
@@ -771,7 +771,7 @@ html {
     .btn { font-size: 13px; }
     .nav-link { font-size: 13px; }
 }
-}
+
 
 /* Small Mobile - Single column */
 @media (max-width: 480px) {
