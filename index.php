@@ -1,7 +1,5 @@
 <?php
 
-
-
 $pageTitle = 'ERS Admin Dashboard';
 $activeIncidents = 0;
 $availableResponders = 0;
