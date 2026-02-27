@@ -38,7 +38,7 @@ try {
     $pdo = db();
 
     // 1) check responder exists and active
-    $stmt = $pdo->prepare("SELECT id, name, email, department, is_active FROM responders WHERE email=? LIMIT 1");
+    $stmt = $pdo->prepare("SELECT id, full_name, email, department, is_active FROM responders WHERE email=? LIMIT 1");
     $stmt->execute([$email]);
     $responder = $stmt->fetch();
 
