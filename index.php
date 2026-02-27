@@ -582,7 +582,7 @@ $resourceUtilization = 0;
                 }, 300);
             }, 3000);
         }
-        // Add CSS animations
+        // Add css animations
         const style = document.createElement('style');
         style.textContent = `
             @keyframes slideIn {

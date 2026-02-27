@@ -18,7 +18,7 @@ $pageTitle = 'Inter-Agency Coordination';
     <link rel="stylesheet" href="css/admin-header.css">
     <link rel="stylesheet" href="css/buttons.css">
     <link rel="stylesheet" href="css/sidebar-footer.css">
-    <link rel="stylesheet" href="CSS/cards.css">
+    <link rel="stylesheet" href="css/cards.css">
     <link rel="stylesheet" href="css/interagency.css">
 </head>
 <body>

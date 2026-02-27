@@ -17,7 +17,7 @@ $pageTitle = 'Incident Priority Management';
     <link rel="stylesheet" href="css/admin-header.css">
     <link rel="stylesheet" href="css/buttons.css">
     <link rel="stylesheet" href="css/sidebar-footer.css">
-    <link rel="stylesheet" href="CSS/cards.css">
+    <link rel="stylesheet" href="css/cards.css">
     <link rel="stylesheet" href="css/incident.css">
 
 </head>
@@ -548,7 +548,7 @@ $pageTitle = 'Incident Priority Management';
             }, 3000);
         }
 
-        // Add CSS animations
+        // Add css animations
         const style = document.createElement('style');
         style.textContent = `
             @keyframes fadeIn {

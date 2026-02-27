@@ -25,29 +25,19 @@
     </div>
     
     <div class="admin-header-right">
-<<<<<<< HEAD
-        <div class="header-actions">
-=======
         <div class="header-actions" style="display: flex; align-items: center; gap: 0.75rem;">
->>>>>>> 96d91f075fc5d228055774589f05f95ee8249f2f
             <div class="notification-item">
                 <button class="notification-btn" aria-label="Notifications">
                     <i class="fas fa-bell"></i>
                     <span class="notification-badge">3</span>
                 </button>
             </div>
-<<<<<<< HEAD
-            
-=======
->>>>>>> 96d91f075fc5d228055774589f05f95ee8249f2f
             <div class="notification-item">
                 <button class="notification-btn" aria-label="Messages">
                     <i class="fas fa-envelope"></i>
                     <span class="notification-badge">5</span>
                 </button>
             </div>
-<<<<<<< HEAD
-=======
             <div class="theme-toggle" style="margin-left: 0.75rem;">
                 <button class="theme-toggle-btn" data-theme="light" aria-label="Light Mode" onclick="ersSetTheme('light')">
                     <i class="fas fa-desktop"></i>
@@ -59,34 +49,22 @@
                     <i class="fas fa-moon"></i>
                 </button>
             </div>
->>>>>>> 96d91f075fc5d228055774589f05f95ee8249f2f
         </div>
         
         <div class="header-divider"></div>
         
         <div class="user-profile" id="userProfileBtn">
             <div class="user-info">
-<<<<<<< HEAD
-                <div class="user-name">Admin User</div>
-                <div class="user-role">Administrator</div>
-            </div>
-            <div class="user-avatar">
-                <img src="https://ui-avatars.com/api/?name=Admin+User&background=4c8a89&color=fff&size=128" alt="Admin User" class="avatar-img">
-=======
                 <div class="user-name"><?php echo htmlspecialchars($user_name); ?></div>
                 <div class="user-role"><?php echo htmlspecialchars($user_role); ?></div>
             </div>
             <div class="user-avatar">
                 <img src="https://ui-avatars.com/api/?name=<?php echo urlencode($user_name); ?>&background=4c8a89&color=fff&size=128" alt="<?php echo htmlspecialchars($user_name); ?>" class="avatar-img">
->>>>>>> 96d91f075fc5d228055774589f05f95ee8249f2f
             </div>
             <i class="fas fa-chevron-down dropdown-icon"></i>
         </div>
     </div>
-<<<<<<< HEAD
-=======
     <script src="css/theme-switcher.js"></script>
->>>>>>> 96d91f075fc5d228055774589f05f95ee8249f2f
 </header>
 
 <!-- User Profile Dropdown -->
@@ -94,19 +72,11 @@
     <div class="dropdown-header">
         <div class="dropdown-user-info">
             <div class="dropdown-user-avatar">
-<<<<<<< HEAD
-                <img src="https://ui-avatars.com/api/?name=Admin+User&background=4c8a89&color=fff&size=128" alt="Admin User">
-            </div>
-            <div class="dropdown-user-details">
-                <div class="dropdown-user-name">Admin User</div>
-                <div class="dropdown-user-email">admin@example.com</div>
-=======
                 <img src="https://ui-avatars.com/api/?name=<?php echo urlencode($user_name); ?>&background=4c8a89&color=fff&size=128" alt="<?php echo htmlspecialchars($user_name); ?>">
             </div>
             <div class="dropdown-user-details">
                 <div class="dropdown-user-name"><?php echo htmlspecialchars($user_name); ?></div>
                 <div class="dropdown-user-email"><?php echo htmlspecialchars($user_email); ?></div>
->>>>>>> 96d91f075fc5d228055774589f05f95ee8249f2f
             </div>
         </div>
     </div>
@@ -123,11 +93,7 @@
     </div>
     
     <div class="dropdown-footer">
-<<<<<<< HEAD
-        <a href="#" class="dropdown-item logout-item">
-=======
         <a href="logout.php" class="dropdown-item logout-item">
->>>>>>> 96d91f075fc5d228055774589f05f95ee8249f2f
             <i class="fas fa-sign-out-alt"></i>
             <span>Logout</span>
         </a>
