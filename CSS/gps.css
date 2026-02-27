@@ -9,19 +9,20 @@
             background: #f8f9fa;
             border: 2px solid #dee2e6;
             border-radius: 12px;
-            height: 600px;
+    height: 850px;
             position: relative;
             overflow: hidden;
             box-shadow: 0 4px 12px rgba(0,0,0,0.1);
         }
 
         .map-header {
-            background: white;
+            background: var(--card-bg-1);
             padding: 1rem 1.5rem;
             border-bottom: 1px solid #dee2e6;
             display: flex;
             justify-content: space-between;
             align-items: center;
+            position: relative;
         }
 
         .map-controls {
@@ -33,7 +34,7 @@
         .map-btn {
             padding: 0.5rem 1rem;
             border: 1px solid #ddd;
-            background: white;
+            background: var(--card-bg-1);
             border-radius: 6px;
             cursor: pointer;
             font-size: 0.85rem;
@@ -53,6 +54,7 @@
 
         .map-viewport {
             position: relative;
+            z-index: 1;
             height: calc(100% - 70px);
             background: linear-gradient(45deg, #f0f0f0 25%, transparent 25%),
                         linear-gradient(-45deg, #f0f0f0 25%, transparent 25%),
@@ -60,6 +62,48 @@
                         linear-gradient(-45deg, transparent 75%, #f0f0f0 75%);
             background-size: 20px 20px;
             background-position: 0 0, 0 10px, 10px -10px, -10px 0px;
+        }
+
+        /* Ensure Leaflet controls and panes sit below header */
+        .map-container .leaflet-top,
+        .map-container .leaflet-bottom {
+            z-index: 10;
+        }
+        .map-container .leaflet-pane {
+            z-index: 1;
+        }
+
+        /* Improve readability of turn-by-turn directions overlay on top of map */
+        .map-container .leaflet-routing-container {
+            background: rgba(255, 255, 255, 0.92);
+            border: 1px solid rgba(0, 0, 0, 0.15);
+            border-radius: 10px;
+            box-shadow: 0 4px 14px rgba(0, 0, 0, 0.2);
+            color: #1f2937;
+            max-width: min(340px, calc(100% - 20px));
+            max-height: calc(100% - 20px);
+            overflow-y: auto;
+            padding: 8px 10px;
+            z-index: 11;
+        }
+
+        .map-container .leaflet-routing-container h2,
+        .map-container .leaflet-routing-container h3,
+        .map-container .leaflet-routing-container p,
+        .map-container .leaflet-routing-container td,
+        .map-container .leaflet-routing-container div,
+        .map-container .leaflet-routing-container span {
+            color: #111827;
+            text-shadow: none;
+        }
+
+        .map-container .leaflet-routing-alt,
+        .map-container .leaflet-routing-alt table {
+            background: transparent;
+        }
+
+        .map-container .leaflet-routing-alt tr:hover {
+            background: rgba(0, 123, 255, 0.08);
         }
 
         .map-marker {
@@ -107,18 +151,38 @@
         }
 
         .unit-panel {
-            background: white;
+            background: var(--card-bg-1);
             border-radius: 12px;
-            padding: 1.5rem;
+            padding: 20px;
             box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+            border: 2px solid #28a745; /* Green border for visibility */
+            overflow: hidden;
+        }
+
+        .unit-panel > h3 {
+            padding: 1.5rem 1.5rem 0 1.5rem;
+        }
+
+        .unit-scroll-container {
+            max-height: 600px;
+            overflow-y: auto;
+            padding: 0 0 1.5rem 0;
+            margin: 0;
         }
 
         .unit-card {
-            background: #f8f9fa;
-            border-radius: 8px;
-            padding: 1rem;
-            margin-bottom: 1rem;
-            border-left: 4px solid #ddd;
+            background: #fff;
+            border-radius: 0;
+            padding: 1rem 0.75rem 0.75rem 0.75rem;
+            margin: 0 0 1.25rem 0;
+            border-left: 6px solid #ddd;
+            border-right: none;
+            border-top: none;
+            border-bottom: none;
+            border: 1px solid #dadce0;
+            box-shadow: none;
+            width: 100%;
+            box-sizing: border-box;
             transition: all 0.3s ease;
         }
 
@@ -127,9 +191,18 @@
             transform: translateY(-2px);
         }
 
-        .unit-card.active { border-left-color: #28a745; background-color: #d4edda; }
-        .unit-card.enroute { border-left-color: #ffc107; background-color: #fff3cd; }
-        .unit-card.emergency { border-left-color: #dc3545; background-color: #f8d7da; }
+        .unit-card.active {
+            border-left-color: #28a745;
+            background-color: #eafaf0;
+        }
+        .unit-card.enroute {
+            border-left-color: #ff9800;
+            background-color: #fff5e6;
+        }
+        .unit-card.emergency {
+            border-left-color: #e53935;
+            background-color: #fdeaea;
+        }
 
         .unit-header {
             display: flex;
@@ -164,6 +237,7 @@
             font-size: 0.85rem;
             color: #666;
             margin-bottom: 0.75rem;
+            width: 100%;
         }
 
         .unit-metrics {
@@ -193,16 +267,21 @@
             display: flex;
             gap: 0.5rem;
             flex-wrap: wrap;
+            width: 100%;
+            justify-content: stretch;
         }
 
         .btn-unit {
             padding: 0.375rem 0.75rem;
             border: 1px solid #ddd;
-            background: white;
+            background: var(--card-bg-1);
             border-radius: 4px;
             font-size: 0.8rem;
             cursor: pointer;
             transition: all 0.3s ease;
+            flex: 1 1 0;
+            min-width: 120px;
+            box-sizing: border-box;
         }
 
         .btn-unit:hover {
@@ -217,7 +296,7 @@
         }
 
         .tracking-controls {
-            background: white;
+            background: var(--card-bg-1);
             border-radius: 12px;
             padding: 1.5rem;
             margin-bottom: 2rem;
@@ -251,7 +330,7 @@
         }
 
         .alerts-panel {
-            background: white;
+            background: var(--card-bg-1);
             border-radius: 12px;
             padding: 1.5rem;
             margin-bottom: 2rem;
@@ -349,4 +428,13 @@
             .gps-grid {
                 grid-template-columns: 1fr;
             }
+        }
+
+        /* Mobile overrides */
+        @media (max-width: 767px) {
+            .map-container { height: 60vh; }
+            .map-controls { justify-content: stretch; }
+            .map-btn { flex: 1 1 48%; }
+            .unit-details { grid-template-columns: 1fr; }
+            .btn-unit { width: 100%; }
         }

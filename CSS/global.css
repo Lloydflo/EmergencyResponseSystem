@@ -1,3 +1,6 @@
+/* Import desired web font */
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+
 /* ===================================
    CSS VARIABLES - COLOR SCHEME
    =================================== */
@@ -15,7 +18,8 @@
     --border-color-1: #e5e5e5;
     --card-bg-1: #ffffff;
     --shadow-1: rgba(0, 0, 0, 0.05);
-    --font-family-1: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    --font-family-1: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    /* Global UI scaling (desktop). 1 = 100% */
 }
 
 /* Dark mode variables */
@@ -52,6 +56,16 @@ body {
     -moz-osx-font-smoothing: grayscale;
 }
 
+/* Fluid media to prevent overflow on small screens */
+img,
+svg,
+video,
+canvas,
+iframe {
+    max-width: 100%;
+    height: auto;
+}
+
 
 /* ===================================
    CUSTOM SCROLLBAR STYLES
@@ -86,6 +100,11 @@ body {
 /* Smooth scrolling */
 html {
     scroll-behavior: smooth;
+}
+
+/* Compact desktop scale: make overall UI a bit smaller */
+@media (min-width: 992px) {
+    html { zoom: var(--ui-zoom); }
 }
 
 /* For containers that might have overflow */
@@ -747,6 +766,11 @@ html {
     .theme-toggle {
         order: -1;
     }
+
+    /* General spacing tightening for mobile */
+    .btn { font-size: 13px; }
+    .nav-link { font-size: 13px; }
+}
 }
 
 /* Small Mobile - Single column */
@@ -785,4 +809,7 @@ html {
     .theme-toggle {
         order: 0;
     }
+
+    /* Slightly smaller base type for very small devices */
+    body { font-size: 15px; }
 }

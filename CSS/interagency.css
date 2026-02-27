@@ -8,7 +8,7 @@
 }
 
 .status-card {
-    background: white;
+    background: var(--card-bg-1);
     border-radius: 16px;
     padding: 1.5rem;
     box-shadow: 0 4px 20px rgba(0,0,0,0.08);
@@ -65,7 +65,7 @@
 }
 
 .coordination-panel {
-    background: white;
+    background: var(--card-bg-1);
     border-radius: 16px;
     box-shadow: 0 4px 20px rgba(0,0,0,0.08);
     border: 1px solid rgba(102, 126, 234, 0.1);
@@ -102,7 +102,7 @@
 }
 
 .btn-control {
-    background: white;
+    background: var(--card-bg-1);
     border: 1px solid #ddd;
     border-radius: 8px;
     padding: 0.5rem 1rem;
@@ -139,7 +139,7 @@
 }
 
 .agency-card {
-    background: white;
+    background: var(--card-bg-1);
     border-radius: 12px;
     padding: 1.25rem;
     margin-bottom: 1rem;
@@ -249,7 +249,7 @@
     flex: 1;
     padding: 0.5rem 0.75rem;
     border: 1px solid #ddd;
-    background: white;
+    background: var(--card-bg-1);
     border-radius: 6px;
     font-size: 0.8rem;
     cursor: pointer;
@@ -289,7 +289,7 @@
 }
 
 .message {
-    background: white;
+    background: var(--card-bg-1);
     border-radius: 12px;
     padding: 1rem;
     box-shadow: 0 2px 8px rgba(0,0,0,0.05);
@@ -344,7 +344,7 @@
 
 .chat-input {
     padding: 1.5rem;
-    background: white;
+    background: var(--card-bg-1);
     border-top: 1px solid #e5e7eb;
 }
 
@@ -425,7 +425,7 @@
     align-items: center;
     gap: 1rem;
     padding: 1rem;
-    background: white;
+    background: var(--card-bg-1);
     border-radius: 8px;
     border: 1px solid #e5e7eb;
     transition: all 0.3s ease;
@@ -508,7 +508,7 @@
 }
 
 .task-card {
-    background: white;
+    background: var(--card-bg-1);
     border-radius: 12px;
     padding: 1.25rem;
     margin-bottom: 1rem;
@@ -618,7 +618,7 @@
     flex: 1;
     padding: 0.5rem 0.75rem;
     border: 1px solid #ddd;
-    background: white;
+    background: var(--card-bg-1);
     border-radius: 6px;
     font-size: 0.8rem;
     cursor: pointer;
@@ -701,3 +701,26 @@
         flex-direction: column;
     }
 }
+.notification {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            background: var(--card-bg-1);
+            border-radius: 8px;
+            padding: 1rem;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+            z-index: 1000;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            animation: slideIn 0.3s ease;
+        }
+
+        .notification.success { border-left: 4px solid #28a745; }
+        .notification.error { border-left: 4px solid #dc3545; }
+        .notification.info { border-left: 4px solid #17a2b8; }
+
+        @keyframes slideIn {
+            from { transform: translateX(100%); opacity: 0; }
+            to { transform: translateX(0); opacity: 1; }
+        }

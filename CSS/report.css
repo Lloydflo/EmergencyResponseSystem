@@ -5,8 +5,15 @@
             margin-bottom: 2rem;
         }
 
+        .charts-grid {
+            display: grid;
+            grid-template-columns: repeat(2, minmax(300px, 1fr));
+            gap: 1.5rem;
+            margin-bottom: 2rem;
+        }
+
         .analytics-card {
-            background: white;
+            background: var(--card-bg-1);
             border-radius: 12px;
             padding: 1.5rem;
             box-shadow: 0 2px 8px rgba(0,0,0,0.1);
@@ -66,7 +73,7 @@
         }
 
         .chart-container {
-            background: white;
+            background: var(--card-bg-1);
             border-radius: 12px;
             padding: 1.5rem;
             margin-bottom: 2rem;
@@ -106,7 +113,7 @@
         }
 
         .report-filters {
-            background: white;
+            background: var(--card-bg-1);
             border-radius: 12px;
             padding: 1.5rem;
             margin-bottom: 2rem;
@@ -158,7 +165,7 @@
         }
 
         .report-card {
-            background: white;
+            background: var(--card-bg-1);
             border-radius: 12px;
             padding: 1.5rem;
             box-shadow: 0 2px 8px rgba(0,0,0,0.1);
@@ -209,7 +216,7 @@
         .btn-report {
             padding: 0.5rem 1rem;
             border: 1px solid #ddd;
-            background: white;
+            background: var(--card-bg-1);
             border-radius: 6px;
             font-size: 0.85rem;
             cursor: pointer;
@@ -234,7 +241,7 @@
         }
 
         .data-table {
-            background: white;
+            background: var(--card-bg-1);
             border-radius: 12px;
             overflow: hidden;
             box-shadow: 0 2px 8px rgba(0,0,0,0.1);
@@ -306,7 +313,7 @@
         .trend-neutral { color: #6c757d; }
 
         .export-section {
-            background: white;
+            background: var(--card-bg-1);
             border-radius: 12px;
             padding: 1.5rem;
             margin-bottom: 2rem;
@@ -344,7 +351,7 @@
         }
 
         .alerts-section {
-            background: white;
+            background: var(--card-bg-1);
             border-radius: 12px;
             padding: 1.5rem;
             margin-bottom: 2rem;
@@ -398,6 +405,9 @@
             .analytics-grid {
                 grid-template-columns: 1fr;
             }
+            .charts-grid {
+                grid-template-columns: 1fr;
+            }
 
             .quick-reports {
                 grid-template-columns: 1fr;
@@ -410,6 +420,8 @@
             .export-options {
                 grid-template-columns: repeat(2, 1fr);
             }
+            .chart-controls { flex-wrap: wrap; }
+            .btn-report { width: 100%; }
         }
 
 /* AI Insights Styles */
@@ -418,11 +430,12 @@
 }
 
 .ai-insights-card {
-    background: linear-gradient(135deg, #f8f9ff 0%, #f0f2ff 100%);
+    background: radial-gradient(circle at top right, rgba(59, 130, 246, 0.12), transparent 45%),
+                linear-gradient(145deg, #f6f9ff 0%, #edf3ff 100%);
     border-radius: 16px;
     padding: 2rem;
-    box-shadow: 0 4px 20px rgba(0,0,0,0.08);
-    border: 1px solid rgba(102, 126, 234, 0.1);
+    box-shadow: 0 10px 24px rgba(30, 64, 175, 0.08);
+    border: 1px solid rgba(79, 70, 229, 0.18);
     position: relative;
     overflow: hidden;
 }
@@ -443,7 +456,7 @@
     align-items: center;
     margin-bottom: 1.5rem;
     padding-bottom: 1rem;
-    border-bottom: 1px solid rgba(102, 126, 234, 0.1);
+    border-bottom: 1px solid rgba(79, 70, 229, 0.18);
 }
 
 .ai-insights-header h2 {
@@ -507,11 +520,11 @@
 }
 
 .ai-insights-content {
-    background: white;
+    background: linear-gradient(180deg, #ffffff 0%, #f8faff 100%);
     border-radius: 12px;
     padding: 1.5rem;
-    border: 1px solid rgba(102, 126, 234, 0.1);
-    box-shadow: inset 0 1px 3px rgba(0,0,0,0.05);
+    border: 1px solid rgba(79, 70, 229, 0.16);
+    box-shadow: inset 0 1px 2px rgba(0,0,0,0.04);
 }
 
 .ai-insights-actions {
@@ -521,9 +534,12 @@
 }
 
 .ai-insight-text {
-    line-height: 1.7;
-    color: #4a5568;
-    font-size: 0.95rem;
+    line-height: 1.55;
+    color: #1f2937;
+    font-size: 0.96rem;
+    white-space: pre-line;
+    max-height: 280px;
+    overflow-y: auto;
     margin: 0;
 }
 
@@ -543,15 +559,15 @@
 }
 
 .ai-error {
-    background: linear-gradient(135deg, #fed7d7 0%, #feb2b2 100%);
-    color: #c53030;
-    padding: 1.5rem;
+    background: linear-gradient(135deg, #fff1f2 0%, #ffe4e6 100%);
+    color: #b91c1c;
+    padding: 1rem 1.1rem;
     border-radius: 12px;
-    border: 1px solid #fbb6ce;
+    border: 1px solid #fecdd3;
     display: flex;
     align-items: center;
     gap: 0.75rem;
-    font-weight: 500;
+    font-weight: 600;
 }
 
 .ai-error i {

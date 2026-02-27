@@ -1,9 +1,17 @@
+/* Scrollable Activity Feed */
+.scrollable-feed {
+    max-height: 350px;
+    overflow-y: auto;
+    padding-right: 8px;
+}
+
 .dashboard-header {
             display: flex;
             justify-content: space-between;
             align-items: center;
-            margin-bottom: 2rem;
-            padding: 1.5rem;
+    margin-bottom: 1rem;
+    margin-top: 4rem;
+    padding: 2rem;
             background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
             border-radius: 12px;
             color: white;
@@ -51,9 +59,9 @@
         }
 
         .metric-card {
-            background: white;
+    background: var(--card-bg-1);
             border-radius: 12px;
-            padding: 1.5rem;
+    padding: 1.5rem;  /* FIXED: Changed from 4.5rem to 1.5rem */
             box-shadow: 0 2px 8px rgba(0,0,0,0.1);
             border-left: 4px solid #007bff;
             transition: all 0.3s ease;
@@ -127,12 +135,13 @@
             margin-top: 1rem;
             display: flex;
             gap: 0.5rem;
+    flex-wrap: wrap;
         }
 
         .btn-metric {
             padding: 0.5rem 1rem;
             border: 1px solid #ddd;
-            background: white;
+    background: var(--card-bg-1);
             border-radius: 6px;
             font-size: 0.8rem;
             cursor: pointer;
@@ -164,7 +173,7 @@
         }
 
         .activity-feed {
-            background: white;
+    background: var(--card-bg-1);
             border-radius: 12px;
             padding: 1.5rem;
             box-shadow: 0 2px 8px rgba(0,0,0,0.1);
@@ -239,7 +248,7 @@
         }
 
         .quick-actions {
-            background: white;
+    background: var(--card-bg-1);
             border-radius: 12px;
             padding: 1.5rem;
             box-shadow: 0 2px 8px rgba(0,0,0,0.1);
@@ -288,7 +297,7 @@
         }
 
         .system-status {
-            background: white;
+    background: var(--card-bg-1);
             border-radius: 12px;
             padding: 1.5rem;
             box-shadow: 0 2px 8px rgba(0,0,0,0.1);
@@ -315,6 +324,7 @@
             display: flex;
             align-items: center;
             gap: 0.5rem;
+    text-align: left;
         }
 
         .status-dot {
@@ -328,12 +338,12 @@
         .status-dot.offline { background-color: #dc3545; }
 
         .status-text {
-            font-size: 0.85rem;
+    font-size: 1rem;
             color: #666;
         }
 
         .weather-widget {
-            background: white;
+    background: var(--card-bg-1);
             border-radius: 12px;
             padding: 1.5rem;
             box-shadow: 0 2px 8px rgba(0,0,0,0.1);
@@ -363,10 +373,12 @@
         }
 
         .alerts-panel {
-            background: white;
+    background: var(--card-bg-1);
             border-radius: 12px;
             padding: 1.5rem;
             box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+    display: flex;
+    flex-direction: column;
         }
 
         .alerts-header {
@@ -393,6 +405,10 @@
             border-radius: 8px;
             margin-bottom: 1rem;
         }
+
+.alert-item:last-child {
+    margin-bottom: 0;
+}
 
         .alert-item.warning {
             background-color: #fffbeb;
@@ -475,5 +491,3 @@
                 text-align: center;
             }
         }
-
-       
