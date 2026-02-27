@@ -1,0 +1,680 @@
+/**
+ * LGU #4 - Content Elements Component Styles
+ * Dedicated styles for the content elements page
+ * 
+ * This file contains:
+ * - Typography styling and text elements
+ * - Alert component styling
+ * - Blockquote and list styling
+ * - Content presentation styles
+ * 
+ * @version 1.0.0
+ * @author LGU #4 Development Team
+ */
+
+/* ===================================
+   TYPOGRAPHY - Base text and heading styles
+   =================================== */
+.typography-showcase {
+    margin: 2rem 0;
+}
+
+.typography-showcase h1 {
+    font-size: 2.5rem;
+    font-weight: 700;
+    color: var(--text-color-1);
+    margin-bottom: 1rem;
+    line-height: 1.2;
+}
+
+.typography-showcase h2 {
+    font-size: 2rem;
+    font-weight: 600;
+    color: var(--text-color-1);
+    margin-bottom: 1rem;
+    line-height: 1.3;
+}
+
+.typography-showcase h3 {
+    font-size: 1.75rem;
+    font-weight: 600;
+    color: var(--text-color-1);
+    margin-bottom: 1rem;
+    line-height: 1.3;
+}
+
+.typography-showcase h4 {
+    font-size: 1.5rem;
+    font-weight: 600;
+    color: var(--text-color-1);
+    margin-bottom: 1rem;
+    line-height: 1.4;
+}
+
+.typography-showcase h5 {
+    font-size: 1.25rem;
+    font-weight: 600;
+    color: var(--text-color-1);
+    margin-bottom: 1rem;
+    line-height: 1.4;
+}
+
+.typography-showcase h6 {
+    font-size: 1.1rem;
+    font-weight: 600;
+    color: var(--text-color-1);
+    margin-bottom: 1rem;
+    line-height: 1.4;
+}
+
+/* ===================================
+   PARAGRAPH STYLES - Text formatting options
+   =================================== */
+.typography-showcase p {
+    color: var(--text-color-1);
+    line-height: 1.6;
+    margin-bottom: 1rem;
+    font-size: 1rem;
+}
+
+.lead {
+    font-size: 1.25rem;
+    font-weight: 300;
+    color: var(--text-color-1);
+    line-height: 1.7;
+}
+
+.text-muted {
+    color: var(--text-secondary-1) !important;
+    opacity: 0.8;
+}
+
+.text-center {
+    text-align: center !important;
+}
+
+.text-right {
+    text-align: right !important;
+}
+
+/* ===================================
+   TEXT ELEMENTS - Inline text formatting
+   =================================== */
+.typography-showcase strong {
+    font-weight: 600;
+    color: var(--text-color-1);
+}
+
+.typography-showcase em {
+    font-style: italic;
+    color: var(--text-color-1);
+}
+
+.typography-showcase u {
+    text-decoration: underline;
+    color: var(--text-color-1);
+}
+
+.typography-showcase mark {
+    background-color: #fff3cd;
+    color: #856404;
+    padding: 0.2em 0.4em;
+    border-radius: 3px;
+}
+
+.typography-showcase abbr {
+    text-decoration: none;
+    border-bottom: 1px dotted var(--text-secondary-1);
+    cursor: help;
+}
+
+.typography-showcase cite {
+    font-style: italic;
+    color: var(--text-secondary-1);
+}
+
+.typography-showcase code {
+    background-color: var(--header-bg-1);
+    color: var(--primary-color);
+    padding: 0.2em 0.4em;
+    border-radius: 3px;
+    font-family: 'Courier New', monospace;
+    font-size: 0.9em;
+}
+
+.typography-showcase del {
+    text-decoration: line-through;
+    color: var(--text-secondary-1);
+}
+
+.typography-showcase ins {
+    text-decoration: underline;
+    color: #28a745;
+}
+
+.typography-showcase small {
+    font-size: 0.875em;
+    color: var(--text-secondary-1);
+}
+
+.typography-showcase sub {
+    vertical-align: sub;
+    font-size: 0.8em;
+    color: var(--text-secondary-1);
+}
+
+.typography-showcase sup {
+    vertical-align: super;
+    font-size: 0.8em;
+    color: var(--text-secondary-1);
+}
+
+/* ===================================
+   BLOCKQUOTES - Quote styling
+   =================================== */
+.typography-showcase blockquote {
+    border-left: 4px solid var(--primary-color-1);
+    padding-left: 1.5rem;
+    margin: 2rem 0;
+    font-style: italic;
+    color: var(--text-secondary-1);
+    background: var(--header-bg-1);
+    padding: 1rem 1.5rem;
+    border-radius: 0 8px 8px 0;
+}
+
+.typography-showcase blockquote p {
+    margin-bottom: 0.5rem;
+    font-size: 1.1rem;
+    line-height: 1.6;
+}
+
+.typography-showcase blockquote footer {
+    color: var(--text-secondary-1);
+    font-size: 0.9rem;
+    font-style: normal;
+}
+
+.blockquote-reverse {
+    border-left: none;
+    border-right: 4px solid var(--primary-color-1);
+    padding-left: 0;
+    padding-right: 1.5rem;
+    text-align: right;
+    border-radius: 8px 0 0 8px;
+}
+
+.blockquote-reverse footer {
+    text-align: right;
+}
+
+/* ===================================
+   LISTS - List styling and organization
+   =================================== */
+.lists-showcase {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+    gap: 2rem;
+    margin: 2rem 0;
+}
+
+.list-example {
+    background: var(--card-bg-1);
+    padding: 1.5rem;
+    border-radius: 8px;
+    border: 1px solid var(--border-color-1);
+    box-shadow: 0 2px 4px var(--shadow-1);
+}
+
+.list-example h5 {
+    color: var(--text-color);
+    font-size: 1.1rem;
+    font-weight: 600;
+    margin-bottom: 1rem;
+    padding-bottom: 0.5rem;
+    border-bottom: 1px solid var(--border-color-1);
+}
+
+.list-example ul,
+.list-example ol {
+    margin-bottom: 0;
+    color: var(--text-color-1);
+}
+
+.list-example li {
+    margin-bottom: 0.5rem;
+    line-height: 1.5;
+}
+
+.list-example ul ul,
+.list-example ol ol {
+    margin-left: 1.5rem;
+    margin-top: 0.5rem;
+}
+
+.list-example dl {
+    margin-bottom: 0;
+}
+
+.list-example dt {
+    font-weight: 600;
+    color: var(--text-color-1);
+    margin-bottom: 0.5rem;
+}
+
+.list-example dd {
+    margin-left: 1.5rem;
+    margin-bottom: 1rem;
+    color: var(--text-secondary-1);
+}
+
+/* ===================================
+   ALERTS - Alert component styling
+   =================================== */
+.alerts-showcase {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 1rem;
+    margin: 2rem 0;
+}
+
+.alert {
+    padding: 1rem 1.5rem;
+    border-radius: 8px;
+    border: 1px solid transparent;
+    margin-bottom: 1rem;
+    position: relative;
+    flex: 1;
+    min-width: 300px;
+}
+
+.alert strong {
+    font-weight: 600;
+    margin-right: 0.5rem;
+}
+
+/* More specific alert styles with higher specificity */
+.component-section .alert.alert-success {
+    background-color: #d4edda !important;
+    border-color: #28a745 !important;
+    color: #155724 !important;
+}
+
+.component-section .alert.alert-warning {
+    background-color: #fff3cd !important;
+    border-color: #ffc107 !important;
+    color: #856404 !important;
+}
+
+.component-section .alert.alert-danger {
+    background-color: #f8d7da !important;
+    border-color: #dc3545 !important;
+    color: #721c24 !important;
+}
+
+.component-section .alert.alert-info {
+    background-color: #d1ecf1 !important;
+    border-color: #17a2b8 !important;
+    color: #0c5460 !important;
+}
+
+.component-section .alert.alert-secondary {
+    background-color: #e2e3e5 !important;
+    border-color: #6c757d !important;
+    color: #383d41 !important;
+}
+
+/* ===================================
+   DISMISSIBLE ALERTS - Alert with close button
+   =================================== */
+.alert-dismissible {
+    padding-right: 3rem;
+}
+
+.alert-close {
+    position: absolute;
+    top: 50%;
+    right: 1rem;
+    transform: translateY(-50%);
+    background: none;
+    border: none;
+    font-size: 1.5rem;
+    line-height: 1;
+    color: inherit;
+    opacity: 0.5;
+    cursor: pointer;
+    padding: 0;
+    transition: opacity 0.2s ease;
+}
+
+.alert-close:hover {
+    opacity: 1;
+}
+
+/* ===================================
+   PAGE CONTENT STYLING - Page-specific layout
+   =================================== */
+.page-content {
+    max-width: 100%;
+}
+
+/* ===================================
+   COMPONENT SECTIONS - Individual component demonstrations
+   =================================== */
+.component-section {
+    margin-bottom: 3rem;
+    background: var(--card-bg-1);
+    border-radius: 12px;
+    padding: 2rem;
+    border: 1px solid var(--border-color-1);
+    box-shadow: 0 4px 12px var(--shadow-1);
+}
+
+.component-section h3 {
+    color: var(--text-color-1);
+    font-size: 1.75rem;
+    font-weight: 600;
+    margin-bottom: 1rem;
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+}
+
+.component-section h3 i {
+    color: var(--primary-color-1);
+    font-size: 1.5rem;
+}
+
+.component-section h4 {
+    color: var(--text-color-1);
+    font-size: 1.25rem;
+    font-weight: 600;
+    margin: 2rem 0 1rem 0;
+    padding-bottom: 0.5rem;
+}
+
+.component-section p {
+    color: var(--text-secondary-1);
+    line-height: 1.6;
+    margin-bottom: 1.5rem;
+    font-size: 1rem;
+}
+
+/* ===================================
+   USAGE REQUIREMENTS - File dependencies display
+   =================================== */
+.usage-requirements {
+    background: var(--header-bg-1);
+    border: 1px solid var(--border-color-1);
+    border-radius: 8px;
+    padding: 1.5rem;
+    margin: 1.5rem 0;
+}
+
+.requirement-item {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    margin-bottom: 0.75rem;
+    padding: 0.75rem;
+    background: var(--card-bg-1);
+    border-radius: 6px;
+    border: 1px solid var(--border-color-1);
+}
+
+.requirement-item:last-child {
+    margin-bottom: 0;
+}
+
+.requirement-item i {
+    color: var(--primary-color-1);
+    font-size: 1.1rem;
+    width: 20px;
+    text-align: center;
+}
+
+/* ===================================
+   IMPLEMENTATION STEPS - Step-by-step guide styling
+   =================================== */
+.implementation-steps {
+    margin: 1.5rem 0;
+}
+
+.step-item {
+    display: flex;
+    gap: 1rem;
+    margin-bottom: 1.5rem;
+    padding: 1rem;
+    background: var(--card-bg-1);
+    border-radius: 8px;
+    border: 1px solid var(--border-color-1);
+    transition: all 0.3s ease;
+}
+
+.step-item:hover {
+    border-color: var(--primary-color-1);
+    box-shadow: 0 4px 12px var(--shadow-1);
+}
+
+.step-number {
+    width: 32px;
+    height: 32px;
+    background: var(--primary-color-1);
+    color: white;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: 600;
+    flex-shrink: 0;
+    margin-top: 0.25rem;
+}
+
+.step-content {
+    flex: 1;
+}
+
+.step-content strong {
+    color: var(--text-color-1);
+    font-size: 1.1rem;
+    display: block;
+    margin-bottom: 0.5rem;
+}
+
+.step-content pre {
+    margin: 0.5rem 0 0 0;
+    background: var(--header-bg-1);
+    border: 1px solid var(--border-color-1);
+    border-radius: 6px;
+    padding: 1rem;
+    overflow-x: auto;
+}
+
+.step-content code {
+    font-family: 'Courier New', monospace;
+    font-size: 13px;
+    color: var(--text-color-1);
+    line-height: 1.4;
+}
+
+/* ===================================
+   CODE BLOCKS - Syntax highlighting and styling
+   =================================== */
+pre {
+    background: var(--header-bg-1);
+    border: 1px solid var(--border-color-1);
+    border-radius: 8px;
+    padding: 1.5rem;
+    overflow-x: auto;
+    margin: 1.5rem 0;
+}
+
+code {
+    font-family: 'Courier New', monospace;
+    font-size: 14px;
+    color: var(--text-color-1);
+}
+
+pre code {
+    display: block;
+    line-height: 1.5;
+}
+
+/* ===================================
+   RESPONSIVE DESIGN - Mobile and tablet adjustments
+   =================================== */
+@media (max-width: 768px) {
+    .usage-requirements {
+        padding: 1rem;
+    }
+    
+    .requirement-item {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 0.5rem;
+        padding: 0.5rem;
+    }
+    
+    .requirement-item i {
+        align-self: center;
+    }
+    
+    .step-item {
+        flex-direction: column;
+        gap: 0.75rem;
+        padding: 0.75rem;
+    }
+    
+    .step-number {
+        align-self: flex-start;
+    }
+    
+    .step-content pre {
+        font-size: 12px;
+        padding: 0.75rem;
+    }
+    
+    .lists-showcase {
+        grid-template-columns: 1fr;
+    }
+    
+    .alerts-showcase {
+        flex-direction: column;
+    }
+    
+    .alert {
+        min-width: auto;
+    }
+    
+    .typography-showcase h1 {
+        font-size: 2rem;
+    }
+    
+    .typography-showcase h2 {
+        font-size: 1.75rem;
+    }
+    
+    .typography-showcase h3 {
+        font-size: 1.5rem;
+    }
+    
+    .typography-showcase h4 {
+        font-size: 1.3rem;
+    }
+    
+    .typography-showcase h5 {
+        font-size: 1.15rem;
+    }
+    
+    .typography-showcase h6 {
+        font-size: 1rem;
+    }
+}
+
+@media (max-width: 480px) {
+    .component-section {
+        padding: 1.5rem;
+    }
+    
+    .list-example {
+        padding: 1rem;
+    }
+    
+    .step-content strong {
+        font-size: 1rem;
+    }
+    
+    .step-content code {
+        font-size: 11px;
+    }
+    
+    .step-content pre {
+        padding: 0.5rem;
+    }
+    
+    pre code {
+        font-size: 12px;
+    }
+    
+    .alert {
+        padding: 0.75rem 1rem;
+        font-size: 14px;
+    }
+    
+    .alert-dismissible {
+        padding-right: 2.5rem;
+    }
+    
+    .alert-close {
+        right: 0.75rem;
+        font-size: 1.25rem;
+    }
+    
+    .typography-showcase blockquote {
+        padding: 0.75rem 1rem;
+        margin: 1rem 0;
+    }
+    
+    .typography-showcase blockquote p {
+        font-size: 1rem;
+    }
+    
+    .lead {
+        font-size: 1.1rem;
+    }
+}
+
+/* ===================================
+   FUNCTIONAL BUTTON COLORS - For content page
+   =================================== */
+
+/* Specific button colors for content page */
+.btn-success {
+    background-color: #28a745 !important;
+    border-color: #28a745 !important;
+    color: white !important;
+}
+
+.btn-warning {
+    background-color: #ffc107 !important;
+    border-color: #ffc107 !important;
+    color: #212529 !important;
+}
+
+.btn-danger {
+    background-color: #dc3545 !important;
+    border-color: #dc3545 !important;
+    color: white !important;
+}
+
+.btn-info {
+    background-color: #17a2b8 !important;
+    border-color: #17a2b8 !important;
+    color: white !important;
+}
+
+.btn-primary {
+    background-color: #4c8a89 !important;
+    border-color: #4c8a89 !important;
+    color: white !important;
+}
