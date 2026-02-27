@@ -376,6 +376,28 @@ CREATE TABLE `report_metrics` (
 
 -- --------------------------------------------------------
 
+CREATE TABLE responders (
+  id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+  name VARCHAR(150) NOT NULL,
+  department ENUM('fire','police','medical','barangay','other') NOT NULL DEFAULT 'other',
+  email VARCHAR(255) NOT NULL,
+  is_active TINYINT(1) NOT NULL DEFAULT 1,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (id),
+  UNIQUE KEY uq_responders_email (email)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE responder_otps (
+  id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+  responder_email VARCHAR(255) NOT NULL,
+  otp VARCHAR(10) NOT NULL,
+  expires_at DATETIME NOT NULL,
+  used_at DATETIME DEFAULT NULL,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (id),
+  INDEX idx_responder_email (responder_email)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
 --
 -- Table structure for table `resources`
 --
