@@ -1,15 +1,7 @@
 <?php
-/**
- * Reusable Admin Header Component - Improved Design
- * Include this file in your pages: <?php include 'sidebar/admin-header.php'; ?>
- * 
- * Features:
- * - Responsive menu toggle
- * - Notification and message icons with badges (outlined style)
- * - User profile with avatar and info
- * - Dark mode support
- * - Clean, modern design
- */
+if (session_status() === PHP_SESSION_NONE) session_start();
+$user_name = $_SESSION['user_name'] ?? 'Admin';
+$user_role = $_SESSION['user_role'] ?? 'admin';
 ?>
 
 <link rel="stylesheet" href="css/notification-modal.css">;
