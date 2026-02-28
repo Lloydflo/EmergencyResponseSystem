@@ -54,7 +54,7 @@ try {
     <link rel="stylesheet" href="css/sidebar.css">
     <link rel="stylesheet" href="css/admin-header.css">
     <link rel="stylesheet" href="css/sidebar-footer.css">
-    <link rel="stylesheet" href="CSS/cards.css">
+    <link rel="stylesheet" href="css/cards.css">
     <link rel="stylesheet" href="css/incident.css">
 
 </head>
@@ -661,7 +661,7 @@ try {
             }, 3000);
         }
 
-        // Add CSS animations
+        // Add css animations
         const style = document.createElement('style');
         style.textContent = `
             @keyframes fadeIn {
@@ -707,7 +707,7 @@ try {
             if (!modal) {
                 modal = document.createElement('div');
                 modal.id = 'incident-update-modal';
-                // Ensure Leaflet CSS/JS is loaded
+                // Ensure Leaflet css/JS is loaded
                 if (!document.getElementById('leaflet-css')) {
                     var lcss = document.createElement('link');
                     lcss.rel = 'stylesheet';

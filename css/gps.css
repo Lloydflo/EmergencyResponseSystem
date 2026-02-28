@@ -5,15 +5,15 @@
             margin-bottom: 2rem;
         }
 
- .map-container {
-    background: #f8f9fa;
-    border: 2px solid #dee2e6;
-    border-radius: 12px;
+        .map-container {
+            background: #f8f9fa;
+            border: 2px solid #dee2e6;
+            border-radius: 12px;
     height: 850px;
-    position: relative;
-    overflow: hidden;
-    box-shadow: 0 4px 12px rgba(0,0,0,0.1);
- }
+            position: relative;
+            overflow: hidden;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+        }
 
         .map-header {
             background: var(--card-bg-1);
