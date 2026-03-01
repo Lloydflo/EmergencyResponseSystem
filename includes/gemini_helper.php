@@ -459,6 +459,18 @@ function predictResourceNeeds($historicalData) {
  * @param string $details Additional details
  */
 function log_activity($pdo, $user_id, $action, $entity_type, $entity_id, $details = null) {
-    $stmt = $pdo->prepare("INSERT INTO activity_log (user_id, action, entity_type, entity_id, details) VALUES (?, ?, ?, ?, ?)");
-    $stmt->execute([$user_id, $action, $entity_type, $entity_id, $details]);
+    try {
+        $stmt = $pdo->prepare("INSERT INTO activity_log (user_id, action, entity_type, entity_id, details) VALUES (?, ?, ?, ?, ?)");
+        $stmt->execute([$user_id, $action, $entity_type, $entity_id, $details]);
+    } catch (Throwable $e) {
+        $msg = (string)$e->getMessage();
+        $isDuplicateZeroPrimary = (strpos($msg, "Duplicate entry '0' for key 'PRIMARY'") !== false);
+        if (!$isDuplicateZeroPrimary) {
+            throw $e;
+        }
+
+        $nextId = (int)$pdo->query("SELECT COALESCE(MAX(id), 0) + 1 FROM activity_log")->fetchColumn();
+        $stmt = $pdo->prepare("INSERT INTO activity_log (id, user_id, action, entity_type, entity_id, details) VALUES (?, ?, ?, ?, ?, ?)");
+        $stmt->execute([$nextId, $user_id, $action, $entity_type, $entity_id, $details]);
+    }
 }

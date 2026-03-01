@@ -811,6 +811,8 @@ $pageTitle = 'Inter-Agency Conversations';
                     });
                     const data = await res.json();
                     if (!data || !data.ok) {
+                        const reason = (data && (data.detail || data.error)) ? String(data.detail || data.error) : 'Send failed';
+                        alert('Failed to send message: ' + reason);
                         return;
                     }
                     messageInput.value = '';

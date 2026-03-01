@@ -385,7 +385,8 @@ require_role('dispatcher', 'dispatcher/interagency.php');
                 });
                 const data = await res.json();
                 if (!data || !data.ok) {
-                    toast('Failed to send message.', 'error');
+                    const reason = (data && (data.detail || data.error)) ? String(data.detail || data.error) : 'Unknown send error';
+                    toast('Failed to send message: ' + reason, 'error');
                     return;
                 }
                 input.value = '';
