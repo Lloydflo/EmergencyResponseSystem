@@ -4,6 +4,7 @@ require_once $rootDir . '/includes/auth.php';
 require_role('admin', 'admin/user_management.php');
 
 $pageTitle = 'User Management';
+$adminName = $_SESSION['user_name'] ?? 'Admin';
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -18,18 +19,864 @@ $pageTitle = 'User Management';
     <link rel="stylesheet" href="css/sidebar.css">
     <link rel="stylesheet" href="css/admin-header.css">
     <link rel="stylesheet" href="css/sidebar-footer.css">
+    <style>
+        :root {
+            --um-bg: #f3f7fb;
+            --um-card: #ffffff;
+            --um-text: #16263a;
+            --um-muted: #5f7287;
+            --um-border: #dbe4ee;
+            --um-primary: #0f766e;
+            --um-primary-dark: #115e59;
+            --um-danger: #b91c1c;
+            --um-soft: #eef3f8;
+        }
+
+        .main-content {
+            background:
+                radial-gradient(circle at 95% 0%, rgba(14, 165, 233, 0.12), transparent 34%),
+                var(--um-bg);
+            padding: 3rem 1.5rem;
+            flex: 1 0 auto;
+            min-height: calc(100vh - 180px);
+        }
+
+        .um-shell {
+            margin-top: 0.8rem;
+        }
+
+        .um-head {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 1rem;
+            margin-bottom: 1rem;
+        }
+
+        .um-head h1 {
+            margin: 0;
+            color: var(--um-text);
+            font-size: 1.65rem;
+            line-height: 1.2;
+        }
+
+        .um-head p {
+            margin: 0.35rem 0 0;
+            color: var(--um-muted);
+            font-size: 0.94rem;
+        }
+
+        .um-add-btn {
+            border: none;
+            border-radius: 10px;
+            padding: 0.68rem 1rem;
+            background: var(--um-primary);
+            color: #fff;
+            font-size: 0.9rem;
+            font-weight: 700;
+            cursor: pointer;
+            white-space: nowrap;
+        }
+
+        .um-add-btn:hover {
+            background: var(--um-primary-dark);
+        }
+
+        .um-card {
+            background: var(--um-card);
+            border: 1px solid var(--um-border);
+            border-radius: 14px;
+            box-shadow: 0 6px 18px rgba(15, 23, 42, 0.06);
+            overflow: hidden;
+        }
+
+        .um-toolbar {
+            padding: 0.8rem;
+            border-bottom: 1px solid var(--um-border);
+            background: var(--um-soft);
+            display: grid;
+            grid-template-columns: 1fr auto;
+            gap: 0.65rem;
+            align-items: center;
+        }
+
+        .um-search {
+            border: 1px solid #c3cfdb;
+            border-radius: 9px;
+            background: #fff;
+            color: var(--um-text);
+            padding: 0.62rem 0.72rem;
+            font-size: 0.9rem;
+            width: 100%;
+        }
+
+        .um-search:focus {
+            outline: none;
+            border-color: #14b8a6;
+            box-shadow: 0 0 0 3px rgba(20, 184, 166, 0.15);
+        }
+
+        .um-summary {
+            color: #334155;
+            font-size: 0.82rem;
+            font-weight: 700;
+            background: #e2e8f0;
+            border-radius: 999px;
+            padding: 0.28rem 0.62rem;
+        }
+
+        .um-table-wrap {
+            max-height: 560px;
+            overflow: auto;
+            border-top: 1px solid #edf2f7;
+        }
+
+        .um-table {
+            width: 100%;
+            min-width: 1120px;
+            border-collapse: collapse;
+        }
+
+        .um-table th,
+        .um-table td {
+            padding: 0.72rem 0.64rem;
+            border-bottom: 1px solid #eef2f7;
+            text-align: left;
+            vertical-align: middle;
+            font-size: 0.84rem;
+        }
+
+        .um-table th {
+            position: sticky;
+            top: 0;
+            z-index: 1;
+            background: #f8fafc;
+            color: #334155;
+            text-transform: uppercase;
+            letter-spacing: 0.04em;
+            font-size: 0.74rem;
+        }
+
+        .um-table tr:hover td {
+            background: #f8fbff;
+        }
+
+        .um-code {
+            font-weight: 700;
+            color: #0f172a;
+        }
+
+        .um-chip {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            border-radius: 999px;
+            padding: 0.2rem 0.52rem;
+            font-size: 0.71rem;
+            font-weight: 700;
+            text-transform: uppercase;
+            border: 1px solid transparent;
+        }
+
+        .um-chip.dispatcher {
+            color: #0c4a6e;
+            border-color: #7dd3fc;
+            background: #f0f9ff;
+        }
+
+        .um-chip.responder {
+            color: #134e4a;
+            border-color: #99f6e4;
+            background: #f0fdfa;
+        }
+
+        .um-chip.active {
+            color: #166534;
+            border-color: #86efac;
+            background: #f0fdf4;
+        }
+
+        .um-chip.inactive {
+            color: #7f1d1d;
+            border-color: #fca5a5;
+            background: #fff1f2;
+        }
+
+        .um-actions {
+            display: flex;
+            align-items: center;
+            gap: 0.35rem;
+            flex-wrap: nowrap;
+        }
+
+        .um-action {
+            width: 30px;
+            height: 30px;
+            border-radius: 8px;
+            border: 1px solid #d7dee8;
+            background: #fff;
+            color: #1e293b;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            transition: 0.2s ease;
+        }
+
+        .um-action:hover {
+            transform: translateY(-1px);
+            box-shadow: 0 2px 7px rgba(15, 23, 42, 0.12);
+        }
+
+        .um-action.edit:hover {
+            color: #0f766e;
+            border-color: #99f6e4;
+            background: #f0fdfa;
+        }
+
+        .um-action.delete:hover {
+            color: var(--um-danger);
+            border-color: #fecaca;
+            background: #fff1f2;
+        }
+
+        .um-action.save:hover {
+            color: #166534;
+            border-color: #86efac;
+            background: #f0fdf4;
+        }
+
+        .um-action.save[disabled] {
+            opacity: 0.45;
+            cursor: not-allowed;
+            box-shadow: none;
+            transform: none;
+        }
+
+        .um-input,
+        .um-select {
+            width: 100%;
+            border: 1px solid #c7d2df;
+            border-radius: 8px;
+            background: #fff;
+            color: var(--um-text);
+            font-size: 0.82rem;
+            padding: 0.42rem 0.5rem;
+        }
+
+        .um-password-wrap {
+            position: relative;
+        }
+
+        .um-password-wrap .um-input {
+            padding-right: 2.2rem;
+        }
+
+        .um-password-toggle {
+            position: absolute;
+            top: 50%;
+            right: 0.45rem;
+            transform: translateY(-50%);
+            border: none;
+            background: transparent;
+            color: #64748b;
+            width: 1.6rem;
+            height: 1.6rem;
+            border-radius: 6px;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+        }
+
+        .um-password-toggle:hover {
+            color: #334155;
+            background: #f1f5f9;
+        }
+
+        .um-empty {
+            text-align: center;
+            color: var(--um-muted);
+            padding: 1.6rem;
+            font-size: 0.9rem;
+        }
+
+        .um-modal {
+            position: fixed;
+            inset: 0;
+            background: rgba(15, 23, 42, 0.48);
+            display: none;
+            align-items: center;
+            justify-content: center;
+            z-index: 5000;
+            padding: 1rem;
+        }
+
+        .um-modal.show {
+            display: flex;
+        }
+
+        .um-modal-card {
+            width: min(620px, 100%);
+            background: #fff;
+            border-radius: 14px;
+            box-shadow: 0 18px 40px rgba(2, 8, 23, 0.34);
+            overflow: hidden;
+            border: 1px solid #dbe3ec;
+        }
+
+        .um-modal-head {
+            padding: 0.85rem 1rem;
+            border-bottom: 1px solid #e5edf5;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 0.6rem;
+            background: #f8fafc;
+        }
+
+        .um-modal-head h2 {
+            margin: 0;
+            color: var(--um-text);
+            font-size: 1.03rem;
+        }
+
+        .um-close {
+            border: 1px solid #d5dee8;
+            background: #fff;
+            color: #334155;
+            border-radius: 8px;
+            width: 30px;
+            height: 30px;
+            cursor: pointer;
+        }
+
+        .um-modal-body {
+            padding: 1rem;
+        }
+
+        .um-form-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 0.72rem;
+        }
+
+        .um-field {
+            display: flex;
+            flex-direction: column;
+            gap: 0.32rem;
+        }
+
+        .um-field.full {
+            grid-column: 1 / -1;
+        }
+
+        .um-field label {
+            color: #334155;
+            font-size: 0.78rem;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.03em;
+        }
+
+        .um-modal-foot {
+            padding: 0.85rem 1rem;
+            border-top: 1px solid #e5edf5;
+            background: #f8fafc;
+            display: flex;
+            justify-content: flex-end;
+            gap: 0.55rem;
+        }
+
+        .um-btn {
+            border-radius: 9px;
+            padding: 0.56rem 0.85rem;
+            font-size: 0.85rem;
+            font-weight: 700;
+            cursor: pointer;
+            border: 1px solid #c9d5e2;
+            background: #fff;
+            color: #0f172a;
+        }
+
+        .um-btn.primary {
+            border-color: var(--um-primary);
+            background: var(--um-primary);
+            color: #fff;
+        }
+
+        .um-btn.primary:hover {
+            background: var(--um-primary-dark);
+        }
+
+        .um-toast {
+            position: fixed;
+            right: 16px;
+            bottom: 16px;
+            z-index: 6000;
+            background: #0f172a;
+            color: #fff;
+            border-radius: 10px;
+            padding: 0.68rem 0.85rem;
+            font-size: 0.82rem;
+            font-weight: 600;
+            box-shadow: 0 8px 18px rgba(0, 0, 0, 0.26);
+            opacity: 0;
+            pointer-events: none;
+            transform: translateY(12px);
+            transition: 0.22s ease;
+        }
+
+        .um-toast.show {
+            opacity: 1;
+            transform: translateY(0);
+        }
+
+        @media (max-width: 880px) {
+            .um-toolbar {
+                grid-template-columns: 1fr;
+            }
+
+            .um-head {
+                flex-direction: column;
+                align-items: flex-start;
+            }
+
+            .um-add-btn {
+                width: 100%;
+            }
+        }
+
+        @media (max-width: 680px) {
+            .main-content {
+                padding: 1rem 0.75rem;
+            }
+
+            .um-head h1 {
+                font-size: 1.35rem;
+            }
+
+            .um-head p {
+                font-size: 0.86rem;
+            }
+
+            .um-form-grid {
+                grid-template-columns: 1fr;
+            }
+
+            .um-table th,
+            .um-table td {
+                font-size: 0.78rem;
+                padding: 0.62rem 0.5rem;
+            }
+        }
+    </style>
 </head>
 <body>
     <?php include $rootDir . '/includes/sidebar.php'; ?>
     <?php include $rootDir . '/includes/admin-header.php'; ?>
 
     <div class="main-content">
-        <div class="main-container">
-            <h1 style="margin-top: 0;">User Management</h1>
-            <p>Admin module for creating, editing, and managing user access.</p>
+        <div class="main-container um-shell">
+            <section class="um-head">
+                <div>
+                    <h1>User Management</h1>
+                    <p>Hi <?php echo htmlspecialchars($adminName); ?>. Manage dispatcher and responder accounts in one panel.</p>
+                </div>
+                <button type="button" class="um-add-btn" id="openAddUserBtn">
+                    <i class="fas fa-user-plus"></i> Add User
+                </button>
+            </section>
+
+            <section class="um-card">
+                <div class="um-toolbar">
+                    <input
+                        type="text"
+                        id="userSearchInput"
+                        class="um-search"
+                        placeholder="Search name, email, role, or department...">
+                    <span class="um-summary" id="userCountBadge">0 account(s)</span>
+                </div>
+
+                <div class="um-table-wrap">
+                    <table class="um-table">
+                        <thead>
+                            <tr>
+                                <th>ID</th>
+                                <th>Name</th>
+                                <th>Email</th>
+                                <th>Role</th>
+                                <th>Department</th>
+                                <th>Status</th>
+                                <th>Created</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody id="usersTableBody"></tbody>
+                    </table>
+                </div>
+            </section>
         </div>
     </div>
 
     <?php include $rootDir . '/includes/admin-footer.php'; ?>
+
+    <div class="um-modal" id="addUserModal" aria-hidden="true">
+        <div class="um-modal-card">
+            <div class="um-modal-head">
+                <h2>Add New Account</h2>
+                <button type="button" class="um-close" id="closeAddUserModal" aria-label="Close">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+            <form id="addUserForm">
+                <div class="um-modal-body">
+                    <div class="um-form-grid">
+                        <div class="um-field">
+                            <label for="newUserName">Full Name</label>
+                            <input id="newUserName" class="um-input" maxlength="80" required>
+                        </div>
+                        <div class="um-field">
+                            <label for="newUserEmail">Email</label>
+                            <input id="newUserEmail" type="email" class="um-input" maxlength="120" required>
+                        </div>
+                        <div class="um-field">
+                            <label for="newUserPassword">Password</label>
+                            <div class="um-password-wrap">
+                                <input id="newUserPassword" type="password" class="um-input" minlength="8" maxlength="128" placeholder="Minimum 8 characters" required>
+                                <button type="button" class="um-password-toggle" id="toggleNewUserPassword" aria-label="Show password" title="Show password">
+                                    <i class="fas fa-eye"></i>
+                                </button>
+                            </div>
+                        </div>
+                        <div class="um-field">
+                            <label for="newUserRole">Role</label>
+                            <select id="newUserRole" class="um-select" required>
+                                <option value="dispatcher">Dispatcher</option>
+                                <option value="responder">Responder</option>
+                            </select>
+                        </div>
+                        <div class="um-field">
+                            <label for="newUserStatus">Status</label>
+                            <select id="newUserStatus" class="um-select" required>
+                                <option value="active">Active</option>
+                                <option value="inactive">Inactive</option>
+                            </select>
+                        </div>
+                        <div class="um-field full">
+                            <label for="newUserDepartment">Department / Assignment</label>
+                            <input id="newUserDepartment" class="um-input" maxlength="80" placeholder="e.g. EMS - Team Bravo" required>
+                        </div>
+                    </div>
+                </div>
+                <div class="um-modal-foot">
+                    <button type="button" class="um-btn" id="cancelAddUserBtn">Cancel</button>
+                    <button type="submit" class="um-btn primary">Save User</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <div class="um-toast" id="userToast"></div>
+
+    <script>
+        const userRows = [
+            { id: 1, name: 'Ramon Cruz', email: 'ramon.cruz@ers.local', role: 'dispatcher', department: 'Dispatch Center Alpha', status: 'active', created: '2026-01-19' },
+            { id: 2, name: 'Lea Santos', email: 'lea.santos@ers.local', role: 'responder', department: 'EMS Team Bravo', status: 'active', created: '2026-01-26' },
+            { id: 3, name: 'Carlos Reyes', email: 'carlos.reyes@ers.local', role: 'dispatcher', department: 'Dispatch Center Bravo', status: 'active', created: '2026-02-01' },
+            { id: 4, name: 'Mia Dela Torre', email: 'mia.delatorre@ers.local', role: 'responder', department: 'Fire Response Unit 2', status: 'inactive', created: '2026-02-03' },
+            { id: 5, name: 'Noel Bautista', email: 'noel.bautista@ers.local', role: 'responder', department: 'Police Support Team', status: 'active', created: '2026-02-06' },
+            { id: 6, name: 'Jessa Navarro', email: 'jessa.navarro@ers.local', role: 'dispatcher', department: 'Night Shift Dispatch', status: 'active', created: '2026-02-10' },
+            { id: 7, name: 'Ariel Manalo', email: 'ariel.manalo@ers.local', role: 'responder', department: 'Traffic Response Group', status: 'active', created: '2026-02-13' },
+            { id: 8, name: 'Rica Mendoza', email: 'rica.mendoza@ers.local', role: 'responder', department: 'Rescue Operations Delta', status: 'inactive', created: '2026-02-16' }
+        ];
+
+        let nextId = userRows.reduce((max, row) => Math.max(max, row.id), 0) + 1;
+        let editingId = null;
+
+        const usersTableBody = document.getElementById('usersTableBody');
+        const userCountBadge = document.getElementById('userCountBadge');
+        const userSearchInput = document.getElementById('userSearchInput');
+        const addUserModal = document.getElementById('addUserModal');
+        const openAddUserBtn = document.getElementById('openAddUserBtn');
+        const closeAddUserModal = document.getElementById('closeAddUserModal');
+        const cancelAddUserBtn = document.getElementById('cancelAddUserBtn');
+        const addUserForm = document.getElementById('addUserForm');
+        const newUserName = document.getElementById('newUserName');
+        const newUserEmail = document.getElementById('newUserEmail');
+        const newUserPassword = document.getElementById('newUserPassword');
+        const toggleNewUserPassword = document.getElementById('toggleNewUserPassword');
+        const newUserRole = document.getElementById('newUserRole');
+        const newUserStatus = document.getElementById('newUserStatus');
+        const newUserDepartment = document.getElementById('newUserDepartment');
+        const userToast = document.getElementById('userToast');
+
+        function escapeHtml(value) {
+            return String(value)
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;')
+                .replace(/"/g, '&quot;')
+                .replace(/'/g, '&#039;');
+        }
+
+        function showToast(message) {
+            userToast.textContent = message;
+            userToast.classList.add('show');
+            window.clearTimeout(showToast._timer);
+            showToast._timer = window.setTimeout(() => {
+                userToast.classList.remove('show');
+            }, 2000);
+        }
+
+        function roleChip(role) {
+            const safe = (role || '').toLowerCase();
+            const label = safe.charAt(0).toUpperCase() + safe.slice(1);
+            return '<span class="um-chip ' + safe + '">' + escapeHtml(label) + '</span>';
+        }
+
+        function statusChip(status) {
+            const safe = (status || '').toLowerCase();
+            const label = safe.charAt(0).toUpperCase() + safe.slice(1);
+            return '<span class="um-chip ' + safe + '">' + escapeHtml(label) + '</span>';
+        }
+
+        function filteredRows() {
+            const needle = userSearchInput.value.trim().toLowerCase();
+            if (!needle) return userRows.slice();
+            return userRows.filter((row) => {
+                const hay = [row.name, row.email, row.role, row.department, row.status].join(' ').toLowerCase();
+                return hay.includes(needle);
+            });
+        }
+
+        function renderRows() {
+            const rows = filteredRows();
+            userCountBadge.textContent = rows.length + ' account(s)';
+
+            if (!rows.length) {
+                usersTableBody.innerHTML = '<tr><td colspan="8" class="um-empty">No user accounts found.</td></tr>';
+                return;
+            }
+
+            usersTableBody.innerHTML = rows.map((row) => {
+                const isEditing = row.id === editingId;
+                return `
+                    <tr data-row-id="${row.id}">
+                        <td class="um-code">USR-${String(row.id).padStart(4, '0')}</td>
+                        <td>
+                            ${isEditing
+                                ? `<input class="um-input" data-field="name" value="${escapeHtml(row.name)}">`
+                                : escapeHtml(row.name)}
+                        </td>
+                        <td>
+                            ${isEditing
+                                ? `<input class="um-input" type="email" data-field="email" value="${escapeHtml(row.email)}">`
+                                : escapeHtml(row.email)}
+                        </td>
+                        <td>
+                            ${isEditing
+                                ? `<select class="um-select" data-field="role">
+                                    <option value="dispatcher"${row.role === 'dispatcher' ? ' selected' : ''}>Dispatcher</option>
+                                    <option value="responder"${row.role === 'responder' ? ' selected' : ''}>Responder</option>
+                                   </select>`
+                                : roleChip(row.role)}
+                        </td>
+                        <td>
+                            ${isEditing
+                                ? `<input class="um-input" data-field="department" value="${escapeHtml(row.department)}">`
+                                : escapeHtml(row.department)}
+                        </td>
+                        <td>
+                            ${isEditing
+                                ? `<select class="um-select" data-field="status">
+                                    <option value="active"${row.status === 'active' ? ' selected' : ''}>Active</option>
+                                    <option value="inactive"${row.status === 'inactive' ? ' selected' : ''}>Inactive</option>
+                                   </select>`
+                                : statusChip(row.status)}
+                        </td>
+                        <td>${escapeHtml(row.created)}</td>
+                        <td>
+                            <div class="um-actions">
+                                <button type="button" class="um-action edit" data-action="edit" data-id="${row.id}" title="Edit" aria-label="Edit">
+                                    <i class="fas fa-pen"></i>
+                                </button>
+                                <button type="button" class="um-action delete" data-action="delete" data-id="${row.id}" title="Delete" aria-label="Delete">
+                                    <i class="fas fa-trash"></i>
+                                </button>
+                                <button type="button" class="um-action save" data-action="save" data-id="${row.id}" title="Save" aria-label="Save"${isEditing ? '' : ' disabled'}>
+                                    <i class="fas fa-floppy-disk"></i>
+                                </button>
+                            </div>
+                        </td>
+                    </tr>
+                `;
+            }).join('');
+        }
+
+        function openModal() {
+            addUserModal.classList.add('show');
+            addUserModal.setAttribute('aria-hidden', 'false');
+            document.body.style.overflow = 'hidden';
+            newUserName.focus();
+        }
+
+        function resetPasswordToggle() {
+            if (!newUserPassword || !toggleNewUserPassword) return;
+            newUserPassword.type = 'password';
+            const icon = toggleNewUserPassword.querySelector('i');
+            if (icon) {
+                icon.classList.remove('fa-eye-slash');
+                icon.classList.add('fa-eye');
+            }
+            toggleNewUserPassword.setAttribute('aria-label', 'Show password');
+            toggleNewUserPassword.setAttribute('title', 'Show password');
+        }
+
+        function closeModal() {
+            addUserModal.classList.remove('show');
+            addUserModal.setAttribute('aria-hidden', 'true');
+            document.body.style.overflow = '';
+            addUserForm.reset();
+            resetPasswordToggle();
+        }
+
+        function saveRow(id) {
+            const rowEl = usersTableBody.querySelector('tr[data-row-id="' + id + '"]');
+            if (!rowEl) return;
+            const target = userRows.find((row) => row.id === id);
+            if (!target) return;
+
+            const nameEl = rowEl.querySelector('[data-field="name"]');
+            const emailEl = rowEl.querySelector('[data-field="email"]');
+            const roleEl = rowEl.querySelector('[data-field="role"]');
+            const deptEl = rowEl.querySelector('[data-field="department"]');
+            const statusEl = rowEl.querySelector('[data-field="status"]');
+            if (!nameEl || !emailEl || !roleEl || !deptEl || !statusEl) return;
+
+            const nextName = nameEl.value.trim();
+            const nextEmail = emailEl.value.trim();
+            const nextRole = roleEl.value;
+            const nextDept = deptEl.value.trim();
+            const nextStatus = statusEl.value;
+
+            if (!nextName || !nextEmail || !nextDept) {
+                showToast('Complete all required fields before saving.');
+                return;
+            }
+
+            target.name = nextName;
+            target.email = nextEmail;
+            target.role = nextRole;
+            target.department = nextDept;
+            target.status = nextStatus;
+
+            editingId = null;
+            renderRows();
+            showToast('User account updated.');
+        }
+
+        usersTableBody.addEventListener('click', (event) => {
+            const button = event.target.closest('.um-action');
+            if (!button) return;
+
+            const action = button.getAttribute('data-action');
+            const id = Number(button.getAttribute('data-id'));
+            const target = userRows.find((row) => row.id === id);
+            if (!target) return;
+
+            if (action === 'edit') {
+                editingId = id;
+                renderRows();
+                return;
+            }
+
+            if (action === 'delete') {
+                const ok = window.confirm('Delete account for ' + target.name + '?');
+                if (!ok) return;
+                const index = userRows.findIndex((row) => row.id === id);
+                if (index >= 0) userRows.splice(index, 1);
+                if (editingId === id) editingId = null;
+                renderRows();
+                showToast('User account deleted.');
+                return;
+            }
+
+            if (action === 'save') {
+                saveRow(id);
+            }
+        });
+
+        openAddUserBtn.addEventListener('click', openModal);
+        closeAddUserModal.addEventListener('click', closeModal);
+        cancelAddUserBtn.addEventListener('click', closeModal);
+
+        addUserModal.addEventListener('click', (event) => {
+            if (event.target === addUserModal) closeModal();
+        });
+
+        document.addEventListener('keydown', (event) => {
+            if (event.key === 'Escape' && addUserModal.classList.contains('show')) {
+                closeModal();
+            }
+        });
+
+        addUserForm.addEventListener('submit', (event) => {
+            event.preventDefault();
+
+            const payload = {
+                id: nextId++,
+                name: newUserName.value.trim(),
+                email: newUserEmail.value.trim(),
+                password: newUserPassword.value,
+                role: newUserRole.value,
+                department: newUserDepartment.value.trim(),
+                status: newUserStatus.value,
+                created: new Date().toISOString().slice(0, 10)
+            };
+
+            if (!payload.name || !payload.email || !payload.department || !payload.password) {
+                showToast('Please complete required fields.');
+                return;
+            }
+            if (payload.password.length < 8) {
+                showToast('Password must be at least 8 characters.');
+                return;
+            }
+
+            const emailExists = userRows.some((row) => row.email.toLowerCase() === payload.email.toLowerCase());
+            if (emailExists) {
+                showToast('Email is already in use.');
+                return;
+            }
+
+            userRows.unshift(payload);
+            closeModal();
+            editingId = null;
+            renderRows();
+            showToast('New user account added.');
+        });
+
+        if (toggleNewUserPassword && newUserPassword) {
+            toggleNewUserPassword.addEventListener('click', () => {
+                const isHidden = newUserPassword.type === 'password';
+                newUserPassword.type = isHidden ? 'text' : 'password';
+
+                const icon = toggleNewUserPassword.querySelector('i');
+                if (icon) {
+                    icon.classList.toggle('fa-eye', !isHidden);
+                    icon.classList.toggle('fa-eye-slash', isHidden);
+                }
+
+                const nextLabel = isHidden ? 'Hide password' : 'Show password';
+                toggleNewUserPassword.setAttribute('aria-label', nextLabel);
+                toggleNewUserPassword.setAttribute('title', nextLabel);
+            });
+        }
+
+        userSearchInput.addEventListener('input', renderRows);
+
+        renderRows();
+    </script>
 </body>
 </html>

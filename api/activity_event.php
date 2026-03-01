@@ -2,6 +2,7 @@
 // Logs a system activity event into activity_log
 header('Content-Type: application/json');
 require_once __DIR__ . '/../includes/db.php';
+require_once __DIR__ . '/../includes/auth.php';
 require_once __DIR__ . '/../includes/gemini_helper.php';
 
 $pdo = get_db_connection();
@@ -18,11 +19,20 @@ if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
 }
 
 $input = json_decode(file_get_contents('php://input'), true);
+$input = is_array($input) ? $input : [];
 $action = isset($input['action']) ? trim($input['action']) : '';
 $entity_type = isset($input['entity_type']) ? trim($input['entity_type']) : 'system';
 $entity_id = isset($input['entity_id']) ? (int)$input['entity_id'] : null;
 $details = isset($input['details']) ? trim($input['details']) : '';
 $user_id = isset($input['user_id']) ? (int)$input['user_id'] : null;
+
+if (($user_id === null || $user_id <= 0) && isset($_SESSION['user_id'])) {
+    $user_id = (int)$_SESSION['user_id'];
+}
+
+if ($action === '' && $entity_type === 'agency_chat') {
+    $action = 'chat';
+}
 
 if ($action === '') {
     http_response_code(400);

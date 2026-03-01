@@ -27,6 +27,8 @@ if ($data && $data['cod'] == 200) {
     $visibility = "--";
 }
 $pageTitle = 'ERS Admin Dashboard';
+$dashboardRoleLabel = ucfirst((string)($_SESSION['user_role'] ?? 'admin'));
+$dashboardHeaderTime = date('n/j/Y, h:i:s A');
 $typesCounts = ['medical'=>0,'fire'=>0,'police'=>0,'traffic'=>0];
 $priorityCounts = ['high'=>0,'medium'=>0,'low'=>0];
 try {
@@ -95,9 +97,23 @@ try {
         <div class="main-container">
             <!-- Dashboard Header -->
             <div class="dashboard-header">
-                <div>
-                    <h1 class="dashboard-title">Emergency Response Dashboard</h1>
-                    <p class="dashboard-subtitle">Real-time monitoring and system overview • <?php echo date('F j, Y g:i:s a'); ?></p>
+                <div class="dashboard-header-copy">
+                    <div class="dashboard-kicker">Operations Console</div>
+                    <h1 class="dashboard-title">Dispatcher Command Dashboard</h1>
+                    <p class="dashboard-subtitle">Live queue monitoring, unit availability, and response coordination in one view.</p>
+                </div>
+                <div class="dashboard-meta">
+                    <div class="dashboard-chip">
+                        <i class="fas fa-user-shield"></i>
+                        <span><?php echo htmlspecialchars($dashboardRoleLabel); ?></span>
+                    </div>
+                    <div class="dashboard-chip">
+                        <i class="fas fa-clock"></i>
+                        <span id="dashboardLiveClock"><?php echo htmlspecialchars($dashboardHeaderTime); ?></span>
+                    </div>
+                    <button type="button" class="dashboard-refresh-btn" onclick="window.location.reload()">
+                        <i class="fas fa-rotate"></i> Refresh Panel
+                    </button>
                 </div>
             </div>
             <!-- Key Metrics -->
@@ -857,6 +873,12 @@ try {
         // Initial load
         document.addEventListener('DOMContentLoaded', function() {
             showNotification('Dashboard loaded successfully', 'success');
+            const liveClockEl = document.getElementById('dashboardLiveClock');
+            if (liveClockEl) {
+                setInterval(() => {
+                    liveClockEl.textContent = new Date().toLocaleString();
+                }, 1000);
+            }
             loadActivityFeed();
             loadAlertsPanel();
             // Auto-refresh panels periodically

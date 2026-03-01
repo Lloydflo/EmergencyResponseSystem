@@ -9,46 +9,77 @@
     display: flex;
     justify-content: space-between;
     align-items: center;
+    gap: 1rem;
     margin-bottom: 1rem;
     margin-top: 4rem;
-    padding: 2rem;
-    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-    border-radius: 12px;
-    color: white;
-            margin-top: 4rem;
+    padding: 1.4rem 1.5rem;
+    border-radius: 16px;
+    background:
+        radial-gradient(circle at 100% 0%, rgba(251, 146, 60, 0.2) 0%, transparent 44%),
+        linear-gradient(120deg, #0f766e 0%, #115e59 42%, #1e3a8a 100%);
+    color: #f8fafc;
+}
+
+.dashboard-header-copy {
+    min-width: 0;
+}
+
+.dashboard-kicker {
+    font-size: 0.78rem;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    margin-bottom: 0.35rem;
+    opacity: 0.8;
+    font-weight: 700;
 }
 
 .dashboard-title {
-    font-size: 2rem;
-    font-weight: 700;
+    font-size: 1.7rem;
+    font-weight: 800;
     margin: 0;
+    line-height: 1.1;
 }
 
 .dashboard-subtitle {
-    font-size: 0.9rem;
-    opacity: 0.9;
-    margin: 0.5rem 0 0 0;
-}
-
-.dashboard-actions {
-    display: flex;
-    gap: 1rem;
-}
-
-.btn-dashboard {
-    padding: 0.75rem 1.5rem;
-    background: rgba(255,255,255,0.2);
-    color: white;
-    border: 1px solid rgba(255,255,255,0.3);
-    border-radius: 8px;
-    cursor: pointer;
+    font-size: 0.95rem;
+    opacity: 0.95;
+    margin: 0.35rem 0 0;
     font-weight: 600;
-    transition: all 0.3s ease;
 }
 
-.btn-dashboard:hover {
-    background: rgba(255,255,255,0.3);
-    transform: translateY(-2px);
+.dashboard-meta {
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+}
+
+.dashboard-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    background: rgba(255, 255, 255, 0.16);
+    border: 1px solid rgba(255, 255, 255, 0.22);
+    border-radius: 999px;
+    padding: 0.42rem 0.75rem;
+    font-size: 0.82rem;
+    font-weight: 600;
+}
+
+.dashboard-refresh-btn {
+    border: 0;
+    border-radius: 10px;
+    padding: 0.48rem 0.85rem;
+    font-weight: 700;
+    font-size: 0.83rem;
+    background: #f8fafc;
+    color: #1f2937;
+    cursor: pointer;
+}
+
+.dashboard-refresh-btn:hover {
+    background: #e2e8f0;
 }
 
 .metrics-grid {
@@ -488,6 +519,19 @@
     .dashboard-header {
         flex-direction: column;
         gap: 1rem;
-        text-align: center;
+        text-align: left;
+        align-items: flex-start;
+    }
+
+    .dashboard-meta {
+        justify-content: flex-start;
+    }
+
+    .dashboard-title {
+        font-size: 1.45rem;
+    }
+
+    .dashboard-subtitle {
+        font-size: 0.9rem;
     }
 }

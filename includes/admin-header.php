@@ -1,6 +1,7 @@
 <?php
 if (session_status() === PHP_SESSION_NONE) session_start();
 $user_name = $_SESSION['user_name'] ?? 'Admin';
+$user_email = $_SESSION['user_email'] ?? $_SESSION['email'] ?? '';
 $user_role = $_SESSION['user_role'] ?? 'admin';
 ?>
 

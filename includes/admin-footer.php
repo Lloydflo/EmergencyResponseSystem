@@ -20,18 +20,6 @@
             <a href="#" class="footer-link">Cookie Policy</a>
         </div>
 
-        <div class="theme-toggle">
-            <button class="theme-toggle-btn" data-theme="system">
-                <i class="fas fa-desktop"></i>
-            </button>
-            <button class="theme-toggle-btn" data-theme="light">
-                <i class="fas fa-sun"></i>
-            </button>
-            <button class="theme-toggle-btn" data-theme="dark">
-                <i class="fas fa-moon"></i>
-            </button>
-        </div>
-
     </div>
 </footer>
 
