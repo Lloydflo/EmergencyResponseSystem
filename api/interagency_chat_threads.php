@@ -33,6 +33,85 @@ function ensure_interagency_reads_table(PDO $pdo): void {
     );
 }
 
+function ensure_interagency_user_threads_table(PDO $pdo): void {
+    $pdo->exec(
+        "CREATE TABLE IF NOT EXISTS `interagency_user_thread_pairs` (
+            `id` BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+            `owner_user_id` INT UNSIGNED NOT NULL,
+            `target_user_id` INT UNSIGNED NOT NULL,
+            `created_by` INT UNSIGNED DEFAULT NULL,
+            `is_active` TINYINT(1) NOT NULL DEFAULT 1,
+            `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            `updated_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+            PRIMARY KEY (`id`),
+            UNIQUE KEY `uk_interagency_user_threads_pair` (`owner_user_id`, `target_user_id`),
+            KEY `idx_interagency_user_threads_owner` (`owner_user_id`),
+            KEY `idx_interagency_user_threads_target` (`target_user_id`),
+            KEY `idx_interagency_user_threads_active` (`is_active`)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci"
+    );
+}
+
+function ensure_interagency_user_reads_table(PDO $pdo): void {
+    $pdo->exec(
+        "CREATE TABLE IF NOT EXISTS `interagency_user_thread_reads` (
+            `id` BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+            `user_id` INT UNSIGNED NOT NULL,
+            `target_user_id` INT UNSIGNED NOT NULL,
+            `last_read_id` INT NOT NULL DEFAULT 0,
+            `updated_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+            PRIMARY KEY (`id`),
+            UNIQUE KEY `uk_interagency_user_reads_pair` (`user_id`, `target_user_id`),
+            KEY `idx_interagency_user_reads_user` (`user_id`)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci"
+    );
+}
+
+function user_icon_by_role(string $role): string {
+    $r = strtolower(trim($role));
+    if ($r === 'admin') return 'fa-user-tie';
+    if ($r === 'dispatcher' || $r === 'operator') return 'fa-headset';
+    return 'fa-user';
+}
+
+function parse_message_details(string $raw): array {
+    $text = trim($raw);
+    $attachments = [];
+
+    if ($text !== '' && ($text[0] === '{' || $text[0] === '[')) {
+        $decoded = json_decode($text, true);
+        if (is_array($decoded) && (isset($decoded['text']) || isset($decoded['attachments']))) {
+            $text = isset($decoded['text']) ? trim((string)$decoded['text']) : '';
+            if (isset($decoded['attachments']) && is_array($decoded['attachments'])) {
+                foreach ($decoded['attachments'] as $a) {
+                    if (!is_array($a)) continue;
+                    $url = trim((string)($a['url'] ?? ''));
+                    if ($url === '') continue;
+                    $attachments[] = [
+                        'name' => trim((string)($a['name'] ?? basename($url))),
+                        'url' => $url
+                    ];
+                }
+            }
+        }
+    }
+
+    return ['text' => $text, 'attachments' => $attachments];
+}
+
+function preview_text_from_details(string $raw): string {
+    $parsed = parse_message_details($raw);
+    $text = (string)($parsed['text'] ?? '');
+    $attachments = is_array($parsed['attachments'] ?? null) ? $parsed['attachments'] : [];
+    if ($text !== '') return $text;
+    if (!count($attachments)) return '';
+    if (count($attachments) === 1) {
+        $name = trim((string)($attachments[0]['name'] ?? 'Attachment'));
+        return '[Attachment] ' . ($name !== '' ? $name : 'File');
+    }
+    return '[' . count($attachments) . ' attachments]';
+}
+
 $threadDefs = [
     1 => [
         'id' => 'police',
@@ -74,6 +153,8 @@ $threadDefs = [
 
 try {
     ensure_interagency_reads_table($pdo);
+    ensure_interagency_user_threads_table($pdo);
+    ensure_interagency_user_reads_table($pdo);
 
     $user = get_logged_in_user();
     $currentUserId = (int)($user['id'] ?? 0);
@@ -81,6 +162,7 @@ try {
     $threads = [];
     foreach ($threadDefs as $entityId => $def) {
         $threads[$entityId] = array_merge($def, [
+            'thread_kind' => 'department',
             'entity_id' => $entityId,
             'last_message_id' => 0,
             'last_text' => '',
@@ -112,7 +194,7 @@ try {
             continue;
         }
         $threads[$eid]['last_message_id'] = (int)$row['id'];
-        $threads[$eid]['last_text'] = (string)$row['details'];
+        $threads[$eid]['last_text'] = preview_text_from_details((string)$row['details']);
         $threads[$eid]['last_at'] = (string)$row['created_at'];
         $threads[$eid]['last_sender_name'] = (string)$row['sender_name'];
         $threads[$eid]['last_sender_role'] = strtolower((string)$row['sender_role']);
@@ -165,11 +247,155 @@ try {
     }
     unset($thread);
 
+    $manualThreadStmt = $pdo->prepare(
+        "SELECT target_user_id
+         FROM interagency_user_thread_pairs
+         WHERE owner_user_id = ? AND is_active = 1"
+    );
+    $manualThreadStmt->execute([$currentUserId]);
+    $manualThreadRows = $manualThreadStmt->fetchAll(PDO::FETCH_ASSOC);
+
+    $counterpartIds = [];
+    foreach ($manualThreadRows as $row) {
+        $id = (int)($row['target_user_id'] ?? 0);
+        if ($id > 0 && $id !== $currentUserId) {
+            $counterpartIds[$id] = true;
+        }
+    }
+
+    $messageCounterpartStmt = $pdo->prepare(
+        "SELECT DISTINCT
+             CASE WHEN a.user_id = ? THEN a.entity_id ELSE a.user_id END AS counterpart_id
+         FROM activity_log a
+         WHERE a.entity_type = 'agency_user_chat'
+           AND (
+               (a.user_id = ? AND a.entity_id IS NOT NULL AND a.entity_id > 0)
+               OR
+               (a.entity_id = ? AND a.user_id IS NOT NULL AND a.user_id > 0)
+           )"
+    );
+    $messageCounterpartStmt->execute([$currentUserId, $currentUserId, $currentUserId]);
+    $messageCounterpartRows = $messageCounterpartStmt->fetchAll(PDO::FETCH_ASSOC);
+    foreach ($messageCounterpartRows as $row) {
+        $id = (int)($row['counterpart_id'] ?? 0);
+        if ($id > 0 && $id !== $currentUserId) {
+            $counterpartIds[$id] = true;
+        }
+    }
+
+    $counterpartIds = array_keys($counterpartIds);
+    $counterpartUsers = [];
+    if (count($counterpartIds) > 0) {
+        sort($counterpartIds);
+        $placeholders = implode(',', array_fill(0, count($counterpartIds), '?'));
+        $usersStmt = $pdo->prepare(
+            "SELECT id, name, role, status
+             FROM users
+             WHERE id IN ($placeholders)"
+        );
+        $usersStmt->execute($counterpartIds);
+        $rows = $usersStmt->fetchAll(PDO::FETCH_ASSOC);
+        foreach ($rows as $row) {
+            $counterpartUsers[(int)$row['id']] = $row;
+        }
+    }
+
+    $userReadStmt = $pdo->prepare(
+        "SELECT target_user_id, last_read_id
+         FROM interagency_user_thread_reads
+         WHERE user_id = ?"
+    );
+    $userReadStmt->execute([$currentUserId]);
+    $userReadRows = $userReadStmt->fetchAll(PDO::FETCH_ASSOC);
+    $userReadByTarget = [];
+    foreach ($userReadRows as $row) {
+        $userReadByTarget[(int)$row['target_user_id']] = (int)$row['last_read_id'];
+    }
+
+    $userLatestStmt = $pdo->prepare(
+        "SELECT a.id, a.details, a.created_at, a.user_id,
+                COALESCE(NULLIF(u.name, ''), 'System') AS sender_name,
+                COALESCE(NULLIF(u.role, ''), 'system') AS sender_role
+         FROM activity_log a
+         LEFT JOIN users u ON u.id = a.user_id
+         WHERE a.entity_type = 'agency_user_chat'
+           AND (
+               (a.user_id = ? AND a.entity_id = ?)
+               OR
+               (a.user_id = ? AND a.entity_id = ?)
+           )
+         ORDER BY a.id DESC
+         LIMIT 1"
+    );
+    $userTotalStmt = $pdo->prepare(
+        "SELECT COUNT(*)
+         FROM activity_log
+         WHERE entity_type = 'agency_user_chat'
+           AND (
+               (user_id = ? AND entity_id = ?)
+               OR
+               (user_id = ? AND entity_id = ?)
+           )"
+    );
+    $userUnreadStmt = $pdo->prepare(
+        "SELECT COUNT(*)
+         FROM activity_log
+         WHERE entity_type = 'agency_user_chat'
+           AND user_id = ?
+           AND entity_id = ?
+           AND id > ?"
+    );
+
+    foreach ($counterpartIds as $targetUserId) {
+        $counterpart = $counterpartUsers[$targetUserId] ?? null;
+        $displayName = trim((string)($counterpart['name'] ?? ''));
+        $displayRole = (string)($counterpart['role'] ?? 'user');
+        $displayStatus = strtolower((string)($counterpart['status'] ?? 'offline'));
+
+        $userLatestStmt->execute([$currentUserId, $targetUserId, $targetUserId, $currentUserId]);
+        $latest = $userLatestStmt->fetch(PDO::FETCH_ASSOC) ?: null;
+
+        $userTotalStmt->execute([$currentUserId, $targetUserId, $targetUserId, $currentUserId]);
+        $totalMessages = (int)($userTotalStmt->fetchColumn() ?: 0);
+
+        $lastReadId = $userReadByTarget[$targetUserId] ?? 0;
+        $userUnreadStmt->execute([$targetUserId, $currentUserId, $lastReadId]);
+        $unreadCount = (int)($userUnreadStmt->fetchColumn() ?: 0);
+
+        $threads[] = [
+            'id' => 'user-' . $targetUserId,
+            'department' => 'user',
+            'thread_kind' => 'user',
+            'user_id' => $targetUserId,
+            'entity_id' => $targetUserId,
+            'title' => ($displayName !== '' ? $displayName : ('User #' . $targetUserId)),
+            'kind' => 'responder',
+            'status' => $displayStatus === 'active' ? 'online' : 'offline',
+            'icon' => user_icon_by_role($displayRole),
+            'tone' => 'responder',
+            'last_message_id' => $latest ? (int)$latest['id'] : 0,
+            'last_text' => $latest ? preview_text_from_details((string)$latest['details']) : '',
+            'last_at' => $latest ? (string)$latest['created_at'] : null,
+            'last_sender_name' => $latest ? (string)$latest['sender_name'] : null,
+            'last_sender_role' => $latest ? strtolower((string)$latest['sender_role']) : null,
+            'total_messages' => $totalMessages,
+            'unread' => $unreadCount
+        ];
+        $totalUnread += $unreadCount;
+    }
+
+    usort($threads, static function (array $a, array $b): int {
+        $at = strtotime((string)($a['last_at'] ?? '1970-01-01 00:00:00'));
+        $bt = strtotime((string)($b['last_at'] ?? '1970-01-01 00:00:00'));
+        if ($at === $bt) return 0;
+        return ($at > $bt) ? -1 : 1;
+    });
+
     $responderStmt = $pdo->query(
         "SELECT COUNT(DISTINCT a.user_id) AS active_responders
          FROM activity_log a
          INNER JOIN users u ON u.id = a.user_id
-         WHERE a.entity_type='agency_chat'
+         WHERE a.entity_type IN ('agency_chat', 'agency_user_chat')
            AND a.user_id IS NOT NULL
            AND a.created_at >= DATE_SUB(NOW(), INTERVAL 1 DAY)
            AND LOWER(u.role) <> 'admin'"
@@ -180,7 +406,7 @@ try {
         'ok' => true,
         'threads' => array_values($threads),
         'stats' => [
-            'total_threads' => count($threadDefs),
+            'total_threads' => count($threads),
             'active_responders' => $activeResponders,
             'unread_messages' => $totalUnread
         ],

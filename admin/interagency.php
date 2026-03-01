@@ -164,6 +164,38 @@ $pageTitle = 'Inter-Agency Conversations';
             grid-template-columns: repeat(3, 1fr);
             gap: 0.45rem;
         }
+        
+        .ia-list-actions {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .ia-list-actions .ia-tabs {
+            flex: 1;
+        }
+
+        .ia-add-thread-btn {
+            width: 34px;
+            height: 34px;
+            border: 1px solid #cfe0ed;
+            border-radius: 9px;
+            background: #fff;
+            color: #0f766e;
+            cursor: pointer;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 0.95rem;
+            font-weight: 700;
+            transition: 0.2s ease;
+            flex-shrink: 0;
+        }
+
+        .ia-add-thread-btn:hover {
+            background: #ecfdf5;
+            border-color: #99e6b8;
+        }
 
         .ia-tab {
             border: 1px solid #d4dde8;
@@ -388,6 +420,52 @@ $pageTitle = 'Inter-Agency Conversations';
             word-break: break-word;
         }
 
+        .ia-message-text {
+            margin-bottom: 0.45rem;
+            white-space: pre-wrap;
+        }
+
+        .ia-message-text:last-child {
+            margin-bottom: 0;
+        }
+
+        .ia-attachments {
+            display: grid;
+            gap: 0.45rem;
+        }
+
+        .ia-attachment-link {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.4rem;
+            color: inherit;
+            text-decoration: none;
+            font-size: 0.82rem;
+            background: rgba(255, 255, 255, 0.25);
+            border: 1px solid rgba(255, 255, 255, 0.45);
+            border-radius: 8px;
+            padding: 0.4rem 0.55rem;
+            width: fit-content;
+            max-width: 100%;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+
+        .ia-message.incoming .ia-attachment-link {
+            background: #f8fbff;
+            border-color: #dce6f1;
+            color: #1f3852;
+        }
+
+        .ia-attachment-image {
+            max-width: min(300px, 100%);
+            max-height: 220px;
+            border-radius: 8px;
+            border: 1px solid rgba(14, 23, 42, 0.08);
+            display: block;
+        }
+
         .ia-message.incoming {
             align-items: flex-start;
         }
@@ -417,7 +495,7 @@ $pageTitle = 'Inter-Agency Conversations';
 
         .ia-form-row {
             display: grid;
-            grid-template-columns: 160px 1fr auto;
+            grid-template-columns: 160px 1fr auto auto;
             gap: 0.6rem;
             align-items: center;
         }
@@ -457,6 +535,62 @@ $pageTitle = 'Inter-Agency Conversations';
 
         .ia-send:hover {
             background: var(--ia-primary-dark);
+        }
+
+        .ia-attach {
+            border: 1px solid #cdd9e5;
+            background: #fff;
+            color: #35516d;
+            border-radius: 9px;
+            padding: 0.63rem 0.78rem;
+            cursor: pointer;
+            font-size: 0.9rem;
+            transition: 0.2s ease;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .ia-attach:hover {
+            background: #f1f6fb;
+            border-color: #a9bfd5;
+        }
+
+        .ia-file-preview {
+            margin-top: 0.55rem;
+            display: flex;
+            flex-wrap: wrap;
+            gap: 0.4rem;
+        }
+
+        .ia-file-chip {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.4rem;
+            background: #f1f6fb;
+            border: 1px solid #d4dde8;
+            color: #24425a;
+            border-radius: 999px;
+            padding: 0.24rem 0.5rem;
+            font-size: 0.74rem;
+            max-width: 100%;
+        }
+
+        .ia-file-chip span {
+            max-width: 180px;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+
+        .ia-file-chip button {
+            border: none;
+            background: transparent;
+            color: #b42318;
+            font-size: 0.8rem;
+            cursor: pointer;
+            padding: 0;
+            line-height: 1;
         }
 
         .ia-note {
@@ -537,10 +671,15 @@ $pageTitle = 'Inter-Agency Conversations';
                             <i class="fas fa-search"></i>
                             <input type="text" id="threadSearchInput" placeholder="Search department or responder...">
                         </div>
-                        <div class="ia-tabs">
-                            <button type="button" class="ia-tab active" data-filter="all">All</button>
-                            <button type="button" class="ia-tab" data-filter="department">Departments</button>
-                            <button type="button" class="ia-tab" data-filter="responder">Responders</button>
+                        <div class="ia-list-actions">
+                            <div class="ia-tabs">
+                                <button type="button" class="ia-tab active" data-filter="all">All</button>
+                                <button type="button" class="ia-tab" data-filter="department">Departments</button>
+                                <button type="button" class="ia-tab" data-filter="responder">Responders</button>
+                            </div>
+                            <button type="button" class="ia-add-thread-btn" id="addThreadBtn" title="Add user conversation" aria-label="Add user conversation">
+                                <i class="fas fa-plus"></i>
+                            </button>
                         </div>
                     </div>
                     <div class="ia-thread-list" id="threadList" aria-live="polite"></div>
@@ -558,10 +697,15 @@ $pageTitle = 'Inter-Agency Conversations';
                                     <option value="Critical">Critical</option>
                                 </select>
                                 <input type="text" id="messageInput" class="ia-input" maxlength="260" placeholder="Type update for selected thread...">
+                                <button type="button" class="ia-attach" id="attachFileBtn" title="Attach files/images">
+                                    <i class="fas fa-paperclip"></i>
+                                </button>
                                 <button type="submit" class="ia-send">
                                     <i class="fas fa-paper-plane"></i> Send
                                 </button>
+                                <input type="file" id="messageFiles" multiple hidden>
                             </div>
+                            <div id="filePreview" class="ia-file-preview"></div>
                         </form>
                         <div class="ia-note">Tip: choose thread sa kaliwa, then send incident update directly to that department/responder.</div>
                     </div>
@@ -581,6 +725,7 @@ $pageTitle = 'Inter-Agency Conversations';
                 activeId: '',
                 lastIdByDept: {},
                 currentUser: { id: 0, name: 'Admin' },
+                pendingFiles: [],
                 poller: null
             };
 
@@ -591,6 +736,10 @@ $pageTitle = 'Inter-Agency Conversations';
             const messageInput = document.getElementById('messageInput');
             const messagePriority = document.getElementById('messagePriority');
             const chatForm = document.getElementById('chatForm');
+            const attachFileBtn = document.getElementById('attachFileBtn');
+            const messageFilesInput = document.getElementById('messageFiles');
+            const filePreviewEl = document.getElementById('filePreview');
+            const addThreadBtn = document.getElementById('addThreadBtn');
             const totalThreadsEl = document.getElementById('iaTotalThreads');
             const activeRespondersEl = document.getElementById('iaActiveResponders');
             const unreadCountEl = document.getElementById('iaUnreadCount');
@@ -602,6 +751,99 @@ $pageTitle = 'Inter-Agency Conversations';
                     .replace(/>/g, '&gt;')
                     .replace(/"/g, '&quot;')
                     .replace(/'/g, '&#039;');
+            }
+
+            function escapeAttr(value) {
+                return String(value || '')
+                    .replace(/&/g, '&amp;')
+                    .replace(/"/g, '&quot;')
+                    .replace(/'/g, '&#039;')
+                    .replace(/</g, '&lt;')
+                    .replace(/>/g, '&gt;');
+            }
+
+            function formatBytes(bytes) {
+                const n = Number(bytes || 0);
+                if (n < 1024) return `${n} B`;
+                if (n < 1024 * 1024) return `${(n / 1024).toFixed(1)} KB`;
+                return `${(n / (1024 * 1024)).toFixed(1)} MB`;
+            }
+
+            function syncFileInput() {
+                if (!messageFilesInput) return;
+                const dt = new DataTransfer();
+                state.pendingFiles.forEach((file) => dt.items.add(file));
+                messageFilesInput.files = dt.files;
+            }
+
+            function clearPendingFiles() {
+                state.pendingFiles = [];
+                if (messageFilesInput) messageFilesInput.value = '';
+                renderPendingFiles();
+            }
+
+            function removePendingFile(index) {
+                state.pendingFiles = state.pendingFiles.filter((_, i) => i !== index);
+                syncFileInput();
+                renderPendingFiles();
+            }
+
+            function renderPendingFiles() {
+                if (!filePreviewEl) return;
+                if (!state.pendingFiles.length) {
+                    filePreviewEl.innerHTML = '';
+                    return;
+                }
+                filePreviewEl.innerHTML = state.pendingFiles.map((file, index) => `
+                    <div class="ia-file-chip">
+                        <i class="fas ${file.type.startsWith('image/') ? 'fa-image' : 'fa-file'}"></i>
+                        <span title="${escapeAttr(file.name)}">${escapeHtml(file.name)} (${formatBytes(file.size)})</span>
+                        <button type="button" data-remove-file="${index}" aria-label="Remove file">&times;</button>
+                    </div>
+                `).join('');
+                filePreviewEl.querySelectorAll('button[data-remove-file]').forEach((btn) => {
+                    btn.addEventListener('click', () => removePendingFile(Number(btn.getAttribute('data-remove-file')) || 0));
+                });
+            }
+
+            async function uploadPendingFiles() {
+                if (!state.pendingFiles.length) {
+                    return [];
+                }
+                const fd = new FormData();
+                state.pendingFiles.forEach((file) => {
+                    fd.append('files[]', file);
+                });
+                const res = await fetch('api/interagency_upload.php', {
+                    method: 'POST',
+                    body: fd
+                });
+                const data = await res.json();
+                if (!data || !data.ok) {
+                    throw new Error((data && data.error) ? String(data.error) : 'File upload failed');
+                }
+                return Array.isArray(data.attachments) ? data.attachments : [];
+            }
+
+            function renderMessageBody(item) {
+                const text = String(item.text || '').trim();
+                const attachments = Array.isArray(item.attachments) ? item.attachments : [];
+                const textHtml = text ? `<div class="ia-message-text">${escapeHtml(text)}</div>` : '';
+                const filesHtml = attachments.length ? `
+                    <div class="ia-attachments">
+                        ${attachments.map((a) => {
+                            const url = String(a.url || '').trim();
+                            const name = String(a.name || 'Attachment');
+                            const isImage = !!a.is_image;
+                            if (!url) return '';
+                            if (isImage) {
+                                return `<a class="ia-attachment-link" href="${escapeAttr(url)}" target="_blank" rel="noopener"><img class="ia-attachment-image" src="${escapeAttr(url)}" alt="${escapeAttr(name)}"></a>`;
+                            }
+                            return `<a class="ia-attachment-link" href="${escapeAttr(url)}" target="_blank" rel="noopener"><i class="fas fa-file"></i><span>${escapeHtml(name)}</span></a>`;
+                        }).join('')}
+                    </div>
+                ` : '';
+                return textHtml + filesHtml;
             }
 
             function rel(dateLike) {
@@ -622,6 +864,14 @@ $pageTitle = 'Inter-Agency Conversations';
 
             function activeThread() {
                 return state.threads.find((item) => item.id === state.activeId) || null;
+            }
+
+            function threadKey(thread) {
+                if (!thread) return '';
+                if (String(thread.thread_kind || '') === 'user') {
+                    return `user:${thread.user_id || thread.entity_id || 0}`;
+                }
+                return `dept:${thread.department || ''}`;
             }
 
             function filteredThreads() {
@@ -705,10 +955,11 @@ $pageTitle = 'Inter-Agency Conversations';
             function appendMessage(item) {
                 const outgoing = !!item.is_self;
                 const who = outgoing ? 'You' : (item.sender_name || 'System');
+                const body = renderMessageBody(item) || '<div class="ia-message-text">Attachment</div>';
                 const html = `
                     <article class="ia-message ${outgoing ? 'outgoing' : 'incoming'}">
                         <div class="meta">${escapeHtml(who)} · ${escapeHtml(time(item.created_at))}</div>
-                        <div class="bubble">${escapeHtml(item.text)}</div>
+                        <div class="bubble">${body}</div>
                     </article>
                 `;
                 chatTimelineEl.insertAdjacentHTML('beforeend', html);
@@ -739,10 +990,19 @@ $pageTitle = 'Inter-Agency Conversations';
                     return;
                 }
 
-                const dept = String(active.department || '');
-                const params = new URLSearchParams({ department: dept });
-                const lastId = Number(state.lastIdByDept[dept] || 0);
-                if (lastId > 0) params.set('since_id', String(lastId));
+                const params = new URLSearchParams();
+                const kind = String(active.thread_kind || 'department');
+                if (kind === 'user') {
+                    params.set('thread_kind', 'user');
+                    params.set('user_id', String(active.user_id || active.entity_id || 0));
+                } else {
+                    params.set('thread_kind', 'department');
+                    params.set('department', String(active.department || ''));
+                }
+                const key = threadKey(active);
+                const previousLastId = Number(state.lastIdByDept[key] || 0);
+                const sinceId = initial ? 0 : previousLastId;
+                if (sinceId > 0) params.set('since_id', String(sinceId));
                 if (markRead) params.set('mark_read', '1');
 
                 const res = await fetch('api/interagency_chat_feed.php?' + params.toString(), { cache: 'no-store' });
@@ -756,15 +1016,21 @@ $pageTitle = 'Inter-Agency Conversations';
                     return;
                 }
 
-                const list = lastId === 0 ? items.slice().reverse() : items;
+                const list = sinceId === 0 ? items.slice().reverse() : items;
                 list.forEach((item) => {
-                    if (item.id > (state.lastIdByDept[dept] || 0)) state.lastIdByDept[dept] = item.id;
+                    if (item.id > (state.lastIdByDept[key] || 0)) state.lastIdByDept[key] = item.id;
                     appendMessage(item);
                 });
 
                 const last = list[list.length - 1];
                 if (last) {
-                    active.last_text = last.text;
+                    const lastAttachments = Array.isArray(last.attachments) ? last.attachments : [];
+                    active.last_text = String(last.text || '').trim();
+                    if (!active.last_text && lastAttachments.length) {
+                        active.last_text = lastAttachments.length === 1
+                            ? `[Attachment] ${String(lastAttachments[0].name || 'File')}`
+                            : `[${lastAttachments.length} attachments]`;
+                    }
                     active.last_sender_name = last.sender_name;
                     active.last_sender_role = last.sender_role;
                     active.last_at = last.created_at;
@@ -780,33 +1046,54 @@ $pageTitle = 'Inter-Agency Conversations';
                 const target = state.threads.find((item) => item.id === threadId);
                 if (!target) return;
                 state.activeId = target.id;
+                state.lastIdByDept[threadKey(target)] = 0;
+                clearPendingFiles();
                 renderThreadList();
                 renderChatHeader();
                 chatTimelineEl.innerHTML = '';
                 try {
                     await loadMessages(true, true);
                     await loadThreads();
-                } catch (_) {}
+                } catch (err) {
+                    const msg = (err && err.message) ? String(err.message) : 'Network error while sending message.';
+                    alert(msg);
+                }
             }
 
             async function handleSendMessage(event) {
                 event.preventDefault();
                 const text = messageInput.value.trim();
-                if (!text) return;
+                if (!text && !state.pendingFiles.length) return;
                 const active = activeThread();
                 if (!active) return;
 
                 const priority = String(messagePriority.value || 'Routine');
-                const payload = `[${priority.toUpperCase()}] ${text}`;
+                const payloadText = text ? `[${priority.toUpperCase()}] ${text}` : '';
+                const isUserThread = String(active.thread_kind || '') === 'user';
+                const entityType = isUserThread ? 'agency_user_chat' : 'agency_chat';
+                const entityId = isUserThread
+                    ? Number(active.user_id || active.entity_id || 0)
+                    : Number(active.entity_id || 0);
+                if (!Number.isInteger(entityId) || entityId <= 0) {
+                    alert('Invalid thread target. Please re-open the thread.');
+                    return;
+                }
                 try {
+                    const attachments = await uploadPendingFiles();
+                    const payloadObj = {
+                        text: payloadText,
+                        attachments: attachments
+                    };
+                    const details = JSON.stringify(payloadObj);
+
                     const res = await fetch('api/activity_event.php', {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify({
                             action: 'chat',
-                            entity_type: 'agency_chat',
-                            entity_id: active.entity_id,
-                            details: payload
+                            entity_type: entityType,
+                            entity_id: entityId,
+                            details: details
                         })
                     });
                     const data = await res.json();
@@ -816,9 +1103,54 @@ $pageTitle = 'Inter-Agency Conversations';
                         return;
                     }
                     messageInput.value = '';
+                    clearPendingFiles();
                     await loadMessages(false, true);
                     await loadThreads();
                 } catch (_) {}
+            }
+
+            async function addUserThread() {
+                try {
+                    const usersRes = await fetch('api/interagency_users.php', { cache: 'no-store' });
+                    const usersData = await usersRes.json();
+                    if (!usersData || !usersData.ok) {
+                        alert('Unable to load users.');
+                        return;
+                    }
+
+                    const candidates = (Array.isArray(usersData.items) ? usersData.items : []).filter((u) => !u.has_thread);
+                    if (!candidates.length) {
+                        alert('All active users already have conversation threads.');
+                        return;
+                    }
+
+                    const menu = candidates.slice(0, 30).map((u) => `${u.id}: ${u.name} (${u.role})`).join('\n');
+                    const raw = window.prompt(`Enter user ID to add as conversation thread:\n\n${menu}`);
+                    if (raw === null) return;
+                    const userId = Number.parseInt(String(raw).trim(), 10);
+                    if (!Number.isInteger(userId) || userId <= 0) {
+                        alert('Invalid user ID.');
+                        return;
+                    }
+
+                    const addRes = await fetch('api/interagency_add_user_thread.php', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ user_id: userId })
+                    });
+                    const addData = await addRes.json();
+                    if (!addData || !addData.ok) {
+                        alert('Unable to add user thread.');
+                        return;
+                    }
+
+                    await loadThreads();
+                    if (addData.thread && addData.thread.id) {
+                        await selectThread(String(addData.thread.id));
+                    }
+                } catch (_) {
+                    alert('Network error while adding thread.');
+                }
             }
 
             function bindEvents() {
@@ -845,6 +1177,20 @@ $pageTitle = 'Inter-Agency Conversations';
                 });
 
                 chatForm.addEventListener('submit', handleSendMessage);
+                if (attachFileBtn && messageFilesInput) {
+                    attachFileBtn.addEventListener('click', () => messageFilesInput.click());
+                    messageFilesInput.addEventListener('change', () => {
+                        const picked = Array.from(messageFilesInput.files || []);
+                        if (!picked.length) return;
+                        const merged = [...state.pendingFiles, ...picked].slice(0, 5);
+                        state.pendingFiles = merged;
+                        syncFileInput();
+                        renderPendingFiles();
+                    });
+                }
+                if (addThreadBtn) {
+                    addThreadBtn.addEventListener('click', addUserThread);
+                }
             }
 
             document.addEventListener('DOMContentLoaded', async () => {

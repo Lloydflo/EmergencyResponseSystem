@@ -12,7 +12,16 @@
  */
 
 $sidebarUser = function_exists('get_logged_in_user') ? get_logged_in_user() : null;
-$sidebarRole = strtolower((string)($sidebarUser['role'] ?? ''));
+$sidebarRoleRaw = (string)($sidebarUser['role'] ?? ($_SESSION['login_role'] ?? $_SESSION['user_role'] ?? ''));
+$sidebarRole = function_exists('canonical_role')
+    ? canonical_role($sidebarRoleRaw)
+    : strtolower(trim($sidebarRoleRaw));
+
+// Backward compatibility: some legacy records/sessions still use "operator"
+if ($sidebarRole === 'operator') {
+    $sidebarRole = 'dispatcher';
+}
+
 $isAdminSidebar = $sidebarRole === 'admin';
 $isDispatcherSidebar = $sidebarRole === 'dispatcher';
 ?>
