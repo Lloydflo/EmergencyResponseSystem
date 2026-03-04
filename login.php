@@ -38,6 +38,9 @@ if (is_logged_in()) {
 if (isset($_GET['logged_out']) && $_GET['logged_out'] == '1') {
     $success_message = 'You have been successfully logged out.';
 }
+if (isset($_GET['password_reset']) && $_GET['password_reset'] === '1') {
+    $success_message = 'Password updated successfully. Please sign in with your new password.';
+}
 // Handle login form submission
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     debug_log('POST request received');
