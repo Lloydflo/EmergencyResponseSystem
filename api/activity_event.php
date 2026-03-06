@@ -56,8 +56,10 @@ function ensure_interagency_attachments_table(PDO $pdo): void {
             `message_id` INT NOT NULL,
             `file_name` VARCHAR(255) NOT NULL,
             `file_url` VARCHAR(500) NOT NULL,
+            `file_path` VARCHAR(500) DEFAULT NULL,
             `mime_type` VARCHAR(150) DEFAULT NULL,
             `file_size` BIGINT UNSIGNED NOT NULL DEFAULT 0,
+            `file_blob` LONGBLOB DEFAULT NULL,
             `is_image` TINYINT(1) NOT NULL DEFAULT 0,
             `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
             PRIMARY KEY (`id`),
@@ -65,6 +67,23 @@ function ensure_interagency_attachments_table(PDO $pdo): void {
             KEY `idx_interagency_msg_attach_image` (`is_image`)
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci"
     );
+
+    ensure_interagency_attachment_storage_columns($pdo);
+}
+
+function table_has_column(PDO $pdo, string $table, string $column): bool {
+    $stmt = $pdo->prepare("SHOW COLUMNS FROM `$table` LIKE ?");
+    $stmt->execute([$column]);
+    return (bool)$stmt->fetch(PDO::FETCH_ASSOC);
+}
+
+function ensure_interagency_attachment_storage_columns(PDO $pdo): void {
+    if (!table_has_column($pdo, 'interagency_message_attachments', 'file_path')) {
+        $pdo->exec("ALTER TABLE interagency_message_attachments ADD COLUMN file_path VARCHAR(500) DEFAULT NULL AFTER file_url");
+    }
+    if (!table_has_column($pdo, 'interagency_message_attachments', 'file_blob')) {
+        $pdo->exec("ALTER TABLE interagency_message_attachments ADD COLUMN file_blob LONGBLOB DEFAULT NULL AFTER file_size");
+    }
 }
 
 function app_base_path(): string {
@@ -129,6 +148,60 @@ function extract_attachments_from_details(string $details): array {
     return $attachments;
 }
 
+function upload_web_path_from_url(string $url): ?string {
+    $url = trim($url);
+    if ($url === '') {
+        return null;
+    }
+
+    $path = $url;
+    if (preg_match('#^https?://#i', $url)) {
+        $parsedPath = (string)(parse_url($url, PHP_URL_PATH) ?? '');
+        if ($parsedPath === '') {
+            return null;
+        }
+        $path = $parsedPath;
+    }
+
+    $path = str_replace('\\', '/', $path);
+    $base = app_base_path();
+    if ($base !== '' && strpos($path, $base . '/') === 0) {
+        $path = substr($path, strlen($base));
+    }
+
+    if (strpos($path, '/uploads/interagency/') !== 0) {
+        return null;
+    }
+
+    return $path;
+}
+
+function resolve_upload_fs_path(string $webPath): ?string {
+    $projectRoot = realpath(dirname(__DIR__));
+    if ($projectRoot === false) {
+        return null;
+    }
+
+    $uploadsRoot = realpath($projectRoot . '/uploads/interagency');
+    if ($uploadsRoot === false) {
+        return null;
+    }
+
+    $candidate = $projectRoot . '/' . ltrim(str_replace('\\', '/', $webPath), '/');
+    $resolved = realpath($candidate);
+    if ($resolved === false || !is_file($resolved)) {
+        return null;
+    }
+
+    $normalizedFile = str_replace('\\', '/', $resolved);
+    $normalizedRoot = rtrim(str_replace('\\', '/', $uploadsRoot), '/');
+    if ($normalizedFile !== $normalizedRoot && strpos($normalizedFile, $normalizedRoot . '/') !== 0) {
+        return null;
+    }
+
+    return $resolved;
+}
+
 function persist_message_attachments(PDO $pdo, int $messageId, string $details): void {
     if ($messageId <= 0) {
         return;
@@ -142,18 +215,43 @@ function persist_message_attachments(PDO $pdo, int $messageId, string $details):
     ensure_interagency_attachments_table($pdo);
     $insert = $pdo->prepare(
         "INSERT INTO interagency_message_attachments
-            (message_id, file_name, file_url, mime_type, file_size, is_image)
-         VALUES (?, ?, ?, ?, ?, ?)"
+            (message_id, file_name, file_url, file_path, mime_type, file_size, file_blob, is_image)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?)"
     );
     foreach ($attachments as $attachment) {
-        $insert->execute([
-            $messageId,
-            $attachment['name'],
-            $attachment['url'],
-            $attachment['mime_type'],
-            $attachment['size'],
-            $attachment['is_image']
-        ]);
+        $filePath = upload_web_path_from_url((string)$attachment['url']);
+        $fileBlob = null;
+        if ($filePath !== null) {
+            $fsPath = resolve_upload_fs_path($filePath);
+            if ($fsPath !== null) {
+                $raw = @file_get_contents($fsPath);
+                if ($raw !== false) {
+                    $fileBlob = $raw;
+                }
+            }
+        }
+
+        $insert->bindValue(1, $messageId, PDO::PARAM_INT);
+        $insert->bindValue(2, $attachment['name'], PDO::PARAM_STR);
+        $insert->bindValue(3, $attachment['url'], PDO::PARAM_STR);
+        if ($filePath !== null) {
+            $insert->bindValue(4, $filePath, PDO::PARAM_STR);
+        } else {
+            $insert->bindValue(4, null, PDO::PARAM_NULL);
+        }
+        if ($attachment['mime_type'] !== null && $attachment['mime_type'] !== '') {
+            $insert->bindValue(5, $attachment['mime_type'], PDO::PARAM_STR);
+        } else {
+            $insert->bindValue(5, null, PDO::PARAM_NULL);
+        }
+        $insert->bindValue(6, (int)$attachment['size'], PDO::PARAM_INT);
+        if ($fileBlob !== null) {
+            $insert->bindValue(7, $fileBlob, PDO::PARAM_LOB);
+        } else {
+            $insert->bindValue(7, null, PDO::PARAM_NULL);
+        }
+        $insert->bindValue(8, (int)$attachment['is_image'], PDO::PARAM_INT);
+        $insert->execute();
     }
 }
 
@@ -179,7 +277,6 @@ function ensure_activity_log_auto_increment(PDO $pdo): void {
 try {
     ensure_activity_log_auto_increment($pdo);
     $pdo->beginTransaction();
-    $attachmentWarning = null;
 
     $insertedMessageId = 0;
     $stmt = $pdo->prepare("INSERT INTO activity_log (user_id, action, entity_type, entity_id, details) VALUES (?, ?, ?, ?, ?)");
@@ -200,18 +297,13 @@ try {
     }
 
     if (($entity_type === 'agency_chat' || $entity_type === 'agency_user_chat') && $details !== '') {
-        try {
-            persist_message_attachments($pdo, $insertedMessageId, $details);
-        } catch (Throwable $attachmentError) {
-            $attachmentWarning = $attachmentError->getMessage();
-        }
+        persist_message_attachments($pdo, $insertedMessageId, $details);
     }
 
     $pdo->commit();
     echo json_encode([
         'ok' => true,
-        'message_id' => $insertedMessageId,
-        'attachment_warning' => $attachmentWarning
+        'message_id' => $insertedMessageId
     ]);
 } catch (Throwable $e) {
     if ($pdo->inTransaction()) {

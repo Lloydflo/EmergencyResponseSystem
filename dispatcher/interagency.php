@@ -284,9 +284,45 @@ $pageTitle = 'Inter-Agency Coordination';
             color: #102132;
             font-size: 0.91rem;
             font-weight: 700;
+            flex: 1;
             white-space: nowrap;
             overflow: hidden;
             text-overflow: ellipsis;
+        }
+
+        .ia-thread-title-wrap {
+            min-width: 0;
+            flex: 1;
+            display: flex;
+            align-items: center;
+            gap: 0.35rem;
+        }
+
+        .ia-thread-edit {
+            width: 22px;
+            height: 22px;
+            border: 1px solid #d7e2ee;
+            border-radius: 7px;
+            background: #fff;
+            color: #3f5c78;
+            cursor: pointer;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 0.66rem;
+            flex-shrink: 0;
+            transition: 0.2s ease;
+        }
+
+        .ia-thread-edit:hover {
+            background: #f1f6fb;
+            border-color: #bdd0e2;
+            color: #23425f;
+        }
+
+        .ia-thread-edit:focus-visible {
+            outline: 2px solid #38bdf8;
+            outline-offset: 1px;
         }
 
         .ia-thread-time {
@@ -919,7 +955,12 @@ $pageTitle = 'Inter-Agency Coordination';
                             </div>
                             <div class="ia-thread-main">
                                 <div class="ia-thread-row">
-                                    <p class="ia-thread-name">${escapeHtml(item.title || item.id)}</p>
+                                    <div class="ia-thread-title-wrap">
+                                        <p class="ia-thread-name">${escapeHtml(item.title || item.id)}</p>
+                                        <span class="ia-thread-edit" data-edit-id="${escapeAttr(item.id)}" title="Edit thread name" aria-label="Edit thread name" role="button" tabindex="0">
+                                            <i class="fas fa-pen"></i>
+                                        </span>
+                                    </div>
                                     <span class="ia-thread-time">${escapeHtml(rel(item.last_at))}</span>
                                 </div>
                                 <p class="ia-thread-sub">
@@ -1153,6 +1194,68 @@ $pageTitle = 'Inter-Agency Coordination';
                 }
             }
 
+            async function renameThread(threadId) {
+                const target = state.threads.find((item) => item.id === threadId);
+                if (!target) return;
+
+                const currentTitle = String(target.title || target.id || '').trim();
+                const raw = window.prompt('Edit thread name:', currentTitle);
+                if (raw === null) return;
+
+                const nextTitle = String(raw).trim().replace(/\s+/g, ' ');
+                if (!nextTitle) {
+                    alert('Thread name cannot be empty.');
+                    return;
+                }
+                if (nextTitle.length > 120) {
+                    alert('Thread name is too long (max 120 characters).');
+                    return;
+                }
+                if (nextTitle === currentTitle) {
+                    return;
+                }
+
+                const payload = {
+                    title: nextTitle,
+                    thread_kind: String(target.thread_kind || 'department')
+                };
+
+                if (payload.thread_kind === 'user') {
+                    const userId = Number(target.user_id || target.entity_id || 0);
+                    if (!Number.isInteger(userId) || userId <= 0) {
+                        alert('Invalid user thread target.');
+                        return;
+                    }
+                    payload.user_id = userId;
+                } else {
+                    payload.department = String(target.department || '').trim().toLowerCase();
+                    if (!payload.department) {
+                        alert('Invalid department thread target.');
+                        return;
+                    }
+                }
+
+                try {
+                    const res = await fetch('api/interagency_thread_title_update.php', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(payload)
+                    });
+                    const data = await res.json();
+                    if (!data || !data.ok) {
+                        const reason = (data && data.error) ? String(data.error) : 'Unable to rename thread.';
+                        alert(reason);
+                        return;
+                    }
+
+                    target.title = String(data.title || nextTitle);
+                    renderThreadList();
+                    renderChatHeader();
+                } catch (_) {
+                    alert('Network error while renaming thread.');
+                }
+            }
+
             function bindEvents() {
                 document.querySelectorAll('.ia-tab').forEach((tab) => {
                     tab.addEventListener('click', () => {
@@ -1169,11 +1272,30 @@ $pageTitle = 'Inter-Agency Coordination';
                 });
 
                 threadListEl.addEventListener('click', (event) => {
+                    const editBtn = event.target.closest('[data-edit-id]');
+                    if (editBtn) {
+                        const editId = editBtn.getAttribute('data-edit-id');
+                        if (editId) {
+                            renameThread(editId);
+                        }
+                        return;
+                    }
                     const thread = event.target.closest('.ia-thread');
                     if (!thread) return;
                     const id = thread.getAttribute('data-id');
                     if (!id) return;
                     selectThread(id);
+                });
+
+                threadListEl.addEventListener('keydown', (event) => {
+                    if (event.key !== 'Enter' && event.key !== ' ') return;
+                    const editBtn = event.target.closest('[data-edit-id]');
+                    if (!editBtn) return;
+                    event.preventDefault();
+                    const editId = editBtn.getAttribute('data-edit-id');
+                    if (editId) {
+                        renameThread(editId);
+                    }
                 });
 
                 chatForm.addEventListener('submit', handleSendMessage);

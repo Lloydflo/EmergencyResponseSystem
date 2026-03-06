@@ -67,6 +67,29 @@ function ensure_interagency_user_reads_table(PDO $pdo): void {
     );
 }
 
+function ensure_interagency_thread_titles_table(PDO $pdo): void {
+    $pdo->exec(
+        "CREATE TABLE IF NOT EXISTS `interagency_thread_titles` (
+            `id` BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+            `owner_user_id` INT UNSIGNED NOT NULL,
+            `thread_key` VARCHAR(64) NOT NULL,
+            `title` VARCHAR(120) NOT NULL,
+            `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            `updated_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+            PRIMARY KEY (`id`),
+            UNIQUE KEY `uk_interagency_thread_title_owner_key` (`owner_user_id`, `thread_key`),
+            KEY `idx_interagency_thread_title_owner` (`owner_user_id`)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci"
+    );
+}
+
+function build_thread_key(string $kind, string $department = '', int $userId = 0): string {
+    if ($kind === 'user') {
+        return 'user:' . max(0, $userId);
+    }
+    return 'dept:' . strtolower(trim($department));
+}
+
 function user_icon_by_role(string $role): string {
     $r = strtolower(trim($role));
     if ($r === 'admin') return 'fa-user-tie';
@@ -155,12 +178,36 @@ try {
     ensure_interagency_reads_table($pdo);
     ensure_interagency_user_threads_table($pdo);
     ensure_interagency_user_reads_table($pdo);
+    ensure_interagency_thread_titles_table($pdo);
 
     $user = get_logged_in_user();
     $currentUserId = (int)($user['id'] ?? 0);
 
+    $titleOverrides = [];
+    if ($currentUserId > 0) {
+        $titleStmt = $pdo->prepare(
+            "SELECT thread_key, title
+             FROM interagency_thread_titles
+             WHERE owner_user_id = ?"
+        );
+        $titleStmt->execute([$currentUserId]);
+        $titleRows = $titleStmt->fetchAll(PDO::FETCH_ASSOC);
+        foreach ($titleRows as $row) {
+            $key = trim((string)($row['thread_key'] ?? ''));
+            $title = trim((string)($row['title'] ?? ''));
+            if ($key !== '' && $title !== '') {
+                $titleOverrides[$key] = $title;
+            }
+        }
+    }
+
     $threads = [];
     foreach ($threadDefs as $entityId => $def) {
+        $threadKey = build_thread_key('department', (string)($def['department'] ?? ''));
+        $customTitle = $titleOverrides[$threadKey] ?? '';
+        if ($customTitle !== '') {
+            $def['title'] = $customTitle;
+        }
         $threads[$entityId] = array_merge($def, [
             'thread_kind' => 'department',
             'entity_id' => $entityId,
@@ -351,6 +398,11 @@ try {
         $displayName = trim((string)($counterpart['name'] ?? ''));
         $displayRole = (string)($counterpart['role'] ?? 'user');
         $displayStatus = strtolower((string)($counterpart['status'] ?? 'offline'));
+        $threadKey = build_thread_key('user', '', $targetUserId);
+        $customTitle = $titleOverrides[$threadKey] ?? '';
+        if ($customTitle !== '') {
+            $displayName = $customTitle;
+        }
 
         $userLatestStmt->execute([$currentUserId, $targetUserId, $targetUserId, $currentUserId]);
         $latest = $userLatestStmt->fetch(PDO::FETCH_ASSOC) ?: null;
