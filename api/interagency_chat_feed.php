@@ -3,6 +3,7 @@ header('Content-Type: application/json');
 
 require_once __DIR__ . '/../includes/db.php';
 require_once __DIR__ . '/../includes/auth.php';
+require_once __DIR__ . '/../includes/media_storage.php';
 
 if (!is_logged_in()) {
     http_response_code(401);
@@ -68,51 +69,6 @@ function ensure_interagency_user_reads_table(PDO $pdo): void {
     );
 }
 
-function ensure_interagency_attachments_table(PDO $pdo): void {
-    $pdo->exec(
-        "CREATE TABLE IF NOT EXISTS `interagency_message_attachments` (
-            `id` BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
-            `message_id` INT NOT NULL,
-            `file_name` VARCHAR(255) NOT NULL,
-            `file_url` VARCHAR(500) NOT NULL,
-            `file_path` VARCHAR(500) DEFAULT NULL,
-            `mime_type` VARCHAR(150) DEFAULT NULL,
-            `file_size` BIGINT UNSIGNED NOT NULL DEFAULT 0,
-            `file_blob` LONGBLOB DEFAULT NULL,
-            `is_image` TINYINT(1) NOT NULL DEFAULT 0,
-            `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-            PRIMARY KEY (`id`),
-            KEY `idx_interagency_msg_attach_message` (`message_id`),
-            KEY `idx_interagency_msg_attach_image` (`is_image`)
-        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci"
-    );
-}
-
-function app_base_path(): string {
-    $scriptName = str_replace('\\', '/', (string)($_SERVER['SCRIPT_NAME'] ?? ''));
-    $dir = str_replace('\\', '/', dirname($scriptName));
-    if ($dir === '/' || $dir === '\\' || $dir === '.' || $dir === '') {
-        return '';
-    }
-    $dir = rtrim($dir, '/');
-    if (substr($dir, -4) === '/api') {
-        $dir = substr($dir, 0, -4);
-    }
-    return rtrim($dir, '/');
-}
-
-function normalize_attachment_url(string $url): string {
-    $url = trim($url);
-    if ($url === '') {
-        return '';
-    }
-    if (preg_match('#^https?://#i', $url) || strpos($url, '/') === 0) {
-        return $url;
-    }
-    $base = app_base_path();
-    return ($base !== '' ? $base : '') . '/' . ltrim($url, '/');
-}
-
 function parse_message_details(string $raw): array {
     $text = trim($raw);
     $attachments = [];
@@ -124,11 +80,11 @@ function parse_message_details(string $raw): array {
             if (isset($decoded['attachments']) && is_array($decoded['attachments'])) {
                 foreach ($decoded['attachments'] as $a) {
                     if (!is_array($a)) continue;
-                    $url = normalize_attachment_url((string)($a['url'] ?? ''));
+                    $url = trim((string)($a['url'] ?? ''));
                     if ($url === '') continue;
                     $attachments[] = [
                         'name' => trim((string)($a['name'] ?? basename($url))),
-                        'url' => $url,
+                        'url' => preg_match('#^https?://#i', $url) || strpos($url, '/') === 0 ? $url : media_endpoint_url($url),
                         'mime_type' => trim((string)($a['mime_type'] ?? '')),
                         'size' => (int)($a['size'] ?? 0),
                         'is_image' => !empty($a['is_image'])
@@ -164,7 +120,7 @@ function load_attachments_by_message(PDO $pdo, array $messageIds): array {
 
         $placeholders = implode(',', array_fill(0, count($ids), '?'));
         $stmt = $pdo->prepare(
-            "SELECT message_id, file_name, file_url, mime_type, file_size, is_image
+            "SELECT id, message_id, file_name, file_url, mime_type, file_size, is_image, file_blob
              FROM interagency_message_attachments
              WHERE message_id IN ($placeholders)
              ORDER BY id ASC"
@@ -172,12 +128,19 @@ function load_attachments_by_message(PDO $pdo, array $messageIds): array {
         $stmt->execute($ids);
         $rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
         foreach ($rows as $row) {
+            $attachmentId = (int)($row['id'] ?? 0);
             $mid = (int)($row['message_id'] ?? 0);
             if ($mid <= 0) continue;
             if (!isset($result[$mid])) {
                 $result[$mid] = [];
             }
-            $url = normalize_attachment_url((string)($row['file_url'] ?? ''));
+            $hasBlob = !empty($row['file_blob']);
+            $url = $hasBlob && $attachmentId > 0
+                ? interagency_attachment_url($attachmentId)
+                : trim((string)($row['file_url'] ?? ''));
+            if ($url !== '' && !preg_match('#^https?://#i', $url) && strpos($url, '/') !== 0) {
+                $url = media_endpoint_url($url);
+            }
             if ($url === '') continue;
             $result[$mid][] = [
                 'name' => trim((string)($row['file_name'] ?? basename($url))),

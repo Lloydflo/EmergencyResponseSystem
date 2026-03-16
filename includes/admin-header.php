@@ -1,5 +1,6 @@
 <?php
 if (session_status() === PHP_SESSION_NONE) session_start();
+require_once __DIR__ . '/media_storage.php';
 $user_name = $_SESSION['user_name'] ?? 'Admin';
 $user_email = $_SESSION['user_email'] ?? $_SESSION['email'] ?? '';
 $user_role = $_SESSION['user_role'] ?? 'admin';
@@ -7,6 +8,36 @@ $normalized_user_role = strtolower((string)$user_role);
 $interagency_page = $normalized_user_role === 'dispatcher'
     ? 'dispatcher/interagency.php'
     : 'admin/interagency.php';
+$profile_page = 'profile.php';
+$account_settings_page = 'account_settings.php';
+$user_avatar = trim((string)($_SESSION['user_avatar'] ?? ''));
+
+if (!empty($_SESSION['user_id'])) {
+    if (!function_exists('get_db_connection') && is_file(__DIR__ . '/db.php')) {
+        require_once __DIR__ . '/db.php';
+    }
+
+    if (function_exists('get_db_connection')) {
+        try {
+            $pdo = get_db_connection();
+            if ($pdo instanceof PDO) {
+                $image = get_active_profile_image($pdo, (int)$_SESSION['user_id']);
+                if (is_array($image) && !empty($image['url'])) {
+                    $user_avatar = (string)$image['url'];
+                    $_SESSION['user_avatar'] = $user_avatar;
+                } else {
+                    $user_avatar = '';
+                    unset($_SESSION['user_avatar']);
+                }
+            }
+        } catch (Throwable $e) {
+        }
+    }
+}
+
+$avatar_source = $user_avatar !== ''
+    ? $user_avatar
+    : 'https://ui-avatars.com/api/?name=' . urlencode($user_name) . '&background=4c8a89&color=fff&size=128';
 ?>
 
 <link rel="stylesheet" href="css/notification-modal.css">;
@@ -170,7 +201,7 @@ $interagency_page = $normalized_user_role === 'dispatcher'
                 <div class="user-role"><?php echo htmlspecialchars($user_role); ?></div>
             </div>
             <div class="user-avatar">
-                <img src="https://ui-avatars.com/api/?name=<?php echo urlencode($user_name); ?>&background=4c8a89&color=fff&size=128" alt="<?php echo htmlspecialchars($user_name); ?>" class="avatar-img">
+                <img src="<?php echo htmlspecialchars($avatar_source); ?>" alt="<?php echo htmlspecialchars($user_name); ?>" class="avatar-img">
             </div>
             <i class="fas fa-chevron-down dropdown-icon"></i>
         </div>
@@ -183,7 +214,7 @@ $interagency_page = $normalized_user_role === 'dispatcher'
     <div class="dropdown-header">
         <div class="dropdown-user-info">
             <div class="dropdown-user-avatar">
-                <img src="https://ui-avatars.com/api/?name=<?php echo urlencode($user_name); ?>&background=4c8a89&color=fff&size=128" alt="<?php echo htmlspecialchars($user_name); ?>">
+                <img src="<?php echo htmlspecialchars($avatar_source); ?>" alt="<?php echo htmlspecialchars($user_name); ?>">
             </div>
             <div class="dropdown-user-details">
                 <div class="dropdown-user-name"><?php echo htmlspecialchars($user_name); ?></div>
@@ -193,11 +224,11 @@ $interagency_page = $normalized_user_role === 'dispatcher'
     </div>
     
     <div class="dropdown-body">
-        <a href="#" class="dropdown-item">
+        <a href="<?php echo htmlspecialchars($profile_page); ?>" class="dropdown-item">
             <i class="fas fa-user"></i>
             <span>Profile</span>
         </a>
-        <a href="#" class="dropdown-item">
+        <a href="<?php echo htmlspecialchars($account_settings_page); ?>" class="dropdown-item">
             <i class="fas fa-cog"></i>
             <span>Settings</span>
         </a>

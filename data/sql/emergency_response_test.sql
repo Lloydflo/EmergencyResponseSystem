@@ -900,6 +900,39 @@ ALTER TABLE `users`
   MODIFY `id` int(10) UNSIGNED NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=3;
 
 --
+-- Media storage tables
+--
+CREATE TABLE IF NOT EXISTS `user_profile_images` (
+  `id` BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+  `user_id` INT UNSIGNED NOT NULL,
+  `file_name` VARCHAR(255) NOT NULL,
+  `mime_type` VARCHAR(150) NOT NULL,
+  `file_size` BIGINT UNSIGNED NOT NULL DEFAULT 0,
+  `image_blob` LONGBLOB NOT NULL,
+  `is_active` TINYINT(1) NOT NULL DEFAULT 1,
+  `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `updated_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  KEY `idx_user_profile_images_user` (`user_id`),
+  KEY `idx_user_profile_images_active` (`user_id`, `is_active`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS `interagency_attachment_uploads` (
+  `id` BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+  `user_id` INT UNSIGNED NOT NULL,
+  `file_name` VARCHAR(255) NOT NULL,
+  `mime_type` VARCHAR(150) NOT NULL,
+  `file_size` BIGINT UNSIGNED NOT NULL DEFAULT 0,
+  `file_blob` LONGBLOB NOT NULL,
+  `is_image` TINYINT(1) NOT NULL DEFAULT 0,
+  `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `expires_at` DATETIME NOT NULL,
+  PRIMARY KEY (`id`),
+  KEY `idx_interagency_attachment_uploads_user` (`user_id`),
+  KEY `idx_interagency_attachment_uploads_exp` (`expires_at`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+--
 -- AUTO_INCREMENT for table `resources`
 --
 ALTER TABLE `resources`

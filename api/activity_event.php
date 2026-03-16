@@ -3,6 +3,7 @@
 header('Content-Type: application/json');
 require_once __DIR__ . '/../includes/db.php';
 require_once __DIR__ . '/../includes/auth.php';
+require_once __DIR__ . '/../includes/media_storage.php';
 
 $pdo = get_db_connection();
 if (!$pdo) {
@@ -49,68 +50,6 @@ if ($action === '') {
     exit;
 }
 
-function ensure_interagency_attachments_table(PDO $pdo): void {
-    $pdo->exec(
-        "CREATE TABLE IF NOT EXISTS `interagency_message_attachments` (
-            `id` BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
-            `message_id` INT NOT NULL,
-            `file_name` VARCHAR(255) NOT NULL,
-            `file_url` VARCHAR(500) NOT NULL,
-            `file_path` VARCHAR(500) DEFAULT NULL,
-            `mime_type` VARCHAR(150) DEFAULT NULL,
-            `file_size` BIGINT UNSIGNED NOT NULL DEFAULT 0,
-            `file_blob` LONGBLOB DEFAULT NULL,
-            `is_image` TINYINT(1) NOT NULL DEFAULT 0,
-            `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-            PRIMARY KEY (`id`),
-            KEY `idx_interagency_msg_attach_message` (`message_id`),
-            KEY `idx_interagency_msg_attach_image` (`is_image`)
-        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci"
-    );
-
-    ensure_interagency_attachment_storage_columns($pdo);
-}
-
-function table_has_column(PDO $pdo, string $table, string $column): bool {
-    $stmt = $pdo->prepare("SHOW COLUMNS FROM `$table` LIKE ?");
-    $stmt->execute([$column]);
-    return (bool)$stmt->fetch(PDO::FETCH_ASSOC);
-}
-
-function ensure_interagency_attachment_storage_columns(PDO $pdo): void {
-    if (!table_has_column($pdo, 'interagency_message_attachments', 'file_path')) {
-        $pdo->exec("ALTER TABLE interagency_message_attachments ADD COLUMN file_path VARCHAR(500) DEFAULT NULL AFTER file_url");
-    }
-    if (!table_has_column($pdo, 'interagency_message_attachments', 'file_blob')) {
-        $pdo->exec("ALTER TABLE interagency_message_attachments ADD COLUMN file_blob LONGBLOB DEFAULT NULL AFTER file_size");
-    }
-}
-
-function app_base_path(): string {
-    $scriptName = str_replace('\\', '/', (string)($_SERVER['SCRIPT_NAME'] ?? ''));
-    $dir = str_replace('\\', '/', dirname($scriptName));
-    if ($dir === '/' || $dir === '\\' || $dir === '.' || $dir === '') {
-        return '';
-    }
-    $dir = rtrim($dir, '/');
-    if (substr($dir, -4) === '/api') {
-        $dir = substr($dir, 0, -4);
-    }
-    return rtrim($dir, '/');
-}
-
-function normalize_attachment_url(string $url): string {
-    $url = trim($url);
-    if ($url === '') {
-        return '';
-    }
-    if (preg_match('#^https?://#i', $url) || strpos($url, '/') === 0) {
-        return $url;
-    }
-    $base = app_base_path();
-    return ($base !== '' ? $base : '') . '/' . ltrim($url, '/');
-}
-
 function extract_attachments_from_details(string $details): array {
     $details = trim($details);
     if ($details === '' || ($details[0] !== '{' && $details[0] !== '[')) {
@@ -126,11 +65,12 @@ function extract_attachments_from_details(string $details): array {
         if (!is_array($rawAttachment)) {
             continue;
         }
-        $url = normalize_attachment_url((string)($rawAttachment['url'] ?? ''));
-        if ($url === '') {
+        $tempId = (int)($rawAttachment['temp_id'] ?? 0);
+        $url = trim((string)($rawAttachment['url'] ?? ''));
+        if ($tempId <= 0 && $url === '') {
             continue;
         }
-        $name = trim((string)($rawAttachment['name'] ?? basename($url)));
+        $name = trim((string)($rawAttachment['name'] ?? ($url !== '' ? basename($url) : 'Attachment')));
         if ($name === '') {
             $name = 'Attachment';
         }
@@ -138,68 +78,15 @@ function extract_attachments_from_details(string $details): array {
         $size = (int)($rawAttachment['size'] ?? 0);
         $isImage = !empty($rawAttachment['is_image']) ? 1 : 0;
         $attachments[] = [
+            'temp_id' => $tempId,
             'name' => substr($name, 0, 255),
-            'url' => substr($url, 0, 500),
+            'url' => ($url !== '' ? substr($url, 0, 500) : ''),
             'mime_type' => ($mime !== '' ? substr($mime, 0, 150) : null),
             'size' => max(0, $size),
             'is_image' => $isImage
         ];
     }
     return $attachments;
-}
-
-function upload_web_path_from_url(string $url): ?string {
-    $url = trim($url);
-    if ($url === '') {
-        return null;
-    }
-
-    $path = $url;
-    if (preg_match('#^https?://#i', $url)) {
-        $parsedPath = (string)(parse_url($url, PHP_URL_PATH) ?? '');
-        if ($parsedPath === '') {
-            return null;
-        }
-        $path = $parsedPath;
-    }
-
-    $path = str_replace('\\', '/', $path);
-    $base = app_base_path();
-    if ($base !== '' && strpos($path, $base . '/') === 0) {
-        $path = substr($path, strlen($base));
-    }
-
-    if (strpos($path, '/uploads/interagency/') !== 0) {
-        return null;
-    }
-
-    return $path;
-}
-
-function resolve_upload_fs_path(string $webPath): ?string {
-    $projectRoot = realpath(dirname(__DIR__));
-    if ($projectRoot === false) {
-        return null;
-    }
-
-    $uploadsRoot = realpath($projectRoot . '/uploads/interagency');
-    if ($uploadsRoot === false) {
-        return null;
-    }
-
-    $candidate = $projectRoot . '/' . ltrim(str_replace('\\', '/', $webPath), '/');
-    $resolved = realpath($candidate);
-    if ($resolved === false || !is_file($resolved)) {
-        return null;
-    }
-
-    $normalizedFile = str_replace('\\', '/', $resolved);
-    $normalizedRoot = rtrim(str_replace('\\', '/', $uploadsRoot), '/');
-    if ($normalizedFile !== $normalizedRoot && strpos($normalizedFile, $normalizedRoot . '/') !== 0) {
-        return null;
-    }
-
-    return $resolved;
 }
 
 function persist_message_attachments(PDO $pdo, int $messageId, string $details): void {
@@ -213,45 +100,30 @@ function persist_message_attachments(PDO $pdo, int $messageId, string $details):
     }
 
     ensure_interagency_attachments_table($pdo);
-    $insert = $pdo->prepare(
-        "INSERT INTO interagency_message_attachments
-            (message_id, file_name, file_url, file_path, mime_type, file_size, file_blob, is_image)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?)"
-    );
     foreach ($attachments as $attachment) {
-        $filePath = upload_web_path_from_url((string)$attachment['url']);
-        $fileBlob = null;
-        if ($filePath !== null) {
-            $fsPath = resolve_upload_fs_path($filePath);
-            if ($fsPath !== null) {
-                $raw = @file_get_contents($fsPath);
-                if ($raw !== false) {
-                    $fileBlob = $raw;
-                }
-            }
+        $tempId = (int)($attachment['temp_id'] ?? 0);
+        if ($tempId > 0) {
+            finalize_interagency_attachment_upload($pdo, $messageId, $tempId);
+            continue;
         }
 
-        $insert->bindValue(1, $messageId, PDO::PARAM_INT);
-        $insert->bindValue(2, $attachment['name'], PDO::PARAM_STR);
-        $insert->bindValue(3, $attachment['url'], PDO::PARAM_STR);
-        if ($filePath !== null) {
-            $insert->bindValue(4, $filePath, PDO::PARAM_STR);
-        } else {
-            $insert->bindValue(4, null, PDO::PARAM_NULL);
+        if (trim((string)$attachment['url']) === '') {
+            continue;
         }
-        if ($attachment['mime_type'] !== null && $attachment['mime_type'] !== '') {
-            $insert->bindValue(5, $attachment['mime_type'], PDO::PARAM_STR);
-        } else {
-            $insert->bindValue(5, null, PDO::PARAM_NULL);
-        }
-        $insert->bindValue(6, (int)$attachment['size'], PDO::PARAM_INT);
-        if ($fileBlob !== null) {
-            $insert->bindValue(7, $fileBlob, PDO::PARAM_LOB);
-        } else {
-            $insert->bindValue(7, null, PDO::PARAM_NULL);
-        }
-        $insert->bindValue(8, (int)$attachment['is_image'], PDO::PARAM_INT);
-        $insert->execute();
+
+        $insert = $pdo->prepare(
+            "INSERT INTO interagency_message_attachments
+                (message_id, file_name, file_url, file_path, mime_type, file_size, file_blob, is_image)
+             VALUES (?, ?, ?, NULL, ?, ?, NULL, ?)"
+        );
+        $insert->execute([
+            $messageId,
+            $attachment['name'],
+            $attachment['url'],
+            $attachment['mime_type'],
+            (int)$attachment['size'],
+            (int)$attachment['is_image'],
+        ]);
     }
 }
 
