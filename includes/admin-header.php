@@ -400,12 +400,12 @@ document.addEventListener('DOMContentLoaded', function() {
     }
 
     function previewText(item) {
-        if (!item || typeof item !== 'object') return 'May bagong mensahe sa interagency.';
+        if (!item || typeof item !== 'object') return 'There is a new interagency message.';
         const cleanText = String(item.last_text || '')
             .replace(/^\[[^\]]+\]\s*/, '')
             .trim();
         if (cleanText) return cleanText;
-        if ((Number(item.unread) || 0) > 0) return 'May bagong mensahe sa interagency.';
+        if ((Number(item.unread) || 0) > 0) return 'There is a new interagency message.';
         return 'No messages yet.';
     }
 

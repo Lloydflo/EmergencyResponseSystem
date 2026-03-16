@@ -34,10 +34,10 @@ try {
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['upload_profile_photo'])) {
     if (!$pdo || $userId <= 0) {
         $feedbackType = 'error';
-        $feedbackMessage = 'Hindi ma-save ang profile picture dahil walang active database connection.';
+        $feedbackMessage = 'The profile picture could not be saved because there is no active database connection.';
     } elseif (!isset($_FILES['profile_photo']) || !is_array($_FILES['profile_photo'])) {
         $feedbackType = 'error';
-        $feedbackMessage = 'Walang napiling image file.';
+        $feedbackMessage = 'No image file was selected.';
     } else {
         $upload = $_FILES['profile_photo'];
         $uploadError = (int)($upload['error'] ?? UPLOAD_ERR_NO_FILE);
@@ -52,10 +52,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['upload_profile_photo'
 
         if ($uploadError !== UPLOAD_ERR_OK) {
             $feedbackType = 'error';
-            $feedbackMessage = 'Nagkaroon ng problema habang ina-upload ang image.';
+            $feedbackMessage = 'There was a problem while uploading the image.';
         } elseif ($fileSize <= 0 || $fileSize > $maxFileSize) {
             $feedbackType = 'error';
-            $feedbackMessage = 'Ang profile picture ay dapat image file na hanggang 5MB lang.';
+            $feedbackMessage = 'The profile picture must be an image file up to 5MB only.';
         } else {
             $detectedMime = null;
             if (function_exists('finfo_open')) {
@@ -76,12 +76,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['upload_profile_photo'
 
             if (!$detectedMime || !isset($allowedMimeTypes[$detectedMime])) {
                 $feedbackType = 'error';
-                $feedbackMessage = 'PNG, JPG, at WEBP images lang ang puwedeng i-upload.';
+                $feedbackMessage = 'Only PNG, JPG, and WEBP images can be uploaded.';
             } else {
                 $blob = @file_get_contents($tmpPath);
                 if ($blob === false || $blob === '') {
                     $feedbackType = 'error';
-                    $feedbackMessage = 'Hindi mabasa ang image file. Pakisubukan ulit.';
+                    $feedbackMessage = 'The image file could not be read. Please try again.';
                 } else {
                     try {
                         $storedImage = store_profile_image(
@@ -96,14 +96,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['upload_profile_photo'
                             $profileImage = $storedImage;
                             $_SESSION['user_avatar'] = (string)$storedImage['url'];
                             $feedbackType = 'success';
-                            $feedbackMessage = 'Na-update na ang profile picture mo.';
+                            $feedbackMessage = 'Your profile picture has been updated.';
                         } else {
                             $feedbackType = 'error';
-                            $feedbackMessage = 'Na-upload ang image pero hindi na-save sa profile image storage.';
+                            $feedbackMessage = 'The image was uploaded but could not be saved to profile image storage.';
                         }
                     } catch (Throwable $e) {
                         $feedbackType = 'error';
-                        $feedbackMessage = 'Hindi na-save ang profile picture sa database.';
+                        $feedbackMessage = 'The profile picture could not be saved to the database.';
                     }
                 }
             }
@@ -165,8 +165,8 @@ $effectiveRole = $canonicalRole === 'unknown' ? current_session_role() : $canoni
 $roleLabel = profile_format_role((string)($profile['role'] ?? $effectiveRole));
 $profileHeading = $effectiveRole === 'admin' ? 'Admin Profile' : 'User Profile';
 $profileIntro = $effectiveRole === 'admin'
-    ? 'Narito ang personal information ng admin account na kasalukuyang naka-login sa system.'
-    : 'Narito ang personal information ng kasalukuyang naka-login na account.';
+    ? 'Here is the personal information of the admin account currently logged in to the system.'
+    : 'Here is the personal information of the account currently logged in.';
 $dashboardPath = role_home_path($effectiveRole !== 'unknown' ? $effectiveRole : 'admin');
 $avatarUrl = is_array($profileImage) && !empty($profileImage['url'])
     ? (string)$profileImage['url']
@@ -364,8 +364,8 @@ $updatedAt = profile_format_datetime($profile['updated_at'] ?? null);
                     </div>
 
                     <p class="profile-body-copy">
-                        Ang page na ito ang lalabas kapag pinindot ang <strong>Profile</strong> sa user dropdown. Dito na naka-display
-                        ang personal information ng current admin sa loob ng main content area para consistent sa layout ng dashboard.
+                        This page appears when <strong>Profile</strong> is clicked in the user dropdown. The current admin's
+                        personal information is displayed here in the main content area to keep the dashboard layout consistent.
                     </p>
 
                     <div class="profile-meta-row">

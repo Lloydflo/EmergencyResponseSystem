@@ -289,13 +289,13 @@ $pageTitle = 'System Settings';
     <div class="main-content">
         <div class="settings-wrap">
             <section class="settings-hero">
-                <h1>Basic System Settings</h1>
-                <p>Simple admin settings lang ito para sa pangalan ng system, center details, language, timezone, at maintenance notice.</p>
+                <h1>System Settings</h1>
+                <p>These are admin settings for the system name, center details, language, timezone, and maintenance notice.</p>
             </section>
 
             <form id="settingsForm" class="settings-card">
                 <h2>General Settings</h2>
-                <p>Mga pangunahing impormasyon na puwedeng i-update ng admin.</p>
+                <p>Core information that the admin can update.</p>
 
                 <div class="settings-grid">
                     <div class="field">
@@ -346,7 +346,7 @@ $pageTitle = 'System Settings';
                         <input type="checkbox" id="maintenanceMode" name="maintenanceMode">
                         <div>
                             <strong>Enable Maintenance Mode</strong>
-                            <span>Kapag naka-on, lalabas sa summary na naka-maintenance ang system.</span>
+                            <span>When enabled, the summary will show that the system is under maintenance.</span>
                         </div>
                     </label>
                 </div>
@@ -366,7 +366,7 @@ $pageTitle = 'System Settings';
 
             <section class="settings-card">
                 <h2>Current Status</h2>
-                <p>Mabilis na view ng current basic configuration.</p>
+                <p>A quick view of the current basic configuration.</p>
                 <div class="settings-note" id="summaryBox">
                     System is available and running normally.
                 </div>

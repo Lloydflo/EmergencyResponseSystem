@@ -973,7 +973,7 @@ $pageTitle = 'Inter-Agency Conversations';
             <div class="ia-modal-head">
                 <div>
                     <p class="ia-modal-title" id="addThreadModalTitle">Add Conversation Thread</p>
-                    <p class="ia-modal-subtitle">Piliin kung sinong active user ang idaragdag sa threadlist.</p>
+                    <p class="ia-modal-subtitle">Choose which active user will be added to the thread list.</p>
                 </div>
                 <button type="button" class="ia-modal-close" id="addThreadModalCloseBtn" aria-label="Close add thread modal">
                     <i class="fas fa-times"></i>
