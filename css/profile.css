@@ -19,6 +19,7 @@
         linear-gradient(135deg, #f5fbfb 0%, #eef5ff 100%);
     border: 1px solid rgba(76, 138, 137, 0.18);
     box-shadow: 0 24px 60px rgba(15, 23, 42, 0.08);
+    margin: 2rem;
 }
 
 .profile-hero::after {
