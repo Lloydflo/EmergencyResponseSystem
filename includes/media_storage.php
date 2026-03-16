@@ -7,11 +7,23 @@ if (!function_exists('media_app_base_path')) {
         if ($dir === '/' || $dir === '\\' || $dir === '.' || $dir === '') {
             return '';
         }
-        $dir = rtrim($dir, '/');
-        if (substr($dir, -4) === '/api') {
-            $dir = substr($dir, 0, -4);
+
+        $segments = array_values(array_filter(explode('/', trim($dir, '/')), 'strlen'));
+        if (!$segments) {
+            return '';
         }
-        return rtrim($dir, '/');
+
+        $appSubfolders = ['api', 'admin', 'dispatcher', 'includes'];
+        $last = strtolower((string)end($segments));
+        if (in_array($last, $appSubfolders, true)) {
+            array_pop($segments);
+        }
+
+        if (!$segments) {
+            return '';
+        }
+
+        return '/' . implode('/', $segments);
     }
 }
 
@@ -316,4 +328,3 @@ if (!function_exists('finalize_interagency_attachment_upload')) {
         ];
     }
 }
-
