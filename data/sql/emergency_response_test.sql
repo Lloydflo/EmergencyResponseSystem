@@ -109,6 +109,52 @@ CREATE TABLE IF NOT EXISTS `interagency_message_attachments` (
 -- --------------------------------------------------------
 
 --
+-- Table structure for table `admin_resources`
+--
+
+CREATE TABLE `admin_resources` (
+  `id` bigint(20) UNSIGNED NOT NULL,
+  `code` varchar(50) NOT NULL,
+  `name` varchar(200) NOT NULL,
+  `category` enum('vehicles','personnel','equipment') NOT NULL,
+  `status` enum('available','in_use','maintenance','offline') NOT NULL DEFAULT 'available',
+  `location` varchar(255) NOT NULL,
+  `driver_name` varchar(150) DEFAULT NULL,
+  `plate_number` varchar(50) DEFAULT NULL,
+  `position_title` varchar(150) DEFAULT NULL,
+  `assignment` varchar(255) DEFAULT NULL,
+  `notes` text DEFAULT NULL,
+  `created_at` datetime NOT NULL DEFAULT current_timestamp(),
+  `updated_at` datetime NOT NULL DEFAULT current_timestamp() ON UPDATE current_timestamp()
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- --------------------------------------------------------
+
+--
+-- Table structure for table `admin_resources_archive`
+--
+
+CREATE TABLE `admin_resources_archive` (
+  `id` bigint(20) UNSIGNED NOT NULL,
+  `resource_id` bigint(20) UNSIGNED NOT NULL,
+  `code` varchar(50) NOT NULL,
+  `name` varchar(200) NOT NULL,
+  `category` enum('vehicles','personnel','equipment') NOT NULL,
+  `status` enum('available','in_use','maintenance','offline') NOT NULL DEFAULT 'available',
+  `location` varchar(255) NOT NULL,
+  `driver_name` varchar(150) DEFAULT NULL,
+  `plate_number` varchar(50) DEFAULT NULL,
+  `position_title` varchar(150) DEFAULT NULL,
+  `assignment` varchar(255) DEFAULT NULL,
+  `notes` text DEFAULT NULL,
+  `created_at` datetime NOT NULL,
+  `updated_at` datetime NOT NULL,
+  `deleted_at` datetime NOT NULL DEFAULT current_timestamp()
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- --------------------------------------------------------
+
+--
 -- Table structure for table `agencies`
 --
 
@@ -641,7 +687,8 @@ CREATE TABLE `users` (
   `email` varchar(150) NOT NULL,
   `password` varchar(255) NOT NULL,
   `name` varchar(150) NOT NULL,
-  `role` enum('admin','operator','viewer') NOT NULL DEFAULT 'viewer',
+  `department` varchar(150) DEFAULT NULL,
+  `role` enum('admin','operator','viewer','dispatcher','responder') NOT NULL DEFAULT 'viewer',
   `status` enum('active','inactive') NOT NULL DEFAULT 'active',
   `created_at` timestamp NOT NULL DEFAULT current_timestamp(),
   `updated_at` timestamp NULL DEFAULT NULL ON UPDATE current_timestamp(),
@@ -652,12 +699,12 @@ CREATE TABLE `users` (
 -- Dumping data for table `users`
 --
 
-INSERT INTO `users` (`id`, `email`, `password`, `name`, `role`, `status`, `created_at`, `updated_at`, `last_login`) VALUES
-(1, 'aldrinisidro6@gmail.com', '$2y$10$XaD//IFx/8UDuAraZmWPG.O9T8TI3dC3U8HzyrNookjpMUXumSu8G', 'Aldrin', 'admin', 'active', '2026-02-10 16:33:47', '2026-02-11 22:40:57', '2026-02-11 22:40:57'),
-(1, 'aldrinisidro6@gmail.com', '$2y$10$uijKapQWHxkPLPRxIHW34OoTWNaXnJlaxWVQeboSSdM1Kat33Sk6q', 'Aldrin', 'admin', 'active', '2026-02-02 14:05:18', '2026-02-11 22:40:57', '2026-02-11 22:40:57'),
-(2, 'admin@example.com', '$2y$10$/KMzrUa6seIiuUY2tDCALOwnudXUgXu02z9OYL33tvmjUUWx3jCT6', 'Administrator', 'admin', 'active', '2026-02-09 16:25:22', NULL, NULL),
-(1, 'aldrinisidro6@gmail.com', '$2y$10$uijKapQWHxkPLPRxIHW34OoTWNaXnJlaxWVQeboSSdM1Kat33Sk6q', 'Aldrin', 'admin', 'active', '2026-02-02 14:05:18', '2026-02-11 13:46:25', '2026-02-11 13:46:25'),
-(2, 'admin@example.com', '$2y$10$/KMzrUa6seIiuUY2tDCALOwnudXUgXu02z9OYL33tvmjUUWx3jCT6', 'Administrator', 'admin', 'active', '2026-02-09 16:25:22', NULL, NULL);
+INSERT INTO `users` (`id`, `email`, `password`, `name`, `department`, `role`, `status`, `created_at`, `updated_at`, `last_login`) VALUES
+(1, 'aldrinisidro6@gmail.com', '$2y$10$XaD//IFx/8UDuAraZmWPG.O9T8TI3dC3U8HzyrNookjpMUXumSu8G', 'Aldrin', 'Administration', 'admin', 'active', '2026-02-10 16:33:47', '2026-02-11 22:40:57', '2026-02-11 22:40:57'),
+(1, 'aldrinisidro6@gmail.com', '$2y$10$uijKapQWHxkPLPRxIHW34OoTWNaXnJlaxWVQeboSSdM1Kat33Sk6q', 'Aldrin', 'Administration', 'admin', 'active', '2026-02-02 14:05:18', '2026-02-11 22:40:57', '2026-02-11 22:40:57'),
+(2, 'admin@example.com', '$2y$10$/KMzrUa6seIiuUY2tDCALOwnudXUgXu02z9OYL33tvmjUUWx3jCT6', 'Administrator', 'Administration', 'admin', 'active', '2026-02-09 16:25:22', NULL, NULL),
+(1, 'aldrinisidro6@gmail.com', '$2y$10$uijKapQWHxkPLPRxIHW34OoTWNaXnJlaxWVQeboSSdM1Kat33Sk6q', 'Aldrin', 'Administration', 'admin', 'active', '2026-02-02 14:05:18', '2026-02-11 13:46:25', '2026-02-11 13:46:25'),
+(2, 'admin@example.com', '$2y$10$/KMzrUa6seIiuUY2tDCALOwnudXUgXu02z9OYL33tvmjUUWx3jCT6', 'Administrator', 'Administration', 'admin', 'active', '2026-02-09 16:25:22', NULL, NULL);
 
 --
 -- Indexes for dumped tables
@@ -668,6 +715,24 @@ INSERT INTO `users` (`id`, `email`, `password`, `name`, `role`, `status`, `creat
 --
 ALTER TABLE `activity_log`
   ADD PRIMARY KEY (`id`);
+
+--
+-- Indexes for table `admin_resources`
+--
+ALTER TABLE `admin_resources`
+  ADD PRIMARY KEY (`id`),
+  ADD UNIQUE KEY `uk_admin_resources_code` (`code`),
+  ADD KEY `idx_admin_resources_category` (`category`),
+  ADD KEY `idx_admin_resources_status` (`status`);
+
+--
+-- Indexes for table `admin_resources_archive`
+--
+ALTER TABLE `admin_resources_archive`
+  ADD PRIMARY KEY (`id`),
+  ADD KEY `idx_admin_resources_archive_resource_id` (`resource_id`),
+  ADD KEY `idx_admin_resources_archive_deleted_at` (`deleted_at`),
+  ADD KEY `idx_admin_resources_archive_category` (`category`);
 
 --
 -- Indexes for table `agencies`
@@ -768,6 +833,15 @@ ALTER TABLE `resource_requests`
   ADD KEY `idx_rr_date_requested` (`date_requested`);
 
 --
+-- Indexes for table `users`
+--
+ALTER TABLE `users`
+  ADD PRIMARY KEY (`id`),
+  ADD UNIQUE KEY `uk_users_email` (`email`),
+  ADD KEY `idx_users_role` (`role`),
+  ADD KEY `idx_users_status` (`status`);
+
+--
 -- Indexes for table `staff`
 --
 ALTER TABLE `staff`
@@ -790,6 +864,18 @@ ALTER TABLE `calls`
   MODIFY `id` bigint(20) UNSIGNED NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=13;
 
 --
+-- AUTO_INCREMENT for table `admin_resources`
+--
+ALTER TABLE `admin_resources`
+  MODIFY `id` bigint(20) UNSIGNED NOT NULL AUTO_INCREMENT;
+
+--
+-- AUTO_INCREMENT for table `admin_resources_archive`
+--
+ALTER TABLE `admin_resources_archive`
+  MODIFY `id` bigint(20) UNSIGNED NOT NULL AUTO_INCREMENT;
+
+--
 -- AUTO_INCREMENT for table `incidents`
 --
 ALTER TABLE `incidents`
@@ -806,6 +892,12 @@ ALTER TABLE `otp_codes`
 --
 ALTER TABLE `resource_requests`
   MODIFY `id` bigint(20) UNSIGNED NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=3;
+
+--
+-- AUTO_INCREMENT for table `users`
+--
+ALTER TABLE `users`
+  MODIFY `id` int(10) UNSIGNED NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=3;
 
 --
 -- AUTO_INCREMENT for table `resources`

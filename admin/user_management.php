@@ -294,6 +294,44 @@ $adminName = $_SESSION['user_name'] ?? 'Admin';
             background: #f1f5f9;
         }
 
+        .um-password-hint {
+            margin-top: 0.6rem;
+            padding: 0.7rem 0.8rem;
+            border: 1px solid #dbe4ee;
+            border-radius: 10px;
+            background: #f8fafc;
+        }
+
+        .um-password-hint[hidden] {
+            display: none;
+        }
+
+        .um-password-hint p {
+            margin: 0 0 0.45rem;
+            color: #334155;
+            font-size: 0.78rem;
+            font-weight: 700;
+        }
+
+        .um-password-rules {
+            margin: 0;
+            padding-left: 1rem;
+            color: #64748b;
+            font-size: 0.76rem;
+        }
+
+        .um-password-rules li + li {
+            margin-top: 0.24rem;
+        }
+
+        .um-password-rules li.valid {
+            color: #166534;
+        }
+
+        .um-password-rules li.invalid {
+            color: #b91c1c;
+        }
+
         .um-empty {
             text-align: center;
             color: var(--um-muted);
@@ -548,6 +586,16 @@ $adminName = $_SESSION['user_name'] ?? 'Admin';
                                     <i class="fas fa-eye"></i>
                                 </button>
                             </div>
+                            <div class="um-password-hint" id="passwordRequirements" hidden>
+                                <p>Password requirements:</p>
+                                <ul class="um-password-rules">
+                                    <li data-rule="length">At least 8 characters</li>
+                                    <li data-rule="upper">At least 1 uppercase letter</li>
+                                    <li data-rule="lower">At least 1 lowercase letter</li>
+                                    <li data-rule="number">At least 1 number</li>
+                                    <li data-rule="special">At least 1 special character</li>
+                                </ul>
+                            </div>
                         </div>
                         <div class="um-field">
                             <label for="newUserRole">Role</label>
@@ -580,18 +628,8 @@ $adminName = $_SESSION['user_name'] ?? 'Admin';
     <div class="um-toast" id="userToast"></div>
 
     <script>
-        const userRows = [
-            { id: 1, name: 'Ramon Cruz', email: 'ramon.cruz@ers.local', role: 'dispatcher', department: 'Dispatch Center Alpha', status: 'active', created: '2026-01-19' },
-            { id: 2, name: 'Lea Santos', email: 'lea.santos@ers.local', role: 'responder', department: 'EMS Team Bravo', status: 'active', created: '2026-01-26' },
-            { id: 3, name: 'Carlos Reyes', email: 'carlos.reyes@ers.local', role: 'dispatcher', department: 'Dispatch Center Bravo', status: 'active', created: '2026-02-01' },
-            { id: 4, name: 'Mia Dela Torre', email: 'mia.delatorre@ers.local', role: 'responder', department: 'Fire Response Unit 2', status: 'inactive', created: '2026-02-03' },
-            { id: 5, name: 'Noel Bautista', email: 'noel.bautista@ers.local', role: 'responder', department: 'Police Support Team', status: 'active', created: '2026-02-06' },
-            { id: 6, name: 'Jessa Navarro', email: 'jessa.navarro@ers.local', role: 'dispatcher', department: 'Night Shift Dispatch', status: 'active', created: '2026-02-10' },
-            { id: 7, name: 'Ariel Manalo', email: 'ariel.manalo@ers.local', role: 'responder', department: 'Traffic Response Group', status: 'active', created: '2026-02-13' },
-            { id: 8, name: 'Rica Mendoza', email: 'rica.mendoza@ers.local', role: 'responder', department: 'Rescue Operations Delta', status: 'inactive', created: '2026-02-16' }
-        ];
-
-        let nextId = userRows.reduce((max, row) => Math.max(max, row.id), 0) + 1;
+        const adminUsersApiUrl = 'api/admin_users.php';
+        const userRows = [];
         let editingId = null;
 
         const usersTableBody = document.getElementById('usersTableBody');
@@ -609,7 +647,12 @@ $adminName = $_SESSION['user_name'] ?? 'Admin';
         const newUserRole = document.getElementById('newUserRole');
         const newUserStatus = document.getElementById('newUserStatus');
         const newUserDepartment = document.getElementById('newUserDepartment');
+        const passwordRequirements = document.getElementById('passwordRequirements');
         const userToast = document.getElementById('userToast');
+        const addUserSubmitBtn = addUserForm.querySelector('button[type="submit"]');
+        const passwordRuleElements = passwordRequirements
+            ? Array.from(passwordRequirements.querySelectorAll('[data-rule]'))
+            : [];
 
         function escapeHtml(value) {
             return String(value)
@@ -627,6 +670,38 @@ $adminName = $_SESSION['user_name'] ?? 'Admin';
             showToast._timer = window.setTimeout(() => {
                 userToast.classList.remove('show');
             }, 2000);
+        }
+
+        function validatePassword(value) {
+            return {
+                length: value.length >= 8,
+                upper: /[A-Z]/.test(value),
+                lower: /[a-z]/.test(value),
+                number: /\d/.test(value),
+                special: /[^A-Za-z0-9]/.test(value)
+            };
+        }
+
+        function passwordMeetsRequirements(value) {
+            const rules = validatePassword(value);
+            return Object.values(rules).every(Boolean);
+        }
+
+        function updatePasswordRequirements(forceVisible = false) {
+            if (!passwordRequirements || !newUserPassword) return;
+
+            const passwordValue = newUserPassword.value || '';
+            const rules = validatePassword(passwordValue);
+            const shouldShow = forceVisible || passwordValue.length > 0;
+
+            passwordRequirements.hidden = !shouldShow;
+
+            passwordRuleElements.forEach((item) => {
+                const ruleName = item.getAttribute('data-rule');
+                const isValid = Boolean(ruleName && rules[ruleName]);
+                item.classList.toggle('valid', isValid);
+                item.classList.toggle('invalid', shouldShow && !isValid);
+            });
         }
 
         function roleChip(role) {
@@ -718,6 +793,7 @@ $adminName = $_SESSION['user_name'] ?? 'Admin';
             addUserModal.classList.add('show');
             addUserModal.setAttribute('aria-hidden', 'false');
             document.body.style.overflow = 'hidden';
+            updatePasswordRequirements(false);
             newUserName.focus();
         }
 
@@ -739,6 +815,31 @@ $adminName = $_SESSION['user_name'] ?? 'Admin';
             document.body.style.overflow = '';
             addUserForm.reset();
             resetPasswordToggle();
+            updatePasswordRequirements(false);
+        }
+
+        async function loadUsers() {
+            usersTableBody.innerHTML = '<tr><td colspan="8" class="um-empty">Loading user accounts...</td></tr>';
+
+            try {
+                const response = await fetch(adminUsersApiUrl, {
+                    headers: {
+                        'Accept': 'application/json'
+                    }
+                });
+                const result = await response.json();
+
+                if (!response.ok || !result.success || !Array.isArray(result.users)) {
+                    throw new Error(result.message || 'Unable to load users.');
+                }
+
+                userRows.splice(0, userRows.length, ...result.users);
+                editingId = null;
+                renderRows();
+            } catch (error) {
+                usersTableBody.innerHTML = '<tr><td colspan="8" class="um-empty">Unable to load user accounts.</td></tr>';
+                showToast(error.message || 'Unable to load users.');
+            }
         }
 
         function saveRow(id) {
@@ -821,26 +922,25 @@ $adminName = $_SESSION['user_name'] ?? 'Admin';
             }
         });
 
-        addUserForm.addEventListener('submit', (event) => {
+        addUserForm.addEventListener('submit', async (event) => {
             event.preventDefault();
 
             const payload = {
-                id: nextId++,
                 name: newUserName.value.trim(),
                 email: newUserEmail.value.trim(),
                 password: newUserPassword.value,
                 role: newUserRole.value,
                 department: newUserDepartment.value.trim(),
-                status: newUserStatus.value,
-                created: new Date().toISOString().slice(0, 10)
+                status: newUserStatus.value
             };
 
             if (!payload.name || !payload.email || !payload.department || !payload.password) {
                 showToast('Please complete required fields.');
                 return;
             }
-            if (payload.password.length < 8) {
-                showToast('Password must be at least 8 characters.');
+            if (!passwordMeetsRequirements(payload.password)) {
+                updatePasswordRequirements(true);
+                showToast('Password does not meet the requirements.');
                 return;
             }
 
@@ -850,11 +950,37 @@ $adminName = $_SESSION['user_name'] ?? 'Admin';
                 return;
             }
 
-            userRows.unshift(payload);
-            closeModal();
-            editingId = null;
-            renderRows();
-            showToast('New user account added.');
+            if (addUserSubmitBtn) {
+                addUserSubmitBtn.disabled = true;
+            }
+
+            try {
+                const response = await fetch(adminUsersApiUrl, {
+                    method: 'POST',
+                    headers: {
+                        'Accept': 'application/json',
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify(payload)
+                });
+                const result = await response.json();
+
+                if (!response.ok || !result.success || !result.user) {
+                    throw new Error(result.message || 'Unable to save user.');
+                }
+
+                userRows.unshift(result.user);
+                closeModal();
+                editingId = null;
+                renderRows();
+                showToast(result.message || 'New user account added.');
+            } catch (error) {
+                showToast(error.message || 'Unable to save user.');
+            } finally {
+                if (addUserSubmitBtn) {
+                    addUserSubmitBtn.disabled = false;
+                }
+            }
         });
 
         if (toggleNewUserPassword && newUserPassword) {
@@ -872,11 +998,23 @@ $adminName = $_SESSION['user_name'] ?? 'Admin';
                 toggleNewUserPassword.setAttribute('aria-label', nextLabel);
                 toggleNewUserPassword.setAttribute('title', nextLabel);
             });
+
+            newUserPassword.addEventListener('focus', () => {
+                updatePasswordRequirements(newUserPassword.value.length > 0);
+            });
+
+            newUserPassword.addEventListener('input', () => {
+                updatePasswordRequirements(true);
+            });
+
+            newUserPassword.addEventListener('blur', () => {
+                updatePasswordRequirements(false);
+            });
         }
 
         userSearchInput.addEventListener('input', renderRows);
 
-        renderRows();
+        loadUsers();
     </script>
 </body>
 </html>

@@ -1,6 +1,8 @@
 <?php
 // OTP Verification Page
 session_start();
+require_once __DIR__ . '/includes/auth.php';
+require_once __DIR__ . '/includes/activity_log.php';
 $pageTitle = 'OTP Verification';
 $error_message = '';
 
@@ -39,6 +41,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             unset($_SESSION['otp'], $_SESSION['otp_expiry']);
             // Set a flag to indicate OTP is verified
             $_SESSION['otp_verified'] = true;
+            $userId = isset($_SESSION['user_id']) ? (int)$_SESSION['user_id'] : null;
+            $userName = trim((string)($_SESSION['user_name'] ?? 'User'));
+            $rawRole = trim((string)($_SESSION['login_role'] ?? $_SESSION['user_role'] ?? 'user'));
+            $roleLabel = ucwords(str_replace(['_', '-'], ' ', $rawRole !== '' ? $rawRole : 'user'));
+            if ($userId !== null && $userId > 0) {
+                log_activity_event(
+                    $userId,
+                    'login',
+                    'auth',
+                    $userId,
+                    trim($roleLabel . ' ' . $userName . ' signed in')
+                );
+            }
             // Role-based redirect after OTP verification
             $selectedRole = strtolower(trim((string)($_SESSION['login_role'] ?? '')));
             $accountRole = strtolower(trim((string)($_SESSION['user_role'] ?? '')));

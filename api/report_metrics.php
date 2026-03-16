@@ -78,6 +78,8 @@ try {
     // Optional filters
     $typeFilter = isset($_GET['type']) ? trim((string)$_GET['type']) : '';
     $priorityFilter = isset($_GET['priority']) ? trim((string)$_GET['priority']) : '';
+    if ($typeFilter === 'accident') { $typeFilter = 'traffic'; }
+    if ($typeFilter === 'crime') { $typeFilter = 'police'; }
 
     // Totals for period and previous period
     $sqlIncBase = 'FROM incidents WHERE created_at BETWEEN :s AND :e';
@@ -116,19 +118,26 @@ try {
         ->fetch()['c'];
     $resource_utilization = $total_units > 0 ? round(($busy_units / $total_units) * 100, 1) : 0.0;
 
-    // Avg response time (minutes): assigned -> on_scene within period
+    // Avg response time (minutes): call received / incident created -> dispatch assigned
     $avg_response_time = 0.0;
-    $sqlDisp = 'FROM dispatches WHERE assigned_at IS NOT NULL AND on_scene_at IS NOT NULL AND assigned_at BETWEEN :s AND :e';
+    $sqlResp = '
+        SELECT AVG(TIMESTAMPDIFF(MINUTE, COALESCE(c.received_at, i.created_at), d.assigned_at)) AS avg_min
+        FROM dispatches d
+        INNER JOIN incidents i ON i.id = d.incident_id
+        LEFT JOIN calls c ON c.id = i.reported_by_call_id
+        WHERE d.assigned_at BETWEEN :s AND :e
+    ';
+    $paramsResp = [':s' => $startAt, ':e' => $endAt];
     if ($typeFilter !== '') {
-        // Limit by incident type via join
-        $stmt = $pdo->prepare('SELECT AVG(TIMESTAMPDIFF(MINUTE, d.assigned_at, d.on_scene_at)) AS avg_min 
-            FROM dispatches d INNER JOIN incidents i ON i.id = d.incident_id 
-            WHERE d.assigned_at BETWEEN :s AND :e AND d.on_scene_at IS NOT NULL AND i.type = :type');
-        $stmt->execute([':s' => $startAt, ':e' => $endAt, ':type' => $typeFilter]);
-    } else {
-        $stmt = $pdo->prepare('SELECT AVG(TIMESTAMPDIFF(MINUTE, assigned_at, on_scene_at)) AS avg_min ' . $sqlDisp);
-        $stmt->execute([':s' => $startAt, ':e' => $endAt]);
+        $sqlResp .= ' AND i.type = :type';
+        $paramsResp[':type'] = $typeFilter;
     }
+    if ($priorityFilter !== '') {
+        $sqlResp .= ' AND i.priority = :prio';
+        $paramsResp[':prio'] = $priorityFilter;
+    }
+    $stmt = $pdo->prepare($sqlResp);
+    $stmt->execute($paramsResp);
     $row = $stmt->fetch();
     if ($row && $row['avg_min'] !== null) {
         $avg_response_time = round((float)$row['avg_min'], 1);

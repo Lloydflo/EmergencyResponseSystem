@@ -263,6 +263,23 @@ function login_user(string $email, string $password, ?string $requiredRole = nul
  * Logout user
  */
 function logout_user(): void {
+    $userId = isset($_SESSION['user_id']) ? (int)$_SESSION['user_id'] : null;
+    $userName = trim((string)($_SESSION['user_name'] ?? 'User'));
+    $rawRole = trim((string)($_SESSION['login_role'] ?? $_SESSION['user_role'] ?? 'user'));
+    $roleLabel = ucwords(str_replace(['_', '-'], ' ', $rawRole !== '' ? $rawRole : 'user'));
+    $isAuthenticatedSession = !empty($_SESSION['logged_in']) || !empty($_SESSION['otp_verified']);
+
+    if ($isAuthenticatedSession && $userId !== null && $userId > 0) {
+        require_once __DIR__ . '/activity_log.php';
+        log_activity_event(
+            $userId,
+            'logout',
+            'auth',
+            $userId,
+            trim($roleLabel . ' ' . $userName . ' signed out')
+        );
+    }
+
     // Unset all session variables
     $_SESSION = [];
     

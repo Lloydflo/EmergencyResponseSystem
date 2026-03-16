@@ -635,6 +635,213 @@ $pageTitle = 'Inter-Agency Conversations';
             color: #64748b;
         }
 
+        .ia-modal-shell {
+            position: fixed;
+            inset: 0;
+            display: none;
+            align-items: center;
+            justify-content: center;
+            padding: 1rem;
+            z-index: 1100;
+        }
+
+        .ia-modal-shell.show {
+            display: flex;
+        }
+
+        .ia-modal-backdrop {
+            position: absolute;
+            inset: 0;
+            background: rgba(15, 23, 42, 0.45);
+            backdrop-filter: blur(2px);
+        }
+
+        .ia-modal {
+            position: relative;
+            width: min(560px, calc(100vw - 2rem));
+            max-height: calc(100vh - 2rem);
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+            background: #ffffff;
+            border: 1px solid #dbe6ef;
+            border-radius: 18px;
+            box-shadow: 0 24px 60px rgba(15, 23, 42, 0.18);
+        }
+
+        .ia-modal-head,
+        .ia-modal-actions {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 0.75rem;
+            padding: 1rem 1.1rem;
+            border-bottom: 1px solid #e7edf4;
+        }
+
+        .ia-modal-actions {
+            justify-content: flex-end;
+            border-top: 1px solid #e7edf4;
+            border-bottom: none;
+        }
+
+        .ia-modal-title {
+            margin: 0;
+            font-size: 1rem;
+            font-weight: 800;
+            color: #102a43;
+        }
+
+        .ia-modal-subtitle {
+            margin: 0.25rem 0 0;
+            font-size: 0.82rem;
+            color: #64748b;
+        }
+
+        .ia-modal-close {
+            width: 34px;
+            height: 34px;
+            border: 1px solid #d7e1ea;
+            border-radius: 999px;
+            background: #fff;
+            color: #35516d;
+            cursor: pointer;
+        }
+
+        .ia-modal-body {
+            padding: 1rem 1.1rem;
+            overflow: auto;
+        }
+
+        .ia-modal-search {
+            position: relative;
+            margin-bottom: 0.9rem;
+        }
+
+        .ia-modal-search i {
+            position: absolute;
+            top: 50%;
+            left: 0.85rem;
+            transform: translateY(-50%);
+            color: #7b8794;
+        }
+
+        .ia-modal-search input {
+            width: 100%;
+            border: 1px solid #d7e1ea;
+            border-radius: 12px;
+            padding: 0.8rem 0.95rem 0.8rem 2.45rem;
+            font-size: 0.9rem;
+            outline: none;
+        }
+
+        .ia-modal-search input:focus {
+            border-color: #0f766e;
+            box-shadow: 0 0 0 3px rgba(15, 118, 110, 0.12);
+        }
+
+        .ia-user-picker-list {
+            display: grid;
+            gap: 0.65rem;
+        }
+
+        .ia-user-option {
+            width: 100%;
+            border: 1px solid #dce6ef;
+            border-radius: 14px;
+            background: #fff;
+            padding: 0.85rem 0.95rem;
+            text-align: left;
+            cursor: pointer;
+            transition: 0.2s ease;
+        }
+
+        .ia-user-option:hover {
+            border-color: #98d7c2;
+            background: #f7fffb;
+        }
+
+        .ia-user-option.selected {
+            border-color: #0f766e;
+            background: #ecfdf5;
+            box-shadow: 0 0 0 2px rgba(15, 118, 110, 0.08);
+        }
+
+        .ia-user-option-top,
+        .ia-user-option-bottom {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 0.75rem;
+        }
+
+        .ia-user-option-name {
+            margin: 0;
+            font-size: 0.92rem;
+            font-weight: 800;
+            color: #102a43;
+        }
+
+        .ia-user-option-meta {
+            margin: 0.35rem 0 0;
+            font-size: 0.78rem;
+            color: #64748b;
+        }
+
+        .ia-user-option-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.35rem;
+            padding: 0.3rem 0.55rem;
+            border-radius: 999px;
+            background: #eef2ff;
+            color: #3730a3;
+            font-size: 0.72rem;
+            font-weight: 700;
+            white-space: nowrap;
+        }
+
+        .ia-user-option-status {
+            font-size: 0.74rem;
+            font-weight: 700;
+            color: #0f766e;
+        }
+
+        .ia-user-picker-empty {
+            padding: 1rem;
+            border: 1px dashed #d7e1ea;
+            border-radius: 14px;
+            text-align: center;
+            color: #64748b;
+            background: #f8fbff;
+        }
+
+        .ia-modal-btn {
+            border: 1px solid #d7e1ea;
+            border-radius: 10px;
+            padding: 0.72rem 1rem;
+            font-size: 0.85rem;
+            font-weight: 700;
+            cursor: pointer;
+            transition: 0.2s ease;
+        }
+
+        .ia-modal-btn.secondary {
+            background: #fff;
+            color: #35516d;
+        }
+
+        .ia-modal-btn.primary {
+            background: #0f766e;
+            border-color: #0f766e;
+            color: #fff;
+        }
+
+        .ia-modal-btn:disabled {
+            opacity: 0.55;
+            cursor: not-allowed;
+        }
+
         @media (max-width: 1080px) {
             .ia-board {
                 grid-template-columns: 1fr;
@@ -665,6 +872,14 @@ $pageTitle = 'Inter-Agency Conversations';
 
             .ia-chat-body {
                 height: 390px;
+            }
+
+            .ia-modal-head,
+            .ia-modal-actions,
+            .ia-user-option-top,
+            .ia-user-option-bottom {
+                align-items: flex-start;
+                flex-direction: column;
             }
         }
     </style>
@@ -752,6 +967,32 @@ $pageTitle = 'Inter-Agency Conversations';
 
     <?php include $rootDir . '/includes/admin-footer.php'; ?>
 
+    <div class="ia-modal-shell" id="addThreadModal" hidden aria-hidden="true">
+        <div class="ia-modal-backdrop" data-close-add-thread></div>
+        <div class="ia-modal" role="dialog" aria-modal="true" aria-labelledby="addThreadModalTitle">
+            <div class="ia-modal-head">
+                <div>
+                    <p class="ia-modal-title" id="addThreadModalTitle">Add Conversation Thread</p>
+                    <p class="ia-modal-subtitle">Piliin kung sinong active user ang idaragdag sa threadlist.</p>
+                </div>
+                <button type="button" class="ia-modal-close" id="addThreadModalCloseBtn" aria-label="Close add thread modal">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+            <div class="ia-modal-body">
+                <div class="ia-modal-search">
+                    <i class="fas fa-search"></i>
+                    <input type="text" id="addThreadSearchInput" placeholder="Search by name, email, or role...">
+                </div>
+                <div class="ia-user-picker-list" id="addThreadUserList"></div>
+            </div>
+            <div class="ia-modal-actions">
+                <button type="button" class="ia-modal-btn secondary" id="addThreadCancelBtn">Cancel</button>
+                <button type="button" class="ia-modal-btn primary" id="addThreadConfirmBtn" disabled>Add to Threadlist</button>
+            </div>
+        </div>
+    </div>
+
     <script>
         (function () {
             const state = {
@@ -762,6 +1003,10 @@ $pageTitle = 'Inter-Agency Conversations';
                 lastIdByDept: {},
                 currentUser: { id: 0, name: 'Admin' },
                 pendingFiles: [],
+                addThreadUsers: [],
+                addThreadQuery: '',
+                addThreadSelectedId: 0,
+                addThreadLoading: false,
                 poller: null
             };
 
@@ -776,6 +1021,12 @@ $pageTitle = 'Inter-Agency Conversations';
             const messageFilesInput = document.getElementById('messageFiles');
             const filePreviewEl = document.getElementById('filePreview');
             const addThreadBtn = document.getElementById('addThreadBtn');
+            const addThreadModal = document.getElementById('addThreadModal');
+            const addThreadSearchInput = document.getElementById('addThreadSearchInput');
+            const addThreadUserList = document.getElementById('addThreadUserList');
+            const addThreadCancelBtn = document.getElementById('addThreadCancelBtn');
+            const addThreadConfirmBtn = document.getElementById('addThreadConfirmBtn');
+            const addThreadModalCloseBtn = document.getElementById('addThreadModalCloseBtn');
             const totalThreadsEl = document.getElementById('iaTotalThreads');
             const activeRespondersEl = document.getElementById('iaActiveResponders');
             const unreadCountEl = document.getElementById('iaUnreadCount');
@@ -803,6 +1054,113 @@ $pageTitle = 'Inter-Agency Conversations';
                 if (n < 1024) return `${n} B`;
                 if (n < 1024 * 1024) return `${(n / 1024).toFixed(1)} KB`;
                 return `${(n / (1024 * 1024)).toFixed(1)} MB`;
+            }
+
+            function formatRole(value) {
+                return String(value || 'user')
+                    .replace(/_/g, ' ')
+                    .replace(/\b\w/g, (char) => char.toUpperCase());
+            }
+
+            function threadChannelLabel(item) {
+                if (String(item.kind || '') === 'department') {
+                    return 'Department Channel';
+                }
+                return `${formatRole(item.role || 'responder')} Channel`;
+            }
+
+            function isAddThreadModalOpen() {
+                return !!(addThreadModal && addThreadModal.classList.contains('show'));
+            }
+
+            function selectedAddThreadUser() {
+                return state.addThreadUsers.find((item) => Number(item.id) === Number(state.addThreadSelectedId)) || null;
+            }
+
+            function syncAddThreadConfirmState() {
+                if (!addThreadConfirmBtn) return;
+                addThreadConfirmBtn.disabled = state.addThreadLoading || !selectedAddThreadUser();
+                addThreadConfirmBtn.textContent = state.addThreadLoading ? 'Adding...' : 'Add to Threadlist';
+            }
+
+            function renderAddThreadUsers() {
+                if (!addThreadUserList) return;
+
+                const query = String(state.addThreadQuery || '').trim().toLowerCase();
+                const items = state.addThreadUsers.filter((item) => {
+                    if (!query) return true;
+                    const hay = `${item.name || ''} ${item.email || ''} ${item.role || ''}`.toLowerCase();
+                    return hay.includes(query);
+                });
+
+                if (items.length && !items.some((item) => Number(item.id) === Number(state.addThreadSelectedId))) {
+                    state.addThreadSelectedId = Number(items[0].id);
+                }
+                if (!items.length) {
+                    state.addThreadSelectedId = 0;
+                }
+
+                if (state.addThreadLoading && !state.addThreadUsers.length) {
+                    addThreadUserList.innerHTML = '<div class="ia-user-picker-empty">Loading active users...</div>';
+                    syncAddThreadConfirmState();
+                    return;
+                }
+
+                if (!items.length) {
+                    const emptyLabel = state.addThreadUsers.length
+                        ? 'No matching active users found.'
+                        : 'All active users already have conversation threads.';
+                    addThreadUserList.innerHTML = `<div class="ia-user-picker-empty">${escapeHtml(emptyLabel)}</div>`;
+                    syncAddThreadConfirmState();
+                    return;
+                }
+
+                addThreadUserList.innerHTML = items.map((item) => {
+                    const isSelected = Number(item.id) === Number(state.addThreadSelectedId);
+                    return `
+                        <button type="button" class="ia-user-option ${isSelected ? 'selected' : ''}" data-add-thread-user="${escapeAttr(item.id)}" aria-pressed="${isSelected ? 'true' : 'false'}">
+                            <div class="ia-user-option-top">
+                                <div>
+                                    <p class="ia-user-option-name">${escapeHtml(item.name || ('User #' + item.id))}</p>
+                                    <p class="ia-user-option-meta">${escapeHtml(item.email || 'No email provided')}</p>
+                                </div>
+                                <span class="ia-user-option-badge">${escapeHtml(formatRole(item.role || 'user'))}</span>
+                            </div>
+                            <div class="ia-user-option-bottom">
+                                <span class="ia-user-option-meta">ID ${escapeHtml(item.id)}</span>
+                                <span class="ia-user-option-status">Active account</span>
+                            </div>
+                        </button>
+                    `;
+                }).join('');
+
+                syncAddThreadConfirmState();
+            }
+
+            function openAddThreadModal() {
+                if (!addThreadModal) return;
+                addThreadModal.hidden = false;
+                addThreadModal.setAttribute('aria-hidden', 'false');
+                addThreadModal.classList.add('show');
+                document.body.style.overflow = 'hidden';
+                syncAddThreadConfirmState();
+                window.setTimeout(() => {
+                    if (addThreadSearchInput) addThreadSearchInput.focus();
+                }, 0);
+            }
+
+            function closeAddThreadModal() {
+                if (!addThreadModal) return;
+                addThreadModal.classList.remove('show');
+                addThreadModal.setAttribute('aria-hidden', 'true');
+                addThreadModal.hidden = true;
+                document.body.style.overflow = '';
+                state.addThreadLoading = false;
+                state.addThreadQuery = '';
+                state.addThreadSelectedId = 0;
+                if (addThreadSearchInput) addThreadSearchInput.value = '';
+                syncAddThreadConfirmState();
+                if (addThreadBtn) addThreadBtn.focus();
             }
 
             function syncFileInput() {
@@ -948,6 +1306,7 @@ $pageTitle = 'Inter-Agency Conversations';
                     const unread = item.unread > 0 ? `<span class="ia-unread">${item.unread}</span>` : '';
                     const avatarType = item.kind === 'department' ? 'department' : 'responder';
                     const stat = item.status === 'busy' ? 'busy' : (item.status === 'offline' ? 'offline' : 'online');
+                    const channelLabel = threadChannelLabel(item);
                     return `
                         <button type="button" class="ia-thread ${activeClass}" data-id="${escapeHtml(item.id)}">
                             <div class="ia-avatar ${avatarType}">
@@ -965,7 +1324,7 @@ $pageTitle = 'Inter-Agency Conversations';
                                 </div>
                                 <p class="ia-thread-sub">
                                     <span class="ia-dot ${escapeHtml(stat)}"></span>
-                                    ${escapeHtml(item.kind === 'department' ? 'Department Channel' : 'Responder Channel')}
+                                    ${escapeHtml(channelLabel)}
                                 </p>
                                 <div class="ia-thread-row">
                                     <p class="ia-thread-preview">${escapeHtml(previewText(item))}</p>
@@ -984,10 +1343,11 @@ $pageTitle = 'Inter-Agency Conversations';
                     return;
                 }
                 const statusLabel = active.status === 'online' ? 'Online' : (active.status === 'busy' ? 'Busy' : 'Offline');
+                const channelLabel = threadChannelLabel(active);
                 chatHeaderEl.innerHTML = `
                     <div>
                         <p class="ia-chat-title">${escapeHtml(active.title || active.id)}</p>
-                        <p class="ia-chat-meta">${escapeHtml(active.kind === 'department' ? 'Department' : 'Responder')} channel · Status: ${escapeHtml(statusLabel)}</p>
+                        <p class="ia-chat-meta">${escapeHtml(channelLabel)} · Status: ${escapeHtml(statusLabel)}</p>
                     </div>
                     <div class="ia-chat-badge">Last activity ${escapeHtml(rel(active.last_at))}</div>
                 `;
@@ -1151,45 +1511,67 @@ $pageTitle = 'Inter-Agency Conversations';
             }
 
             async function addUserThread() {
+                openAddThreadModal();
+                state.addThreadLoading = true;
+                state.addThreadUsers = [];
+                state.addThreadQuery = '';
+                state.addThreadSelectedId = 0;
+                if (addThreadSearchInput) addThreadSearchInput.value = '';
+                renderAddThreadUsers();
+
                 try {
                     const usersRes = await fetch('api/interagency_users.php', { cache: 'no-store' });
                     const usersData = await usersRes.json();
                     if (!usersData || !usersData.ok) {
+                        state.addThreadUsers = [];
+                        state.addThreadLoading = false;
+                        renderAddThreadUsers();
                         alert('Unable to load users.');
                         return;
                     }
 
-                    const candidates = (Array.isArray(usersData.items) ? usersData.items : []).filter((u) => !u.has_thread);
-                    if (!candidates.length) {
-                        alert('All active users already have conversation threads.');
-                        return;
-                    }
+                    state.addThreadUsers = (Array.isArray(usersData.items) ? usersData.items : []).filter((u) => !u.has_thread);
+                    state.addThreadSelectedId = state.addThreadUsers.length ? Number(state.addThreadUsers[0].id) : 0;
+                    state.addThreadLoading = false;
+                    renderAddThreadUsers();
+                } catch (_) {
+                    state.addThreadUsers = [];
+                    state.addThreadLoading = false;
+                    renderAddThreadUsers();
+                    alert('Network error while loading users.');
+                }
+            }
 
-                    const menu = candidates.slice(0, 30).map((u) => `${u.id}: ${u.name} (${u.role})`).join('\n');
-                    const raw = window.prompt(`Enter user ID to add as conversation thread:\n\n${menu}`);
-                    if (raw === null) return;
-                    const userId = Number.parseInt(String(raw).trim(), 10);
-                    if (!Number.isInteger(userId) || userId <= 0) {
-                        alert('Invalid user ID.');
-                        return;
-                    }
+            async function confirmAddUserThread() {
+                const selected = selectedAddThreadUser();
+                if (!selected || state.addThreadLoading) return;
 
+                state.addThreadLoading = true;
+                syncAddThreadConfirmState();
+
+                try {
                     const addRes = await fetch('api/interagency_add_user_thread.php', {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ user_id: userId })
+                        body: JSON.stringify({ user_id: Number(selected.id) })
                     });
                     const addData = await addRes.json();
                     if (!addData || !addData.ok) {
-                        alert('Unable to add user thread.');
+                        state.addThreadLoading = false;
+                        syncAddThreadConfirmState();
+                        alert((addData && addData.error) ? String(addData.error) : 'Unable to add user thread.');
                         return;
                     }
 
+                    const threadId = addData.thread && addData.thread.id ? String(addData.thread.id) : ('user-' + selected.id);
+                    closeAddThreadModal();
                     await loadThreads();
-                    if (addData.thread && addData.thread.id) {
-                        await selectThread(String(addData.thread.id));
+                    if (state.threads.some((item) => item.id === threadId)) {
+                        await selectThread(threadId);
                     }
                 } catch (_) {
+                    state.addThreadLoading = false;
+                    syncAddThreadConfirmState();
                     alert('Network error while adding thread.');
                 }
             }
@@ -1313,6 +1695,43 @@ $pageTitle = 'Inter-Agency Conversations';
                 if (addThreadBtn) {
                     addThreadBtn.addEventListener('click', addUserThread);
                 }
+                if (addThreadSearchInput) {
+                    addThreadSearchInput.addEventListener('input', () => {
+                        state.addThreadQuery = addThreadSearchInput.value || '';
+                        renderAddThreadUsers();
+                    });
+                }
+                if (addThreadUserList) {
+                    addThreadUserList.addEventListener('click', (event) => {
+                        const option = event.target.closest('[data-add-thread-user]');
+                        if (!option) return;
+                        const userId = Number(option.getAttribute('data-add-thread-user') || 0);
+                        if (userId <= 0) return;
+                        state.addThreadSelectedId = userId;
+                        renderAddThreadUsers();
+                    });
+                }
+                if (addThreadConfirmBtn) {
+                    addThreadConfirmBtn.addEventListener('click', confirmAddUserThread);
+                }
+                if (addThreadCancelBtn) {
+                    addThreadCancelBtn.addEventListener('click', closeAddThreadModal);
+                }
+                if (addThreadModalCloseBtn) {
+                    addThreadModalCloseBtn.addEventListener('click', closeAddThreadModal);
+                }
+                if (addThreadModal) {
+                    addThreadModal.addEventListener('click', (event) => {
+                        if (event.target.matches('[data-close-add-thread]')) {
+                            closeAddThreadModal();
+                        }
+                    });
+                }
+                document.addEventListener('keydown', (event) => {
+                    if (event.key === 'Escape' && isAddThreadModalOpen()) {
+                        closeAddThreadModal();
+                    }
+                });
             }
 
             document.addEventListener('DOMContentLoaded', async () => {

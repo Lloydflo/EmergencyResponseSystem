@@ -135,13 +135,39 @@ function preview_text_from_details(string $raw): string {
     return '[' . count($attachments) . ' attachments]';
 }
 
+function derive_thread_status(?string $accountStatus, ?string $lastActivityAt): string {
+    $normalizedStatus = strtolower(trim((string)$accountStatus));
+    if ($normalizedStatus !== '' && $normalizedStatus !== 'active') {
+        return 'offline';
+    }
+
+    $activityAt = trim((string)$lastActivityAt);
+    if ($activityAt === '') {
+        return 'offline';
+    }
+
+    $activityTs = strtotime($activityAt);
+    if ($activityTs === false) {
+        return 'offline';
+    }
+
+    $ageSeconds = time() - $activityTs;
+    if ($ageSeconds <= 300) {
+        return 'online';
+    }
+    if ($ageSeconds <= 3600) {
+        return 'busy';
+    }
+    return 'offline';
+}
+
 $threadDefs = [
     1 => [
         'id' => 'police',
         'department' => 'police',
         'title' => 'Police Command Center',
         'kind' => 'department',
-        'status' => 'online',
+        'status' => 'offline',
         'icon' => 'fa-shield-halved',
         'tone' => 'police'
     ],
@@ -150,7 +176,7 @@ $threadDefs = [
         'department' => 'fire',
         'title' => 'Fire Department HQ',
         'kind' => 'department',
-        'status' => 'online',
+        'status' => 'offline',
         'icon' => 'fa-fire-extinguisher',
         'tone' => 'fire'
     ],
@@ -159,7 +185,7 @@ $threadDefs = [
         'department' => 'medical',
         'title' => 'EMS Coordination',
         'kind' => 'department',
-        'status' => 'online',
+        'status' => 'offline',
         'icon' => 'fa-truck-medical',
         'tone' => 'medical'
     ],
@@ -168,7 +194,7 @@ $threadDefs = [
         'department' => 'coordinator',
         'title' => 'Operations Coordinator',
         'kind' => 'department',
-        'status' => 'online',
+        'status' => 'offline',
         'icon' => 'fa-user-tie',
         'tone' => 'coordinator'
     ],
@@ -246,6 +272,27 @@ try {
         $threads[$eid]['last_sender_name'] = (string)$row['sender_name'];
         $threads[$eid]['last_sender_role'] = strtolower((string)$row['sender_role']);
     }
+
+    $departmentActivityStmt = $pdo->query(
+        "SELECT a.entity_id, MAX(a.created_at) AS last_activity_at
+         FROM activity_log a
+         INNER JOIN users u ON u.id = a.user_id
+         WHERE a.entity_type = 'agency_chat'
+           AND a.entity_id IN (1,2,3,4)
+           AND LOWER(u.role) <> 'admin'
+         GROUP BY a.entity_id"
+    );
+    $departmentActivityRows = $departmentActivityStmt->fetchAll(PDO::FETCH_ASSOC);
+    $departmentLastActivity = [];
+    foreach ($departmentActivityRows as $row) {
+        $departmentLastActivity[(int)$row['entity_id']] = (string)($row['last_activity_at'] ?? '');
+    }
+
+    foreach ($threads as &$thread) {
+        $entityId = (int)($thread['entity_id'] ?? 0);
+        $thread['status'] = derive_thread_status(null, $departmentLastActivity[$entityId] ?? null);
+    }
+    unset($thread);
 
     $totalStmt = $pdo->query(
         "SELECT entity_id, COUNT(*) AS total_messages
@@ -347,6 +394,23 @@ try {
         }
     }
 
+    $lastActivityByUserId = [];
+    if (count($counterpartIds) > 0) {
+        $placeholders = implode(',', array_fill(0, count($counterpartIds), '?'));
+        $userActivityStmt = $pdo->prepare(
+            "SELECT user_id, MAX(created_at) AS last_activity_at
+             FROM activity_log
+             WHERE entity_type IN ('agency_chat', 'agency_user_chat')
+               AND user_id IN ($placeholders)
+             GROUP BY user_id"
+        );
+        $userActivityStmt->execute($counterpartIds);
+        $activityRows = $userActivityStmt->fetchAll(PDO::FETCH_ASSOC);
+        foreach ($activityRows as $row) {
+            $lastActivityByUserId[(int)$row['user_id']] = (string)($row['last_activity_at'] ?? '');
+        }
+    }
+
     $userReadStmt = $pdo->prepare(
         "SELECT target_user_id, last_read_id
          FROM interagency_user_thread_reads
@@ -397,7 +461,10 @@ try {
         $counterpart = $counterpartUsers[$targetUserId] ?? null;
         $displayName = trim((string)($counterpart['name'] ?? ''));
         $displayRole = (string)($counterpart['role'] ?? 'user');
-        $displayStatus = strtolower((string)($counterpart['status'] ?? 'offline'));
+        $displayStatus = derive_thread_status(
+            isset($counterpart['status']) ? (string)$counterpart['status'] : null,
+            $lastActivityByUserId[$targetUserId] ?? null
+        );
         $threadKey = build_thread_key('user', '', $targetUserId);
         $customTitle = $titleOverrides[$threadKey] ?? '';
         if ($customTitle !== '') {
@@ -422,7 +489,8 @@ try {
             'entity_id' => $targetUserId,
             'title' => ($displayName !== '' ? $displayName : ('User #' . $targetUserId)),
             'kind' => 'responder',
-            'status' => $displayStatus === 'active' ? 'online' : 'offline',
+            'role' => strtolower($displayRole),
+            'status' => $displayStatus,
             'icon' => user_icon_by_role($displayRole),
             'tone' => 'responder',
             'last_message_id' => $latest ? (int)$latest['id'] : 0,

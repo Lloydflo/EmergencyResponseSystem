@@ -14,21 +14,67 @@ $resourceUtilization = 0.0;
 $successRate = 0.0;
 $resolvedCountMonth = 0;
 $activeResponders = 0;
+$defaultPeriod = 'custom';
+$defaultStartDate = '';
+$defaultEndDate = '';
 try {
     $pdo = get_db_connection();
     if ($pdo) {
-        $totalIncidentsMonth = (int)$pdo->query("SELECT COUNT(*) AS c FROM incidents WHERE YEAR(created_at)=YEAR(CURDATE()) AND MONTH(created_at)=MONTH(CURDATE())")->fetch()['c'];
-        $lastMonthIncidents = (int)$pdo->query("SELECT COUNT(*) AS c FROM incidents WHERE YEAR(created_at)=YEAR(DATE_SUB(CURDATE(), INTERVAL 1 MONTH)) AND MONTH(created_at)=MONTH(DATE_SUB(CURDATE(), INTERVAL 1 MONTH))")->fetch()['c'];
-        $resolvedCount = (int)$pdo->query("SELECT COUNT(*) AS c FROM incidents WHERE status='resolved'")->fetch()['c'];
-        $resolvedCountMonth = (int)$pdo->query("SELECT COUNT(*) AS c FROM incidents WHERE status='resolved' AND YEAR(created_at)=YEAR(CURDATE()) AND MONTH(created_at)=MONTH(CURDATE())")->fetch()['c'];
-        $totalIncidentsAll = (int)$pdo->query("SELECT COUNT(*) AS c FROM incidents")->fetch()['c'];
-        $successRate = $totalIncidentsAll > 0 ? round(($resolvedCount / $totalIncidentsAll) * 100, 1) : 0.0;
+        $latestDates = [];
+        foreach ([
+            "SELECT MAX(created_at) AS latest_at FROM incidents",
+            "SELECT MAX(assigned_at) AS latest_at FROM dispatches",
+            "SELECT MAX(received_at) AS latest_at FROM calls"
+        ] as $sql) {
+            $row = $pdo->query($sql)->fetch();
+            if (!empty($row['latest_at'])) {
+                $latestDates[] = (string)$row['latest_at'];
+            }
+        }
+
+        $latestActivityAt = !empty($latestDates) ? max($latestDates) : date('Y-m-d H:i:s');
+        $latestActivity = new DateTime($latestActivityAt);
+        $rangeStart = (clone $latestActivity)->modify('first day of this month')->format('Y-m-d');
+        $rangeEnd = (clone $latestActivity)->modify('last day of this month')->format('Y-m-d');
+        $prevStart = (clone $latestActivity)->modify('first day of last month')->format('Y-m-d');
+        $prevEnd = (clone $latestActivity)->modify('last day of last month')->format('Y-m-d');
+
+        $defaultStartDate = $rangeStart;
+        $defaultEndDate = $rangeEnd;
+
+        $stmt = $pdo->prepare("SELECT COUNT(*) AS c FROM incidents WHERE created_at BETWEEN :start AND :end");
+        $stmt->execute([':start' => $rangeStart . ' 00:00:00', ':end' => $rangeEnd . ' 23:59:59']);
+        $totalIncidentsMonth = (int)($stmt->fetch()['c'] ?? 0);
+
+        $stmt = $pdo->prepare("SELECT COUNT(*) AS c FROM incidents WHERE created_at BETWEEN :start AND :end");
+        $stmt->execute([':start' => $prevStart . ' 00:00:00', ':end' => $prevEnd . ' 23:59:59']);
+        $lastMonthIncidents = (int)($stmt->fetch()['c'] ?? 0);
+
+        $stmt = $pdo->prepare("SELECT COUNT(*) AS total, SUM(CASE WHEN status='resolved' THEN 1 ELSE 0 END) AS resolved FROM incidents WHERE created_at BETWEEN :start AND :end");
+        $stmt->execute([':start' => $rangeStart . ' 00:00:00', ':end' => $rangeEnd . ' 23:59:59']);
+        $rangeStats = $stmt->fetch() ?: [];
+        $resolvedCountMonth = (int)($rangeStats['resolved'] ?? 0);
+        $totalIncidentsInRange = (int)($rangeStats['total'] ?? 0);
+        $successRate = $totalIncidentsInRange > 0 ? round(($resolvedCountMonth / $totalIncidentsInRange) * 100, 1) : 0.0;
+
         $totalUnits = (int)$pdo->query("SELECT COUNT(*) AS c FROM units")->fetch()['c'];
         $busyUnits = (int)$pdo->query("SELECT COUNT(*) AS c FROM units WHERE status IN ('assigned','enroute','on_scene')")->fetch()['c'];
         $activeResponders = (int)$pdo->query("SELECT COUNT(*) AS c FROM staff WHERE status IN ('available','on_duty')")->fetch()['c'];
         $resourceUtilization = $totalUnits > 0 ? round(($busyUnits / $totalUnits) * 100, 1) : 0.0;
-        $row = $pdo->query("SELECT AVG(TIMESTAMPDIFF(MINUTE, assigned_at, on_scene_at)) AS avg_min FROM dispatches WHERE assigned_at IS NOT NULL AND on_scene_at IS NOT NULL AND YEAR(assigned_at)=YEAR(CURDATE()) AND MONTH(assigned_at)=MONTH(CURDATE())")->fetch();
-        if ($row && $row['avg_min'] !== null) { $avgResponseTime = round((float)$row['avg_min'], 1); }
+
+        $stmt = $pdo->prepare("
+            SELECT AVG(TIMESTAMPDIFF(MINUTE, COALESCE(c.received_at, i.created_at), d.assigned_at)) AS avg_min
+            FROM dispatches d
+            INNER JOIN incidents i ON i.id = d.incident_id
+            LEFT JOIN calls c ON c.id = i.reported_by_call_id
+            WHERE d.assigned_at IS NOT NULL
+              AND d.assigned_at BETWEEN :start AND :end
+        ");
+        $stmt->execute([':start' => $rangeStart . ' 00:00:00', ':end' => $rangeEnd . ' 23:59:59']);
+        $row = $stmt->fetch();
+        if ($row && $row['avg_min'] !== null) {
+            $avgResponseTime = round((float)$row['avg_min'], 1);
+        }
     }
 } catch (Throwable $e) {
     // keep defaults if any error
@@ -69,7 +115,7 @@ try {
             <!-- Key Metrics Overview -->
             <div class="analytics-grid">
                 <div class="analytics-card response-time">
-                    <div class="metric-label">Average Response Time</div>
+                    <div class="metric-label">SLA Response Average</div>
                     <div class="metric-display">
                         <div class="metric-value" id="metricAvgResponse"><?php echo number_format($avgResponseTime, 1); ?></div>
                         <div class="metric-change positive">
@@ -77,11 +123,11 @@ try {
                             
                         </div>
                     </div>
-                    <div style="color: #666; font-size: 0.9rem;">Target: &lt; 10m</div>
+                    <div style="color: #666; font-size: 0.9rem;">Admin target: &lt; 10m</div>
                 </div>
 
                 <div class="analytics-card incidents">
-                    <div class="metric-label">Total Incidents (This Month)</div>
+                    <div class="metric-label">Monthly Operational Load</div>
                     <div class="metric-display">
                         <div class="metric-value" id="metricIncidentsMonth"><?php echo (int)$totalIncidentsMonth; ?></div>
                         <div class="metric-change positive">
@@ -89,11 +135,11 @@ try {
                             
                         </div>
                     </div>
-                    <div style="color: #666; font-size: 0.9rem;">Last month: <span id="metricLastMonth"><?php echo (int)$lastMonthIncidents; ?></span></div>
+                    <div style="color: #666; font-size: 0.9rem;">Previous month baseline: <span id="metricLastMonth"><?php echo (int)$lastMonthIncidents; ?></span></div>
                 </div>
 
                 <div class="analytics-card resources">
-                    <div class="metric-label">Resource Utilization</div>
+                    <div class="metric-label">System Utilization</div>
                     <div class="metric-display">
                         <div class="metric-value" id="metricUtilization"><?php echo number_format($resourceUtilization, 1); ?>%</div>
                         <div class="metric-change neutral">
@@ -101,11 +147,11 @@ try {
                             
                         </div>
                     </div>
-                    <div style="color: #666; font-size: 0.9rem;">Target: 70–85%</div>
+                    <div style="color: #666; font-size: 0.9rem;">Coverage target: 70-85%</div>
                 </div>
 
                 <div class="analytics-card performance">
-                    <div class="metric-label">Success Rate</div>
+                    <div class="metric-label">Resolution Performance</div>
                     <div class="metric-display">
                         <div class="metric-value" id="metricSuccess"><?php echo number_format($successRate, 1); ?>%</div>
                         <div class="metric-change positive">
@@ -113,7 +159,7 @@ try {
                             
                         </div>
                     </div>
-                    <div style="color: #666; font-size: 0.9rem;">Industry average: 92–96%</div>
+                    <div style="color: #666; font-size: 0.9rem;">Admin benchmark: 92-96%</div>
                 </div>
             </div>
 
@@ -121,43 +167,43 @@ try {
             <div class="report-filters">
                 <h2 style="font-size: 1.25rem; font-weight: 700; color: #333; margin-bottom: 1.5rem; display: flex; align-items: center;">
                     <i class="fas fa-filter" style="margin-right: 0.5rem; color: #007bff;"></i>
-                    Report Filters
+                    Admin Report Filters
                 </h2>
                 <div class="filter-row">
                     <div class="filter-group">
-                        <label for="report-type">Report Type</label>
+                        <label for="report-type">Admin View</label>
                         <select id="report-type">
-                            <option value="">All Reports</option>
-                            <option value="incident">Incident Reports</option>
-                            <option value="performance">Performance Reports</option>
-                            <option value="resource">Resource Reports</option>
-                            <option value="trend">Trend Analysis</option>
+                            <option value="">Executive Summary</option>
+                            <option value="incident">Incident Oversight</option>
+                            <option value="performance">Performance Review</option>
+                            <option value="resource">Resource Audit</option>
+                            <option value="trend">Trend Monitoring</option>
                         </select>
                     </div>
                     <div class="filter-group">
                         <label for="time-period">Time Period</label>
                         <select id="time-period">
-                            <option value="today">Today</option>
-                            <option value="week">This Week</option>
-                            <option value="month" selected>This Month</option>
-                            <option value="quarter">This Quarter</option>
-                            <option value="year">This Year</option>
-                            <option value="custom">Custom Range</option>
+                            <option value="today" <?php echo $defaultPeriod === 'today' ? 'selected' : ''; ?>>Today</option>
+                            <option value="week" <?php echo $defaultPeriod === 'week' ? 'selected' : ''; ?>>This Week</option>
+                            <option value="month" <?php echo $defaultPeriod === 'month' ? 'selected' : ''; ?>>This Month</option>
+                            <option value="quarter" <?php echo $defaultPeriod === 'quarter' ? 'selected' : ''; ?>>This Quarter</option>
+                            <option value="year" <?php echo $defaultPeriod === 'year' ? 'selected' : ''; ?>>This Year</option>
+                            <option value="custom" <?php echo $defaultPeriod === 'custom' ? 'selected' : ''; ?>>Custom Range</option>
                         </select>
                     </div>
                     <div class="filter-group">
-                        <label for="incident-type">Incident Type</label>
+                        <label for="incident-type">Service Category</label>
                         <select id="incident-type">
-                            <option value="">All Types</option>
+                            <option value="">All Categories</option>
                             <option value="medical">Medical Emergency</option>
                             <option value="fire">Fire</option>
-                            <option value="accident">Traffic Accident</option>
-                            <option value="crime">Crime</option>
+                            <option value="police">Police Emergency</option>
+                            <option value="traffic">Traffic Accident</option>
                             <option value="other">Other</option>
                         </select>
                     </div>
                     <div class="filter-group">
-                        <label for="priority-level">Priority Level</label>
+                        <label for="priority-level">Escalation Level</label>
                         <select id="priority-level">
                             <option value="">All Priorities</option>
                             <option value="high">High</option>
@@ -170,11 +216,11 @@ try {
                     <div class="date-range">
                         <div class="filter-group">
                             <label for="start-date">Start Date</label>
-                            <input type="date" id="start-date" value="">
+                            <input type="date" id="start-date" value="<?php echo htmlspecialchars($defaultStartDate); ?>">
                         </div>
                         <div class="filter-group">
                             <label for="end-date">End Date</label>
-                            <input type="date" id="end-date" value="">
+                            <input type="date" id="end-date" value="<?php echo htmlspecialchars($defaultEndDate); ?>">
                         </div>
                         <button class="btn-report primary" onclick="applyFilters()">
                             <i class="fas fa-search"></i> Apply Filters
@@ -231,8 +277,8 @@ try {
                     <div class="report-icon incident">
                         <i class="fas fa-exclamation-triangle"></i>
                     </div>
-                    <div class="report-title">Incident Summary Report</div>
-                    <div class="report-description">Comprehensive overview of all incidents with response times and outcomes</div>
+                    <div class="report-title">Executive Incident Summary</div>
+                    <div class="report-description">Admin-ready overview of incident volume, priorities, and operational outcomes.</div>
                     <div class="report-actions">
                         <button class="btn-report primary" onclick="generateIncidentReport()">
                             <i class="fas fa-file-pdf"></i> Generate
@@ -247,8 +293,8 @@ try {
                     <div class="report-icon performance">
                         <i class="fas fa-trophy"></i>
                     </div>
-                    <div class="report-title">Performance Analytics</div>
-                    <div class="report-description">Team performance metrics, response times, and success rates</div>
+                    <div class="report-title">Admin Performance Review</div>
+                    <div class="report-description">Leadership snapshot of response efficiency, success rate, and service delivery trends.</div>
                     <div class="report-actions">
                         <button class="btn-report primary" onclick="generatePerformanceReport()">
                             <i class="fas fa-file-pdf"></i> Generate
@@ -263,8 +309,8 @@ try {
                     <div class="report-icon resource">
                         <i class="fas fa-truck"></i>
                     </div>
-                    <div class="report-title">Resource Utilization Report</div>
-                    <div class="report-description">Equipment and personnel usage statistics and efficiency metrics</div>
+                    <div class="report-title">Resource Audit Report</div>
+                    <div class="report-description">Administrative review of fleet, personnel, and utilization coverage across the system.</div>
                     <div class="report-actions">
                         <button class="btn-report primary" onclick="generateResourceReport()">
                             <i class="fas fa-file-pdf"></i> Generate
@@ -280,7 +326,7 @@ try {
             <div class="charts-grid">
             <div class="chart-container">
                 <div class="chart-header">
-                    <h3 class="chart-title">Incident Response Times</h3>
+                    <h3 class="chart-title">Response Performance Trend</h3>
                     <div class="chart-controls">
                         <button class="btn-report" onclick="refreshChart()">
                             <i class="fas fa-sync"></i> Refresh
@@ -298,10 +344,10 @@ try {
 
             <div class="chart-container">
                 <div class="chart-header">
-                    <h3 class="chart-title">Incident Types Distribution</h3>
+                    <h3 class="chart-title">Incident Mix by Type</h3>
                     <div class="chart-controls">
-                        <button class="btn-report" onclick="toggleChartView()">
-                            <i class="fas fa-pie-chart"></i> Toggle View
+                        <button class="btn-report" onclick="refreshChart()">
+                            <i class="fas fa-sync"></i> Refresh
                         </button>
                         <button class="btn-report" onclick="exportChart('incidentsTypesChart')">
                             <i class="fas fa-download"></i> Export
@@ -316,7 +362,15 @@ try {
             <!-- Call Duration Graph -->
             <div class="chart-container">
                 <div class="chart-header">
-                    <h3 class="chart-title">Call Duration by Incident Type</h3>
+                    <h3 class="chart-title">Priority Level Oversight</h3>
+                    <div class="chart-controls">
+                        <button class="btn-report" onclick="refreshChart()">
+                            <i class="fas fa-sync"></i> Refresh
+                        </button>
+                        <button class="btn-report" onclick="exportChart('callDurationChart')">
+                            <i class="fas fa-download"></i> Export
+                        </button>
+                    </div>
                 </div>
                 <div style="position: relative; width: 100%; height: 320px;">
                     <canvas id="callDurationChart" class="chart-canvas"></canvas>
@@ -325,7 +379,7 @@ try {
 
             <div class="chart-container">
                 <div class="chart-header">
-                    <h3 class="chart-title">Dispatch Report</h3>
+                    <h3 class="chart-title">Dispatch Load by Unit Type</h3>
                     <div class="chart-controls">
                         <button class="btn-report" onclick="refreshDispatchReport()"><i class="fas fa-sync"></i> Refresh</button>
                         <button class="btn-report" onclick="window.open('api/reports_dispatch.php' + buildQuery(currentFilters), '_blank')"><i class="fas fa-file-pdf"></i> Open Full</button>
@@ -339,15 +393,18 @@ try {
 
             <!-- Dispatch Breakdown Table -->
             <div class="data-table">
-                <div class="table-header">
-                    <h3 class="table-title">Dispatch Breakdown</h3>
+                <div class="table-header" style="display:flex; align-items:center; justify-content:space-between; gap:1rem;">
+                    <h3 class="table-title">Top Dispatched Units</h3>
+                    <button class="btn-report" type="button" onclick="showAllDispatchUnitsModal()">
+                        <i class="fas fa-list"></i> View All
+                    </button>
                 </div>
                 <div class="table-container">
                     <table class="analytics-table">
                         <thead>
                             <tr>
-                                <th>Unit</th>
-                                <th>Type</th>
+                                <th>Service</th>
+                                <th>Linked Type</th>
                                 <th>Dispatches</th>
                             </tr>
                         </thead>
@@ -442,38 +499,110 @@ try {
 
             <!-- System Alerts -->
             <div class="alerts-section">
-                <h2 style="font-size: 1.25rem; font-weight: 700; color: #333; margin-bottom: 1.5rem; display: flex; align-items: center;">
-                    <i class="fas fa-bell" style="margin-right: 0.5rem; color: #ffc107;"></i>
-                    System Alerts & Notifications
-                </h2>
+                <div style="display:flex; align-items:center; justify-content:space-between; gap:1rem; margin-bottom:1.5rem;">
+                    <h2 style="font-size: 1.25rem; font-weight: 700; color: #333; margin: 0; display: flex; align-items: center;">
+                        <i class="fas fa-bell" style="margin-right: 0.5rem; color: #ffc107;"></i>
+                        System Alerts & Notifications
+                    </h2>
+                    <button class="btn-report" type="button" onclick="exportSystemFeed()">
+                        <i class="fas fa-print"></i> Export
+                    </button>
+                </div>
                 <div id="alerts-dynamic"></div>
             </div>
     <script>
-    // --- Dynamic Alerts & Notifications ---
+    // --- Combined System Alerts & Activity Feed ---
     let LAST_ALERTS = [];
+    let LAST_SYSTEM_FEED = [];
+
+    function systemFeedEscape(value) {
+        return String(value || '')
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;')
+            .replace(/'/g, '&#039;');
+    }
+
+    function systemFeedTime(value) {
+        if (!value) return '';
+        try {
+            const date = new Date(value);
+            if (!Number.isNaN(date.getTime())) {
+                return date.toLocaleString();
+            }
+        } catch (e) {}
+        return String(value);
+    }
+
     async function fetchAlerts() {
         try {
-            const res = await fetch('api/alerts_active.php');
+            const res = await fetch('api/alerts_active.php?all=1');
             const data = await res.json();
             if (!data.ok) return [];
             return data.data || [];
         } catch (e) { return []; }
     }
 
-    function alertHtml(alert, idx) {
-        let icon = '<i class="fas fa-info-circle"></i>';
-        let cls = '';
-        if (alert.type === 'critical') { icon = '<i class="fas fa-exclamation-triangle"></i>'; cls = 'critical'; }
-        else if (alert.type === 'warning') { icon = '<i class="fas fa-exclamation-circle"></i>'; cls = 'warning'; }
-        else if (alert.type === 'info') { icon = '<i class="fas fa-info-circle"></i>'; cls = 'info'; }
+    async function fetchSystemActivity() {
+        try {
+            const res = await fetch('api/activity_feed.php?all=1');
+            const data = await res.json();
+            if (!data.ok) return [];
+            return data.data || [];
+        } catch (e) { return []; }
+    }
+
+    function normalizeSystemFeed(alerts, activities) {
+        const alertItems = alerts.map((alert, index) => ({
+            kind: 'alert',
+            key: 'alert-' + index + '-' + String(alert.title || '') + '-' + String(alert.details || ''),
+            type: String(alert.type || 'info').toLowerCase(),
+            title: alert.title || 'Alert',
+            details: alert.details || '',
+            created_at: alert.created_at || null,
+        }));
+
+        const activityItems = activities.map((activity, index) => ({
+            kind: 'activity',
+            key: 'activity-' + index + '-' + String(activity.id || '') + '-' + String(activity.created_at || ''),
+            type: String(activity.action || 'activity').toLowerCase(),
+            title: `${String(activity.action || 'Activity').toUpperCase()} Activity`,
+            details: `${activity.username || ('User #' + (activity.user_id || ''))} ${activity.action || 'updated'} the system`,
+            created_at: activity.created_at || null,
+            entity_type: activity.entity_type || 'auth',
+        }));
+
+        return [...alertItems, ...activityItems].sort((a, b) => {
+            const aTime = a.created_at ? new Date(a.created_at).getTime() : 0;
+            const bTime = b.created_at ? new Date(b.created_at).getTime() : 0;
+            return bTime - aTime;
+        });
+    }
+
+    function systemFeedItemHtml(item) {
+        const isAlert = item.kind === 'alert';
+        const cardClass = isAlert
+            ? (item.type === 'critical' ? 'critical' : item.type === 'warning' ? 'warning' : 'info')
+            : 'info';
+        const icon = isAlert
+            ? (item.type === 'critical' ? 'fa-exclamation-triangle' : item.type === 'warning' ? 'fa-exclamation-circle' : 'fa-info-circle')
+            : (item.type === 'login' ? 'fa-right-to-bracket' : item.type === 'logout' ? 'fa-right-from-bracket' : 'fa-clock-rotate-left');
+        const badgeLabel = isAlert ? item.type.toUpperCase() : 'ACTIVITY';
+        const badgeColor = isAlert
+            ? (item.type === 'critical' ? '#dc2626' : item.type === 'warning' ? '#f59e0b' : '#2563eb')
+            : '#475569';
+        const time = systemFeedTime(item.created_at);
+
         return `
-            <div class="alert-item ${cls}" data-alert-idx="${idx}">
+            <div class="alert-item ${systemFeedEscape(cardClass)}">
                 <div class="alert-info">
-                    <div class="alert-title">${icon} ${alert.title || 'Alert'}</div>
-                    <div class="alert-details">${alert.details || ''}</div>
-                </div>
-                <div class="alert-actions">
-                    <button class="btn-report" onclick="dismissAlert(event)"><i class="fas fa-times"></i> Dismiss</button>
+                    <div class="alert-title">
+                        <span style="display:inline-block;margin-right:8px;padding:2px 8px;border-radius:999px;background:${badgeColor};color:#fff;font-size:11px;font-weight:700;">${systemFeedEscape(badgeLabel)}</span>
+                        <i class="fas ${icon}"></i> ${systemFeedEscape(item.title)}
+                    </div>
+                    <div class="alert-details">${systemFeedEscape(item.details)}</div>
+                    ${time ? `<div style="margin-top:6px;color:#94a3b8;font-size:12px;">${systemFeedEscape(time)}</div>` : ''}
                 </div>
             </div>
         `;
@@ -484,15 +613,23 @@ try {
     }
 
     async function renderAlerts() {
-        const alerts = await fetchAlerts();
         const container = document.getElementById('alerts-dynamic');
         if (!container) return;
-        if (!alerts.length) {
-            container.innerHTML = '<div style="color:#888;padding:1em;">No active alerts at this time.</div>';
+
+        const [alerts, activities] = await Promise.all([
+            fetchAlerts(),
+            fetchSystemActivity()
+        ]);
+
+        const combinedFeed = normalizeSystemFeed(alerts, activities);
+        LAST_SYSTEM_FEED = combinedFeed;
+
+        if (!combinedFeed.length) {
+            container.innerHTML = '<div style="color:#888;padding:1em;">No system alerts or recent activity at this time.</div>';
         } else {
-            container.innerHTML = alerts.map(alertHtml).join('');
+            container.innerHTML = combinedFeed.map(systemFeedItemHtml).join('');
         }
-        // Show popup for new alerts
+
         if (LAST_ALERTS.length) {
             alerts.forEach(a => {
                 if (!LAST_ALERTS.find(b => b.title === a.title && b.details === a.details)) {
@@ -505,14 +642,60 @@ try {
         LAST_ALERTS = alerts;
     }
 
-    // Dismiss alert (removes from UI only)
-    function dismissAlert(e) {
-        const item = e.target.closest('.alert-item');
-        if (item) item.style.display = 'none';
-        showNotification('Alert dismissed', 'info');
+    function exportSystemFeed() {
+        const printableItems = Array.isArray(LAST_SYSTEM_FEED) ? LAST_SYSTEM_FEED : [];
+        const rows = printableItems.length
+            ? printableItems.map(item => `
+                <tr>
+                    <td>${systemFeedEscape(item.kind === 'alert' ? 'Alert' : 'Activity')}</td>
+                    <td>${systemFeedEscape(item.title)}</td>
+                    <td>${systemFeedEscape(item.details)}</td>
+                    <td>${systemFeedEscape(systemFeedTime(item.created_at) || '—')}</td>
+                </tr>
+            `).join('')
+            : '<tr><td colspan="4">No data available.</td></tr>';
+
+        const printWindow = window.open('', '_blank', 'width=1100,height=800');
+        if (!printWindow) {
+            showNotification('Unable to open print window', 'error');
+            return;
+        }
+
+        printWindow.document.write(`
+            <html>
+            <head>
+                <title>System Alerts and Activity Export</title>
+                <style>
+                    body { font-family: Arial, sans-serif; padding: 24px; color: #111827; }
+                    h1 { margin: 0 0 8px; font-size: 24px; }
+                    p { margin: 0 0 20px; color: #4b5563; }
+                    table { width: 100%; border-collapse: collapse; }
+                    th, td { border: 1px solid #d1d5db; padding: 10px 12px; text-align: left; vertical-align: top; }
+                    th { background: #f3f4f6; }
+                </style>
+            </head>
+            <body>
+                <h1>System Alerts & Notifications</h1>
+                <p>Export generated on ${systemFeedEscape(new Date().toLocaleString())}</p>
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Category</th>
+                            <th>Title</th>
+                            <th>Details</th>
+                            <th>Date / Time</th>
+                        </tr>
+                    </thead>
+                    <tbody>${rows}</tbody>
+                </table>
+            </body>
+            </html>
+        `);
+        printWindow.document.close();
+        printWindow.focus();
+        printWindow.print();
     }
 
-    // Poll for new alerts every 10s
     document.addEventListener('DOMContentLoaded', function() {
         renderAlerts();
         setInterval(renderAlerts, 10000);
@@ -528,6 +711,11 @@ try {
     <script>
         // Emergency Response Analytics & Reporting Functionality
         let currentFilters = {};
+        const defaultReportFilters = {
+            period: <?php echo json_encode($defaultPeriod); ?>,
+            start: <?php echo json_encode($defaultStartDate); ?>,
+            end: <?php echo json_encode($defaultEndDate); ?>
+        };
         function navigateTo(page, params = {}) {
             const qs = new URLSearchParams(Object.entries(params).filter(([k,v]) => v !== undefined && v !== null && v !== '')).toString();
             window.location.href = qs ? `${page}?${qs}` : page;
@@ -657,33 +845,6 @@ try {
             }
         }
 
-        function toggleChartView() {
-            try {
-                if (!typesChart) { showNotification('No chart to toggle', 'warning'); return; }
-                const currentType = typesChart.config.type;
-                const newType = currentType === 'doughnut' ? 'bar' : 'doughnut';
-                const labels = typesChart.data.labels.slice();
-                const data = typesChart.data.datasets[0].data.slice();
-                typesChart.destroy();
-                const ctx2 = document.getElementById('incidentsTypesChart');
-                typesChart = new Chart(ctx2, {
-                    type: newType,
-                    data: {
-                        labels,
-                        datasets: [{
-                            label: 'Incidents by Type',
-                            data,
-                            backgroundColor: ['#ef4444','#f59e0b','#3b82f6','#22c55e'],
-                        }]
-                    },
-                    options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: newType !== 'bar' } }, scales: newType === 'bar' ? { y: { beginAtZero: true } } : {} }
-                });
-                showNotification('Chart view updated', 'success');
-            } catch (e) {
-                showNotification('Failed to toggle chart view', 'error');
-            }
-        }
-
         // Incident details (fetch + modal)
         async function viewIncidentDetails(id) {
             try {
@@ -796,11 +957,11 @@ try {
             const endDate = document.getElementById('end-date');
 
             if (reportType) reportType.value = '';
-            if (timePeriod) timePeriod.value = 'month';
+            if (timePeriod) timePeriod.value = defaultReportFilters.period;
             if (incidentType) incidentType.value = '';
             if (priorityLevel) priorityLevel.value = '';
-            if (startDate) startDate.value = '';
-            if (endDate) endDate.value = '';
+            if (startDate) startDate.value = defaultReportFilters.start;
+            if (endDate) endDate.value = defaultReportFilters.end;
 
             currentFilters = getFilters();
             refreshMetrics(currentFilters);
@@ -981,6 +1142,118 @@ try {
         let typesChart = null;
         let callDurationChart = null;
         let dispatchDailyChart = null;
+        let dispatchUnitBreakdown = [];
+
+        const reportBarValueLabelsPlugin = {
+            id: 'reportBarValueLabels',
+            afterDatasetsDraw(chart) {
+                if (chart.config.type !== 'bar') return;
+                const { ctx } = chart;
+                const meta = chart.getDatasetMeta(0);
+                const dataset = chart.data.datasets[0];
+                const color = chart.options.plugins?.reportBarValueLabels?.color || '#1f2937';
+
+                ctx.save();
+                ctx.font = '700 12px Arial';
+                ctx.fillStyle = color;
+                ctx.textBaseline = 'middle';
+
+                meta.data.forEach((bar, index) => {
+                    const raw = Number(dataset.data[index] || 0);
+                    const x = bar.x + 10;
+                    const y = bar.y;
+                    ctx.fillText(String(raw), x, y);
+                });
+
+                ctx.restore();
+            }
+        };
+
+        const reportDoughnutCenterPlugin = {
+            id: 'reportDoughnutCenter',
+            afterDraw(chart) {
+                if (chart.config.type !== 'doughnut') return;
+                const meta = chart.getDatasetMeta(0);
+                if (!meta.data.length) return;
+
+                const total = chart.data.datasets[0].data.reduce((sum, value) => sum + Number(value || 0), 0);
+                const { x, y } = meta.data[0];
+                const valueColor = chart.options.plugins?.reportDoughnutCenter?.valueColor || '#1f2937';
+                const labelColor = chart.options.plugins?.reportDoughnutCenter?.labelColor || '#6b7280';
+
+                const { ctx } = chart;
+                ctx.save();
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'middle';
+                ctx.fillStyle = valueColor;
+                ctx.font = '700 24px Arial';
+                ctx.fillText(String(total), x, y - 8);
+                ctx.fillStyle = labelColor;
+                ctx.font = '600 11px Arial';
+                ctx.fillText('Total', x, y + 14);
+                ctx.restore();
+            }
+        };
+
+        const reportDoughnutSliceLabelPlugin = {
+            id: 'reportDoughnutSliceLabel',
+            afterDatasetsDraw(chart) {
+                if (chart.config.type !== 'doughnut') return;
+                const dataset = chart.data.datasets[0];
+                const meta = chart.getDatasetMeta(0);
+                if (!dataset || !meta?.data?.length) return;
+
+                const total = dataset.data.reduce((sum, value) => sum + Number(value || 0), 0);
+                if (!total) return;
+
+                const textColor = chart.options.plugins?.reportDoughnutSliceLabel?.color || '#ffffff';
+                const ctx = chart.ctx;
+                ctx.save();
+                ctx.fillStyle = textColor;
+                ctx.font = '700 12px Arial';
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'middle';
+
+                meta.data.forEach((arc, index) => {
+                    const value = Number(dataset.data[index] || 0);
+                    if (!value) return;
+                    const angle = (arc.startAngle + arc.endAngle) / 2;
+                    const radius = arc.innerRadius + ((arc.outerRadius - arc.innerRadius) * 0.58);
+                    const x = arc.x + Math.cos(angle) * radius;
+                    const y = arc.y + Math.sin(angle) * radius;
+                    const percentage = ((value / total) * 100).toFixed(1).replace(/\.0$/, '') + '%';
+                    ctx.fillText(percentage, x, y);
+                });
+
+                ctx.restore();
+            }
+        };
+
+        function getReportChartTheme() {
+            const isDark = document.documentElement.getAttribute('data-theme') === 'dark';
+            return isDark ? {
+                text: '#e5eef9',
+                muted: '#94a3b8',
+                grid: 'rgba(148, 163, 184, 0.16)',
+                tooltipBg: '#020817',
+                tooltipBorder: '#334155',
+                tooltipText: '#f8fafc'
+            } : {
+                text: '#1f2937',
+                muted: '#6b7280',
+                grid: 'rgba(148, 163, 184, 0.2)',
+                tooltipBg: '#ffffff',
+                tooltipBorder: '#d1d5db',
+                tooltipText: '#111827'
+            };
+        }
+
+        function createChartGradient(ctx, colorTop, colorBottom) {
+            const gradient = ctx.createLinearGradient(0, 0, 0, 320);
+            gradient.addColorStop(0, colorTop);
+            gradient.addColorStop(1, colorBottom);
+            return gradient;
+        }
 
         function setChartLoading(chartId, isLoading) {
             const canvas = document.getElementById(chartId);
@@ -1006,46 +1279,83 @@ try {
                 setChartLoading('callDurationChart', true);
                 setChartLoading('dispatchDailyChart', true);
                 const qs = buildQuery(filters);
-                const [respRes, metricsRes] = await Promise.all([
+                const [respRes, metricsRes, dispRes] = await Promise.all([
                     fetch('api/report_response_times_daily.php' + qs),
-                    fetch('api/report_metrics.php' + qs)
+                    fetch('api/report_metrics.php' + qs),
+                    fetch('api/reports_dispatch.php' + qs)
                 ]);
                 const respData = await respRes.json();
                 const metricsData = await metricsRes.json();
+                const dispData = await dispRes.json();
+                const theme = getReportChartTheme();
+
                 if (respData.ok) {
                     const labels = respData.labels || [];
                     const data = respData.data || [];
                     const ctx = document.getElementById('responseTimeChart');
                     if (ctx) {
-                        if (!responseChart) {
-                            responseChart = new Chart(ctx, {
-                                type: 'line',
-                                data: { labels, datasets: [{
+                        if (responseChart) responseChart.destroy();
+                        const chartCtx = ctx.getContext('2d');
+                        responseChart = new Chart(ctx, {
+                            type: 'line',
+                            data: {
+                                labels,
+                                datasets: [{
                                     label: 'Avg Response Time (min)',
                                     data,
-                                    borderColor: '#3b82f6',
-                                    backgroundColor: 'rgba(59,130,246,0.15)',
-                                    tension: 0.3,
+                                    borderColor: '#2563eb',
+                                    backgroundColor: createChartGradient(chartCtx, 'rgba(37, 99, 235, 0.28)', 'rgba(37, 99, 235, 0.04)'),
+                                    tension: 0.35,
                                     fill: true,
-                                }]},
-                                options: {
-                                    responsive: true,
-                                    maintainAspectRatio: false,
-                                    scales: { y: { beginAtZero: true } },
-                                    plugins: { legend: { display: true } }
+                                    pointRadius: 3,
+                                    pointHoverRadius: 5,
+                                    pointBackgroundColor: '#2563eb',
+                                    pointBorderColor: '#ffffff'
+                                }, {
+                                    label: 'Admin Target',
+                                    data: labels.map(() => 10),
+                                    borderColor: '#f59e0b',
+                                    borderDash: [6, 6],
+                                    pointRadius: 0,
+                                    pointHoverRadius: 0,
+                                    fill: false
+                                }]
+                            },
+                            options: {
+                                responsive: true,
+                                maintainAspectRatio: false,
+                                plugins: {
+                                    legend: {
+                                        labels: { color: theme.text }
+                                    },
+                                    tooltip: {
+                                        backgroundColor: theme.tooltipBg,
+                                        borderColor: theme.tooltipBorder,
+                                        borderWidth: 1,
+                                        titleColor: theme.tooltipText,
+                                        bodyColor: theme.tooltipText
+                                    }
+                                },
+                                scales: {
+                                    x: {
+                                        ticks: { color: theme.muted, maxRotation: 30, minRotation: 30 },
+                                        grid: { color: theme.grid, drawBorder: false }
+                                    },
+                                    y: {
+                                        beginAtZero: true,
+                                        ticks: { color: theme.muted },
+                                        grid: { color: theme.grid, drawBorder: false }
+                                    }
                                 }
-                            });
-                        } else {
-                            responseChart.data.labels = labels;
-                            responseChart.data.datasets[0].data = data;
-                            responseChart.update();
-                        }
+                            }
+                        });
                     }
                 }
+
                 if (metricsData.ok) {
                     const typeCounts = metricsData.metrics?.incidents_by_type || {};
-                    let labels = ['Medical','Fire','Police','Traffic'];
-                    let values = [
+                    let typeLabels = ['Medical','Fire','Police','Traffic'];
+                    let typeValues = [
                         typeCounts.medical || 0,
                         typeCounts.fire || 0,
                         typeCounts.police || 0,
@@ -1055,116 +1365,201 @@ try {
                     if (filters.type) {
                         const map = { medical: 'Medical', fire: 'Fire', police: 'Police', traffic: 'Traffic', accident: 'Traffic', crime: 'Police' };
                         const wanted = map[filters.type] || filters.type;
-                        const idx = labels.indexOf(wanted);
-                        if (idx >= 0) { labels = [labels[idx]]; values = [values[idx]]; } else { labels = []; values = []; }
+                        const idx = typeLabels.indexOf(wanted);
+                        if (idx >= 0) { typeLabels = [typeLabels[idx]]; typeValues = [typeValues[idx]]; } else { typeLabels = []; typeValues = []; }
                     }
                     const ctx2 = document.getElementById('incidentsTypesChart');
                     if (ctx2) {
-                        if (!typesChart) {
-                            typesChart = new Chart(ctx2, {
-                                type: 'doughnut',
-                                data: {
-                                    labels,
-                                    datasets: [{
-                                        label: 'Incidents by Type',
-                                        data: values,
-                                        backgroundColor: ['#ef4444','#f59e0b','#3b82f6','#22c55e'],
-                                    }]
+                        if (typesChart) typesChart.destroy();
+                        typesChart = new Chart(ctx2, {
+                            type: 'bar',
+                            data: {
+                                labels: typeLabels,
+                                datasets: [{
+                                    label: 'Incidents by Type',
+                                    data: typeValues,
+                                    backgroundColor: ['#ef4444','#f59e0b','#3b82f6','#22c55e'],
+                                    borderRadius: 999,
+                                    borderSkipped: false,
+                                    barThickness: 28,
+                                    maxBarThickness: 32
+                                }]
+                            },
+                            options: {
+                                responsive: true,
+                                maintainAspectRatio: false,
+                                indexAxis: 'y',
+                                layout: { padding: { right: 28 } },
+                                plugins: {
+                                    legend: { display: false },
+                                    reportBarValueLabels: { color: theme.text },
+                                    tooltip: {
+                                        backgroundColor: theme.tooltipBg,
+                                        borderColor: theme.tooltipBorder,
+                                        borderWidth: 1,
+                                        titleColor: theme.tooltipText,
+                                        bodyColor: theme.tooltipText,
+                                        callbacks: {
+                                            label(context) {
+                                                return `${context.label}: ${context.raw} incident(s)`;
+                                            }
+                                        }
+                                    }
                                 },
-                                options: { responsive: true, maintainAspectRatio: false }
-                            });
-                        } else {
-                            typesChart.data.labels = labels;
-                            typesChart.data.datasets[0].data = values;
-                            typesChart.update();
+                                scales: {
+                                    x: {
+                                        beginAtZero: true,
+                                        ticks: { precision: 0, stepSize: 1, color: theme.muted },
+                                        grid: { color: theme.grid, drawBorder: false }
+                                    },
+                                    y: {
+                                        ticks: { color: theme.text, font: { weight: '700' } },
+                                        grid: { display: false, drawBorder: false }
+                                    }
+                                }
+                            },
+                            plugins: [reportBarValueLabelsPlugin]
+                        });
+                    }
+
+                    const priorityCounts = metricsData.metrics?.incidents_by_priority || {};
+                    let priorityLabels = ['High', 'Medium', 'Low'];
+                    let priorityValues = [
+                        priorityCounts.high || 0,
+                        priorityCounts.medium || 0,
+                        priorityCounts.low || 0
+                    ];
+                    if (filters.priority) {
+                        const wantedPriority = String(filters.priority).toLowerCase();
+                        const idx = ['high', 'medium', 'low'].indexOf(wantedPriority);
+                        if (idx >= 0) {
+                            priorityLabels = [priorityLabels[idx]];
+                            priorityValues = [priorityValues[idx]];
                         }
                     }
-                }
-                // Call Duration Chart
-                const callRes = await fetch('api/report_call_duration.php');
-                const callData = await callRes.json();
-                if (callData.ok) {
-                    const raw = Array.isArray(callData.data) ? callData.data : [];
-                    const filtered = raw.filter(x => ((x.type || '').toLowerCase() !== 'other'));
-                    const labels = filtered.map(x => x.type);
-                    const values = filtered.map(x => x.avg_duration);
                     const ctx3 = document.getElementById('callDurationChart');
                     if (ctx3) {
-                        if (!callDurationChart) {
-                            callDurationChart = new Chart(ctx3, {
-                                type: 'bar',
-                                data: {
-                                    labels,
-                                    datasets: [{
-                                        label: 'Avg Call Duration (min)',
-                                        data: values,
-                                        backgroundColor: '#6366f1',
-                                    }]
-                                },
-                                options: {
-                                    responsive: true,
-                                    maintainAspectRatio: false,
-                                    scales: { y: { beginAtZero: true } },
-                                    plugins: { legend: { display: true } }
-                                }
-                            });
-                        } else {
-                            callDurationChart.data.labels = labels;
-                            callDurationChart.data.datasets[0].data = values;
-                            callDurationChart.update();
-                        }
-                    }
-                }
-                // Dispatch daily chart
-                const dispRes = await fetch('api/reports_dispatch.php' + qs);
-                const dispData = await dispRes.json();
-                if (dispData.ok) {
-                    const labels = dispData.daily?.labels || [];
-                    const values = dispData.daily?.data || [];
-                    const ctx4 = document.getElementById('dispatchDailyChart');
-                    const maxVal = values.length ? Math.max(...values) : 0;
-                    if (ctx4) {
-                        if (!dispatchDailyChart) {
-                            dispatchDailyChart = new Chart(ctx4, {
-                                type: 'line',
-                                data: {
-                                    labels,
-                                    datasets: [{
-                                        label: 'Dispatches per Day',
-                                        data: values,
-                                        borderColor: '#3b82f6',
-                                        backgroundColor: 'rgba(59,130,246,0.15)',
-                                        tension: 0.3,
-                                        fill: false,
-                                        pointRadius: 3,
-                                        pointHoverRadius: 5,
-                                        spanGaps: true
-                                    }]
-                                },
-                                options: {
-                                    responsive: true,
-                                    maintainAspectRatio: false,
-                                    plugins: { legend: { display: false } },
-                                    scales: {
-                                        x: {
-                                            grid: { display: true },
-                                            ticks: { maxRotation: 45, minRotation: 45 }
-                                        },
-                                        y: {
-                                            beginAtZero: true,
-                                            suggestedMax: Math.max(4, Math.ceil(maxVal * 1.2)),
-                                            grid: { display: true }
+                        if (callDurationChart) callDurationChart.destroy();
+                        callDurationChart = new Chart(ctx3, {
+                            type: 'doughnut',
+                            data: {
+                                labels: priorityLabels,
+                                datasets: [{
+                                    label: 'Priority Level Oversight',
+                                    data: priorityValues,
+                                    backgroundColor: ['#ef4444', '#f59e0b', '#22c55e'],
+                                    borderColor: ['#fee2e2', '#fde68a', '#bbf7d0'],
+                                    borderWidth: 2,
+                                    hoverOffset: 10,
+                                    spacing: 3,
+                                    borderRadius: 8
+                                }]
+                            },
+                            options: {
+                                responsive: true,
+                                maintainAspectRatio: false,
+                                cutout: '56%',
+                                plugins: {
+                                    legend: {
+                                        position: 'bottom',
+                                        labels: { color: theme.text }
+                                    },
+                                    reportDoughnutSliceLabel: {
+                                        color: '#ffffff'
+                                    },
+                                    reportDoughnutCenter: {
+                                        valueColor: theme.text,
+                                        labelColor: theme.muted
+                                    },
+                                    tooltip: {
+                                        backgroundColor: theme.tooltipBg,
+                                        borderColor: theme.tooltipBorder,
+                                        borderWidth: 1,
+                                        titleColor: theme.tooltipText,
+                                        bodyColor: theme.tooltipText,
+                                        callbacks: {
+                                            label(context) {
+                                                const value = Number(context.raw || 0);
+                                                const total = context.dataset.data.reduce((sum, item) => sum + Number(item || 0), 0);
+                                                const percentage = total ? ((value / total) * 100).toFixed(1).replace(/\.0$/, '') : '0';
+                                                return `${context.label}: ${value} (${percentage}%)`;
+                                            }
                                         }
                                     }
                                 }
-                            });
-                        } else {
-                            dispatchDailyChart.data.labels = labels;
-                            dispatchDailyChart.data.datasets[0].data = values;
-                            // Update suggestedMax dynamically on refresh
-                            dispatchDailyChart.options.scales.y.suggestedMax = Math.max(4, Math.ceil(maxVal * 1.2));
-                            dispatchDailyChart.update();
-                        }
+                            },
+                            plugins: [reportDoughnutCenterPlugin, reportDoughnutSliceLabelPlugin]
+                        });
+                    }
+                }
+
+                if (dispData.ok) {
+                    const byUnitType = dispData.metrics?.by_unit_type || {};
+                    const labels = ['Ambulance', 'Fire', 'Police', 'Rescue', 'Other'];
+                    const values = [
+                        byUnitType.ambulance || 0,
+                        byUnitType.fire || 0,
+                        byUnitType.police || 0,
+                        byUnitType.rescue || 0,
+                        byUnitType.other || 0
+                    ];
+                    const ctx4 = document.getElementById('dispatchDailyChart');
+                    if (ctx4) {
+                        if (dispatchDailyChart) dispatchDailyChart.destroy();
+                        dispatchDailyChart = new Chart(ctx4, {
+                            type: 'polarArea',
+                            data: {
+                                labels,
+                                datasets: [{
+                                    label: 'Dispatch Load',
+                                    data: values,
+                                    backgroundColor: [
+                                        'rgba(59, 130, 246, 0.72)',
+                                        'rgba(239, 68, 68, 0.72)',
+                                        'rgba(245, 158, 11, 0.72)',
+                                        'rgba(34, 197, 94, 0.72)',
+                                        'rgba(148, 163, 184, 0.72)'
+                                    ],
+                                    borderColor: ['#93c5fd','#fca5a5','#fcd34d','#86efac','#cbd5e1'],
+                                    borderWidth: 2
+                                }]
+                            },
+                            options: {
+                                responsive: true,
+                                maintainAspectRatio: false,
+                                plugins: {
+                                    legend: {
+                                        position: 'bottom',
+                                        labels: { color: theme.text }
+                                    },
+                                    tooltip: {
+                                        backgroundColor: theme.tooltipBg,
+                                        borderColor: theme.tooltipBorder,
+                                        borderWidth: 1,
+                                        titleColor: theme.tooltipText,
+                                        bodyColor: theme.tooltipText,
+                                        callbacks: {
+                                            label(context) {
+                                                return `${context.label}: ${context.raw} dispatch(es)`;
+                                            }
+                                        }
+                                    }
+                                },
+                                scales: {
+                                    r: {
+                                        beginAtZero: true,
+                                        ticks: {
+                                            precision: 0,
+                                            color: theme.muted,
+                                            backdropColor: 'transparent'
+                                        },
+                                        grid: { color: theme.grid },
+                                        angleLines: { color: theme.grid },
+                                        pointLabels: { color: theme.text }
+                                    }
+                                }
+                            }
+                        });
                     }
                 }
             } catch (e) { /* silent */ }
@@ -1242,8 +1637,8 @@ try {
                     if (ackEl) ackEl.textContent = (dm.avg_ack_min ?? 0).toFixed(1);
                     if (onSceneEl) onSceneEl.textContent = (dm.avg_on_scene_min ?? 0).toFixed(1);
                     if (breachEl) breachEl.textContent = ((dm.sla_breach_rate ?? 0)).toFixed(1) + '%';
-                    // Render top units
-                    renderDispatchTopUnits(disp.top_units || []);
+                    dispatchUnitBreakdown = Array.isArray(disp.all_units) ? disp.all_units : [];
+                    renderDispatchTopUnits(disp.summary_by_service || {});
                 }
             } catch (e) {
                 // silent fail
@@ -1320,20 +1715,93 @@ try {
             }).join('');
         }
 
-        function renderDispatchTopUnits(items) {
+        function formatDispatchServiceLabel(key) {
+            switch ((key || '').toLowerCase()) {
+                case 'ambulance': return { title: 'Ambulance', linked: 'Medical' };
+                case 'fire': return { title: 'Fire', linked: 'Fire' };
+                case 'police': return { title: 'Police', linked: 'Police' };
+                case 'traffic': return { title: 'Traffic', linked: 'Traffic' };
+                default: return { title: key || 'Other', linked: 'Other' };
+            }
+        }
+
+        function renderDispatchTopUnits(summary) {
             const tbody = document.getElementById('dispatchTopUnitsBody');
             if (!tbody) return;
-            if (!items.length) {
-                tbody.innerHTML = `<tr><td colspan="3" style="color:#6b7280">No dispatches found for selected period</td></tr>`;
-                return;
-            }
-            tbody.innerHTML = items.map(u => `
+            const orderedKeys = ['ambulance', 'fire', 'police', 'traffic'];
+
+            tbody.innerHTML = orderedKeys.map((key) => {
+                const label = formatDispatchServiceLabel(key);
+                const count = Number(summary?.[key] || 0);
+                return `
                 <tr>
-                    <td>${u.identifier}</td>
-                    <td>${(u.unit_type || '').charAt(0).toUpperCase() + (u.unit_type || '').slice(1)}</td>
-                    <td>${u.count}</td>
-                </tr>
-            `).join('');
+                    <td>${label.title}</td>
+                    <td>${label.linked}</td>
+                    <td>${count}</td>
+                </tr>`;
+            }).join('');
+        }
+
+        function showAllDispatchUnitsModal() {
+            const overlay = document.createElement('div');
+            overlay.className = 'incident-modal-overlay';
+            const modal = document.createElement('div');
+            modal.className = 'incident-modal';
+
+            const rows = dispatchUnitBreakdown.length
+                ? dispatchUnitBreakdown.map((unit) => `
+                    <tr>
+                        <td>${unit.identifier || '—'}</td>
+                        <td>${(unit.unit_type || '').charAt(0).toUpperCase() + (unit.unit_type || '').slice(1)}</td>
+                        <td>${Number(unit.count || 0)}</td>
+                    </tr>
+                `).join('')
+                : `<tr><td colspan="3" style="color:#6b7280; text-align:center;">No dispatches found for selected period</td></tr>`;
+
+            modal.innerHTML = `
+                <div class="incident-modal-header">
+                    <h3>All Vehicle Dispatches</h3>
+                    <button class="incident-modal-close" aria-label="Close">&times;</button>
+                </div>
+                <div class="incident-modal-body">
+                    <div style="max-height: 420px; overflow-y: auto;">
+                        <table class="analytics-table">
+                            <thead>
+                                <tr>
+                                    <th>Vehicle</th>
+                                    <th>Type</th>
+                                    <th>Dispatches</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                ${rows}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+                <div class="incident-modal-footer">
+                    <button class="btn-report" id="dispatch-modal-close-btn"><i class="fas fa-times"></i> Close</button>
+                </div>
+            `;
+
+            overlay.appendChild(modal);
+            document.body.appendChild(overlay);
+
+            function closeModal() {
+                overlay.remove();
+            }
+
+            overlay.addEventListener('click', (e) => {
+                if (e.target === overlay) closeModal();
+            });
+            modal.querySelector('.incident-modal-close').addEventListener('click', closeModal);
+            modal.querySelector('#dispatch-modal-close-btn').addEventListener('click', closeModal);
+            document.addEventListener('keydown', function escHandler(e) {
+                if (e.key === 'Escape') {
+                    closeModal();
+                    document.removeEventListener('keydown', escHandler);
+                }
+            });
         }
 
         async function refreshDispatchReport() {
@@ -1352,11 +1820,14 @@ try {
             const cardInc = document.querySelector('.analytics-card.incidents');
             const cardRes = document.querySelector('.analytics-card.resources');
             const cardPerf = document.querySelector('.analytics-card.performance');
-            if (cardResp) cardResp.style.cursor='pointer', cardResp.addEventListener('click', () => navigateTo('dispatch.php', { period: currentFilters.period || 'month' }));
-            if (cardInc) cardInc.style.cursor='pointer', cardInc.addEventListener('click', () => navigateTo('incident.php', { period: currentFilters.period || 'month' }));
-            if (cardRes) cardRes.style.cursor='pointer', cardRes.addEventListener('click', () => window.open('api/reports_resources.php' + buildQuery(currentFilters), '_blank'));
-            if (cardPerf) cardPerf.style.cursor='pointer', cardPerf.addEventListener('click', () => navigateTo('incident.php', { period: currentFilters.period || 'month', status: 'resolved' }));
-            setInterval(() => { refreshMetrics(currentFilters); refreshCharts(currentFilters); }, 15000);
+            if (cardResp) cardResp.style.cursor='pointer', cardResp.addEventListener('click', () => window.open('api/reports_performance.php' + buildQuery(currentFilters), '_blank'));
+            if (cardInc) cardInc.style.cursor='pointer', cardInc.addEventListener('click', () => navigateTo('admin/review.php', { period: currentFilters.period || defaultReportFilters.period, start: currentFilters.start, end: currentFilters.end }));
+            if (cardRes) cardRes.style.cursor='pointer', cardRes.addEventListener('click', () => navigateTo('admin/resources.php'));
+            if (cardPerf) cardPerf.style.cursor='pointer', cardPerf.addEventListener('click', () => window.open('api/reports_incident_summary.php' + buildQuery(currentFilters), '_blank'));
+        });
+
+        document.addEventListener('themeChanged', function() {
+            refreshCharts(currentFilters);
         });
     </script>
 </body>

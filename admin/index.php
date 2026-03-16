@@ -5,27 +5,143 @@ require_once $rootDir . '/includes/auth.php';
 require_role('admin', 'admin/index.php');
 
 $apiKey = "225acf0f31b12ee9281d3aa19c94a57e";
-$city   = "Quezon";
+$weatherLat = 14.6760;
+$weatherLon = 121.0437;
 
-$url = "https://api.openweathermap.org/data/2.5/weather?q=Quezon,PH&units=metric&appid=225acf0f31b12ee9281d3aa19c94a57e";
-$response = @file_get_contents($url);
-$data = json_decode($response, true);
+if (!function_exists('ers_fetch_json')) {
+    function ers_fetch_json(string $url): ?array {
+        $context = stream_context_create([
+            'http' => [
+                'method' => 'GET',
+                'timeout' => 5,
+                'ignore_errors' => true,
+            ]
+        ]);
 
-if ($data && $data['cod'] == 200) {
-    $location   = $data['name'];
-    $condition  = ucwords($data['weather'][0]['description']);
-    $temp       = round($data['main']['temp']);
-    $humidity   = $data['main']['humidity'];
-    $wind       = round($data['wind']['speed'] * 3.6); // m/s → km/h
-    $visibility = isset($data['visibility']) ? round($data['visibility'] / 1000) : 'N/A';
-} else {
-    $location = "Quezon City";
-    $condition = "Unavailable";
-    $temp = "--";
-    $humidity = "--";
-    $wind = "--";
-    $visibility = "--";
+        $response = @file_get_contents($url, false, $context);
+        if ($response === false) {
+            return null;
+        }
+
+        $decoded = json_decode($response, true);
+        return is_array($decoded) ? $decoded : null;
+    }
 }
+
+if (!function_exists('ers_weather_visuals')) {
+    function ers_weather_visuals(?string $iconCode, ?string $condition): array {
+        $iconCode = strtolower(trim((string)$iconCode));
+        $condition = strtolower(trim((string)$condition));
+
+        if (strpos($iconCode, '11') === 0 || strpos($condition, 'thunder') !== false || strpos($condition, 'storm') !== false) {
+            return ['fa-cloud-bolt', 'weather-storm'];
+        }
+        if (strpos($iconCode, '09') === 0 || strpos($iconCode, '10') === 0 || strpos($condition, 'rain') !== false || strpos($condition, 'drizzle') !== false || strpos($condition, 'shower') !== false) {
+            return ['fa-cloud-rain', 'weather-rain'];
+        }
+        if (strpos($iconCode, '13') === 0 || strpos($condition, 'snow') !== false) {
+            return ['fa-snowflake', 'weather-mist'];
+        }
+        if (strpos($iconCode, '50') === 0 || strpos($condition, 'mist') !== false || strpos($condition, 'fog') !== false || strpos($condition, 'haze') !== false) {
+            return ['fa-smog', 'weather-mist'];
+        }
+        if (strpos($iconCode, '03') === 0 || strpos($iconCode, '04') === 0 || strpos($condition, 'cloud') !== false || strpos($condition, 'overcast') !== false) {
+            return ['fa-cloud', 'weather-cloudy'];
+        }
+        if (strpos($iconCode, '02') === 0) {
+            return ['fa-cloud-sun', 'weather-cloudy'];
+        }
+
+        return ['fa-sun', 'weather-clear'];
+    }
+}
+
+if (!function_exists('ers_weather_local_time')) {
+    function ers_weather_local_time(?int $timestamp, ?int $timezoneOffset): string {
+        if (!$timestamp) {
+            return 'Unavailable';
+        }
+
+        $localTimestamp = $timestamp + (int)$timezoneOffset;
+        return gmdate('g:i A', $localTimestamp);
+    }
+}
+
+if (!function_exists('ers_table_exists')) {
+    function ers_table_exists(PDO $pdo, string $tableName): bool {
+        try {
+            $stmt = $pdo->prepare("SHOW TABLES LIKE ?");
+            $stmt->execute([$tableName]);
+            return (bool)$stmt->fetchColumn();
+        } catch (Throwable $e) {
+            return false;
+        }
+    }
+}
+
+$location = "Quezon City";
+$condition = "Unavailable";
+$temp = "--";
+$humidity = "--";
+$wind = "--";
+$visibility = "--";
+$feelsLike = "--";
+$rainChance = "--";
+$forecastCondition = "Forecast unavailable";
+$forecastTimeLabel = "Unavailable";
+$forecastTempRange = "--";
+$weatherUpdatedAt = "Unavailable";
+$weatherTimezoneOffset = 8 * 3600;
+$weatherIconCode = null;
+
+$currentWeatherUrl = "https://api.openweathermap.org/data/2.5/weather?lat={$weatherLat}&lon={$weatherLon}&units=metric&appid={$apiKey}";
+$forecastWeatherUrl = "https://api.openweathermap.org/data/2.5/forecast?lat={$weatherLat}&lon={$weatherLon}&units=metric&appid={$apiKey}";
+
+$currentWeather = ers_fetch_json($currentWeatherUrl);
+$forecastWeather = ers_fetch_json($forecastWeatherUrl);
+
+if (is_array($currentWeather) && (int)($currentWeather['cod'] ?? 0) === 200) {
+    $location = (string)($currentWeather['name'] ?? 'Quezon City');
+    $condition = ucwords((string)($currentWeather['weather'][0]['description'] ?? 'Unavailable'));
+    $temp = isset($currentWeather['main']['temp']) ? round((float)$currentWeather['main']['temp']) : "--";
+    $feelsLike = isset($currentWeather['main']['feels_like']) ? round((float)$currentWeather['main']['feels_like']) : "--";
+    $humidity = isset($currentWeather['main']['humidity']) ? (int)$currentWeather['main']['humidity'] : "--";
+    $wind = isset($currentWeather['wind']['speed']) ? round((float)$currentWeather['wind']['speed'] * 3.6) : "--";
+    $visibility = isset($currentWeather['visibility']) ? round((float)$currentWeather['visibility'] / 1000, 1) : 'N/A';
+    $weatherTimezoneOffset = (int)($currentWeather['timezone'] ?? $weatherTimezoneOffset);
+    $weatherUpdatedAt = ers_weather_local_time(isset($currentWeather['dt']) ? (int)$currentWeather['dt'] : null, $weatherTimezoneOffset);
+    $weatherIconCode = (string)($currentWeather['weather'][0]['icon'] ?? '');
+}
+
+if (is_array($forecastWeather) && (string)($forecastWeather['cod'] ?? '') === '200' && !empty($forecastWeather['list'][0])) {
+    $nextForecast = $forecastWeather['list'][0];
+    $forecastCondition = ucwords((string)($nextForecast['weather'][0]['description'] ?? 'Forecast unavailable'));
+    $forecastTimeLabel = ers_weather_local_time(isset($nextForecast['dt']) ? (int)$nextForecast['dt'] : null, (int)($forecastWeather['city']['timezone'] ?? $weatherTimezoneOffset));
+    $rainChance = isset($nextForecast['pop']) ? (int)round(((float)$nextForecast['pop']) * 100) : "--";
+
+    $forecastSamples = array_slice((array)($forecastWeather['list'] ?? []), 0, 8);
+    $temps = [];
+    foreach ($forecastSamples as $sample) {
+        if (isset($sample['main']['temp_min'])) {
+            $temps[] = (float)$sample['main']['temp_min'];
+        }
+        if (isset($sample['main']['temp_max'])) {
+            $temps[] = (float)$sample['main']['temp_max'];
+        }
+    }
+    if (!empty($temps)) {
+        $forecastTempRange = round(max($temps)) . '° / ' . round(min($temps)) . '°';
+    }
+
+    if (!$weatherIconCode) {
+        $weatherIconCode = (string)($nextForecast['weather'][0]['icon'] ?? '');
+    }
+}
+
+[$weatherIconClass, $weatherThemeClass] = ers_weather_visuals($weatherIconCode, $condition);
+$weatherHeadline = $forecastCondition !== 'Forecast unavailable'
+    ? 'Next forecast at ' . $forecastTimeLabel . ': ' . $forecastCondition
+    : 'Live conditions unavailable';
 $pageTitle = 'ERS Admin Dashboard';
 $dashboardRoleLabel = ucfirst((string)($_SESSION['user_role'] ?? 'admin'));
 $dashboardHeaderTime = date('n/j/Y, h:i:s A');
@@ -39,21 +155,33 @@ try {
     $q2 = $pdo->query("SELECT priority, COUNT(*) AS c FROM incidents GROUP BY priority");
     foreach ($q2->fetchAll() as $r) { if (isset($priorityCounts[$r['priority']])) { $priorityCounts[$r['priority']] = (int)$r['c']; } }
 } catch (Throwable $e) {}
-$activeIncidents = 0;
-$availableResponders = 0;
-$avgResponseTime = 0;
-$pendingCalls = 0;
-$totalIncidents = 0;
-$resourceUtilization = 0;
+$openIncidents = 0;
+$activeUsers = 0;
+$partnerAgencies = 0;
+$resourceRecords = 0;
+$monthlyIncidents = 0;
 // Load dashboard metrics and chart data from DB for accuracy
 try {
     require_once $rootDir . '/includes/db.php';
     $pdo = get_db_connection();
     // Metrics
-    $activeIncidents = (int)$pdo->query("SELECT COUNT(*) AS c FROM incidents WHERE status IN ('pending','dispatched')")->fetch()['c'];
-    $pendingCalls = (int)$pdo->query("SELECT COUNT(*) AS c FROM incidents WHERE status='pending'")->fetch()['c'];
-    $availableResponders = (int)$pdo->query("SELECT COUNT(*) AS c FROM units WHERE status='available'")->fetch()['c'];
-    $totalIncidents = (int)$pdo->query("SELECT COUNT(*) AS c FROM incidents WHERE YEAR(created_at)=YEAR(CURDATE()) AND MONTH(created_at)=MONTH(CURDATE())")->fetch()['c'];
+    $openIncidents = (int)$pdo->query("SELECT COUNT(*) AS c FROM incidents WHERE status IN ('pending','dispatched')")->fetch()['c'];
+    $monthlyIncidents = (int)$pdo->query("SELECT COUNT(*) AS c FROM incidents WHERE YEAR(created_at)=YEAR(CURDATE()) AND MONTH(created_at)=MONTH(CURDATE())")->fetch()['c'];
+
+    if (ers_table_exists($pdo, 'users')) {
+        $activeUsers = (int)$pdo->query("SELECT COUNT(*) AS c FROM users WHERE status = 'active'")->fetch()['c'];
+    }
+
+    if (ers_table_exists($pdo, 'agencies')) {
+        $partnerAgencies = (int)$pdo->query("SELECT COUNT(*) AS c FROM agencies WHERE status = 'active'")->fetch()['c'];
+    }
+
+    if (ers_table_exists($pdo, 'admin_resources')) {
+        $resourceRecords = (int)$pdo->query("SELECT COUNT(*) AS c FROM admin_resources")->fetch()['c'];
+    } elseif (ers_table_exists($pdo, 'resources')) {
+        $resourceRecords = (int)$pdo->query("SELECT COUNT(*) AS c FROM resources")->fetch()['c'];
+    }
+
     // Charts
     $typesCounts = ['medical'=>0,'fire'=>0,'police'=>0,'traffic'=>0];
     $priorityCounts = ['high'=>0,'medium'=>0,'low'=>0];
@@ -121,97 +249,97 @@ try {
                 <div class="metric-card critical">
                     <div class="metric-header">
                         <div>
-                            <h3 class="metric-title">Active Incidents</h3>
-                            <div class="metric-value"><?php echo $activeIncidents; ?></div>
+                            <h3 class="metric-title">Open Incidents</h3>
+                            <div class="metric-value"><?php echo $openIncidents; ?></div>
                             <div class="metric-change positive">
-                                <i class="fas fa-arrow-down"></i>
+                                <i class="fas fa-shield-halved"></i>
                             </div>
                         </div>
                         <div class="metric-icon fire">
-                            <i class="fas fa-fire"></i>
+                            <i class="fas fa-triangle-exclamation"></i>
                         </div>
                     </div>
                     <div class="metric-actions">
-                        <button class="btn-metric" onclick="viewIncidents()">
-                            <i class="fas fa-eye"></i> View All
+                        <button type="button" class="btn-metric" onclick="openIncidentOversight()">
+                            <i class="fas fa-clipboard-list"></i> Review Queue
                         </button>
                     </div>
                 </div>
                 <div class="metric-card success">
                     <div class="metric-header">
                         <div>
-                            <h3 class="metric-title">Available Responders</h3>
-                            <div class="metric-value"><?php echo $availableResponders; ?></div>
+                            <h3 class="metric-title">Active Users</h3>
+                            <div class="metric-value"><?php echo $activeUsers; ?></div>
                             <div class="metric-change positive">
-                                <i class="fas fa-arrow-up"></i>
+                                <i class="fas fa-user-check"></i>
                             </div>
                         </div>
-                        <div class="metric-icon medical">
-                            <i class="fas fa-truck-medical"></i>
+                        <div class="metric-icon users">
+                            <i class="fas fa-users"></i>
                         </div>
                     </div>
                     <div class="metric-actions">
-                        <button class="btn-metric" onclick="viewResponders()">
-                            <i class="fas fa-users"></i> Manage
+                        <button type="button" class="btn-metric" onclick="openUserManagement()">
+                            <i class="fas fa-user-gear"></i> Manage Accounts
                         </button>
                     </div>
                 </div>
                 <div class="metric-card warning">
                     <div class="metric-header">
                         <div>
-                            <h3 class="metric-title">Avg Response Time</h3>
-                            <div class="metric-value"><?php echo number_format($avgResponseTime, 1); ?>m</div>
-                            <div class="metric-change negative">
-                                <i class="fas fa-arrow-up"></i>
+                            <h3 class="metric-title">Partner Agencies</h3>
+                            <div class="metric-value"><?php echo $partnerAgencies; ?></div>
+                            <div class="metric-change positive">
+                                <i class="fas fa-link"></i>
                             </div>
                         </div>
-                        <div class="metric-icon time">
-                            <i class="fas fa-clock"></i>
+                        <div class="metric-icon server">
+                            <i class="fas fa-building-shield"></i>
                         </div>
                     </div>
                     <div class="metric-actions">
-                        <button class="btn-metric" onclick="viewResponseTimes()">
-                            <i class="fas fa-chart-line"></i> Analytics
+                        <button type="button" class="btn-metric" onclick="openInteragencyDesk()">
+                            <i class="fas fa-handshake-angle"></i> Open Desk
                         </button>
                     </div>
                 </div>
                 <div class="metric-card info">
                     <div class="metric-header">
                         <div>
-                            <h3 class="metric-title">Pending Calls</h3>
-                            <div class="metric-value"><?php echo $pendingCalls; ?></div>
-                            <div class="metric-change neutral">
-                                <i class="fas fa-minus"></i>
+                            <h3 class="metric-title">Resource Records</h3>
+                            <div class="metric-value"><?php echo $resourceRecords; ?></div>
+                            <div class="metric-change positive">
+                                <i class="fas fa-box-open"></i>
                             </div>
                         </div>
-                        <div class="metric-icon phone">
-                            <i class="fas fa-phone-volume"></i>
+                        <div class="metric-icon server">
+                            <i class="fas fa-boxes-stacked"></i>
                         </div>
                     </div>
                     <div class="metric-actions">
-                        <button class="btn-metric" onclick="viewCalls()">
-                            <i class="fas fa-phone"></i> Answer
+                        <button type="button" class="btn-metric" onclick="openResourceOversight()">
+                            <i class="fas fa-warehouse"></i> View Records
                         </button>
                     </div>
                 </div>
                 <div class="metric-card success">
                     <div class="metric-header">
                         <div>
-                            <h3 class="metric-title">Total Incidents (Month)</h3>
-                            <div class="metric-value"><?php echo $totalIncidents; ?></div>
+                            <h3 class="metric-title">Monthly Incidents</h3>
+                            <div class="metric-value"><?php echo $monthlyIncidents; ?></div>
                             <div class="metric-change positive">
-                                <i class="fas fa-arrow-up"></i>
+                                <i class="fas fa-chart-simple"></i>
                             </div>
                         </div>
                         <div class="metric-icon chart">
-                            <i class="fas fa-chart-bar"></i>
+                            <i class="fas fa-file-chart-column"></i>
                         </div>
                     </div>
                     <div class="metric-actions">
-                        <button class="btn-metric" onclick="monthlyReport()">
-                            <i class="fas fa-file-pdf"></i> Report
+                        <button type="button" class="btn-metric" onclick="openReportsCenter()">
+                            <i class="fas fa-file-lines"></i> Report
                         </button>
-                        <button class="btn-metric" onclick="trendAnalysis()">
+                        <button type="button" class="btn-metric" onclick="trendAnalysis()">
                             <i class="fas fa-chart-line"></i> Trends
                         </button>
                     </div>
@@ -246,49 +374,77 @@ try {
                     <div class="quick-actions">
                         <h3 class="quick-actions-title">Quick Actions</h3>
                         <div class="action-grid">
-                            <button class="action-btn" onclick="emergencyCall()">
-                                <i class="fas fa-phone-volume"></i>
-                                <span>Emergency Call</span>
+                            <button type="button" class="action-btn" onclick="openUserManagement()">
+                                <i class="fas fa-users-cog"></i>
+                                <span>User Management</span>
                             </button>
-                            <button class="action-btn" onclick="dispatchUnit()">
-                                <i class="fas fa-truck-medical"></i>
-                                <span>Dispatch Unit</span>
+                            <button type="button" class="action-btn" onclick="openSystemSettings()">
+                                <i class="fas fa-sliders"></i>
+                                <span>System Settings</span>
                             </button>
-                            <button class="action-btn" onclick="resourceCheck()">
-                                <i class="fas fa-clipboard-check"></i>
-                                <span>Resource Check</span>
+                            <button type="button" class="action-btn" onclick="openResourceOversight()">
+                                <i class="fas fa-boxes-stacked"></i>
+                                <span>Resource Oversight</span>
                             </button>
-                            <button class="action-btn" onclick="generateReport()">
-                                <i class="fas fa-file-pdf"></i>
-                                <span>Generate Report</span>
+                            <button type="button" class="action-btn" onclick="openReportsCenter()">
+                                <i class="fas fa-chart-column"></i>
+                                <span>Reports Center</span>
                             </button>
                         </div>
                     </div>
                     <!-- Weather Widget -->
-<div class="weather-widget">
+<div class="weather-widget <?php echo htmlspecialchars($weatherThemeClass); ?>">
+    <div class="weather-widget-glow"></div>
     <div class="weather-header">
-        <div>
-            <div class="weather-location"><?php echo $location; ?></div>
-            <div class="weather-condition"><?php echo $condition; ?></div>
+        <div class="weather-copy">
+            <div class="weather-eyebrow">Live Weather Brief</div>
+            <div class="weather-location"><?php echo htmlspecialchars($location); ?></div>
+            <div class="weather-condition"><?php echo htmlspecialchars($condition); ?></div>
         </div>
-        <i class="fa-solid fa-cloud"></i>
-        <div class="weather-temp"><?php echo $temp; ?>°C</div>
+        <div class="weather-icon-shell" aria-hidden="true">
+            <i class="fa-solid <?php echo htmlspecialchars($weatherIconClass); ?>"></i>
+        </div>
     </div>
 
-    <div style="display: flex; justify-content: space-between; margin-top: 1rem;">
-        <div style="text-align: center;">
-            <div style="font-weight: 600; color: #333;">Humidity</div>
-            <div style="color: #666;"><?php echo $humidity; ?>%</div>
+    <div class="weather-body">
+        <div class="weather-temp-block">
+            <div class="weather-temp"><?php echo htmlspecialchars((string)$temp); ?>°C</div>
+            <div class="weather-headline"><?php echo htmlspecialchars($weatherHeadline); ?></div>
+            <div class="weather-meta-line">Updated <?php echo htmlspecialchars($weatherUpdatedAt); ?> for exact Quezon City coordinates</div>
         </div>
-
-        <div style="text-align: center;">
-            <div style="font-weight: 600; color: #333;">Wind</div>
-            <div style="color: #666;"><?php echo $wind; ?> km/h</div>
+        <div class="weather-status-chip">
+            <span class="weather-status-dot"></span>
+            <span><?php echo htmlspecialchars($forecastTimeLabel); ?> forecast</span>
         </div>
+    </div>
 
-        <div style="text-align: center;">
-            <div style="font-weight: 600; color: #333;">Visibility</div>
-            <div style="color: #666;"><?php echo $visibility; ?> km</div>
+    <div class="weather-stats">
+        <div class="weather-stat">
+            <span class="weather-stat-label">Feels Like</span>
+            <strong class="weather-stat-value"><?php echo htmlspecialchars((string)$feelsLike); ?>°C</strong>
+        </div>
+        <div class="weather-stat">
+            <span class="weather-stat-label">Rain Chance</span>
+            <strong class="weather-stat-value"><?php echo htmlspecialchars((string)$rainChance); ?>%</strong>
+        </div>
+        <div class="weather-stat">
+            <span class="weather-stat-label">Next 24h Range</span>
+            <strong class="weather-stat-value"><?php echo htmlspecialchars((string)$forecastTempRange); ?></strong>
+        </div>
+    </div>
+
+    <div class="weather-detail-strip">
+        <div class="weather-detail-pill">
+            <span class="weather-detail-label">Humidity</span>
+            <strong><?php echo htmlspecialchars((string)$humidity); ?>%</strong>
+        </div>
+        <div class="weather-detail-pill">
+            <span class="weather-detail-label">Wind</span>
+            <strong><?php echo htmlspecialchars((string)$wind); ?> km/h</strong>
+        </div>
+        <div class="weather-detail-pill">
+            <span class="weather-detail-label">Visibility</span>
+            <strong><?php echo htmlspecialchars((string)$visibility); ?> km</strong>
         </div>
     </div>
 </div>
@@ -372,12 +528,132 @@ try {
         ]); ?>;
         const priorityLabels = ['High','Medium','Low'];
         const priorityValues = <?php echo json_encode(array_values($priorityCounts)); ?>;
+        const piePercentageLabelsPlugin = {
+            id: 'piePercentageLabels',
+            afterDatasetsDraw(chart) {
+                const { ctx } = chart;
+                const dataset = chart.data.datasets[0];
+                const meta = chart.getDatasetMeta(0);
+                const total = dataset.data.reduce((sum, value) => sum + Number(value || 0), 0);
 
-        document.addEventListener('DOMContentLoaded', () => {
-            // Bar: incidents per type
+                if (!total) {
+                    return;
+                }
+
+                ctx.save();
+                ctx.font = '700 13px Arial';
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'middle';
+
+                meta.data.forEach((slice, index) => {
+                    const value = Number(dataset.data[index] || 0);
+
+                    if (!value) {
+                        return;
+                    }
+
+                    const { x, y } = slice.tooltipPosition();
+                    const percentage = ((value / total) * 100).toFixed(1).replace(/\.0$/, '') + '%';
+                    const borderColors = Array.isArray(dataset.borderColor) ? dataset.borderColor : [];
+
+                    ctx.fillStyle = borderColors[index] || '#1f2937';
+                    ctx.fillText(percentage, x, y);
+                });
+
+                ctx.restore();
+            }
+        };
+        const barValueLabelsPlugin = {
+            id: 'barValueLabels',
+            afterDatasetsDraw(chart) {
+                if (chart.config.type !== 'bar') {
+                    return;
+                }
+
+                const { ctx } = chart;
+                const dataset = chart.data.datasets[0];
+                const meta = chart.getDatasetMeta(0);
+
+                ctx.save();
+                ctx.font = '700 12px Arial';
+                ctx.textBaseline = 'middle';
+                ctx.fillStyle = chart.options.plugins?.barValueLabels?.color || '#1f2937';
+
+                meta.data.forEach((bar, index) => {
+                    const value = Number(dataset.data[index] || 0);
+                    const x = bar.x + 12;
+                    const y = bar.y;
+                    ctx.fillText(String(value), x, y);
+                });
+
+                ctx.restore();
+            }
+        };
+        const doughnutCenterTextPlugin = {
+            id: 'doughnutCenterText',
+            afterDraw(chart) {
+                if (chart.config.type !== 'doughnut') {
+                    return;
+                }
+
+                const { ctx } = chart;
+                const dataset = chart.data.datasets[0];
+                const total = dataset.data.reduce((sum, value) => sum + Number(value || 0), 0);
+                const meta = chart.getDatasetMeta(0);
+
+                if (!meta.data.length) {
+                    return;
+                }
+
+                const { x, y } = meta.data[0];
+
+                ctx.save();
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'middle';
+                ctx.fillStyle = chart.options.plugins?.doughnutCenterText?.valueColor || '#1f2937';
+                ctx.font = '700 26px Arial';
+                ctx.fillText(String(total), x, y - 8);
+                ctx.fillStyle = chart.options.plugins?.doughnutCenterText?.labelColor || '#6b7280';
+                ctx.font = '600 11px Arial';
+                ctx.fillText('Total Cases', x, y + 16);
+                ctx.restore();
+            }
+        };
+
+        let incidentsTypeChart = null;
+        let incidentsPriorityChart = null;
+
+        function getDashboardChartTheme() {
+            const isDark = document.documentElement.getAttribute('data-theme') === 'dark';
+            return isDark ? {
+                text: '#e5eef9',
+                muted: '#94a3b8',
+                grid: 'rgba(148, 163, 184, 0.18)',
+                tooltipBg: '#020817',
+                tooltipBorder: '#334155',
+                tooltipText: '#f8fafc'
+            } : {
+                text: '#1f2937',
+                muted: '#6b7280',
+                grid: 'rgba(148, 163, 184, 0.2)',
+                tooltipBg: '#ffffff',
+                tooltipBorder: '#d1d5db',
+                tooltipText: '#111827'
+            };
+        }
+
+        function renderIncidentsTypeChart() {
             const barCtx = document.getElementById('incidentsTypeBar');
-            if (barCtx) {
-                new Chart(barCtx, {
+            if (!barCtx) {
+                return;
+            }
+
+            if (incidentsTypeChart) {
+                incidentsTypeChart.destroy();
+            }
+
+            const theme = getDashboardChartTheme();
+            incidentsTypeChart = new Chart(barCtx, {
                     type: 'bar',
                     data: {
                         labels: typesLabels,
@@ -385,43 +661,140 @@ try {
                             label: 'Incidents by Type',
                             data: typesValues,
                             backgroundColor: ['#ef4444','#f59e0b','#3b82f6','#22c55e'],
+                            borderRadius: 999,
+                            borderSkipped: false,
+                            barThickness: 28,
+                            maxBarThickness: 30
                         }]
                     },
                     options: {
                         responsive: true,
                         maintainAspectRatio: false,
-                        plugins: { legend: { display: false } },
-                        scales: { y: { beginAtZero: true, ticks: { precision: 0 } } }
-                    }
+                        indexAxis: 'y',
+                        layout: {
+                            padding: {
+                                right: 28
+                            }
+                        },
+                        plugins: {
+                            legend: { display: false },
+                            barValueLabels: {
+                                color: theme.text
+                            },
+                            tooltip: {
+                                backgroundColor: theme.tooltipBg,
+                                borderColor: theme.tooltipBorder,
+                                borderWidth: 1,
+                                titleColor: theme.tooltipText,
+                                bodyColor: theme.tooltipText,
+                                callbacks: {
+                                    label(context) {
+                                        return `${context.label}: ${context.raw} incident(s)`;
+                                    }
+                                }
+                            }
+                        },
+                        scales: {
+                            x: {
+                                beginAtZero: true,
+                                ticks: { precision: 0, stepSize: 1, color: theme.muted },
+                                grid: {
+                                    color: theme.grid,
+                                    drawBorder: false
+                                }
+                            },
+                            y: {
+                                grid: { display: false, drawBorder: false },
+                                ticks: {
+                                    color: theme.text,
+                                    font: { size: 12, weight: '700' }
+                                }
+                            }
+                        }
+                    },
+                    plugins: [barValueLabelsPlugin]
                 });
+        }
+
+        function renderIncidentsPriorityChart() {
+            const pieCtx = document.getElementById('incidentsPriorityPie');
+            if (!pieCtx) {
+                return;
             }
 
-            // Pie: incidents by priority
-            const pieCtx = document.getElementById('incidentsPriorityPie');
-            if (pieCtx) {
-                new Chart(pieCtx, {
-                    type: 'pie',
+            if (incidentsPriorityChart) {
+                incidentsPriorityChart.destroy();
+            }
+
+            const theme = getDashboardChartTheme();
+            incidentsPriorityChart = new Chart(pieCtx, {
+                    type: 'doughnut',
                     data: {
                         labels: priorityLabels,
                         datasets: [{
                             label: 'Incidents by Priority',
                             data: priorityValues,
                             backgroundColor: [
-                                '#fed7aa', // High (bg)
+                                '#fecaca', // High (bg)
                                 '#bfdbfe', // Medium (bg)
                                 '#d1fae5'  // Low (bg)
                             ],
                             borderColor: [
-                                '#92400e', // High (text)
+                                '#b91c1c', // High (text)
                                 '#1e40af', // Medium (text)
                                 '#065f46'  // Low (text)
                             ],
-                            borderWidth: 2
+                            borderWidth: 2,
+                            hoverOffset: 10,
+                            spacing: 3,
+                            borderRadius: 8
                         }]
                     },
-                    options: { responsive: true, maintainAspectRatio: false }
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        cutout: '55%',
+                        plugins: {
+                            legend: {
+                                position: 'bottom',
+                                labels: {
+                                    color: theme.text
+                                }
+                            },
+                            doughnutCenterText: {
+                                valueColor: theme.text,
+                                labelColor: theme.muted
+                            },
+                            tooltip: {
+                                backgroundColor: theme.tooltipBg,
+                                borderColor: theme.tooltipBorder,
+                                borderWidth: 1,
+                                titleColor: theme.tooltipText,
+                                bodyColor: theme.tooltipText,
+                                callbacks: {
+                                    label(context) {
+                                        const value = Number(context.raw || 0);
+                                        const total = context.dataset.data.reduce((sum, item) => sum + Number(item || 0), 0);
+                                        const percentage = total ? ((value / total) * 100).toFixed(1).replace(/\.0$/, '') : '0';
+
+                                        return `${context.label}: ${value} (${percentage}%)`;
+                                    }
+                                }
+                            }
+                        }
+                    },
+                    plugins: [piePercentageLabelsPlugin, doughnutCenterTextPlugin]
                 });
-            }
+        }
+
+        document.addEventListener('DOMContentLoaded', () => {
+            renderIncidentsTypeChart();
+            renderIncidentsPriorityChart();
+        });
+
+        document.addEventListener('themeChanged', () => {
+            renderIncidentsTypeChart();
+            renderIncidentsPriorityChart();
         });
 
         // Dashboard: Recent Activity and Active Alerts
@@ -738,11 +1111,20 @@ try {
             }, 400);
         }
         // Quick action functions
-        function emergencyCall() {
-            window.location.href = 'call.php';
+        function goToAdminPage(path) {
+            window.location.href = 'admin/' + path;
         }
-        function dispatchUnit() {
-            window.location.href = 'dispatch.php';
+        function openIncidentOversight() {
+            goToAdminPage('review.php');
+        }
+        function openUserManagement() {
+            goToAdminPage('user_management.php');
+        }
+        function openSystemSettings() {
+            goToAdminPage('system_settings.php');
+        }
+        function openInteragencyDesk() {
+            goToAdminPage('interagency.php');
         }
         function alertAllUnits() {
             if (confirm('Send emergency alert to all units? This will interrupt current operations.')) {
@@ -755,11 +1137,11 @@ try {
                 showNotification('System test completed successfully', 'success');
             }, 3000);
         }
-        function resourceCheck() {
-            window.location.href = 'resources.php';
+        function openResourceOversight() {
+            goToAdminPage('resources.php');
         }
-        function generateReport() {
-            window.location.href = 'report.php';
+        function openReportsCenter() {
+            goToAdminPage('report.php');
         }
         // Activity and alert functions
         function viewAllActivity() {

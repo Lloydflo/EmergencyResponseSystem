@@ -10,6 +10,16 @@ if (!$pdo) {
     exit;
 }
 
+$table_exists = function (string $table) use ($pdo): bool {
+    try {
+        $stmt = $pdo->prepare("SHOW TABLES LIKE ?");
+        $stmt->execute([$table]);
+        return (bool)$stmt->fetchColumn();
+    } catch (Throwable $e) {
+        return false;
+    }
+};
+
 $alerts = [];
 $all = isset($_GET['all']) && $_GET['all'] == 1;
 
@@ -57,6 +67,95 @@ if ($total > 0 && count($used) / $total > 0.8) {
             'title' => 'Resource Utilization',
             'details' => 'Ambulance fleet at over 80% capacity'
         ];
+    }
+}
+
+// Low resource stock / availability alerts
+if ($table_exists('shared_resources')) {
+    $stockRows = $pdo->query(
+        "SELECT id, name, resource_type, quantity_total, quantity_available, status
+         FROM shared_resources
+         WHERE quantity_total > 0
+           AND (
+               (quantity_available < quantity_total AND quantity_available <= 0)
+               OR (quantity_available < quantity_total AND quantity_available <= GREATEST(1, FLOOR(quantity_total * 0.2)))
+               OR status IN ('unavailable', 'maintenance')
+           )
+         ORDER BY quantity_available ASC, updated_at DESC, id DESC"
+    )->fetchAll(PDO::FETCH_ASSOC);
+
+    if (!empty($stockRows)) {
+        if ($all) {
+            foreach ($stockRows as $row) {
+                $availableQty = (int)($row['quantity_available'] ?? 0);
+                $totalQty = (int)($row['quantity_total'] ?? 0);
+                $status = strtolower((string)($row['status'] ?? 'available'));
+                $isCritical = ($availableQty <= 0 || $status === 'unavailable');
+
+                $alerts[] = [
+                    'type' => $isCritical ? 'critical' : 'warning',
+                    'title' => 'Low Resource Stock',
+                    'details' => trim((string)($row['name'] ?? 'Resource')) . ' has only ' . $availableQty . ' of ' . $totalQty . ' item(s) available',
+                    'resource_id' => (int)($row['id'] ?? 0)
+                ];
+            }
+        } else {
+            $criticalCount = 0;
+            foreach ($stockRows as $row) {
+                $availableQty = (int)($row['quantity_available'] ?? 0);
+                $status = strtolower((string)($row['status'] ?? 'available'));
+                if ($availableQty <= 0 || $status === 'unavailable') {
+                    $criticalCount++;
+                }
+            }
+
+            $alerts[] = [
+                'type' => $criticalCount > 0 ? 'critical' : 'warning',
+                'title' => 'Low Resource Stock',
+                'details' => count($stockRows) . ' resource stock item(s) need replenishment'
+            ];
+        }
+    }
+}
+
+if ($table_exists('admin_resources')) {
+    $equipmentSummary = $pdo->query(
+        "SELECT
+            COUNT(*) AS total_equipment,
+            SUM(CASE WHEN status = 'available' THEN 1 ELSE 0 END) AS available_equipment
+         FROM admin_resources
+         WHERE category = 'equipment'"
+    )->fetch(PDO::FETCH_ASSOC);
+
+    $totalEquipment = (int)($equipmentSummary['total_equipment'] ?? 0);
+    $availableEquipment = (int)($equipmentSummary['available_equipment'] ?? 0);
+    $equipmentThreshold = $totalEquipment > 0 ? max(1, (int)floor($totalEquipment * 0.2)) : 0;
+
+    if ($totalEquipment > 0 && $availableEquipment < $totalEquipment && $availableEquipment <= $equipmentThreshold) {
+        if ($all) {
+            $equipmentRows = $pdo->query(
+                "SELECT id, code, name, status, location
+                 FROM admin_resources
+                 WHERE category = 'equipment'
+                   AND status <> 'available'
+                 ORDER BY updated_at DESC, id DESC"
+            )->fetchAll(PDO::FETCH_ASSOC);
+
+            foreach ($equipmentRows as $row) {
+                $alerts[] = [
+                    'type' => 'warning',
+                    'title' => 'Low Equipment Availability',
+                    'details' => trim((string)($row['code'] ?? 'EQ')) . ' - ' . trim((string)($row['name'] ?? 'Equipment')) . ' is currently ' . strtolower((string)($row['status'] ?? 'unavailable')),
+                    'resource_id' => (int)($row['id'] ?? 0)
+                ];
+            }
+        } else {
+            $alerts[] = [
+                'type' => 'warning',
+                'title' => 'Low Equipment Availability',
+                'details' => 'Only ' . $availableEquipment . ' of ' . $totalEquipment . ' equipment resource(s) are currently available'
+            ];
+        }
     }
 }
 

@@ -6,17 +6,13 @@
 
     function setTheme(theme) {
         if (theme === 'system') {
-            root.removeAttribute('data-theme');
-            if (systemDark.matches) {
-                root.setAttribute('data-theme', 'dark');
-            } else {
-                root.setAttribute('data-theme', 'light');
-            }
+            root.setAttribute('data-theme', systemDark.matches ? 'dark' : 'light');
         } else {
             root.setAttribute('data-theme', theme);
         }
         localStorage.setItem(THEME_KEY, theme);
         updateActiveButton(theme);
+        document.dispatchEvent(new CustomEvent('themeChanged', { detail: theme }));
     }
 
     function updateActiveButton(theme) {
@@ -33,6 +29,15 @@
         setTheme(theme);
     }
 
+    function bindThemeButtons() {
+        document.querySelectorAll('.theme-toggle-btn').forEach(btn => {
+            btn.addEventListener('click', () => {
+                const theme = btn.dataset.theme || 'system';
+                setTheme(theme);
+            });
+        });
+    }
+
     // Listen for system theme changes
     systemDark.addEventListener('change', () => {
         if ((localStorage.getItem(THEME_KEY) || 'system') === 'system') {
@@ -44,5 +49,8 @@
     window.ersSetTheme = setTheme;
     window.ersInitTheme = initTheme;
 
-    document.addEventListener('DOMContentLoaded', initTheme);
+    document.addEventListener('DOMContentLoaded', () => {
+        bindThemeButtons();
+        initTheme();
+    });
 })();

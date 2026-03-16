@@ -805,6 +805,19 @@ $pageTitle = 'Inter-Agency Coordination';
                 return `${(n / (1024 * 1024)).toFixed(1)} MB`;
             }
 
+            function formatRole(value) {
+                return String(value || 'user')
+                    .replace(/_/g, ' ')
+                    .replace(/\b\w/g, (char) => char.toUpperCase());
+            }
+
+            function threadChannelLabel(item) {
+                if (String(item.kind || '') === 'department') {
+                    return 'Department Channel';
+                }
+                return `${formatRole(item.role || 'responder')} Channel`;
+            }
+
             function syncFileInput() {
                 if (!messageFilesInput) return;
                 const dt = new DataTransfer();
@@ -948,6 +961,7 @@ $pageTitle = 'Inter-Agency Coordination';
                     const unread = item.unread > 0 ? `<span class="ia-unread">${item.unread}</span>` : '';
                     const avatarType = item.kind === 'department' ? 'department' : 'responder';
                     const stat = item.status === 'busy' ? 'busy' : (item.status === 'offline' ? 'offline' : 'online');
+                    const channelLabel = threadChannelLabel(item);
                     return `
                         <button type="button" class="ia-thread ${activeClass}" data-id="${escapeHtml(item.id)}">
                             <div class="ia-avatar ${avatarType}">
@@ -965,7 +979,7 @@ $pageTitle = 'Inter-Agency Coordination';
                                 </div>
                                 <p class="ia-thread-sub">
                                     <span class="ia-dot ${escapeHtml(stat)}"></span>
-                                    ${escapeHtml(item.kind === 'department' ? 'Department Channel' : 'Responder Channel')}
+                                    ${escapeHtml(channelLabel)}
                                 </p>
                                 <div class="ia-thread-row">
                                     <p class="ia-thread-preview">${escapeHtml(previewText(item))}</p>
@@ -984,10 +998,11 @@ $pageTitle = 'Inter-Agency Coordination';
                     return;
                 }
                 const statusLabel = active.status === 'online' ? 'Online' : (active.status === 'busy' ? 'Busy' : 'Offline');
+                const channelLabel = threadChannelLabel(active);
                 chatHeaderEl.innerHTML = `
                     <div>
                         <p class="ia-chat-title">${escapeHtml(active.title || active.id)}</p>
-                        <p class="ia-chat-meta">${escapeHtml(active.kind === 'department' ? 'Department' : 'Responder')} channel · Status: ${escapeHtml(statusLabel)}</p>
+                        <p class="ia-chat-meta">${escapeHtml(channelLabel)} · Status: ${escapeHtml(statusLabel)}</p>
                     </div>
                     <div class="ia-chat-badge">Last activity ${escapeHtml(rel(active.last_at))}</div>
                 `;

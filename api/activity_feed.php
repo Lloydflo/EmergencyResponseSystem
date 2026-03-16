@@ -1,6 +1,6 @@
 <?php
 // API endpoint: /api/activity_feed.php
-// Returns the 20 most recent activities (all entities)
+// Returns recent auth activity for dispatcher/responder accounts
 header('Content-Type: application/json');
 require_once __DIR__ . '/../includes/db.php';
 $pdo = get_db_connection();
@@ -10,6 +10,17 @@ if (!$pdo) {
     exit;
 }
 $limit = isset($_GET['all']) ? 200 : 20;
-// Get recent activity log
-$activity = $pdo->query("SELECT a.*, u.name AS username FROM activity_log a LEFT JOIN users u ON a.user_id = u.id ORDER BY a.created_at DESC LIMIT $limit")->fetchAll(PDO::FETCH_ASSOC);
+// Get recent login/logout activity for dispatcher and responder users only
+$stmt = $pdo->prepare(
+    "SELECT a.*, u.name AS username
+     FROM activity_log a
+     LEFT JOIN users u ON a.user_id = u.id
+     WHERE a.entity_type = 'auth'
+       AND a.action IN ('login', 'logout')
+       AND LOWER(COALESCE(u.role, '')) IN ('dispatcher', 'responder', 'operator')
+     ORDER BY a.created_at DESC
+     LIMIT " . (int)$limit
+);
+$stmt->execute();
+$activity = $stmt->fetchAll(PDO::FETCH_ASSOC);
 echo json_encode(['ok' => true, 'data' => $activity]);
