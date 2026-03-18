@@ -470,6 +470,157 @@ $adminName = $_SESSION['user_name'] ?? 'Admin';
             transform: translateY(0);
         }
 
+        html[data-theme="dark"] .um-head h1 {
+            color: #f8fafc;
+        }
+
+        html[data-theme="dark"] .um-head p {
+            color: #cbd5e1;
+        }
+
+        html[data-theme="dark"] .um-toolbar {
+            background: #0f172a;
+            border-bottom-color: #334155;
+        }
+
+        html[data-theme="dark"] .um-search {
+            background: #111827;
+            border-color: #334155;
+            color: #f8fafc;
+        }
+
+        html[data-theme="dark"] .um-search::placeholder {
+            color: #94a3b8;
+        }
+
+        html[data-theme="dark"] .um-summary {
+            background: #1e293b;
+            color: #e2e8f0;
+            border: 1px solid #334155;
+        }
+
+        html[data-theme="dark"] .um-table-wrap {
+            border-top-color: #334155;
+        }
+
+        html[data-theme="dark"] .um-table th {
+            background: #111827;
+            color: #cbd5e1;
+            border-bottom-color: #334155;
+        }
+
+        html[data-theme="dark"] .um-table td {
+            color: #e5e7eb;
+            border-bottom-color: #1f2937;
+        }
+
+        html[data-theme="dark"] .um-table tr:hover td {
+            background: #172033;
+        }
+
+        html[data-theme="dark"] .um-code {
+            color: #f8fafc;
+        }
+
+        html[data-theme="dark"] .um-action {
+            background: #0f172a;
+            border-color: #334155;
+            color: #e5e7eb;
+        }
+
+        html[data-theme="dark"] .um-modal .um-modal-card {
+            background: #111827;
+            border-color: #334155;
+        }
+
+        html[data-theme="dark"] .um-modal .um-modal-head,
+        html[data-theme="dark"] .um-modal .um-modal-foot {
+            background: #0f172a;
+            border-color: #334155;
+        }
+
+        html[data-theme="dark"] .um-modal .um-modal-head h2 {
+            color: #f8fafc;
+        }
+
+        html[data-theme="dark"] .um-modal .um-modal-body {
+            color: #e5e7eb;
+        }
+
+        html[data-theme="dark"] .um-close {
+            background: #111827;
+            border-color: #334155;
+            color: #e5e7eb;
+        }
+
+        html[data-theme="dark"] .um-close:hover {
+            background: #1e293b;
+            color: #ffffff;
+        }
+
+        html[data-theme="dark"] .um-field label {
+            color: #cbd5e1;
+        }
+
+        html[data-theme="dark"] .um-input,
+        html[data-theme="dark"] .um-select {
+            background: #0f172a;
+            border-color: #334155;
+            color: #f8fafc;
+        }
+
+        html[data-theme="dark"] .um-input::placeholder {
+            color: #94a3b8;
+        }
+
+        html[data-theme="dark"] .um-password-toggle {
+            color: #94a3b8;
+        }
+
+        html[data-theme="dark"] .um-password-toggle:hover {
+            color: #f8fafc;
+            background: #1e293b;
+        }
+
+        html[data-theme="dark"] .um-password-hint {
+            background: #0f172a;
+            border-color: #334155;
+        }
+
+        html[data-theme="dark"] .um-password-hint p {
+            color: #e5e7eb;
+        }
+
+        html[data-theme="dark"] .um-password-rules {
+            color: #cbd5e1;
+        }
+
+        html[data-theme="dark"] .um-btn {
+            background: #0f172a;
+            border-color: #334155;
+            color: #e5e7eb;
+        }
+
+        html[data-theme="dark"] .um-btn:hover {
+            background: #1e293b;
+            color: #ffffff;
+        }
+
+        html[data-theme="dark"] .um-btn.primary {
+            background: #2563eb;
+            border-color: #2563eb;
+            color: #ffffff;
+        }
+
+        html[data-theme="dark"] .um-btn.primary:hover {
+            background: #1d4ed8;
+            border-color: #1d4ed8;
+        }
+
+        html[data-theme="dark"] .um-empty {
+            color: #cbd5e1;
+        }
+
         @media (max-width: 880px) {
             .um-toolbar {
                 grid-template-columns: 1fr;

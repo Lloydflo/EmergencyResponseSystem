@@ -130,11 +130,10 @@ try {
        MAIN CONTENT - Emergency Resources Status
        =================================== -->
     <div class="main-content">
-        <div class="main-container">
-            <div style="height: 3.5rem;"></div>
-                        </div>
+        <div class="main-container dispatcher-resources-page">
+            <div class="resources-page-spacer"></div>
 
-                        
+            <div class="resources-summary-grid">
             <!-- Resource Overview -->
             <div class="resource-overview">
                 <div class="overview-card">
@@ -172,11 +171,12 @@ try {
                     Generate Report
                 </button>
             </div>
+            </div>
 
             <!-- Resource Filters -->
-            <div class="resource-filters">
-                <h2 style="font-size: 1.25rem; font-weight: 700; color: #333; margin-bottom: 1.5rem; display: flex; align-items: center;">
-                    <i class="fas fa-filter" style="margin-right: 0.5rem; color: #007bff;"></i>
+            <div class="resource-filters resources-panel">
+                <h2 class="section-heading">
+                    <i class="fas fa-filter"></i>
                     Resource Filters
                 </h2>
                 <div class="filter-grid">
@@ -217,11 +217,15 @@ try {
 
             <!-- Resource Tabs -->
             <!-- Combined Resources Table -->
-            <div class="resources-table-section" style="margin-top:2rem;">
-                <h2 style="font-size: 1.2rem; font-weight: 700; color: #333; margin-bottom: 1rem; display: flex; align-items: center;">
-                    <i class="fas fa-table" style="margin-right: 0.5rem; color: #007bff;"></i>
-                    All Resources
-                </h2>
+            <div class="resources-table-section resources-panel" style="margin-top:2rem;">
+                <div class="panel-heading-row">
+                    <h2 class="section-heading">
+                        <i class="fas fa-table"></i>
+                        All Resources
+                    </h2>
+                    <p class="section-heading-note">Unified live table for vehicles, personnel, and equipment.</p>
+                </div>
+                <div class="table-shell">
                 <div style="overflow-x:auto;">
                 <style>
                 .resource-table {
@@ -327,6 +331,8 @@ try {
                         <!-- Table will be rendered here by JS -->
                     </tbody>
                 </table>
+                </div>
+                </div>
                 <script>
                 // Resource data loaded from backend
                 let RESOURCES = [];
@@ -451,11 +457,15 @@ try {
             </div>
 
             <!-- Resource Requests Table (placed under All Resources) -->
-            <div class="resource-requests-table-section" style="margin-top:2rem;">
-                <h2 style="font-size: 1.2rem; font-weight: 700; color: #333; margin-bottom: 1rem; display: flex; align-items: center;">
-                    <i class="fas fa-clipboard-list" style="margin-right: 0.5rem; color: #007bff;"></i>
-                    Request
-                </h2>
+            <div class="resource-requests-table-section resources-panel" style="margin-top:2rem;">
+                <div class="panel-heading-row">
+                    <h2 class="section-heading">
+                        <i class="fas fa-clipboard-list"></i>
+                        Request Queue
+                    </h2>
+                    <p class="section-heading-note">Review responder requests and approve or reject without changing the workflow.</p>
+                </div>
+                <div class="table-shell">
                 <div style="overflow-x:auto;">
                 <style>
                 .request-table {
@@ -556,10 +566,11 @@ try {
                     </tbody>
                 </table>
                 </div>
+                </div>
             </div>
 
             <!-- AI-Powered Resource Gap Recommendations -->
-            <div class="ai-predictive-section">
+            <div class="ai-predictive-section resources-panel">
                 <div class="ai-predictive-card">
                     <div class="ai-predictive-header">
                         <h2><i class="fas fa-brain"></i> AI Resource Gap Recommendations</h2>

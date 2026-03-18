@@ -595,6 +595,108 @@ $pageTitle = 'Resources Status';
             display: block;
         }
 
+        html[data-theme="dark"] .modal .modal-card {
+            background: #111827 !important;
+            border: 1px solid #334155 !important;
+        }
+
+        html[data-theme="dark"] .modal .modal-head,
+        html[data-theme="dark"] .modal .modal-foot {
+            background: #0f172a !important;
+            border-color: #334155 !important;
+        }
+
+        html[data-theme="dark"] .modal .modal-body {
+            background: #111827 !important;
+            color: #e5eef9 !important;
+        }
+
+        html[data-theme="dark"] .modal-head h2,
+        html[data-theme="dark"] .form-group label,
+        html[data-theme="dark"] .archive-summary strong {
+            color: #f8fafc !important;
+        }
+
+        html[data-theme="dark"] .modal-helper {
+            background: #0f172a !important;
+            border-color: #334155 !important;
+            color: #e5eef9 !important;
+        }
+
+        html[data-theme="dark"] .modal-helper p,
+        html[data-theme="dark"] .archive-summary span,
+        html[data-theme="dark"] .name-cell span,
+        html[data-theme="dark"] .resource-meta-note {
+            color: #cbd5e1 !important;
+        }
+
+        html[data-theme="dark"] .label-inline-btn {
+            background: #0f172a !important;
+            border-color: #475569 !important;
+            color: #e5eef9 !important;
+        }
+
+        html[data-theme="dark"] .label-inline-btn:hover,
+        html[data-theme="dark"] .preset-btn:hover {
+            background: #1e293b !important;
+            color: #ffffff !important;
+        }
+
+        html[data-theme="dark"] .preset-btn {
+            background: #111827 !important;
+            border-color: #334155 !important;
+            color: #bfdbfe !important;
+        }
+
+        html[data-theme="dark"] .archive-summary {
+            background: linear-gradient(135deg, #0f172a, #111827) !important;
+            border-color: #334155 !important;
+        }
+
+        html[data-theme="dark"] .archive-table th {
+            background: #0f172a !important;
+            border-bottom-color: #334155 !important;
+            color: #cbd5e1 !important;
+        }
+
+        html[data-theme="dark"] .archive-table td {
+            border-bottom-color: #1f2937 !important;
+            color: #e5eef9 !important;
+        }
+
+        html[data-theme="dark"] .countdown-chip {
+            background: rgba(251, 191, 36, 0.16) !important;
+            color: #fde68a !important;
+            border: 1px solid rgba(251, 191, 36, 0.32) !important;
+        }
+
+        html[data-theme="dark"] .modal .action-btn {
+            background: #0f172a !important;
+            border-color: #334155 !important;
+            color: #e5eef9 !important;
+        }
+
+        html[data-theme="dark"] .modal .action-btn:hover {
+            background: #1e293b !important;
+            color: #ffffff !important;
+        }
+
+        html[data-theme="dark"] .modal .btn-outline {
+            background: #0f172a !important;
+            border-color: #334155 !important;
+            color: #e5eef9 !important;
+        }
+
+        html[data-theme="dark"] .modal .btn-outline:hover {
+            background: #1e293b !important;
+            color: #ffffff !important;
+        }
+
+        html[data-theme="dark"] .form-input::placeholder,
+        html[data-theme="dark"] .form-textarea::placeholder {
+            color: #94a3b8 !important;
+        }
+
         @media (max-width: 980px) {
             .overview-grid {
                 grid-template-columns: repeat(3, minmax(120px, 1fr));
@@ -1276,7 +1378,7 @@ $pageTitle = 'Resources Status';
                         <td>
                             <span class="status-chip status-${escapeHtml(item.status)}">${escapeHtml(formatStatus(item.status))}</span>
                         </td>
-                        <td>${escapeHtml(item.location)} <br><span style="color:#64748b;font-size:0.8rem;">${escapeHtml(formatAssignmentDisplay(item))}</span></td>
+                        <td>${escapeHtml(item.location)} <br><span class="resource-meta-note">${escapeHtml(formatAssignmentDisplay(item))}</span></td>
                         <td>${escapeHtml(formatDate(item.updatedAt))}</td>
                         <td class="actions-cell">
                             <button type="button" class="action-btn" title="Edit" data-action="edit" data-id="${item.id}">
@@ -1308,7 +1410,7 @@ $pageTitle = 'Resources Status';
                             <span>${escapeHtml(detailLine || item.notes || 'No details')}</span>
                         </td>
                         <td>${escapeHtml(formatCategory(item.category))}</td>
-                        <td>${escapeHtml(item.location || 'N/A')}<br><span style="color:#64748b;font-size:0.8rem;">${escapeHtml(formatAssignmentDisplay(item))}</span></td>
+                        <td>${escapeHtml(item.location || 'N/A')}<br><span class="resource-meta-note">${escapeHtml(formatAssignmentDisplay(item))}</span></td>
                         <td>${escapeHtml(formatDate(item.deletedAt))}</td>
                         <td>
                             ${escapeHtml(formatDate(item.purgeAt))}<br>

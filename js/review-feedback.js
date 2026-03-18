@@ -1,367 +1,607 @@
-(function(){
-  const qs = (sel, ctx=document) => ctx.querySelector(sel);
-  const qsa = (sel, ctx=document) => Array.from(ctx.querySelectorAll(sel));
+(function () {
+  const qs = (selector, ctx = document) => ctx.querySelector(selector);
+  const qsa = (selector, ctx = document) => Array.from(ctx.querySelectorAll(selector));
+
+  const dashboard = qs('.review-dashboard');
+  const reviewerName = dashboard?.dataset?.reviewerName || 'Dispatcher';
 
   const container = qs('#incidentsContainer');
   const statusFilter = qs('#statusFilter');
   const dayFilter = qs('#dayFilter');
   const searchInput = qs('#searchInput');
+  const sortSelect = qs('#sortSelect');
   const applyFiltersBtn = qs('#applyFiltersBtn');
   const clearFiltersBtn = qs('#clearFiltersBtn');
-  const sortSelect = qs('#sortSelect');
+  const resultsMeta = qs('#resultsMeta');
+
+  const statClosedIncidents = qs('#statClosedIncidents');
+  const statAverageResponse = qs('#statAverageResponse');
+  const statAverageRating = qs('#statAverageRating');
+  const statUnitsTracked = qs('#statUnitsTracked');
 
   const modal = qs('#reviewModal');
   const modalOverlay = qs('#reviewModalOverlay');
   const modalClose = qs('#modalClose');
+  const closeFeedbackBtn = qs('#closeFeedbackBtn');
+  const saveFeedbackBtn = qs('#saveFeedbackBtn');
 
   const modalTitle = qs('#modalTitle');
+  const modalStatusBadge = qs('#modalStatusBadge');
+  const modalPriorityBadge = qs('#modalPriorityBadge');
   const summaryCode = qs('#summaryCode');
   const summaryType = qs('#summaryType');
-  const summaryPriority = qs('#summaryPriority');
-  const summaryStatus = qs('#summaryStatus');
-  const summaryLocation = qs('#summaryLocation');
   const summaryDescription = qs('#summaryDescription');
+  const summaryLocation = qs('#summaryLocation');
+  const summaryClosedTime = qs('#summaryClosedTime');
+  const summaryDispatchTime = qs('#summaryDispatchTime');
+  const summaryOnSceneTime = qs('#summaryOnSceneTime');
+  const summaryResponseTime = qs('#summaryResponseTime');
+  const summaryResolutionTime = qs('#summaryResolutionTime');
+  const summaryUnit = qs('#summaryUnit');
+  const summaryDriver = qs('#summaryDriver');
+  const summaryVehicle = qs('#summaryVehicle');
+  const summaryPlate = qs('#summaryPlate');
+  const summaryAverageRating = qs('#summaryAverageRating');
+  const summaryRatingCount = qs('#summaryRatingCount');
+  const summaryFeedbackCount = qs('#summaryFeedbackCount');
+  const summaryLastUpdated = qs('#summaryLastUpdated');
 
-  const feedbackList = qs('#feedbackList');
   const feedbackIncidentId = qs('#feedbackIncidentId');
-  const cancelFeedbackBtn = qs('#cancelFeedbackBtn');
-  const confirmReviewBtn = qs('#confirmReviewBtn');
-  // Tabs
-  const tabFeedback = qs('#tabFeedback');
-  const tabProof = qs('#tabProof');
-  const panelFeedback = qs('#panelFeedback');
-  const panelProof = qs('#panelProof');
-
-  // Proof capture elements
-  // Proof controls removed (no upload/camera)
+  const ratingInput = qs('#ratingInput');
+  const ratingHelper = qs('#ratingHelper');
+  const feedbackNoteInput = qs('#feedbackNoteInput');
+  const feedbackSummary = qs('#feedbackSummary');
+  const feedbackList = qs('#feedbackList');
   const proofGallery = qs('#proofGallery');
 
-  let mediaStream = null;
-
   let currentItems = [];
+  let currentIncident = null;
+  let selectedRating = 0;
 
-  function buildQuery(){
+  function buildQuery() {
     const params = new URLSearchParams();
-    const status = statusFilter.value || '';
-    // If status is 'all', omit the filter to fetch all incidents
-    if (status && status !== 'all') params.set('status', status);
-    const day = dayFilter.value || '';
+    const status = statusFilter?.value || 'closed';
+    params.set('status', status);
+
+    const day = dayFilter?.value || '';
     if (day) params.set('day', day);
-    const search = searchInput.value.trim();
+
+    const search = (searchInput?.value || '').trim();
     if (search) params.set('search', search);
-    const sort = sortSelect?.value || 'recent';
-    params.set('sort', sort);
+
     return params.toString();
   }
 
-  async function loadIncidents(){
-    container.innerHTML = skeletonMarkup(6);
-    if (applyFiltersBtn){
-      applyFiltersBtn.disabled = true;
-      applyFiltersBtn.setAttribute('aria-disabled','true');
-      applyFiltersBtn.classList.add('is-disabled');
-    }
+  async function loadIncidents() {
+    container.innerHTML = loadingMarkup('Loading closed incidents...');
+    setApplyLoading(true);
+
     try {
-      const res = await fetch('api/incidents_list.php?' + buildQuery(), { cache: 'no-store' });
-      const data = await res.json();
-      if (!data.ok) throw new Error(data.error || 'Failed to load');
+      const response = await fetch('api/incidents_list.php?' + buildQuery(), { cache: 'no-store' });
+      const data = await response.json();
+      if (!data.ok) throw new Error(data.error || 'Failed to load incidents');
+
       currentItems = sortItems(data.items || []);
+      renderStats(currentItems);
       renderIncidents(currentItems);
-    } catch (e) {
-      container.innerHTML = `<div class="card"><div class="card-body">Error loading incidents: ${e.message}</div></div>`;
+    } catch (error) {
+      container.innerHTML = emptyMarkup('fas fa-triangle-exclamation', 'Failed to load closed incidents.', escapeHtml(error.message));
+      resultsMeta.textContent = 'Unable to load results.';
     } finally {
-      if (applyFiltersBtn){
-        applyFiltersBtn.disabled = false;
-        applyFiltersBtn.removeAttribute('aria-disabled');
-        applyFiltersBtn.classList.remove('is-disabled');
-      }
+      setApplyLoading(false);
     }
   }
 
-  function priorityBadge(priority){
-    const p = (priority||'').toLowerCase();
-    const cls = p==='high' ? 'priority-high' : p==='medium' ? 'priority-medium' : 'priority-low';
-    return `<span class="badge ${cls}">${priority||'N/A'}</span>`;
-  }
+  function renderStats(items) {
+    const responseValues = items
+      .map(item => toNumber(item.response_time_min))
+      .filter(value => value !== null);
 
-  function renderIncidents(items){
-    if (!items.length){
-      container.innerHTML = '<div class="card"><div class="card-body">No incidents found for the selected filters.</div></div>';
+    const ratingValues = items
+      .map(item => toNumber(item.avg_rating))
+      .filter(value => value !== null);
+
+    const trackedUnits = items.filter(item => {
+      return Boolean(
+        clean(item.assigned_unit) ||
+        clean(item.driver_name) ||
+        clean(item.plate_number) ||
+        clean(item.vehicle_name)
+      );
+    }).length;
+
+    statClosedIncidents.textContent = String(items.length);
+    statAverageResponse.textContent = responseValues.length ? formatMinutes(avg(responseValues)) : '--';
+    statAverageRating.textContent = ratingValues.length ? formatRating(avg(ratingValues)) : '--';
+    statUnitsTracked.textContent = String(trackedUnits);
+
+    if (!items.length) {
+      resultsMeta.textContent = 'No closed incidents matched the current filters.';
       return;
     }
+
+    const resolvedCount = items.filter(item => normalizeStatus(item.status) === 'resolved').length;
+    const cancelledCount = items.filter(item => normalizeStatus(item.status) === 'cancelled').length;
+    resultsMeta.textContent = `${items.length} closed incidents loaded. Resolved: ${resolvedCount}, Cancelled: ${cancelledCount}.`;
+  }
+
+  function renderIncidents(items) {
+    if (!items.length) {
+      container.innerHTML = emptyMarkup('fas fa-inbox', 'No closed incidents found.', 'Try a different date, search term, or status filter.');
+      return;
+    }
+
     container.innerHTML = items.map(item => {
-      const status = (item.status||'').toLowerCase();
-      const priority = (item.priority||'').toLowerCase();
-      const mood = status.includes('resolved') ? 'success' : (priority==='high' ? 'critical' : (priority==='medium' ? 'warning' : 'info'));
-      const iconInfo = typeIcon(item.type || item.title || '');
-      const typeLabel = String(item.type||'Incident').toUpperCase();
-      const code = escapeHtml(item.incident_code || String(item.id) || '—');
-      const details = `${escapeHtml(item.type || '—')} • <span class="chip ${mood}">${escapeHtml(item.status || '—')}</span> ${priorityBadge(item.priority)}`;
-      const canReview = status.includes('resolved') || status.includes('cancel');
+      const status = normalizeStatus(item.status);
+      const priority = normalizePriority(item.priority);
+      const ratingText = toNumber(item.avg_rating) !== null
+        ? `${formatRating(item.avg_rating)} (${Number(item.rating_count || 0)})`
+        : 'No ratings';
+      const driver = clean(item.driver_name) || 'Not recorded';
+      const plate = clean(item.plate_number) || 'Not recorded';
+      const vehicle = clean(item.vehicle_name) || clean(item.assigned_unit) || 'Not recorded';
+      const unit = clean(item.assigned_unit) || 'Unassigned';
+
       return `
-        <div class="metric-card incident-card ${mood}" data-id="${item.id}">
-          <div class="metric-header">
+        <article class="review-card priority-${priority}">
+          <div class="review-card-header">
             <div>
-              <div class="metric-title">${typeLabel}</div>
-              <div class="metric-value">${code}</div>
+              <h4 class="review-card-ref">${escapeHtml(item.incident_code || item.reference_no || 'No reference')}</h4>
+              <p class="review-card-type">${escapeHtml(item.type || 'Incident')}</p>
             </div>
-            <div class="metric-icon ${iconInfo.cls}"><i class="${iconInfo.icon}"></i></div>
+            <div class="review-card-badges">
+              <span class="status-chip status-${status}">${escapeHtml(statusLabel(status))}</span>
+              <span class="priority-chip priority-${priority}">${escapeHtml(priorityLabel(priority))}</span>
+            </div>
           </div>
-          <div class="card-text">${details}</div>
-          <div class="metric-actions">
-            ${canReview ? `<button class="btn-metric review-btn" data-id="${item.id}"><i class="fa fa-clipboard-check"></i> Review</button>` : ''}
+
+          <div class="review-card-body">
+            <div class="review-card-copy">
+              <p class="review-card-description">${escapeHtml(item.description || 'No incident description provided.')}</p>
+              <div class="review-card-location">
+                <span class="label">Incident Location</span>
+                <strong>${escapeHtml(item.location || 'No location recorded')}</strong>
+              </div>
+            </div>
+
+            <div class="review-card-metrics">
+              ${metricPill('Response Time', formatMinutes(item.response_time_min))}
+              ${metricPill('Resolution Time', formatMinutes(item.resolution_time_min))}
+              ${metricPill('Driver', driver)}
+              ${metricPill('Plate Number', plate)}
+              ${metricPill('Vehicle / Unit', `${vehicle}${vehicle !== unit ? ' / ' + unit : ''}`)}
+              ${metricPill('Rating Feedback', ratingText)}
+            </div>
           </div>
-        </div>`;
+
+          <div class="review-card-footer">
+            <div class="review-card-times">
+              <span><i class="fas fa-calendar-plus"></i> Reported ${escapeHtml(formatDate(item.created_at))}</span>
+              <span><i class="fas fa-flag-checkered"></i> Closed ${escapeHtml(formatDate(item.resolved_at || item.cleared_at))}</span>
+            </div>
+            <div class="review-card-actions">
+              <button type="button" class="btn-card-action" data-open-review="${item.id}">
+                <i class="fas fa-eye"></i> View Details
+              </button>
+              <button type="button" class="btn-card-action primary" data-open-review="${item.id}">
+                <i class="fas fa-star"></i> Rate & Feedback
+              </button>
+            </div>
+          </div>
+        </article>
+      `;
     }).join('');
-    qsa('.review-btn', container).forEach(btn => btn.addEventListener('click', () => openReviewModal(parseInt(btn.dataset.id, 10))));
+
+    qsa('[data-open-review]', container).forEach(button => {
+      button.addEventListener('click', () => {
+        const incidentId = parseInt(button.getAttribute('data-open-review') || '', 10);
+        if (Number.isInteger(incidentId)) {
+          openReviewModal(incidentId);
+        }
+      });
+    });
   }
 
-  function typeIcon(type){
-    const t = String(type).toLowerCase();
-    if (t.includes('fire')) return { cls: 'fire', icon: 'fa-solid fa-fire' };
-    if (t.includes('medical') || t.includes('health')) return { cls: 'medical', icon: 'fa-solid fa-kit-medical' };
-    if (t.includes('police') || t.includes('security')) return { cls: 'users', icon: 'fa-solid fa-shield-halved' };
-    if (t.includes('traffic') || t.includes('accident')) return { cls: 'time', icon: 'fa-solid fa-car-burst' };
-    if (t.includes('call') || t.includes('report')) return { cls: 'phone', icon: 'fa-solid fa-phone' };
-    return { cls: 'info', icon: 'fa-solid fa-circle-info' };
-  }
+  async function openReviewModal(incidentId) {
+    resetModalState();
+    feedbackIncidentId.value = String(incidentId);
+    showModal();
 
-  async function openReviewModal(incidentId){
     try {
-      // Details
-      const detailsRes = await fetch('api/incident_details.php?id=' + incidentId, { cache: 'no-store' });
-      const details = await detailsRes.json();
-      const inc = details.incident || {};
+      const [detailsRes, feedbackRes, proofsRes] = await Promise.all([
+        fetch('api/incident_details.php?id=' + encodeURIComponent(incidentId), { cache: 'no-store' }),
+        fetch('api/incident_feedback.php?incident_id=' + encodeURIComponent(incidentId), { cache: 'no-store' }),
+        fetch('api/incident_proofs.php?incident_id=' + encodeURIComponent(incidentId), { cache: 'no-store' })
+      ]);
 
-      // Populate summary
-      modalTitle.textContent = `Review Incident ${inc.reference_no || inc.id || ''}`;
-      summaryCode.textContent = inc.reference_no || '—';
-      summaryType.textContent = inc.type || '—';
-      summaryPriority.textContent = inc.priority || '—';
-      summaryStatus.textContent = inc.status || '—';
-      summaryLocation.textContent = inc.location_address || '—';
-      summaryDescription.textContent = inc.description || '—';
-      // New: Dispatch and Resolve times
-      const dispatchTime = inc.assigned_at || inc.dispatched_at || inc.created_at || '';
-      const resolveTime = inc.resolved_at || '';
-      const dispatchElem = document.getElementById('summaryDispatchTime');
-      const resolveElem = document.getElementById('summaryResolveTime');
-      if (dispatchElem) dispatchElem.textContent = dispatchTime ? formatDate(dispatchTime) : '—';
-      if (resolveElem) resolveElem.textContent = resolveTime ? formatDate(resolveTime) : '—';
+      const detailsData = await detailsRes.json();
+      const feedbackData = await feedbackRes.json();
+      const proofsData = await proofsRes.json();
 
-      // Set form incident id if present
-      if (feedbackIncidentId) feedbackIncidentId.value = incidentId;
-
-      // Load feedback list (safe)
-      try {
-        await loadFeedbackList(incidentId);
-      } catch (e) {
-        if (feedbackList) feedbackList.innerHTML = '<div class="feedback-item"><div class="meta">No feedback yet.</div></div>';
+      if (!detailsData.ok || !detailsData.incident) {
+        throw new Error(detailsData.error || 'Incident details not available');
       }
-      // Load proofs (safe)
-      try {
-        await loadProofs(incidentId);
-      } catch (e) {
-        if (proofGallery) proofGallery.innerHTML = '<div class="gallery-empty">No proofs yet.</div>';
-      }
-      showModal();
-    } catch (e) {
-      alert('Failed to load incident details: ' + e.message);
+
+      currentIncident = detailsData.incident;
+      populateIncidentSummary(detailsData.incident);
+      renderFeedback(feedbackData);
+      renderProofs(proofsData);
+    } catch (error) {
+      feedbackList.innerHTML = `<div class="feedback-empty">${escapeHtml(error.message || 'Unable to load incident review.')}</div>`;
+      proofGallery.innerHTML = '<div class="proof-empty">Unable to load proof gallery.</div>';
     }
   }
 
-  async function loadFeedbackList(incidentId){
-    feedbackList.innerHTML = '<div class="feedback-item"><div class="meta">Loading feedback…</div></div>';
-    try {
-      const res = await fetch('api/incident_feedback.php?incident_id=' + incidentId, { cache: 'no-store' });
-      const data = await res.json();
-      if (!data.ok) throw new Error(data.error || 'Failed to load');
-      const notes = data.data || [];
-      if (!notes.length){
-        feedbackList.innerHTML = '<div class="feedback-item"><div class="meta">No feedback yet. Be the first to add one.</div></div>';
-        return;
-      }
-      feedbackList.innerHTML = notes.map(n => `
+  function populateIncidentSummary(incident) {
+    const status = normalizeStatus(incident.status);
+    const priority = normalizePriority(incident.priority);
+    const closedAt = incident.resolved_at || incident.cleared_at || incident.updated_at || '';
+
+    modalTitle.textContent = `Closed Incident ${incident.reference_no || incident.id || ''}`;
+    modalStatusBadge.className = `status-chip status-${status}`;
+    modalStatusBadge.textContent = statusLabel(status);
+    modalPriorityBadge.className = `priority-chip priority-${priority}`;
+    modalPriorityBadge.textContent = priorityLabel(priority);
+
+    summaryCode.textContent = incident.reference_no || `Incident #${incident.id || '--'}`;
+    summaryType.textContent = incident.type || 'Incident';
+    summaryDescription.textContent = incident.description || 'No incident description provided.';
+    summaryLocation.textContent = incident.location_address || 'No location recorded';
+    summaryClosedTime.textContent = `Closed: ${formatDate(closedAt)}`;
+
+    summaryDispatchTime.textContent = formatDate(incident.dispatch_assigned_at || incident.assigned_at || incident.created_at);
+    summaryOnSceneTime.textContent = formatDate(incident.on_scene_at);
+    summaryResponseTime.textContent = formatMinutes(incident.response_time_min);
+    summaryResolutionTime.textContent = formatMinutes(incident.resolution_time_min);
+
+    summaryUnit.textContent = clean(incident.assigned_unit_identifier) || 'Unassigned';
+    summaryDriver.textContent = clean(incident.driver_name) || 'Not recorded';
+    summaryVehicle.textContent = clean(incident.vehicle_name) || clean(incident.assigned_unit_identifier) || 'Not recorded';
+    summaryPlate.textContent = clean(incident.plate_number) || 'Not recorded';
+
+    summaryAverageRating.textContent = toNumber(incident.avg_rating) !== null ? formatRating(incident.avg_rating) : '--';
+    summaryRatingCount.textContent = String(Number(incident.rating_count || 0));
+    summaryFeedbackCount.textContent = String(Number(incident.feedback_count || 0));
+    summaryLastUpdated.textContent = formatDate(incident.updated_at || closedAt);
+  }
+
+  function renderFeedback(payload) {
+    if (!payload || !payload.ok) {
+      feedbackSummary.innerHTML = '';
+      feedbackList.innerHTML = '<div class="feedback-empty">Unable to load feedback history.</div>';
+      return;
+    }
+
+    const summary = payload.summary || {};
+    const notes = Array.isArray(payload.data) ? payload.data : [];
+
+    const chips = [];
+    chips.push(`<span class="feedback-summary-chip"><i class="fas fa-comments"></i> ${Number(summary.feedback_count || notes.length || 0)} feedback</span>`);
+    if (toNumber(summary.avg_rating) !== null) {
+      chips.push(`<span class="feedback-summary-chip"><i class="fas fa-star"></i> ${escapeHtml(formatRating(summary.avg_rating))} average</span>`);
+    }
+    if (Number(summary.rating_count || 0) > 0) {
+      chips.push(`<span class="feedback-summary-chip"><i class="fas fa-chart-simple"></i> ${Number(summary.rating_count)} rated</span>`);
+    }
+    feedbackSummary.innerHTML = chips.join('');
+
+    if (!notes.length) {
+      feedbackList.innerHTML = '<div class="feedback-empty">No feedback yet. Add the first dispatcher review for this incident.</div>';
+      return;
+    }
+
+    feedbackList.innerHTML = notes.map(note => {
+      const rating = clampRating(note.rating);
+      return `
         <div class="feedback-item">
-          <div class="meta">${escapeHtml(n.author_name || 'Anonymous')} • ${formatDate(n.created_at)}</div>
-          <div class="text">${escapeHtml(n.note || '')}</div>
+          <div class="feedback-item-header">
+            <div>
+              <div class="feedback-author">${escapeHtml(note.author_name || 'Anonymous')}</div>
+              <div class="feedback-date">${escapeHtml(formatDate(note.created_at))}</div>
+            </div>
+            <div class="feedback-stars">${renderStars(rating)}</div>
+          </div>
+          <p class="feedback-note">${escapeHtml(note.note || (rating ? 'Submitted a rating without additional notes.' : 'No note provided.'))}</p>
         </div>
-      `).join('');
-    } catch (e) {
-      feedbackList.innerHTML = `<div class="feedback-item"><div class="meta">Error loading feedback: ${e.message}</div></div>`;
+      `;
+    }).join('');
+  }
+
+  function renderProofs(payload) {
+    if (!payload || !payload.ok) {
+      proofGallery.innerHTML = '<div class="proof-empty">Unable to load proof images.</div>';
+      return;
+    }
+
+    const items = Array.isArray(payload.items) ? payload.items : [];
+    if (!items.length) {
+      proofGallery.innerHTML = '<div class="proof-empty">No resolution proof uploaded for this incident yet.</div>';
+      return;
+    }
+
+    proofGallery.innerHTML = items.map(item => `
+      <figure class="proof-card">
+        <img src="${escapeAttribute(item.url || '')}" alt="Incident resolution proof">
+        <figcaption class="proof-meta">${escapeHtml(formatDate(item.created_at))}</figcaption>
+      </figure>
+    `).join('');
+  }
+
+  async function saveFeedback() {
+    const incidentId = parseInt(feedbackIncidentId.value || '', 10);
+    const note = (feedbackNoteInput?.value || '').trim();
+    const rating = selectedRating > 0 ? selectedRating : null;
+
+    if (!Number.isInteger(incidentId) || incidentId < 1) {
+      alert('Missing incident reference for feedback.');
+      return;
+    }
+
+    if (!note && rating === null) {
+      alert('Maglagay ng rating o feedback note bago i-save.');
+      return;
+    }
+
+    saveFeedbackBtn.disabled = true;
+
+    try {
+      const response = await fetch('api/incident_feedback.php', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          incident_id: incidentId,
+          author_name: reviewerName,
+          note,
+          rating
+        })
+      });
+
+      const data = await response.json();
+      if (!data.ok) {
+        throw new Error(data.error || 'Unable to save feedback');
+      }
+
+      feedbackNoteInput.value = '';
+      setSelectedRating(0);
+
+      await Promise.all([
+        refreshFeedbackInModal(incidentId),
+        refreshIncidentSummary(incidentId),
+        loadIncidents()
+      ]);
+    } catch (error) {
+      alert('Failed to save feedback: ' + error.message);
+    } finally {
+      saveFeedbackBtn.disabled = false;
     }
   }
 
-  function showModal(){
+  async function refreshFeedbackInModal(incidentId) {
+    const response = await fetch('api/incident_feedback.php?incident_id=' + encodeURIComponent(incidentId), { cache: 'no-store' });
+    const payload = await response.json();
+    renderFeedback(payload);
+  }
+
+  async function refreshIncidentSummary(incidentId) {
+    const response = await fetch('api/incident_details.php?id=' + encodeURIComponent(incidentId), { cache: 'no-store' });
+    const payload = await response.json();
+    if (payload.ok && payload.incident) {
+      currentIncident = payload.incident;
+      populateIncidentSummary(payload.incident);
+    }
+  }
+
+  function showModal() {
     modalOverlay.hidden = false;
     modal.hidden = false;
+    document.body.classList.add('review-modal-open');
   }
-  function hideModal(){
+
+  function hideModal() {
     modalOverlay.hidden = true;
     modal.hidden = true;
+    document.body.classList.remove('review-modal-open');
   }
 
-  modalOverlay.addEventListener('click', hideModal);
-  modalClose.addEventListener('click', hideModal);
-  cancelFeedbackBtn.addEventListener('click', hideModal);
+  function resetModalState() {
+    currentIncident = null;
+    setSelectedRating(0);
+    feedbackNoteInput.value = '';
+    modalTitle.textContent = 'Closed Incident Details';
+    summaryCode.textContent = '--';
+    summaryType.textContent = '--';
+    summaryDescription.textContent = '--';
+    summaryLocation.textContent = '--';
+    summaryClosedTime.textContent = 'Closed: --';
+    summaryDispatchTime.textContent = '--';
+    summaryOnSceneTime.textContent = '--';
+    summaryResponseTime.textContent = '--';
+    summaryResolutionTime.textContent = '--';
+    summaryUnit.textContent = '--';
+    summaryDriver.textContent = '--';
+    summaryVehicle.textContent = '--';
+    summaryPlate.textContent = '--';
+    summaryAverageRating.textContent = '--';
+    summaryRatingCount.textContent = '0';
+    summaryFeedbackCount.textContent = '0';
+    summaryLastUpdated.textContent = '--';
+    modalStatusBadge.className = 'status-chip';
+    modalPriorityBadge.className = 'priority-chip';
+    feedbackSummary.innerHTML = '';
+    feedbackList.innerHTML = '<div class="feedback-empty">Loading feedback...</div>';
+    proofGallery.innerHTML = '<div class="proof-empty">Loading proof gallery...</div>';
+  }
 
-  // Close modal with Escape key
-  document.addEventListener('keydown', (e) => {
-    if (e.key === 'Escape' && !modal.hidden){ hideModal(); }
-  });
+  function setSelectedRating(value) {
+    selectedRating = clampRating(value);
+    qsa('.rating-star', ratingInput).forEach(button => {
+      const starValue = clampRating(button.dataset.rating);
+      button.classList.toggle('is-active', starValue !== null && starValue <= selectedRating);
+    });
 
+    ratingHelper.textContent = selectedRating > 0
+      ? `${selectedRating} out of 5 selected.`
+      : 'Select a rating from 1 to 5.';
+  }
 
+  function sortItems(items) {
+    const mode = sortSelect?.value || 'recent';
+    const copy = [...items];
 
-  // ----- Proofs -----
-  async function loadProofs(incidentId){
-    proofGallery.innerHTML = '<div class="gallery-empty">Loading proofs…</div>';
-    try {
-      const res = await fetch('api/incident_proofs.php?incident_id=' + incidentId, { cache: 'no-store' });
-      const data = await res.json();
-      if (!data.ok) throw new Error(data.error || 'Failed to load');
-      const items = data.items || [];
-      if (!items.length){
-        proofGallery.innerHTML = '<div class="gallery-empty">No proofs yet.</div>';
-        return;
-      }
-      proofGallery.innerHTML = items.map(p => `
-        <div class="gallery-item">
-          <img src="${escapeHtml(p.url)}" alt="Proof" />
-          <div class="gallery-meta">${formatDate(p.created_at)}</div>
-        </div>
-      `).join('');
-    } catch (e) {
-      proofGallery.innerHTML = `<div class="gallery-empty">Error loading proofs: ${escapeHtml(e.message)}</div>`;
+    if (mode === 'rating_desc') {
+      copy.sort((a, b) => {
+        const ra = toNumber(a.avg_rating) ?? -1;
+        const rb = toNumber(b.avg_rating) ?? -1;
+        return rb - ra || compareRecent(b, a);
+      });
+      return copy;
     }
-  }
 
-  async function uploadProofFile(){
-    const incident_id = parseInt(feedbackIncidentId.value, 10);
-    const file = proofFile.files[0];
-    if (!incident_id) { alert('Missing incident id'); return; }
-    if (!file) { alert('Please choose an image to upload.'); return; }
-    uploadProofBtn.disabled = true; uploadProofBtn.classList.add('is-disabled');
-    const fd = new FormData();
-    fd.append('incident_id', String(incident_id));
-    fd.append('proof', file);
-    try {
-      const res = await fetch('api/incident_proof_upload.php', { method: 'POST', body: fd });
-      const data = await res.json();
-      if (!data.ok) throw new Error(data.error || 'Upload failed');
-      proofFile.value = '';
-      await loadProofs(incident_id);
-    } catch (e) {
-      alert('Failed to upload proof: ' + e.message);
-    } finally {
-      uploadProofBtn.disabled = false; uploadProofBtn.classList.remove('is-disabled');
+    if (mode === 'response_asc') {
+      copy.sort((a, b) => {
+        const ra = toNumber(a.response_time_min);
+        const rb = toNumber(b.response_time_min);
+        if (ra === null && rb === null) return compareRecent(b, a);
+        if (ra === null) return 1;
+        if (rb === null) return -1;
+        return ra - rb || compareRecent(b, a);
+      });
+      return copy;
     }
-  }
 
-  async function startCamera(){
-    try {
-      if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia){
-        throw new Error('Camera not supported on this device/browser');
-      }
-      mediaStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' }, audio: false });
-      proofVideo.srcObject = mediaStream;
-      await proofVideo.play();
-      // Mirror the preview horizontally
-      proofVideo.style.transform = 'scaleX(-1)';
-      proofVideo.style.transformOrigin = 'center';
-      capturePhotoBtn.disabled = false;
-      stopCameraBtn.disabled = false;
-      startCameraBtn.disabled = true;
-      proofCanvas.hidden = true;
-      proofVideo.hidden = false;
-      saveCaptureBtn.hidden = true;
-      discardCaptureBtn.hidden = true;
-    } catch (e) {
-      alert('Camera access failed: ' + e.message);
+    if (mode === 'priority_desc') {
+      const weight = value => ({ high: 3, medium: 2, low: 1 })[normalizePriority(value)] || 0;
+      copy.sort((a, b) => weight(b.priority) - weight(a.priority) || compareRecent(b, a));
+      return copy;
     }
-  }
 
-  function stopCamera(){
-    try {
-      if (mediaStream){ mediaStream.getTracks().forEach(t => t.stop()); }
-    } catch {}
-    mediaStream = null;
-    proofVideo.srcObject = null;
-    capturePhotoBtn.disabled = true;
-    stopCameraBtn.disabled = true;
-    startCameraBtn.disabled = false;
-  }
-
-  function capturePhoto(){
-    const vw = proofVideo.videoWidth;
-    const vh = proofVideo.videoHeight;
-    if (!vw || !vh){ alert('Camera not ready.'); return; }
-    proofCanvas.width = vw;
-    proofCanvas.height = vh;
-    const ctx = proofCanvas.getContext('2d');
-    // Draw mirrored image onto the canvas
-    ctx.save();
-    ctx.translate(vw, 0);
-    ctx.scale(-1, 1);
-    ctx.drawImage(proofVideo, 0, 0, vw, vh);
-    ctx.restore();
-    proofCanvas.hidden = false;
-    proofVideo.hidden = true;
-    saveCaptureBtn.hidden = false;
-    discardCaptureBtn.hidden = false;
-  }
-
-  async function saveCapture(){
-    const incident_id = parseInt(feedbackIncidentId.value, 10);
-    if (!incident_id){ alert('Missing incident id'); return; }
-    saveCaptureBtn.disabled = true; saveCaptureBtn.classList.add('is-disabled');
-    try {
-      const blob = await new Promise(resolve => proofCanvas.toBlob(resolve, 'image/jpeg', 0.95));
-      if (!blob) throw new Error('Failed to encode image');
-      const fd = new FormData();
-      fd.append('incident_id', String(incident_id));
-      fd.append('proof', new File([blob], 'capture.jpg', { type: 'image/jpeg' }));
-      const res = await fetch('api/incident_proof_upload.php', { method: 'POST', body: fd });
-      const data = await res.json();
-      if (!data.ok) throw new Error(data.error || 'Upload failed');
-      await loadProofs(incident_id);
-      discardCapture();
-    } catch (e) {
-      alert('Failed to save capture: ' + e.message);
-    } finally {
-      saveCaptureBtn.disabled = false; saveCaptureBtn.classList.remove('is-disabled');
+    if (mode === 'code_asc') {
+      copy.sort((a, b) => String(a.incident_code || '').localeCompare(String(b.incident_code || '')));
+      return copy;
     }
+
+    copy.sort((a, b) => compareRecent(a, b));
+    return copy;
   }
 
-  function discardCapture(){
-    proofCanvas.hidden = true;
-    proofVideo.hidden = false;
-    saveCaptureBtn.hidden = true;
-    discardCaptureBtn.hidden = true;
+  function compareRecent(a, b) {
+    const aTime = timestampOf(a);
+    const bTime = timestampOf(b);
+    return bTime - aTime || (Number(b.id || 0) - Number(a.id || 0));
   }
 
+  function timestampOf(item) {
+    const value = item?.resolved_at || item?.cleared_at || item?.updated_at || item?.created_at || 0;
+    const stamp = new Date(value).getTime();
+    return Number.isFinite(stamp) ? stamp : 0;
+  }
 
-  // Confirm button closes modal
-  confirmReviewBtn?.addEventListener('click', hideModal);
+  function normalizeStatus(value) {
+    const raw = clean(value).toLowerCase();
+    if (raw === 'cancelled' || raw === 'closed') return 'cancelled';
+    return 'resolved';
+  }
 
-  applyFiltersBtn.addEventListener('click', loadIncidents);
-  // Auto-apply on filter changes and Enter in search
-  statusFilter.addEventListener('change', loadIncidents);
-  dayFilter.addEventListener('change', loadIncidents);
-  searchInput.addEventListener('keypress', (e)=>{ if (e.key === 'Enter') loadIncidents(); });
-  clearFiltersBtn.addEventListener('click', () => {
-    statusFilter.value = 'dispatched';
-    dayFilter.value = '';
-    searchInput.value = '';
-    sortSelect.value = 'recent';
-    loadIncidents();
-  });
-  sortSelect.addEventListener('change', () => {
-    currentItems = sortItems(currentItems);
-    renderIncidents(currentItems);
-  });
+  function normalizePriority(value) {
+    const raw = clean(value).toLowerCase();
+    if (raw === 'high') return 'high';
+    if (raw === 'medium') return 'medium';
+    return 'low';
+  }
 
-  function escapeHtml(str){
-    return String(str)
+  function statusLabel(status) {
+    return status === 'cancelled' ? 'Closed / Cancelled' : 'Resolved';
+  }
+
+  function priorityLabel(priority) {
+    if (priority === 'high') return 'High Priority';
+    if (priority === 'medium') return 'Medium Priority';
+    return 'Low Priority';
+  }
+
+  function metricPill(label, value) {
+    return `
+      <div class="metric-pill">
+        <span class="label">${escapeHtml(label)}</span>
+        <strong>${escapeHtml(value)}</strong>
+      </div>
+    `;
+  }
+
+  function renderStars(rating) {
+    if (!rating) return '<span class="feedback-date">No rating</span>';
+    return Array.from({ length: 5 }, (_, index) => {
+      const filled = index < rating;
+      return `<i class="${filled ? 'fas' : 'far'} fa-star"></i>`;
+    }).join('');
+  }
+
+  function formatDate(value) {
+    if (!value) return '--';
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) return String(value);
+    return date.toLocaleString();
+  }
+
+  function formatMinutes(value) {
+    const minutes = toNumber(value);
+    if (minutes === null) return '--';
+    if (minutes < 60) return `${Math.round(minutes)} min`;
+    const hours = Math.floor(minutes / 60);
+    const remaining = Math.round(minutes % 60);
+    return remaining ? `${hours}h ${remaining}m` : `${hours}h`;
+  }
+
+  function formatRating(value) {
+    const rating = toNumber(value);
+    if (rating === null) return '--';
+    return `${rating.toFixed(1)} / 5`;
+  }
+
+  function clampRating(value) {
+    const rating = Number(value);
+    if (!Number.isFinite(rating)) return 0;
+    if (rating < 1 || rating > 5) return 0;
+    return Math.round(rating);
+  }
+
+  function toNumber(value) {
+    if (value === null || value === undefined || value === '') return null;
+    const number = Number(value);
+    return Number.isFinite(number) ? number : null;
+  }
+
+  function avg(values) {
+    if (!values.length) return null;
+    return values.reduce((sum, value) => sum + value, 0) / values.length;
+  }
+
+  function clean(value) {
+    return String(value || '').trim();
+  }
+
+  function loadingMarkup(message) {
+    return `<div class="loading-state"><i class="fas fa-spinner fa-spin"></i>${escapeHtml(message)}</div>`;
+  }
+
+  function emptyMarkup(icon, title, description) {
+    return `
+      <div class="empty-state">
+        <i class="${escapeHtml(icon)}"></i>
+        <strong>${escapeHtml(title)}</strong>
+        <p>${escapeHtml(description)}</p>
+      </div>
+    `;
+  }
+
+  function setApplyLoading(isLoading) {
+    if (!applyFiltersBtn) return;
+    applyFiltersBtn.disabled = isLoading;
+    applyFiltersBtn.setAttribute('aria-disabled', isLoading ? 'true' : 'false');
+  }
+
+  function escapeHtml(value) {
+    return String(value)
       .replaceAll('&', '&amp;')
       .replaceAll('<', '&lt;')
       .replaceAll('>', '&gt;')
@@ -369,63 +609,50 @@
       .replaceAll("'", '&#039;');
   }
 
-  function formatDate(d){
-    if (!d) return '—';
-    try {
-      const dt = new Date(d);
-      return dt.toLocaleString();
-    } catch { return String(d); }
+  function escapeAttribute(value) {
+    return escapeHtml(value);
   }
 
-  function skeletonMarkup(n){
-    return `<div class="skeleton-grid">${Array.from({length:n}).map(()=>`
-      <div class="skeleton-card">
-        <div style="display:flex;justify-content:space-between;align-items:center;gap:1rem;">
-          <div style="flex:1;">
-            <div class="skeleton-line" style="width:40%;height:10px;"></div>
-            <div class="skeleton-line" style="width:60%;height:20px;"></div>
-          </div>
-          <div class="skeleton-circle"></div>
-        </div>
-        <div class="skeleton-line" style="width:90%;"></div>
-        <div class="skeleton-line" style="width:70%;"></div>
-        <div class="skeleton-line" style="width:50%;"></div>
-      </div>`).join('')}</div>`;
-  }
+  ratingInput?.addEventListener('click', event => {
+    const button = event.target.closest('.rating-star');
+    if (!button) return;
+    setSelectedRating(button.dataset.rating);
+  });
 
-  function sortItems(items){
-    const mode = sortSelect?.value || 'recent';
-    const copy = [...items];
-    if (mode === 'priority_desc'){
-      const weight = (p) => ({high:3, medium:2, low:1})[(p||'').toLowerCase()] || 0;
-      copy.sort((a,b) => weight(b.priority) - weight(a.priority));
-    } else if (mode === 'code_asc'){
-      const ta = (a.incident_code||'').toString().toLowerCase();
-      const tb = (b.incident_code||'').toString().toLowerCase();
-      copy.sort((a,b)=> ta.localeCompare(tb));
-    } else {
-      // recent: attempt by updated_at/resolved_at/id desc
-      const ts = i => new Date(i.updated_at || i.resolved_at || i.created_at || 0).getTime() || 0;
-      copy.sort((a,b)=> ts(b)-ts(a) || (b.id||0)-(a.id||0));
+  applyFiltersBtn?.addEventListener('click', loadIncidents);
+  clearFiltersBtn?.addEventListener('click', () => {
+    if (statusFilter) statusFilter.value = 'closed';
+    if (dayFilter) dayFilter.value = '';
+    if (searchInput) searchInput.value = '';
+    if (sortSelect) sortSelect.value = 'recent';
+    loadIncidents();
+  });
+
+  statusFilter?.addEventListener('change', loadIncidents);
+  dayFilter?.addEventListener('change', loadIncidents);
+  sortSelect?.addEventListener('change', () => {
+    currentItems = sortItems(currentItems);
+    renderStats(currentItems);
+    renderIncidents(currentItems);
+  });
+  searchInput?.addEventListener('keypress', event => {
+    if (event.key === 'Enter') {
+      event.preventDefault();
+      loadIncidents();
     }
-    return copy;
-  }
+  });
 
-  // Tabs interactions
-  function activateTab(which){
-    if (which==='feedback'){
-      tabFeedback.classList.add('active'); tabFeedback.setAttribute('aria-selected','true');
-      tabProof.classList.remove('active'); tabProof.setAttribute('aria-selected','false');
-      panelFeedback.hidden = false; panelProof.hidden = true;
-    } else {
-      tabProof.classList.add('active'); tabProof.setAttribute('aria-selected','true');
-      tabFeedback.classList.remove('active'); tabFeedback.setAttribute('aria-selected','false');
-      panelProof.hidden = false; panelFeedback.hidden = true;
+  modalOverlay?.addEventListener('click', hideModal);
+  modalClose?.addEventListener('click', hideModal);
+  closeFeedbackBtn?.addEventListener('click', hideModal);
+  saveFeedbackBtn?.addEventListener('click', saveFeedback);
+
+  document.addEventListener('keydown', event => {
+    if (event.key === 'Escape' && modal && !modal.hidden) {
+      hideModal();
     }
-  }
-  tabFeedback?.addEventListener('click', () => activateTab('feedback'));
-  tabProof?.addEventListener('click', () => activateTab('proof'));
+  });
 
-  // Initial load
+  hideModal();
   loadIncidents();
 })();

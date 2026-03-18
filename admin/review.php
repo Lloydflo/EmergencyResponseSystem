@@ -4,7 +4,10 @@ require_once $rootDir . '/includes/auth.php';
 require_role('admin', 'admin/review.php');
 
 $pageTitle = 'Review & Feedback';
-$adminName = $_SESSION['user_name'] ?? 'Admin';
+$adminName = trim((string)($_SESSION['user_name'] ?? $_SESSION['name'] ?? 'Admin'));
+if ($adminName === '') {
+    $adminName = 'Admin';
+}
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -20,638 +23,467 @@ $adminName = $_SESSION['user_name'] ?? 'Admin';
     <link rel="stylesheet" href="css/admin-header.css">
     <link rel="stylesheet" href="css/sidebar-footer.css">
     <style>
-        :root {
-            --ar-bg: #f3f6fa;
-            --ar-card: #ffffff;
-            --ar-border: #d8e1ea;
-            --ar-text: #15283c;
-            --ar-muted: #5f7287;
-            --ar-primary: #0f766e;
-            --ar-primary-dark: #115e59;
-            --ar-pending: #b45309;
-            --ar-reviewed: #0369a1;
-            --ar-resolved: #15803d;
-            --ar-danger: #b91c1c;
-            --ar-dark-card: #1f2329;
-        }
-
-        .main-content {
-            background:
-                radial-gradient(circle at 86% 0%, rgba(56, 189, 248, 0.12), transparent 34%),
-                var(--ar-bg);
-            padding: 3rem 1.5rem;
-        }
-
-        .ar-shell {
-            margin-top: 0.8rem;
-        }
-
-        .ar-header {
-            margin-bottom: 1rem;
-        }
-
-        .ar-title {
-            margin: 0;
-            font-size: 1.65rem;
-            color: var(--ar-text);
-            line-height: 1.2;
-        }
-
-        .ar-subtitle {
-            margin: 0.35rem 0 0;
-            color: var(--ar-muted);
-            font-size: 0.94rem;
-        }
-
-        .ar-layout {
-            display: grid;
-            grid-template-columns: 1fr;
-            gap: 0.9rem;
-            align-items: start;
-        }
-
-        .ar-filter-card {
-            background: var(--ar-dark-card);
-            color: #fff;
-            border-radius: 14px;
-            padding: 1rem;
-            box-shadow: 0 6px 18px rgba(0, 0, 0, 0.24);
-            position: sticky;
-            top: 90px;
-        }
-
-        .ar-filter-title {
-            margin: 0 0 0.8rem;
-            font-size: 1rem;
-            font-weight: 700;
-            letter-spacing: 0.01em;
-        }
-
-        .ar-filter-list {
-            list-style: disc;
-            margin: 0;
-            padding-left: 1.2rem;
-        }
-
-        .ar-filter-item {
-            margin-bottom: 0.58rem;
-        }
-
-        .ar-filter-item label {
-            color: #f8fafc;
-            font-size: 1.05rem;
-            font-weight: 500;
-            cursor: pointer;
-        }
-
-        .ar-filter-item label.resolved {
-            color: #facc15;
-        }
-
-        .ar-filter-item input[type="radio"] {
-            margin-right: 0.45rem;
-            transform: translateY(1px);
-        }
-
-        .ar-filter-item input[type="text"],
-        .ar-filter-item input[type="date"] {
-            margin-top: 0.4rem;
-            width: 100%;
-            border: 1px solid #39414b;
-            border-radius: 8px;
-            background: #13171c;
-            color: #fff;
-            padding: 0.52rem 0.6rem;
-            font-size: 0.86rem;
-        }
-
-        .ar-filter-item input[type="text"]::placeholder {
-            color: #9fb0c2;
-        }
-
-        .ar-filter-actions {
-            margin-top: 0.95rem;
-            display: grid;
-            grid-template-columns: 1fr 1fr;
-            gap: 0.5rem;
-        }
-
-        .ar-btn {
-            border: none;
-            border-radius: 8px;
-            padding: 0.52rem 0.65rem;
-            font-size: 0.79rem;
-            font-weight: 700;
-            cursor: pointer;
-        }
-
-        .ar-btn-apply {
-            background: #14b8a6;
-            color: #052e2b;
-        }
-
-        .ar-btn-apply:hover {
-            background: #2dd4bf;
-        }
-
-        .ar-btn-reset {
-            background: #334155;
-            color: #e2e8f0;
-        }
-
-        .ar-btn-reset:hover {
-            background: #475569;
-        }
-
-        .ar-table-card {
-            background: var(--ar-card);
-            border: 1px solid var(--ar-border);
-            border-radius: 14px;
-            box-shadow: 0 6px 16px rgba(15, 23, 42, 0.06);
-            overflow: hidden;
-        }
-
-        .ar-toolbar {
-            display: grid;
-            grid-template-columns: 1.45fr 1fr 1fr auto;
-            gap: 0.65rem;
-            padding: 0.8rem;
-            background: #eef2f6;
-            border-bottom: 1px solid var(--ar-border);
-        }
-
-        .ar-toolbar-input,
-        .ar-toolbar-select {
-            border: 1px solid #b8c3cf;
-            border-radius: 9px;
-            background: #fff;
-            color: var(--ar-text);
-            padding: 0.62rem 0.72rem;
-            font-size: 0.9rem;
-            width: 100%;
-        }
-
-        .ar-toolbar-input::placeholder {
-            color: #677b91;
-        }
-
-        .ar-toolbar-input:focus,
-        .ar-toolbar-select:focus {
-            outline: none;
-            border-color: #14b8a6;
-            box-shadow: 0 0 0 3px rgba(20, 184, 166, 0.14);
-        }
-
-        .ar-toolbar-reset {
-            border: 1px solid #b8c3cf;
-            border-radius: 9px;
-            background: #fff;
-            color: #0f172a;
-            padding: 0.62rem 0.95rem;
-            font-size: 0.88rem;
-            font-weight: 700;
-            cursor: pointer;
-            white-space: nowrap;
-        }
-
-        .ar-toolbar-reset:hover {
-            background: #f8fafc;
-        }
-
-        .ar-table-head {
-            padding: 0.85rem 1rem;
-            border-bottom: 1px solid var(--ar-border);
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            gap: 0.8rem;
-            background: #f7fbff;
-        }
-
-        .ar-table-head h2 {
-            margin: 0;
-            color: var(--ar-text);
-            font-size: 1rem;
-        }
-
-        .ar-count {
-            color: #334155;
-            font-size: 0.84rem;
-            font-weight: 700;
-            background: #e2e8f0;
-            border-radius: 999px;
-            padding: 0.3rem 0.65rem;
-        }
-
-        .ar-table-scroll {
-            max-height: 560px;
-            overflow: auto;
-            border-top: 1px solid #edf2f7;
-        }
-
-        .ar-table {
-            width: 100%;
-            border-collapse: collapse;
-            min-width: 1080px;
-        }
-
-        .ar-table th,
-        .ar-table td {
-            padding: 0.72rem 0.68rem;
-            border-bottom: 1px solid #eef2f7;
-            text-align: left;
-            vertical-align: middle;
-            font-size: 0.84rem;
-        }
-
-        .ar-table th {
-            position: sticky;
-            top: 0;
-            z-index: 1;
-            background: #f8fafc;
-            color: #334155;
-            text-transform: uppercase;
-            letter-spacing: 0.04em;
-            font-size: 0.74rem;
-        }
-
-        .ar-table tr:hover td {
-            background: #f9fcff;
-        }
-
-        .ar-incident-code {
-            font-weight: 700;
-            color: #0f172a;
-        }
-
-        .ar-chip {
-            display: inline-flex;
-            align-items: center;
-            padding: 0.2rem 0.55rem;
-            border-radius: 999px;
-            font-size: 0.72rem;
-            font-weight: 700;
-            border: 1px solid transparent;
-            text-transform: uppercase;
-        }
-
-        .ar-chip.pending {
-            color: #92400e;
-            border-color: #fcd34d;
-            background: #fffbeb;
-        }
-
-        .ar-chip.reviewed {
-            color: #075985;
-            border-color: #7dd3fc;
-            background: #f0f9ff;
-        }
-
-        .ar-chip.resolved {
-            color: #166534;
-            border-color: #86efac;
-            background: #f0fdf4;
-        }
-
-        .ar-actions {
-            display: flex;
-            align-items: center;
-            gap: 0.35rem;
-            flex-wrap: wrap;
-        }
-
-        .ar-action-btn {
-            width: 30px;
-            height: 30px;
-            border-radius: 8px;
-            border: 1px solid #d7dee8;
-            background: #fff;
-            color: #1e293b;
-            display: inline-flex;
-            align-items: center;
-            justify-content: center;
-            cursor: pointer;
-            transition: 0.2s ease;
-        }
-
-        .ar-action-btn:hover {
-            transform: translateY(-1px);
-            box-shadow: 0 2px 8px rgba(15, 23, 42, 0.13);
-        }
-
-        .ar-action-btn.reviewed:hover {
-            color: var(--ar-reviewed);
-            border-color: #7dd3fc;
-            background: #f0f9ff;
-        }
-
-        .ar-action-btn.resolved:hover {
-            color: var(--ar-resolved);
-            border-color: #86efac;
-            background: #f0fdf4;
-        }
-
-        .ar-action-btn.remarks:hover {
-            color: var(--ar-primary);
-            border-color: #99f6e4;
-            background: #f0fdfa;
-        }
-
-        .ar-action-btn.escalate:hover {
-            color: var(--ar-pending);
-            border-color: #fcd34d;
-            background: #fffbeb;
-        }
-
-        .ar-action-btn.flag:hover {
-            color: var(--ar-danger);
-            border-color: #fca5a5;
-            background: #fff1f2;
-        }
-
-        .ar-empty {
-            text-align: center;
-            color: var(--ar-muted);
-            padding: 1.6rem;
-            font-size: 0.9rem;
-        }
-
-        .ar-toast {
-            position: fixed;
-            right: 16px;
-            bottom: 16px;
-            z-index: 9999;
-            background: #0f172a;
-            color: #fff;
-            border-radius: 10px;
-            padding: 0.7rem 0.85rem;
-            font-size: 0.82rem;
-            font-weight: 600;
-            box-shadow: 0 8px 18px rgba(0, 0, 0, 0.25);
-            opacity: 0;
-            pointer-events: none;
-            transform: translateY(12px);
-            transition: 0.22s ease;
-        }
-
-        .ar-toast.show {
-            opacity: 1;
-            transform: translateY(0);
-        }
-
-        @media (max-width: 1080px) {
-            .ar-toolbar {
-                grid-template-columns: 1fr 1fr;
-            }
-        }
-
-        @media (max-width: 720px) {
-            .main-content {
-                padding: 1rem 0.75rem;
-            }
-
-            .ar-title {
-                font-size: 1.35rem;
-            }
-
-            .ar-subtitle {
-                font-size: 0.86rem;
-            }
-
-            .ar-toolbar {
-                grid-template-columns: 1fr;
-            }
-
-            .ar-table th,
-            .ar-table td {
-                font-size: 0.78rem;
-                padding: 0.6rem 0.5rem;
-            }
-
-            .ar-action-btn {
-                width: 28px;
-                height: 28px;
-            }
-        }
+        .main-content { padding: 1.5rem; background: radial-gradient(circle at top right, rgba(56,189,248,.08), transparent 28%), #f3f7fb; }
+        .ar-shell { width: min(100%, 1360px); margin: 0 auto; display: grid; gap: 1rem; }
+        .ar-hero { background: linear-gradient(135deg, #0f172a, #1e3a8a); color: #f8fafc; border-radius: 22px; padding: 1.3rem 1.4rem; box-shadow: 0 20px 40px rgba(15,23,42,.18); }
+        .ar-hero h1 { margin: 0; font-size: 1.6rem; }
+        .ar-hero p { margin: .55rem 0 0; color: rgba(248,250,252,.88); line-height: 1.6; }
+        .ar-stats { display: grid; grid-template-columns: repeat(4, minmax(0,1fr)); gap: 1rem; }
+        .ar-stat, .ar-toolbar, .ar-card, .ar-modal-dialog { background: rgba(255,255,255,.98); border: 1px solid #dbe5f0; box-shadow: 0 14px 34px rgba(15,23,42,.08); }
+        .ar-stat { border-radius: 20px; padding: 1rem 1.1rem; }
+        .ar-stat span { display: inline-flex; font-size: .78rem; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; color: #64748b; }
+        .ar-stat strong { display: block; margin-top: .65rem; font-size: 1.9rem; line-height: 1; color: #0f172a; }
+        .ar-stat p { margin: .55rem 0 0; color: #64748b; line-height: 1.55; font-size: .9rem; }
+        .ar-toolbar { border-radius: 20px; padding: 1rem; display: grid; grid-template-columns: 1.45fr 1fr 1fr auto; gap: .8rem; align-items: end; }
+        .ar-field { display: flex; flex-direction: column; gap: .4rem; min-width: 0; }
+        .ar-field label { color: #475569; font-size: .84rem; font-weight: 700; }
+        .ar-field input, .ar-field select { width: 100%; border: 1px solid #cbd5e1; border-radius: 14px; background: #fff; color: #0f172a; padding: .78rem .9rem; font-size: .94rem; box-sizing: border-box; }
+        .ar-field input:focus, .ar-field select:focus { outline: none; border-color: #38bdf8; box-shadow: 0 0 0 4px rgba(56,189,248,.14); }
+        .ar-actions { display: flex; gap: .55rem; }
+        .ar-btn { min-height: 46px; padding: .72rem 1rem; border-radius: 14px; border: 1px solid #cbd5e1; font-weight: 800; cursor: pointer; }
+        .ar-btn.primary { background: linear-gradient(135deg, #0f766e, #2563eb); border-color: transparent; color: #fff; }
+        .ar-btn.secondary { background: #fff; color: #0f172a; }
+        .ar-card { border-radius: 22px; overflow: hidden; }
+        .ar-card-head { display: flex; justify-content: space-between; align-items: center; gap: 1rem; padding: 1rem 1.15rem; border-bottom: 1px solid #e2e8f0; background: #f8fbff; }
+        .ar-card-head h2 { margin: 0; color: #0f172a; font-size: 1.05rem; }
+        .ar-card-head p { margin: .3rem 0 0; color: #64748b; font-size: .9rem; }
+        .ar-count { display: inline-flex; align-items: center; justify-content: center; border-radius: 999px; background: #e2e8f0; color: #334155; font-size: .82rem; font-weight: 800; padding: .38rem .72rem; }
+        .ar-scroll { max-height: 620px; overflow: auto; }
+        .ar-table { width: 100%; border-collapse: collapse; min-width: 1080px; }
+        .ar-table th, .ar-table td { padding: .82rem .8rem; border-bottom: 1px solid #eef2f7; text-align: left; vertical-align: top; font-size: .88rem; }
+        .ar-table th { position: sticky; top: 0; z-index: 1; background: #f8fafc; color: #334155; text-transform: uppercase; letter-spacing: .04em; font-size: .74rem; }
+        .ar-table tr:hover td { background: #f8fbff; }
+        .ar-ref { font-weight: 800; color: #0f172a; margin-bottom: .2rem; }
+        .ar-meta { color: #64748b; line-height: 1.55; }
+        .ar-chip, .ar-pill { display: inline-flex; align-items: center; gap: .4rem; padding: .35rem .7rem; border-radius: 999px; font-size: .76rem; font-weight: 800; }
+        .ar-chip.resolved { background: #dcfce7; color: #166534; }
+        .ar-chip.cancelled { background: #fee2e2; color: #991b1b; }
+        .ar-pill.high { background: #fee2e2; color: #b91c1c; }
+        .ar-pill.medium { background: #fef3c7; color: #b45309; }
+        .ar-pill.low { background: #dcfce7; color: #166534; }
+        .ar-pill.feedback { background: #eff6ff; color: #1d4ed8; }
+        .ar-pill.empty { background: #e2e8f0; color: #475569; }
+        .ar-row-actions { display: flex; gap: .45rem; flex-wrap: wrap; }
+        .ar-action { border: 1px solid #cbd5e1; background: #fff; color: #0f172a; border-radius: 12px; padding: .55rem .85rem; font-weight: 700; cursor: pointer; }
+        .ar-action.primary { background: #0f172a; color: #fff; border-color: #0f172a; }
+        .ar-empty { padding: 2rem 1rem; text-align: center; color: #64748b; }
+        .ar-overlay { position: fixed; inset: 0; background: rgba(15,23,42,.45); backdrop-filter: blur(3px); z-index: 2000; }
+        .ar-modal { position: fixed; inset: 0; z-index: 2001; display: flex; align-items: center; justify-content: center; padding: 1rem; box-sizing: border-box; }
+        .ar-modal[hidden], .ar-overlay[hidden] { display: none !important; }
+        .ar-modal-dialog { width: min(1040px, 100%); max-height: calc(100vh - 2rem); overflow: auto; border-radius: 24px; }
+        .ar-modal-head { display: flex; justify-content: space-between; gap: 1rem; align-items: flex-start; padding: 1.15rem 1.25rem 1rem; border-bottom: 1px solid #e2e8f0; }
+        .ar-modal-head p { margin: 0; color: #64748b; font-size: .82rem; font-weight: 800; text-transform: uppercase; letter-spacing: .08em; }
+        .ar-modal-head h3 { margin: .35rem 0 0; color: #0f172a; font-size: 1.4rem; }
+        .ar-close { width: 42px; height: 42px; border-radius: 12px; border: 1px solid #cbd5e1; background: #fff; color: #0f172a; cursor: pointer; }
+        .ar-modal-body { display: grid; gap: 1rem; padding: 1.2rem 1.25rem 1.3rem; }
+        .ar-spotlight, .ar-grid article, .ar-feedback-panel { border-radius: 20px; border: 1px solid #dbe5f0; background: #f8fbff; }
+        .ar-spotlight { display: grid; grid-template-columns: minmax(0,1.2fr) minmax(260px,.75fr); gap: 1rem; padding: 1rem; }
+        .ar-badges { display: flex; gap: .45rem; flex-wrap: wrap; margin-bottom: .65rem; }
+        .ar-spotlight h4 { margin: 0; font-size: 1.35rem; color: #0f172a; }
+        .ar-spotlight .type { margin: .35rem 0 0; color: #334155; font-weight: 700; }
+        .ar-spotlight .desc { margin: .7rem 0 0; color: #475569; line-height: 1.65; white-space: pre-wrap; }
+        .ar-side { display: flex; flex-direction: column; gap: .55rem; justify-content: space-between; background: #fff; border: 1px solid #dbe5f0; border-radius: 18px; padding: .95rem; }
+        .ar-side span { color: #64748b; font-size: .78rem; font-weight: 800; text-transform: uppercase; letter-spacing: .08em; }
+        .ar-side strong { color: #0f172a; line-height: 1.55; }
+        .ar-grid { display: grid; grid-template-columns: repeat(3, minmax(0,1fr)); gap: 1rem; }
+        .ar-grid article { padding: 1rem; }
+        .ar-grid h4, .ar-feedback-panel h4 { margin: 0; color: #0f172a; font-size: 1rem; }
+        .ar-list { display: grid; gap: .65rem; margin-top: .9rem; }
+        .ar-detail { display: flex; justify-content: space-between; gap: .7rem; padding: .7rem .78rem; border-radius: 14px; background: #fff; border: 1px solid #e2e8f0; }
+        .ar-detail span { color: #64748b; font-weight: 600; }
+        .ar-detail strong { color: #0f172a; text-align: right; }
+        .ar-feedback-panel { padding: 1rem; }
+        .ar-feedback-panel p { margin: .3rem 0 0; color: #64748b; }
+        .ar-feedback-list { display: grid; gap: .75rem; margin-top: 1rem; }
+        .ar-feedback { border: 1px solid #e2e8f0; border-radius: 18px; background: #fff; padding: .9rem .95rem; }
+        .ar-feedback-head { display: flex; justify-content: space-between; gap: .8rem; align-items: center; }
+        .ar-feedback-head strong { color: #0f172a; }
+        .ar-feedback-head span { color: #64748b; font-size: .84rem; }
+        .ar-stars { display: inline-flex; gap: .18rem; color: #f59e0b; }
+        .ar-note { margin: .65rem 0 0; color: #334155; line-height: 1.65; white-space: pre-wrap; }
+        .ar-feedback-empty { border: 1px dashed #cbd5e1; border-radius: 18px; background: #f8fafc; color: #64748b; padding: 1.05rem 1rem; }
+        [data-theme="dark"] .main-content { background: radial-gradient(circle at top right, rgba(59,130,246,.14), transparent 28%), #08111f; }
+        [data-theme="dark"] .ar-stat, [data-theme="dark"] .ar-toolbar, [data-theme="dark"] .ar-card, [data-theme="dark"] .ar-modal-dialog { background: linear-gradient(180deg, rgba(15,23,42,.98), rgba(2,6,23,.98)); border-color: #334155; box-shadow: 0 18px 42px rgba(2,6,23,.38); }
+        [data-theme="dark"] .ar-stat strong, [data-theme="dark"] .ar-ref, [data-theme="dark"] .ar-card-head h2, [data-theme="dark"] .ar-modal-head h3, [data-theme="dark"] .ar-spotlight h4, [data-theme="dark"] .ar-side strong, [data-theme="dark"] .ar-grid h4, [data-theme="dark"] .ar-feedback-panel h4, [data-theme="dark"] .ar-detail strong, [data-theme="dark"] .ar-feedback-head strong { color: #f8fafc !important; }
+        [data-theme="dark"] .ar-stat span, [data-theme="dark"] .ar-stat p, [data-theme="dark"] .ar-field label, [data-theme="dark"] .ar-card-head p, [data-theme="dark"] .ar-meta, [data-theme="dark"] .ar-modal-head p, [data-theme="dark"] .ar-spotlight .type, [data-theme="dark"] .ar-spotlight .desc, [data-theme="dark"] .ar-side span, [data-theme="dark"] .ar-detail span, [data-theme="dark"] .ar-feedback-panel p, [data-theme="dark"] .ar-feedback-head span, [data-theme="dark"] .ar-note, [data-theme="dark"] .ar-feedback-empty { color: #94a3b8 !important; }
+        [data-theme="dark"] .ar-field input, [data-theme="dark"] .ar-field select, [data-theme="dark"] .ar-btn.secondary, [data-theme="dark"] .ar-action, [data-theme="dark"] .ar-close { background: #0f172a !important; color: #f8fafc !important; border-color: #475569 !important; }
+        [data-theme="dark"] .ar-card-head, [data-theme="dark"] .ar-table th, [data-theme="dark"] .ar-table tr:hover td, [data-theme="dark"] .ar-spotlight, [data-theme="dark"] .ar-grid article, [data-theme="dark"] .ar-feedback-panel, [data-theme="dark"] .ar-side, [data-theme="dark"] .ar-detail, [data-theme="dark"] .ar-feedback, [data-theme="dark"] .ar-feedback-empty { background: #020617 !important; border-color: #334155 !important; }
+        [data-theme="dark"] .ar-count, [data-theme="dark"] .ar-pill.empty { background: #1e293b !important; color: #cbd5e1 !important; }
+        [data-theme="dark"] .ar-chip.resolved { background: #052e16 !important; color: #bbf7d0 !important; }
+        [data-theme="dark"] .ar-chip.cancelled { background: #450a0a !important; color: #fecaca !important; }
+        [data-theme="dark"] .ar-pill.high { background: #450a0a !important; color: #fecaca !important; }
+        [data-theme="dark"] .ar-pill.medium { background: #451a03 !important; color: #fde68a !important; }
+        [data-theme="dark"] .ar-pill.low { background: #052e16 !important; color: #bbf7d0 !important; }
+        @media (max-width: 1180px) { .ar-stats, .ar-grid { grid-template-columns: repeat(2, minmax(0,1fr)); } .ar-toolbar, .ar-spotlight { grid-template-columns: 1fr; } .ar-actions { justify-content: flex-end; } }
+        @media (max-width: 767px) { .main-content { padding: 1rem .75rem; } .ar-stats, .ar-toolbar, .ar-grid { grid-template-columns: 1fr; } .ar-actions, .ar-row-actions { display: grid; grid-template-columns: 1fr; } .ar-feedback-head, .ar-card-head { flex-direction: column; align-items: flex-start; } }
     </style>
 </head>
 <body>
     <?php include $rootDir . '/includes/sidebar.php'; ?>
     <?php include $rootDir . '/includes/admin-header.php'; ?>
-
-    <div class="main-content">
+    <main class="main-content">
         <div class="main-container ar-shell">
-            <section class="ar-header">
-                <h1 class="ar-title">Review &amp; Feedback Console</h1>
-                <p class="ar-subtitle">Hi <?php echo htmlspecialchars($adminName); ?>. Manage incident review flow and apply action controls per case.</p>
+            <section class="ar-hero">
+                <h1>Review &amp; Feedback Console</h1>
+                <p>Hi <?php echo htmlspecialchars($adminName); ?>. Feedback sent from the dispatcher review page is listed here automatically so the admin team can review it per closed incident.</p>
             </section>
 
-            <section class="ar-layout">
-                <div class="ar-table-card">
-                    <div class="ar-toolbar">
-                        <input
-                            type="text"
-                            id="searchFilterInput"
-                            class="ar-toolbar-input"
-                            placeholder="Search incident code, type, or location...">
-                        <select id="categoryFilterSelect" class="ar-toolbar-select">
-                            <option value="">All Categories</option>
-                            <option value="fire">Fire</option>
-                            <option value="medical">Medical</option>
-                            <option value="traffic">Traffic</option>
-                            <option value="police">Police</option>
-                            <option value="rescue">Rescue</option>
-                        </select>
-                        <select id="statusFilterSelect" class="ar-toolbar-select">
-                            <option value="">All Status</option>
-                            <option value="pending">Pending</option>
-                            <option value="reviewed">Reviewed</option>
-                            <option value="resolved">Resolved</option>
-                        </select>
-                        <button type="button" class="ar-toolbar-reset" id="resetFilterBtn">Reset</button>
+            <section class="ar-stats" aria-live="polite">
+                <article class="ar-stat"><span>Closed Incidents</span><strong id="statClosed">0</strong><p>Resolved and cancelled incidents currently loaded.</p></article>
+                <article class="ar-stat"><span>With Feedback</span><strong id="statFeedback">0</strong><p>Incidents that already have dispatcher notes or ratings.</p></article>
+                <article class="ar-stat"><span>Average Rating</span><strong id="statRating">--</strong><p>Average score from dispatcher feedback entries.</p></article>
+                <article class="ar-stat"><span>Average Response</span><strong id="statResponse">--</strong><p>Average dispatch-to-scene timing for visible incidents.</p></article>
+            </section>
+
+            <section class="ar-toolbar">
+                <div class="ar-field">
+                    <label for="searchFilterInput">Search</label>
+                    <input type="text" id="searchFilterInput" placeholder="Search incident, location, driver, plate, or vehicle...">
+                </div>
+                <div class="ar-field">
+                    <label for="categoryFilterSelect">Category</label>
+                    <select id="categoryFilterSelect">
+                        <option value="">All Categories</option>
+                        <option value="fire">Fire</option>
+                        <option value="medical">Medical</option>
+                        <option value="traffic">Traffic</option>
+                        <option value="police">Police</option>
+                        <option value="rescue">Rescue</option>
+                    </select>
+                </div>
+                <div class="ar-field">
+                    <label for="statusFilterSelect">Queue Filter</label>
+                    <select id="statusFilterSelect">
+                        <option value="">All Closed Cases</option>
+                        <option value="resolved">Resolved Only</option>
+                        <option value="cancelled">Cancelled Only</option>
+                        <option value="with_feedback">With Dispatcher Feedback</option>
+                        <option value="without_feedback">No Feedback Yet</option>
+                    </select>
+                </div>
+                <div class="ar-actions">
+                    <button type="button" class="ar-btn primary" id="refreshReviewBtn"><i class="fas fa-rotate"></i> Refresh</button>
+                    <button type="button" class="ar-btn secondary" id="resetFilterBtn"><i class="fas fa-rotate-left"></i> Reset</button>
+                </div>
+            </section>
+
+            <section class="ar-card">
+                <div class="ar-card-head">
+                    <div>
+                        <h2>Dispatcher Feedback Queue</h2>
+                        <p id="tableSubtitle">Loading closed incidents and dispatcher feedback...</p>
                     </div>
-                    <div class="ar-table-head">
-                        <h2>Incident Review Table</h2>
-                        <span class="ar-count" id="incidentCountBadge">0 incident(s)</span>
-                    </div>
-                    <div class="ar-table-scroll">
-                        <table class="ar-table">
-                            <thead>
-                                <tr>
-                                    <th>Incident</th>
-                                    <th>Type</th>
-                                    <th>Location</th>
-                                    <th>Department</th>
-                                    <th>Priority</th>
-                                    <th>Status</th>
-                                    <th>Date</th>
-                                    <th>Actions</th>
-                                </tr>
-                            </thead>
-                            <tbody id="incidentTableBody"></tbody>
-                        </table>
-                    </div>
+                    <span class="ar-count" id="incidentCountBadge">0 incident(s)</span>
+                </div>
+                <div class="ar-scroll">
+                    <table class="ar-table">
+                        <thead>
+                            <tr>
+                                <th>Incident</th>
+                                <th>Type</th>
+                                <th>Location</th>
+                                <th>Priority</th>
+                                <th>Status</th>
+                                <th>Response</th>
+                                <th>Feedback</th>
+                                <th>Closed</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody id="incidentTableBody"></tbody>
+                    </table>
                 </div>
             </section>
         </div>
+    </main>
+    <div id="adminFeedbackOverlay" class="ar-overlay" hidden></div>
+    <div id="adminFeedbackModal" class="ar-modal" hidden role="dialog" aria-modal="true" aria-labelledby="adminFeedbackTitle">
+        <div class="ar-modal-dialog">
+            <div class="ar-modal-head">
+                <div>
+                    <p>Dispatcher Feedback</p>
+                    <h3 id="adminFeedbackTitle">Incident Feedback Details</h3>
+                </div>
+                <button type="button" class="ar-close" id="adminFeedbackClose" aria-label="Close"><i class="fas fa-times"></i></button>
+            </div>
+            <div class="ar-modal-body">
+                <section class="ar-spotlight">
+                    <div>
+                        <div id="adminModalBadges" class="ar-badges"></div>
+                        <h4 id="adminModalCode">--</h4>
+                        <p id="adminModalType" class="type">--</p>
+                        <p id="adminModalDescription" class="desc">--</p>
+                    </div>
+                    <div class="ar-side">
+                        <span>Location</span>
+                        <strong id="adminModalLocation">--</strong>
+                        <strong id="adminModalClosed">Closed: --</strong>
+                    </div>
+                </section>
+                <section class="ar-grid">
+                    <article><h4><i class="fas fa-stopwatch"></i> Timeline</h4><div class="ar-list"><div class="ar-detail"><span>Dispatched</span><strong id="adminModalDispatch">--</strong></div><div class="ar-detail"><span>On Scene</span><strong id="adminModalOnScene">--</strong></div><div class="ar-detail"><span>Response Time</span><strong id="adminModalResponse">--</strong></div><div class="ar-detail"><span>Resolution Time</span><strong id="adminModalResolution">--</strong></div></div></article>
+                    <article><h4><i class="fas fa-truck-medical"></i> Unit & Vehicle</h4><div class="ar-list"><div class="ar-detail"><span>Assigned Unit</span><strong id="adminModalUnit">--</strong></div><div class="ar-detail"><span>Driver</span><strong id="adminModalDriver">--</strong></div><div class="ar-detail"><span>Vehicle</span><strong id="adminModalVehicle">--</strong></div><div class="ar-detail"><span>Plate Number</span><strong id="adminModalPlate">--</strong></div></div></article>
+                    <article><h4><i class="fas fa-chart-line"></i> Feedback Summary</h4><div class="ar-list"><div class="ar-detail"><span>Average Rating</span><strong id="adminModalAvgRating">--</strong></div><div class="ar-detail"><span>Rated Entries</span><strong id="adminModalRatingCount">0</strong></div><div class="ar-detail"><span>Total Feedback</span><strong id="adminModalFeedbackCount">0</strong></div><div class="ar-detail"><span>Last Updated</span><strong id="adminModalLastUpdated">--</strong></div></div></article>
+                </section>
+                <section class="ar-feedback-panel">
+                    <h4><i class="fas fa-paper-plane"></i> Feedback Sent by Dispatcher</h4>
+                    <p>Every note saved from the dispatcher review page appears here automatically.</p>
+                    <div id="adminFeedbackList" class="ar-feedback-list"></div>
+                </section>
+            </div>
+        </div>
     </div>
-
     <?php include $rootDir . '/includes/admin-footer.php'; ?>
-    <div class="ar-toast" id="reviewToast"></div>
-
     <script>
-        const incidentRows = [
-            { id: 1, code: 'INC-2026-0042', type: 'Fire', location: 'Barangay South Poblacion', department: 'Fire Dept', priority: 'High', status: 'pending', date: '2026-02-28' },
-            { id: 2, code: 'INC-2026-0041', type: 'Medical', location: 'Rizal Street, Zone 2', department: 'EMS', priority: 'Medium', status: 'reviewed', date: '2026-02-28' },
-            { id: 3, code: 'INC-2026-0040', type: 'Traffic', location: 'Maharlika Highway', department: 'Police', priority: 'Low', status: 'resolved', date: '2026-02-27' },
-            { id: 4, code: 'INC-2026-0039', type: 'Police', location: 'Market Area', department: 'Police', priority: 'High', status: 'pending', date: '2026-02-27' },
-            { id: 5, code: 'INC-2026-0038', type: 'Medical', location: 'District Hospital', department: 'EMS', priority: 'High', status: 'reviewed', date: '2026-02-26' },
-            { id: 6, code: 'INC-2026-0037', type: 'Fire', location: 'Sitio Maligaya', department: 'Fire Dept', priority: 'Medium', status: 'pending', date: '2026-02-26' },
-            { id: 7, code: 'INC-2026-0036', type: 'Rescue', location: 'Riverbank Crossing', department: 'Rescue Team', priority: 'High', status: 'resolved', date: '2026-02-25' },
-            { id: 8, code: 'INC-2026-0035', type: 'Medical', location: 'National Road Km. 12', department: 'EMS', priority: 'Low', status: 'pending', date: '2026-02-25' },
-            { id: 9, code: 'INC-2026-0034', type: 'Police', location: 'Town Plaza', department: 'Police', priority: 'Medium', status: 'reviewed', date: '2026-02-24' },
-            { id: 10, code: 'INC-2026-0033', type: 'Fire', location: 'Industrial Park Block B', department: 'Fire Dept', priority: 'High', status: 'pending', date: '2026-02-24' },
-            { id: 11, code: 'INC-2026-0032', type: 'Medical', location: 'School Gym Evacuation Area', department: 'EMS', priority: 'Medium', status: 'resolved', date: '2026-02-23' },
-            { id: 12, code: 'INC-2026-0031', type: 'Traffic', location: 'Bypass Road Junction', department: 'Traffic Unit', priority: 'Low', status: 'pending', date: '2026-02-22' }
-        ];
+        (function () {
+            const qs = (selector, ctx = document) => ctx.querySelector(selector);
+            const tableBody = qs('#incidentTableBody');
+            const countBadge = qs('#incidentCountBadge');
+            const tableSubtitle = qs('#tableSubtitle');
+            const searchFilterInput = qs('#searchFilterInput');
+            const categoryFilterSelect = qs('#categoryFilterSelect');
+            const statusFilterSelect = qs('#statusFilterSelect');
+            const resetFilterBtn = qs('#resetFilterBtn');
+            const refreshReviewBtn = qs('#refreshReviewBtn');
+            const modal = qs('#adminFeedbackModal');
+            const modalOverlay = qs('#adminFeedbackOverlay');
+            const modalClose = qs('#adminFeedbackClose');
+            let incidentRows = [];
 
-        const tableBody = document.getElementById('incidentTableBody');
-        const countBadge = document.getElementById('incidentCountBadge');
-        const searchFilterInput = document.getElementById('searchFilterInput');
-        const categoryFilterSelect = document.getElementById('categoryFilterSelect');
-        const statusFilterSelect = document.getElementById('statusFilterSelect');
-        const resetFilterBtn = document.getElementById('resetFilterBtn');
-        const toastEl = document.getElementById('reviewToast');
-
-        function escapeHtml(value) {
-            return String(value)
-                .replace(/&/g, '&amp;')
-                .replace(/</g, '&lt;')
-                .replace(/>/g, '&gt;')
-                .replace(/"/g, '&quot;')
-                .replace(/'/g, '&#039;');
-        }
-
-        function statusChip(status) {
-            const safe = (status || '').toLowerCase();
-            const label = safe.charAt(0).toUpperCase() + safe.slice(1);
-            return '<span class="ar-chip ' + safe + '">' + escapeHtml(label) + '</span>';
-        }
-
-        function showToast(message) {
-            toastEl.textContent = message;
-            toastEl.classList.add('show');
-            window.clearTimeout(showToast._t);
-            showToast._t = window.setTimeout(() => {
-                toastEl.classList.remove('show');
-            }, 1900);
-        }
-
-        function getFilteredRows() {
-            const searchNeedle = searchFilterInput.value.trim().toLowerCase();
-            const categoryNeedle = categoryFilterSelect.value.trim().toLowerCase();
-            const statusNeedle = statusFilterSelect.value.trim().toLowerCase();
-
-            return incidentRows.filter((row) => {
-                if (categoryNeedle && row.type.toLowerCase() !== categoryNeedle) return false;
-                if (statusNeedle && row.status.toLowerCase() !== statusNeedle) return false;
-                if (searchNeedle) {
-                    const hay = (row.code + ' ' + row.type + ' ' + row.location + ' ' + row.department).toLowerCase();
-                    if (!hay.includes(searchNeedle)) return false;
-                }
-                return true;
-            });
-        }
-
-        function renderTable() {
-            const rows = getFilteredRows();
-            countBadge.textContent = rows.length + ' incident(s)';
-
-            if (!rows.length) {
-                tableBody.innerHTML = '<tr><td colspan="8" class="ar-empty">No incidents match the current filter.</td></tr>';
-                return;
+            function escapeHtml(value) {
+                return String(value).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#039;');
+            }
+            function toNumber(value) {
+                if (value === null || value === undefined || value === '') return null;
+                const number = Number(value);
+                return Number.isFinite(number) ? number : null;
+            }
+            function normalizeStatus(status) {
+                return String(status || '').toLowerCase() === 'cancelled' ? 'cancelled' : 'resolved';
+            }
+            function normalizePriority(priority) {
+                const safe = String(priority || '').toLowerCase();
+                if (safe === 'high') return 'high';
+                if (safe === 'medium') return 'medium';
+                return 'low';
+            }
+            function formatDate(value) {
+                if (!value) return '--';
+                const date = new Date(value);
+                return Number.isNaN(date.getTime()) ? String(value) : date.toLocaleString();
+            }
+            function formatMinutes(value) {
+                const minutes = toNumber(value);
+                if (minutes === null) return '--';
+                if (minutes < 60) return Math.round(minutes) + ' min';
+                const hours = Math.floor(minutes / 60);
+                const remaining = Math.round(minutes % 60);
+                return remaining ? (hours + 'h ' + remaining + 'm') : (hours + 'h');
+            }
+            function formatRating(value) {
+                const rating = toNumber(value);
+                return rating === null ? '--' : (rating.toFixed(1) + ' / 5');
+            }
+            function average(values) {
+                return values.length ? (values.reduce((sum, value) => sum + value, 0) / values.length) : null;
+            }
+            function statusChip(status) {
+                const safe = normalizeStatus(status);
+                const label = safe === 'cancelled' ? 'Cancelled' : 'Resolved';
+                return '<span class="ar-chip ' + safe + '">' + escapeHtml(label) + '</span>';
+            }
+            function priorityChip(priority) {
+                const safe = normalizePriority(priority);
+                const label = safe.charAt(0).toUpperCase() + safe.slice(1) + ' Priority';
+                return '<span class="ar-pill ' + safe + '">' + escapeHtml(label) + '</span>';
+            }
+            function feedbackPill(row) {
+                const count = Number(row.feedback_count || 0);
+                if (!count) return '<span class="ar-pill empty"><i class="fas fa-inbox"></i> No feedback</span>';
+                const rating = toNumber(row.avg_rating);
+                const label = rating === null ? (count + ' note(s)') : (rating.toFixed(1) + ' / 5');
+                return '<span class="ar-pill feedback"><i class="fas fa-paper-plane"></i> ' + escapeHtml(label) + '</span>';
+            }
+            function renderStars(rating) {
+                const value = toNumber(rating);
+                if (value === null || value < 1) return '<span>No rating</span>';
+                const rounded = Math.max(1, Math.min(5, Math.round(value)));
+                let html = '';
+                for (let i = 1; i <= 5; i += 1) html += '<i class="' + (i <= rounded ? 'fas' : 'far') + ' fa-star"></i>';
+                return html;
             }
 
-            tableBody.innerHTML = rows.map((row) => {
-                return `
+            async function loadRows() {
+                tableBody.innerHTML = '<tr><td colspan="9" class="ar-empty">Loading dispatcher feedback queue...</td></tr>';
+                try {
+                    const response = await fetch('api/incidents_list.php?status=closed', { cache: 'no-store' });
+                    const data = await response.json();
+                    if (!data.ok) throw new Error(data.error || 'Failed to load incidents');
+                    incidentRows = Array.isArray(data.items) ? data.items : [];
+                    renderStats(incidentRows);
+                    renderTable();
+                } catch (error) {
+                    tableBody.innerHTML = '<tr><td colspan="9" class="ar-empty">Failed to load feedback queue.</td></tr>';
+                    tableSubtitle.textContent = 'Unable to load dispatcher feedback at the moment.';
+                }
+            }
+
+            function renderStats(rows) {
+                const withFeedback = rows.filter((row) => Number(row.feedback_count || 0) > 0);
+                const ratings = rows.map((row) => toNumber(row.avg_rating)).filter((value) => value !== null);
+                const responses = rows.map((row) => toNumber(row.response_time_min)).filter((value) => value !== null);
+                qs('#statClosed').textContent = String(rows.length);
+                qs('#statFeedback').textContent = String(withFeedback.length);
+                qs('#statRating').textContent = ratings.length ? formatRating(average(ratings)) : '--';
+                qs('#statResponse').textContent = responses.length ? formatMinutes(average(responses)) : '--';
+            }
+
+            function getFilteredRows() {
+                const searchNeedle = String(searchFilterInput.value || '').trim().toLowerCase();
+                const categoryNeedle = String(categoryFilterSelect.value || '').trim().toLowerCase();
+                const statusNeedle = String(statusFilterSelect.value || '').trim().toLowerCase();
+                return incidentRows.filter((row) => {
+                    const rowStatus = normalizeStatus(row.status);
+                    const feedbackCount = Number(row.feedback_count || 0);
+                    if (categoryNeedle && String(row.type || '').toLowerCase() !== categoryNeedle) return false;
+                    if (statusNeedle === 'resolved' && rowStatus !== 'resolved') return false;
+                    if (statusNeedle === 'cancelled' && rowStatus !== 'cancelled') return false;
+                    if (statusNeedle === 'with_feedback' && feedbackCount < 1) return false;
+                    if (statusNeedle === 'without_feedback' && feedbackCount > 0) return false;
+                    if (searchNeedle) {
+                        const haystack = [row.incident_code, row.type, row.location, row.driver_name, row.plate_number, row.vehicle_name, row.assigned_unit].join(' ').toLowerCase();
+                        if (!haystack.includes(searchNeedle)) return false;
+                    }
+                    return true;
+                });
+            }
+
+            function renderTable() {
+                const rows = getFilteredRows();
+                countBadge.textContent = rows.length + ' incident(s)';
+                tableSubtitle.textContent = rows.length ? 'Closed incidents with dispatcher ratings and notes ready for admin review.' : 'No incidents matched the current filter.';
+                if (!rows.length) {
+                    tableBody.innerHTML = '<tr><td colspan="9" class="ar-empty">No incidents match the current filter.</td></tr>';
+                    return;
+                }
+                tableBody.innerHTML = rows.map((row) => `
                     <tr>
-                        <td class="ar-incident-code">${escapeHtml(row.code)}</td>
-                        <td>${escapeHtml(row.type)}</td>
-                        <td>${escapeHtml(row.location)}</td>
-                        <td>${escapeHtml(row.department)}</td>
-                        <td>${escapeHtml(row.priority)}</td>
+                        <td><div class="ar-ref">${escapeHtml(row.incident_code || 'No reference')}</div><div class="ar-meta">${escapeHtml(row.assigned_unit || 'No assigned unit')}</div></td>
+                        <td>${escapeHtml(row.type || '--')}</td>
+                        <td>${escapeHtml(row.location || '--')}</td>
+                        <td>${priorityChip(row.priority)}</td>
                         <td>${statusChip(row.status)}</td>
-                        <td>${escapeHtml(row.date)}</td>
-                        <td>
-                            <div class="ar-actions">
-                                <button type="button" class="ar-action-btn reviewed" data-action="mark-reviewed" data-id="${row.id}" title="Mark as reviewed" aria-label="Mark as reviewed">
-                                    <i class="fas fa-check-circle"></i>
-                                </button>
-                                <button type="button" class="ar-action-btn resolved" data-action="mark-resolved" data-id="${row.id}" title="Mark as resolved" aria-label="Mark as resolved">
-                                    <i class="fas fa-circle-check"></i>
-                                </button>
-                                <button type="button" class="ar-action-btn remarks" data-action="add-remarks" data-id="${row.id}" title="Add admin remarks" aria-label="Add admin remarks">
-                                    <i class="fas fa-comment-dots"></i>
-                                </button>
-                                <button type="button" class="ar-action-btn escalate" data-action="escalate-maintenance" data-id="${row.id}" title="Escalate to maintenance" aria-label="Escalate to maintenance">
-                                    <i class="fas fa-screwdriver-wrench"></i>
-                                </button>
-                                <button type="button" class="ar-action-btn flag" data-action="flag-serious-issue" data-id="${row.id}" title="Flag serious issue" aria-label="Flag serious issue">
-                                    <i class="fas fa-flag"></i>
-                                </button>
-                            </div>
-                        </td>
+                        <td>${escapeHtml(formatMinutes(row.response_time_min))}</td>
+                        <td>${feedbackPill(row)}</td>
+                        <td>${escapeHtml(formatDate(row.resolved_at || row.cleared_at))}</td>
+                        <td><div class="ar-row-actions"><button type="button" class="ar-action primary" data-action="view-feedback" data-id="${row.id}"><i class="fas fa-paper-plane"></i> View Feedback</button><button type="button" class="ar-action" data-action="view-feedback" data-id="${row.id}"><i class="fas fa-eye"></i> Details</button></div></td>
                     </tr>
-                `;
-            }).join('');
-        }
-
-        function findRowById(idValue) {
-            const id = Number(idValue);
-            return incidentRows.find((row) => row.id === id) || null;
-        }
-
-        function handleActionClick(event) {
-            const button = event.target.closest('.ar-action-btn');
-            if (!button) return;
-
-            const action = button.getAttribute('data-action');
-            const row = findRowById(button.getAttribute('data-id'));
-            if (!row) return;
-
-            if (action === 'mark-reviewed') {
-                row.status = 'reviewed';
-                showToast(row.code + ' marked as reviewed.');
-            } else if (action === 'mark-resolved') {
-                row.status = 'resolved';
-                showToast(row.code + ' marked as resolved.');
-            } else if (action === 'add-remarks') {
-                const remarks = window.prompt('Enter admin remarks for ' + row.code + ':');
-                if (remarks && remarks.trim()) {
-                    showToast('Remarks added to ' + row.code + '.');
-                }
-            } else if (action === 'escalate-maintenance') {
-                showToast(row.code + ' escalated to maintenance.');
-            } else if (action === 'flag-serious-issue') {
-                showToast('Serious issue flagged for ' + row.code + '.');
+                `).join('');
             }
 
-            renderTable();
-        }
+            function setModalLoading() {
+                qs('#adminFeedbackTitle').textContent = 'Incident Feedback Details';
+                qs('#adminModalCode').textContent = '--';
+                qs('#adminModalType').textContent = '--';
+                qs('#adminModalDescription').textContent = '--';
+                qs('#adminModalLocation').textContent = '--';
+                qs('#adminModalClosed').textContent = 'Closed: --';
+                qs('#adminModalDispatch').textContent = '--';
+                qs('#adminModalOnScene').textContent = '--';
+                qs('#adminModalResponse').textContent = '--';
+                qs('#adminModalResolution').textContent = '--';
+                qs('#adminModalUnit').textContent = '--';
+                qs('#adminModalDriver').textContent = '--';
+                qs('#adminModalVehicle').textContent = '--';
+                qs('#adminModalPlate').textContent = '--';
+                qs('#adminModalAvgRating').textContent = '--';
+                qs('#adminModalRatingCount').textContent = '0';
+                qs('#adminModalFeedbackCount').textContent = '0';
+                qs('#adminModalLastUpdated').textContent = '--';
+                qs('#adminModalBadges').innerHTML = '';
+                qs('#adminFeedbackList').innerHTML = '<div class="ar-feedback-empty">Loading dispatcher feedback...</div>';
+            }
 
-        resetFilterBtn.addEventListener('click', () => {
-            searchFilterInput.value = '';
-            categoryFilterSelect.value = '';
-            statusFilterSelect.value = '';
-            renderTable();
-        });
+            function populateModal(incident, feedbackPayload) {
+                qs('#adminFeedbackTitle').textContent = 'Incident ' + (incident.reference_no || incident.id || '');
+                qs('#adminModalCode').textContent = incident.reference_no || ('Incident #' + (incident.id || '--'));
+                qs('#adminModalType').textContent = incident.type || '--';
+                qs('#adminModalDescription').textContent = incident.description || 'No incident description provided.';
+                qs('#adminModalLocation').textContent = incident.location_address || '--';
+                qs('#adminModalClosed').textContent = 'Closed: ' + formatDate(incident.resolved_at || incident.cleared_at || incident.updated_at);
+                qs('#adminModalDispatch').textContent = formatDate(incident.dispatch_assigned_at || incident.assigned_at || incident.created_at);
+                qs('#adminModalOnScene').textContent = formatDate(incident.on_scene_at);
+                qs('#adminModalResponse').textContent = formatMinutes(incident.response_time_min);
+                qs('#adminModalResolution').textContent = formatMinutes(incident.resolution_time_min);
+                qs('#adminModalUnit').textContent = incident.assigned_unit_identifier || 'Unassigned';
+                qs('#adminModalDriver').textContent = incident.driver_name || 'Not recorded';
+                qs('#adminModalVehicle').textContent = incident.vehicle_name || incident.assigned_unit_identifier || 'Not recorded';
+                qs('#adminModalPlate').textContent = incident.plate_number || 'Not recorded';
+                qs('#adminModalAvgRating').textContent = formatRating(incident.avg_rating);
+                qs('#adminModalRatingCount').textContent = String(Number(incident.rating_count || 0));
+                qs('#adminModalFeedbackCount').textContent = String(Number(incident.feedback_count || 0));
+                qs('#adminModalLastUpdated').textContent = formatDate(incident.updated_at || incident.resolved_at || incident.cleared_at);
+                qs('#adminModalBadges').innerHTML = statusChip(incident.status) + ' ' + priorityChip(incident.priority);
+                const notes = feedbackPayload && feedbackPayload.ok && Array.isArray(feedbackPayload.data) ? feedbackPayload.data : [];
+                qs('#adminFeedbackList').innerHTML = notes.length ? notes.map((note) => `
+                    <div class="ar-feedback">
+                        <div class="ar-feedback-head">
+                            <div><strong>${escapeHtml(note.author_name || 'Dispatcher')}</strong><span>${escapeHtml(formatDate(note.created_at))}</span></div>
+                            <div class="ar-stars">${renderStars(note.rating)}</div>
+                        </div>
+                        <p class="ar-note">${escapeHtml(note.note || 'No additional note provided.')}</p>
+                    </div>
+                `).join('') : '<div class="ar-feedback-empty">No dispatcher feedback has been sent for this incident yet.</div>';
+            }
 
-        searchFilterInput.addEventListener('input', renderTable);
-        categoryFilterSelect.addEventListener('change', renderTable);
-        statusFilterSelect.addEventListener('change', renderTable);
-        tableBody.addEventListener('click', handleActionClick);
+            async function openModal(incidentId) {
+                setModalLoading();
+                modalOverlay.hidden = false;
+                modal.hidden = false;
+                try {
+                    const [detailsRes, feedbackRes] = await Promise.all([
+                        fetch('api/incident_details.php?id=' + encodeURIComponent(incidentId), { cache: 'no-store' }),
+                        fetch('api/incident_feedback.php?incident_id=' + encodeURIComponent(incidentId), { cache: 'no-store' })
+                    ]);
+                    const detailsData = await detailsRes.json();
+                    const feedbackData = await feedbackRes.json();
+                    if (!detailsData.ok || !detailsData.incident) throw new Error(detailsData.error || 'Incident details not available');
+                    populateModal(detailsData.incident, feedbackData);
+                } catch (error) {
+                    qs('#adminFeedbackList').innerHTML = '<div class="ar-feedback-empty">' + escapeHtml(error.message || 'Unable to load feedback.') + '</div>';
+                }
+            }
 
-        renderTable();
+            function closeModal() {
+                modalOverlay.hidden = true;
+                modal.hidden = true;
+            }
+
+            tableBody.addEventListener('click', (event) => {
+                const button = event.target.closest('[data-action]');
+                if (!button) return;
+                const incidentId = parseInt(button.getAttribute('data-id') || '', 10);
+                if (Number.isInteger(incidentId)) openModal(incidentId);
+            });
+            resetFilterBtn.addEventListener('click', () => {
+                searchFilterInput.value = '';
+                categoryFilterSelect.value = '';
+                statusFilterSelect.value = '';
+                renderTable();
+            });
+            refreshReviewBtn.addEventListener('click', loadRows);
+            searchFilterInput.addEventListener('input', renderTable);
+            categoryFilterSelect.addEventListener('change', renderTable);
+            statusFilterSelect.addEventListener('change', renderTable);
+            modalOverlay.addEventListener('click', closeModal);
+            modalClose.addEventListener('click', closeModal);
+            document.addEventListener('keydown', (event) => {
+                if (event.key === 'Escape' && !modal.hidden) closeModal();
+            });
+
+            closeModal();
+            loadRows();
+        })();
     </script>
-</body>
-</html>
+ </body>
+ </html>

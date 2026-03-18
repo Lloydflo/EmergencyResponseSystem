@@ -481,21 +481,39 @@ try {
             const created = new Date(i.created_at || Date.now());
             const location = i.location || i.location_address || 'Unknown location';
             const ref = i.incident_code || i.reference_no || '';
+            const type = capitalize(i.type || 'Unknown');
+            const priorityLabel = capitalize(priority);
+            const description = (i.description || '').trim();
+            const shortDescription = description.length > 88 ? `${description.substring(0, 88)}...` : description;
             const id = Number(i.id || 0);
             return `
                 <tr class="priority-${priority}" data-id="${id}" data-ref="${escapeHtml(ref)}">
-                    <td>${ref}</td>
-                    <td>${capitalize(i.type)}</td>
-                    <td>${capitalize(priority)}</td>
-                    <td>${(i.description || '').substring(0, 60)}${(i.description||'').length>60?'...':''}</td>
-                    <td><span class="status-badge ${statusInfo.cls}">${statusInfo.label}</span></td>
-                    <td>${location}</td>
-                    <td>${created.toLocaleString()}</td>
+                    <td class="incident-ref-cell">${escapeHtml(ref || 'N/A')}</td>
+                    <td>${escapeHtml(type)}</td>
                     <td>
-                        <button class="btn-priority btn-${priority}">${capitalize(priority)} Priority</button>
-                        <button class="btn-action"><i class="fas fa-edit"></i></button>
-                        <button class="btn-action"><i class="fas fa-phone"></i></button>
-                        <button class="btn-action"><i class="fas fa-check"></i></button>
+                        <span class="priority-badge priority-${escapeHtml(priority)}">${escapeHtml(priorityLabel)}</span>
+                    </td>
+                    <td class="incident-description-cell" title="${escapeHtml(description || 'No description')}">
+                        ${escapeHtml(shortDescription || 'No description')}
+                    </td>
+                    <td><span class="status-badge ${escapeHtml(statusInfo.cls)}">${escapeHtml(statusInfo.label)}</span></td>
+                    <td class="incident-location-cell" title="${escapeHtml(location)}">${escapeHtml(location)}</td>
+                    <td class="incident-date-cell">${escapeHtml(created.toLocaleString())}</td>
+                    <td>
+                        <div class="table-actions">
+                            <button class="btn-table-action btn-priority priority-${escapeHtml(priority)}" type="button" title="Change priority" aria-label="Change priority for ${escapeHtml(ref || type)}">
+                                <i class="fas fa-flag"></i>
+                            </button>
+                            <button class="btn-table-action" type="button" title="Edit incident" aria-label="Edit incident ${escapeHtml(ref || type)}">
+                                <i class="fas fa-edit"></i>
+                            </button>
+                            <button class="btn-table-action" type="button" title="Call contact" aria-label="Call contact for incident ${escapeHtml(ref || type)}">
+                                <i class="fas fa-phone"></i>
+                            </button>
+                            <button class="btn-table-action" type="button" title="Resolve incident" aria-label="Resolve incident ${escapeHtml(ref || type)}">
+                                <i class="fas fa-check"></i>
+                            </button>
+                        </div>
                     </td>
                 </tr>
             `;
@@ -534,40 +552,8 @@ try {
             if (!filtered.length) {
                 container.innerHTML = '<div class="incident-card empty">No incidents yet. Logged calls will appear here.</div>';
             } else {
-                let table = `<style>
-                    .incident-table-wrapper {
-                        width: 100%;
-                        overflow-x: auto;
-                        max-height: 420px;
-                        border-radius: 10px;
-                        box-shadow: 0 2px 8px rgba(0,0,0,0.04);
-                        background: #fff;
-                        margin-bottom: 1em;
-                    }
-                    .incident-table {
-                        width: 100%;
-                        border-collapse: collapse;
-                        font-size: 1.08rem;
-                        min-width: 900px;
-                    }
-                    .incident-table th, .incident-table td {
-                        padding: 0.85em 1.1em;
-                        border: 1px solid #e0e0e0;
-                        text-align: left;
-                    }
-                    .incident-table th {
-                        background: #f7f7f7;
-                        font-size: 1.13rem;
-                        position: sticky;
-                        top: 0;
-                        z-index: 2;
-                    }
-                    .incident-table tr:nth-child(even) {
-                        background: #fafbfc;
-                    }
-                </style>
-                <div class="incident-table-wrapper">
-                  <table class=\"incident-table\">
+                let table = `<div class="incidents-table-wrapper logged-incidents-table">
+                  <table class="incidents-table">
                     <thead>
                         <tr>
                             <th>Reference No</th>
@@ -765,15 +751,39 @@ try {
                 const style = document.createElement('style');
                 style.textContent = `
                     #incident-update-modal { position:fixed;top:0;left:0;width:100vw;height:100vh;z-index:2000;display:flex;align-items:center;justify-content:center; }
-                    #incident-update-modal .modal-backdrop { position:absolute;top:0;left:0;width:100vw;height:100vh;background:rgba(0,0,0,0.35); }
-                    #incident-update-modal .modal-content { position:relative;z-index:1;background:#fff;padding:2em 1.5em;border-radius:10px;box-shadow:0 8px 32px rgba(0,0,0,0.18);min-width:320px;max-width:95vw; }
-                    #incident-update-modal h3 { margin-top:0; }
-                    #incident-update-modal textarea, #incident-update-modal input, #incident-update-modal select { border:1px solid #ccc;border-radius:6px;padding:0.7em; font-size:1em; }
-                    #incident-update-modal button { padding:0.5em 1.2em;font-size:1em;border-radius:6px;border:none;cursor:pointer; }
-                    #modal-save-btn { background:#007bff;color:#fff; }
-                    #modal-cancel-btn { background:#eee;color:#333; }
-                    #modal-save-btn:hover { background:#0056b3; }
-                    #modal-cancel-btn:hover { background:#ccc; }
+                    #incident-update-modal .modal-backdrop { position:absolute;top:0;left:0;width:100vw;height:100vh;background:rgba(0,0,0,0.45);backdrop-filter:blur(2px); }
+                    #incident-update-modal .modal-content { position:relative;z-index:1;background:#ffffff;padding:2em 1.5em;border-radius:12px;box-shadow:0 12px 36px rgba(0,0,0,0.18);min-width:320px;max-width:95vw;border:1px solid #e5e7eb;color:#0f172a; }
+                    #incident-update-modal h3 { margin-top:0;margin-bottom:1rem;color:#0f172a;border-bottom:1px solid #e5e7eb;padding-bottom:0.65rem; }
+                    #incident-update-modal label { display:block;color:#334155;font-weight:600; }
+                    #incident-update-modal textarea,
+                    #incident-update-modal input,
+                    #incident-update-modal select { border:1px solid #cbd5e1;border-radius:8px;padding:0.7em; font-size:1em;background:#ffffff;color:#0f172a; }
+                    #incident-update-modal textarea::placeholder,
+                    #incident-update-modal input::placeholder { color:#64748b; }
+                    #incident-update-modal textarea:focus,
+                    #incident-update-modal input:focus,
+                    #incident-update-modal select:focus { outline:none;border-color:#60a5fa;box-shadow:0 0 0 3px rgba(96,165,250,0.15); }
+                    #incident-update-modal button { padding:0.6em 1.2em;font-size:1em;border-radius:8px;border:1px solid transparent;cursor:pointer;font-weight:700; }
+                    #modal-save-btn { background:#2563eb;color:#fff;border-color:#2563eb; }
+                    #modal-cancel-btn { background:#f8fafc;color:#111827;border-color:#cbd5e1; }
+                    #modal-save-btn:hover { background:#1d4ed8; }
+                    #modal-cancel-btn:hover { background:#e2e8f0; }
+
+                    html[data-theme="dark"] #incident-update-modal .modal-content { background:#000000 !important;border-color:#334155 !important;color:#f8fafc !important;box-shadow:0 18px 42px rgba(2,6,23,0.55) !important; }
+                    html[data-theme="dark"] #incident-update-modal h3 { color:#f8fafc !important;border-bottom-color:#334155 !important; }
+                    html[data-theme="dark"] #incident-update-modal label { color:#cbd5e1 !important; }
+                    html[data-theme="dark"] #incident-update-modal textarea,
+                    html[data-theme="dark"] #incident-update-modal input,
+                    html[data-theme="dark"] #incident-update-modal select { background:#0f172a !important;color:#f8fafc !important;border-color:#475569 !important; }
+                    html[data-theme="dark"] #incident-update-modal textarea::placeholder,
+                    html[data-theme="dark"] #incident-update-modal input::placeholder { color:#94a3b8 !important; }
+                    html[data-theme="dark"] #incident-update-modal textarea:focus,
+                    html[data-theme="dark"] #incident-update-modal input:focus,
+                    html[data-theme="dark"] #incident-update-modal select:focus { border-color:#60a5fa !important;box-shadow:0 0 0 3px rgba(96,165,250,0.18) !important; }
+                    html[data-theme="dark"] #modal-save-btn { background:#2563eb !important;color:#eff6ff !important;border-color:#2563eb !important; }
+                    html[data-theme="dark"] #modal-save-btn:hover { background:#1d4ed8 !important; }
+                    html[data-theme="dark"] #modal-cancel-btn { background:#111827 !important;color:#f8fafc !important;border-color:#475569 !important; }
+                    html[data-theme="dark"] #modal-cancel-btn:hover { background:#1f2937 !important;color:#ffffff !important;border-color:#64748b !important; }
                 `;
                 document.head.appendChild(style);
             }
@@ -944,18 +954,18 @@ try {
                 modal.id = 'incident-resolved-modal';
                 modal.innerHTML = `
                     <div class="modal-backdrop"></div>
-                    <div class="modal-content" style="min-width:520px;max-width:860px;position:relative;">
-                        <h3 style="margin:0 2.2rem 0 0;">Resolved Incidents</h3>
+                    <div class="modal-content">
+                        <h3 class="resolved-modal-title">Resolved Incidents</h3>
                         <button type="button" id="resolved-close-btn" aria-label="Close" title="Close">&times;</button>
-                        <div id="resolved-controls" class="resolved-controls" style="margin-top:0.8em;display:flex;gap:0.6em;flex-wrap:wrap;align-items:center;">
-                            <input id="resolved-search" type="text" placeholder="Search reference, type, location" style="flex:1;min-width:220px;padding:0.55em;border:1px solid #ddd;border-radius:6px;">
-                            <input id="resolved-date" type="date" style="padding:0.5em;border:1px solid #ddd;border-radius:6px;">
-                            <input id="resolved-month" type="month" style="padding:0.5em;border:1px solid #ddd;border-radius:6px;">
-                            <button id="resolved-clear" title="Clear filters" style="padding:0.5em 0.9em;border:none;border-radius:6px;background:#f3f3f3;color:#333;cursor:pointer;">Clear Filters</button>
+                        <div id="resolved-controls" class="resolved-controls">
+                            <input id="resolved-search" type="text" placeholder="Search reference, type, location">
+                            <input id="resolved-date" type="date">
+                            <input id="resolved-month" type="month">
+                            <button id="resolved-clear" title="Clear filters">Clear Filters</button>
                         </div>
-                        <div id="resolved-list" style="margin-top:0.8em;max-height:320px;overflow:auto;border:1px solid #eee;border-radius:8px;background:#fafafa;"></div>
-                        <div id="resolved-details" style="margin-top:1em;padding:0.75em;border:1px solid #eee;border-radius:8px;background:#fff;">
-                            <div style="color:#666;">Select an incident and click Details to view more info.</div>
+                        <div id="resolved-list"></div>
+                        <div id="resolved-details">
+                            <div class="resolved-helper">Select an incident and click Details to view more info.</div>
                         </div>
                     </div>
                 `;
@@ -964,14 +974,15 @@ try {
                 style.textContent = `
                     #incident-resolved-modal { position:fixed;top:0;left:0;width:100vw;height:100vh;z-index:2002;display:flex;align-items:center;justify-content:center; }
                     #incident-resolved-modal .modal-backdrop { position:absolute;top:0;left:0;width:100vw;height:100vh;background:rgba(0,0,0,0.45); backdrop-filter: blur(2px); }
-                    #incident-resolved-modal .modal-content { position:relative;z-index:1;background:#fff;padding:1.2em 1.2em 1.2em;border-radius:12px;box-shadow:0 12px 36px rgba(0,0,0,0.18);min-width:540px;max-width:960px; border:1px solid #eee; }
-                    #incident-resolved-modal .modal-content h3 { font-size:1.25rem; font-weight:700; color:#1f2d3d; padding-bottom:0.6em; border-bottom: 1px solid #f0f0f0; }
+                    #incident-resolved-modal .modal-content { position:relative;z-index:1;background:#ffffff;padding:1.2em 1.2em 1.2em;border-radius:12px;box-shadow:0 12px 36px rgba(0,0,0,0.18);min-width:540px;max-width:960px; border:1px solid #e5e7eb; color:#0f172a; }
+                    #incident-resolved-modal .modal-content h3 { margin:0 2.2rem 0 0; font-size:1.25rem; font-weight:700; color:#1f2d3d; padding-bottom:0.6em; border-bottom: 1px solid #f0f0f0; }
                     #resolved-close-btn { position:absolute; top:12px; right:14px; width:34px; height:34px; line-height:32px; text-align:center; font-size:22px; border-radius:8px; border:1px solid #e5e5e5; cursor:pointer; background:#fafafa; color:#333; transition: all 0.2s ease; }
                     #resolved-close-btn:hover { background:#efefef; box-shadow:0 2px 8px rgba(0,0,0,0.08); }
                     .resolved-controls { margin-top:0.8em; display:flex; gap:0.6em; flex-wrap:wrap; align-items:center; }
                     .resolved-controls input[type="text"],
                     .resolved-controls input[type="date"],
-                    .resolved-controls input[type="month"] { padding:0.55em 0.7em; border:1px solid #dcdcdc; border-radius:8px; font-size:0.95rem; outline:none; transition: border-color 0.2s ease, box-shadow 0.2s ease; }
+                    .resolved-controls input[type="month"] { padding:0.55em 0.7em; border:1px solid #dcdcdc; border-radius:8px; font-size:0.95rem; outline:none; transition: border-color 0.2s ease, box-shadow 0.2s ease; background:#ffffff; color:#0f172a; }
+                    .resolved-controls input[type="text"] { flex:1; min-width:220px; }
                     .resolved-controls input:focus { border-color:#3399ff; box-shadow:0 0 0 3px rgba(51,153,255,0.12); }
                     #resolved-clear { padding:0.55em 0.9em; border:1px solid #e5e5e5; border-radius:8px; background:#f7f7f7; color:#333; cursor:pointer; font-weight:600; }
                     #resolved-clear:hover { background:#efefef; }
@@ -997,11 +1008,42 @@ try {
                     .details-grid .detail { background:#fafafa; border:1px solid #f0f0f0; border-radius:8px; padding:0.6em 0.7em; }
                     .details-grid .label { font-size:0.85rem; color:#666; margin-bottom:0.2em; }
                     .details-grid .value { color:#222; font-weight:600; }
+                    .resolved-helper { color:#64748b; }
 
                     /* Scrollbar polish */
                     #resolved-list::-webkit-scrollbar { width:10px; height:10px; }
                     #resolved-list::-webkit-scrollbar-thumb { background:#ddd; border-radius:10px; }
                     #resolved-list::-webkit-scrollbar-thumb:hover { background:#ccc; }
+
+                    html[data-theme="dark"] #incident-resolved-modal .modal-content { background:#000000 !important; border-color:#334155 !important; color:#f8fafc !important; box-shadow:0 18px 42px rgba(2,6,23,0.55) !important; }
+                    html[data-theme="dark"] #incident-resolved-modal .modal-content h3,
+                    html[data-theme="dark"] #incident-resolved-modal .details-header .title,
+                    html[data-theme="dark"] #incident-resolved-modal .resolved-main,
+                    html[data-theme="dark"] #incident-resolved-modal .resolved-main .ref,
+                    html[data-theme="dark"] #incident-resolved-modal .details-grid .value { color:#f8fafc !important; border-color:#334155 !important; }
+                    html[data-theme="dark"] #incident-resolved-modal .modal-content h3,
+                    html[data-theme="dark"] #incident-resolved-modal .details-header { border-color:#334155 !important; }
+                    html[data-theme="dark"] #resolved-close-btn { background:#0f172a !important; color:#f8fafc !important; border-color:#334155 !important; }
+                    html[data-theme="dark"] #resolved-close-btn:hover { background:#172033 !important; }
+                    html[data-theme="dark"] .resolved-controls input[type="text"],
+                    html[data-theme="dark"] .resolved-controls input[type="date"],
+                    html[data-theme="dark"] .resolved-controls input[type="month"] { background:#0f172a !important; color:#f8fafc !important; border-color:#475569 !important; }
+                    html[data-theme="dark"] .resolved-controls input::placeholder { color:#94a3b8 !important; }
+                    html[data-theme="dark"] #resolved-clear { background:#111827 !important; color:#f8fafc !important; border-color:#334155 !important; }
+                    html[data-theme="dark"] #resolved-clear:hover { background:#172033 !important; }
+                    html[data-theme="dark"] #resolved-list,
+                    html[data-theme="dark"] #resolved-details { background:#000000 !important; border-color:#334155 !important; color:#f8fafc !important; }
+                    html[data-theme="dark"] .resolved-item { border-bottom-color:#1f2937 !important; }
+                    html[data-theme="dark"] .resolved-item:hover { background:#111827 !important; }
+                    html[data-theme="dark"] .resolved-main .type,
+                    html[data-theme="dark"] .resolved-main .meta,
+                    html[data-theme="dark"] .details-grid .label,
+                    html[data-theme="dark"] .resolved-helper { color:#94a3b8 !important; }
+                    html[data-theme="dark"] .details-grid .detail { background:#0f172a !important; border-color:#1f2937 !important; }
+                    html[data-theme="dark"] .badge-type { background:#172554 !important; color:#dbeafe !important; border-color:#1d4ed8 !important; }
+                    html[data-theme="dark"] .badge-resolved { background:#052e16 !important; color:#bbf7d0 !important; border-color:#166534 !important; }
+                    html[data-theme="dark"] #resolved-list::-webkit-scrollbar-thumb { background:#475569 !important; }
+                    html[data-theme="dark"] #resolved-list::-webkit-scrollbar-thumb:hover { background:#64748b !important; }
                 `;
                 document.head.appendChild(style);
                 // Close handler
@@ -1029,7 +1071,7 @@ try {
             const detailsEl = document.getElementById('resolved-details');
             const controlsEl = document.getElementById('resolved-controls');
             listEl.innerHTML = '<div class="resolved-item"><div>Loading resolved incidents...</div></div>';
-            detailsEl.innerHTML = '<div style="color:#666;">Select an incident and click Details to view more info.</div>';
+            detailsEl.innerHTML = '<div class="resolved-helper">Select an incident and click Details to view more info.</div>';
 
             // Wire filters once
             if (controlsEl && !controlsEl.dataset.wired) {
@@ -1103,13 +1145,13 @@ try {
 
         function loadResolvedDetails(id) {
             const detailsEl = document.getElementById('resolved-details');
-            detailsEl.innerHTML = '<div>Loading details...</div>';
+            detailsEl.innerHTML = '<div class="resolved-helper">Loading details...</div>';
             fetch('api/incident_details.php?id=' + encodeURIComponent(id))
                 .then(r => r.json())
                 .then(data => {
                     const inc = data && data.incident ? data.incident : null;
                     if (!inc) {
-                        detailsEl.innerHTML = '<div>Details not available.</div>';
+                        detailsEl.innerHTML = '<div class="resolved-helper">Details not available.</div>';
                         return;
                     }
                     const safe = v => (v === null || v === undefined) ? '' : String(v).replace(/</g,'&lt;');
@@ -1133,7 +1175,7 @@ try {
                     `;
                 })
                 .catch(() => {
-                    detailsEl.innerHTML = '<div>Network error while loading details.</div>';
+                    detailsEl.innerHTML = '<div class="resolved-helper">Network error while loading details.</div>';
                 });
         }
     </script>

@@ -294,7 +294,7 @@ try {
                             </div>
                         </div>
                         <div class="metric-icon server">
-                            <i class="fas fa-building-shield"></i>
+                            <i class="fas fa-handshake"></i>
                         </div>
                     </div>
                     <div class="metric-actions">
@@ -332,7 +332,7 @@ try {
                             </div>
                         </div>
                         <div class="metric-icon chart">
-                            <i class="fas fa-file-chart-column"></i>
+                            <i class="fas fa-chart-line"></i>
                         </div>
                     </div>
                     <div class="metric-actions">

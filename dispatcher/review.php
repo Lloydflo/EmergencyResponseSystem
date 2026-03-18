@@ -1,9 +1,13 @@
 <?php
 $rootDir = dirname(__DIR__);
 require_once $rootDir . '/includes/auth.php';
-// Require full login (including OTP verification) before loading page
 require_role('dispatcher', 'dispatcher/review.php');
-$pageTitle = 'Emergency Call Center';
+
+$pageTitle = 'Review & Feedback';
+$reviewerName = trim((string)($_SESSION['user_name'] ?? $_SESSION['name'] ?? 'Dispatcher'));
+if ($reviewerName === '') {
+    $reviewerName = 'Dispatcher';
+}
 ?>
 
 <!DOCTYPE html>
@@ -20,144 +24,200 @@ $pageTitle = 'Emergency Call Center';
     <link rel="stylesheet" href="css/admin-header.css">
     <link rel="stylesheet" href="css/sidebar-footer.css">
     <link rel="stylesheet" href="css/cards.css">
-    <link rel="stylesheet" href="css/call.css">
-    <link rel="stylesheet" href="css/dashboard.css">
     <link rel="stylesheet" href="css/review.css">
 </head>
 <body>
     <?php include $rootDir . '/includes/sidebar.php'; ?>
     <?php include $rootDir . '/includes/admin-header.php'; ?>
-    <main class="main-content">
-        <div class="main-container">
-            <div class="page-header">
-                <h2>Review & Feedback</h2>
-                <p class="text-muted">Review resolved incidents and submit feedback to improve response quality.</p>
-            </div>
 
-            <div class="filters">
-                <div class="filter-group">
+    <main class="main-content review-page">
+        <div class="main-container review-dashboard" data-reviewer-name="<?php echo htmlspecialchars($reviewerName, ENT_QUOTES, 'UTF-8'); ?>">
+            <section class="review-stats-grid" id="reviewStatsGrid" aria-live="polite">
+                <article class="review-stat-card">
+                    <span class="stat-label">Closed Incidents</span>
+                    <strong id="statClosedIncidents">0</strong>
+                    <p>Resolved and cancelled incidents in the current result set.</p>
+                </article>
+                <article class="review-stat-card">
+                    <span class="stat-label">Average Response</span>
+                    <strong id="statAverageResponse">--</strong>
+                    <p>Average dispatch-to-scene time based on latest responder data.</p>
+                </article>
+                <article class="review-stat-card">
+                    <span class="stat-label">Average Rating</span>
+                    <strong id="statAverageRating">--</strong>
+                    <p>Average dispatcher feedback rating across rated incidents.</p>
+                </article>
+                <article class="review-stat-card">
+                    <span class="stat-label">Latest Unit Coverage</span>
+                    <strong id="statUnitsTracked">0</strong>
+                    <p>Closed incidents with tracked responder or vehicle assignment.</p>
+                </article>
+            </section>
+
+            <section class="review-toolbar">
+                <div class="toolbar-field">
                     <label for="statusFilter">Status</label>
                     <select id="statusFilter">
-                        <option value="all">All</option>
-                        <option value="resolved">Resolved / Cancelled</option>
-                        <option value="dispatched" selected>Dispatched</option>
-                        <option value="active">Active</option>
+                        <option value="closed" selected>Resolved / Closed</option>
+                        <option value="resolved_only">Resolved Only</option>
+                        <option value="cancelled">Cancelled Only</option>
                     </select>
                 </div>
-                <div class="filter-group">
+                <div class="toolbar-field">
                     <label for="dayFilter">Day</label>
-                    <input type="date" id="dayFilter" />
+                    <input type="date" id="dayFilter">
                 </div>
-                <div class="filter-group search">
+                <div class="toolbar-field toolbar-search">
                     <label for="searchInput">Search</label>
-                    <input type="text" id="searchInput" placeholder="Search by code, type, location..." />
+                    <input type="text" id="searchInput" placeholder="Search reference, type, location, driver, plate...">
                 </div>
-                <div class="filter-group">
+                <div class="toolbar-field">
                     <label for="sortSelect">Sort</label>
-                    <select id="sortSelect" aria-label="Sort incidents">
+                    <select id="sortSelect" aria-label="Sort reviews">
                         <option value="recent" selected>Most Recent</option>
-                        <option value="priority_desc">Priority (High → Low)</option>
-                        <option value="code_asc">Incident Code (A → Z)</option>
+                        <option value="rating_desc">Highest Rated</option>
+                        <option value="response_asc">Fastest Response</option>
+                        <option value="priority_desc">Priority (High to Low)</option>
+                        <option value="code_asc">Reference (A to Z)</option>
                     </select>
                 </div>
-                <div class="filter-actions">
-                    <button id="applyFiltersBtn" class="btn btn-primary"><i class="fa fa-filter"></i> Apply</button>
-                    <button id="clearFiltersBtn" class="btn btn-secondary"><i class="fa fa-undo"></i> Reset</button>
+                <div class="toolbar-actions">
+                    <button id="applyFiltersBtn" class="btn btn-primary" type="button"><i class="fas fa-filter"></i> Apply</button>
+                    <button id="clearFiltersBtn" class="btn btn-secondary" type="button"><i class="fas fa-rotate-left"></i> Reset</button>
                 </div>
-            </div>
+            </section>
 
-            <div id="incidentsContainer" class="card-grid"></div>
+            <section class="review-results-bar">
+                <div>
+                    <h3>Completed Incident Reviews</h3>
+                    <p id="resultsMeta">Loading closed incidents...</p>
+                </div>
+            </section>
+
+            <section id="incidentsContainer" class="review-incident-list" aria-live="polite"></section>
         </div>
     </main>
 
-    <!-- Review Modal -->
-    <div id="reviewModalOverlay" class="modal-overlay" hidden></div>
-    <div id="reviewModal" class="modal" hidden>
-        <div class="modal-header">
-            <h3 id="modalTitle">Review Incident</h3>
-            <button id="modalClose" class="modal-close" aria-label="Close"><i class="fa fa-times"></i></button>
-        </div>
-        <div class="modal-body">
-            <section class="incident-summary">
-                <div class="summary-row">
-                    <div>
-                        <div class="summary-label"><i class="fa fa-hashtag"></i> Incident Code</div>
-                        <div id="summaryCode" class="summary-value">—</div>
-                    </div>
-                    <div>
-                        <div class="summary-label"><i class="fa fa-list"></i> Type</div>
-                        <div id="summaryType" class="summary-value">—</div>
-                    </div>
-                    <div>
-                        <div class="summary-label"><i class="fa fa-signal"></i> Priority</div>
-                        <div id="summaryPriority" class="summary-value">—</div>
-                    </div>
-                    <div>
-                        <div class="summary-label"><i class="fa fa-check-circle"></i> Status</div>
-                        <div id="summaryStatus" class="summary-value">—</div>
-                    </div>
+    <div id="reviewModalOverlay" class="review-modal-overlay" hidden></div>
+    <div id="reviewModal" class="review-modal" hidden role="dialog" aria-modal="true" aria-labelledby="modalTitle">
+        <div class="review-modal-dialog">
+            <div class="review-modal-header">
+                <div>
+                    <p class="modal-eyebrow">Incident Review</p>
+                    <h3 id="modalTitle">Closed Incident Details</h3>
                 </div>
-                <div class="summary-row">
-                    <div>
-                        <div class="summary-label"><i class="fa fa-clock"></i> Dispatch Time</div>
-                        <div id="summaryDispatchTime" class="summary-value">—</div>
-                    </div>
-                    <div>
-                        <div class="summary-label"><i class="fa fa-hourglass-end"></i> Resolve Time</div>
-                        <div id="summaryResolveTime" class="summary-value">—</div>
-                    </div>
-                </div>
-                <div class="summary-row">
-                    <div class="summary-col">
-                        <div class="summary-label"><i class="fa fa-location-dot"></i> Location</div>
-                        <div id="summaryLocation" class="summary-value">—</div>
-                    </div>
-                </div>
-                <div class="summary-row">
-                    <div class="summary-col">
-                        <div class="summary-label"><i class="fa fa-align-left"></i> Description</div>
-                        <div id="summaryDescription" class="summary-value">—</div>
-                    </div>
-                </div>
-            </section>
-
-            <nav class="modal-tabs" role="tablist" aria-label="Incident review sections">
-                <button class="tab-btn active" id="tabFeedback" role="tab" aria-selected="true" aria-controls="panelFeedback">
-                    <i class="fa fa-comments"></i> Feedback
+                <button id="modalClose" class="modal-close" aria-label="Close">
+                    <i class="fas fa-times"></i>
                 </button>
-                <button class="tab-btn" id="tabProof" role="tab" aria-selected="false" aria-controls="panelProof">
-                    <i class="fa fa-camera"></i> Proof
-                </button>
-            </nav>
+            </div>
 
-            <section id="panelFeedback" class="tab-panel" role="tabpanel" aria-labelledby="tabFeedback">
-                <div class="feedback-section">
-                    <h4>Responder Feedback</h4>
-                    <div id="feedbackList" class="feedback-list" aria-live="polite"></div>
-                </div>
-                <div class="form-actions">
-                    <button type="button" id="cancelFeedbackBtn" class="btn btn-secondary">Close</button>
-                    <button type="button" id="confirmReviewBtn" class="btn btn-success"><i class="fa fa-check"></i> Confirm</button>
-                </div>
-            </section>
-
-            <section id="panelProof" class="tab-panel" role="tabpanel" aria-labelledby="tabProof" hidden>
-                <div class="proof-section">
-                    <div class="section-header">
-                        <h4>Resolution Proof</h4>
-                        <p class="text-muted">Below are the images sent by responders as proof of resolution.</p>
-                    </div>
-                    <div class="proof-controls" style="border: 2px dashed #28a745; border-radius: 12px; padding: 1rem; margin-bottom: 1rem;">
-                        <!-- No upload/camera controls, only gallery below -->
-                    </div>
-                    <div class="proof-gallery">
-                        <div class="gallery-header">
-                            <h5>Uploaded Proofs</h5>
+            <div class="review-modal-body">
+                <section class="incident-spotlight">
+                    <div class="spotlight-copy">
+                        <div class="spotlight-badges">
+                            <span id="modalStatusBadge" class="status-chip">Status</span>
+                            <span id="modalPriorityBadge" class="priority-chip">Priority</span>
                         </div>
-                        <div id="proofGallery" class="gallery-grid" aria-live="polite"></div>
+                        <h4 id="summaryCode">--</h4>
+                        <p id="summaryType" class="spotlight-type">--</p>
+                        <p id="summaryDescription" class="spotlight-description">--</p>
                     </div>
-                </div>
-            </section>
+                    <div class="spotlight-location">
+                        <span class="spotlight-label">Location</span>
+                        <strong id="summaryLocation">--</strong>
+                        <span id="summaryClosedTime" class="spotlight-time">Closed: --</span>
+                    </div>
+                </section>
+
+                <section class="incident-meta-grid">
+                    <article class="review-panel">
+                        <h4><i class="fas fa-stopwatch"></i> Response Timeline</h4>
+                        <div class="meta-stack">
+                            <div class="meta-row"><span>Dispatched</span><strong id="summaryDispatchTime">--</strong></div>
+                            <div class="meta-row"><span>On Scene</span><strong id="summaryOnSceneTime">--</strong></div>
+                            <div class="meta-row"><span>Response Time</span><strong id="summaryResponseTime">--</strong></div>
+                            <div class="meta-row"><span>Resolution Time</span><strong id="summaryResolutionTime">--</strong></div>
+                        </div>
+                    </article>
+
+                    <article class="review-panel">
+                        <h4><i class="fas fa-truck-medical"></i> Responder & Vehicle</h4>
+                        <div class="meta-stack">
+                            <div class="meta-row"><span>Assigned Unit</span><strong id="summaryUnit">--</strong></div>
+                            <div class="meta-row"><span>Driver</span><strong id="summaryDriver">--</strong></div>
+                            <div class="meta-row"><span>Vehicle</span><strong id="summaryVehicle">--</strong></div>
+                            <div class="meta-row"><span>Plate Number</span><strong id="summaryPlate">--</strong></div>
+                        </div>
+                    </article>
+
+                    <article class="review-panel">
+                        <h4><i class="fas fa-star-half-stroke"></i> Feedback Snapshot</h4>
+                        <div class="meta-stack">
+                            <div class="meta-row"><span>Average Rating</span><strong id="summaryAverageRating">--</strong></div>
+                            <div class="meta-row"><span>Rated Entries</span><strong id="summaryRatingCount">0</strong></div>
+                            <div class="meta-row"><span>Total Feedback</span><strong id="summaryFeedbackCount">0</strong></div>
+                            <div class="meta-row"><span>Last Update</span><strong id="summaryLastUpdated">--</strong></div>
+                        </div>
+                    </article>
+                </section>
+
+                <section class="review-modal-columns">
+                    <article class="review-panel">
+                        <div class="panel-head">
+                            <div>
+                                <h4><i class="fas fa-pen-to-square"></i> Add Dispatcher Feedback</h4>
+                                <p>Rate the completed response and add notes for future improvement.</p>
+                            </div>
+                        </div>
+
+                        <input type="hidden" id="feedbackIncidentId" value="">
+
+                        <div class="rating-field">
+                            <span class="field-label">Response Rating</span>
+                            <div id="ratingInput" class="rating-input" role="radiogroup" aria-label="Incident rating">
+                                <button type="button" class="rating-star" data-rating="1" aria-label="1 star"><i class="fas fa-star"></i></button>
+                                <button type="button" class="rating-star" data-rating="2" aria-label="2 stars"><i class="fas fa-star"></i></button>
+                                <button type="button" class="rating-star" data-rating="3" aria-label="3 stars"><i class="fas fa-star"></i></button>
+                                <button type="button" class="rating-star" data-rating="4" aria-label="4 stars"><i class="fas fa-star"></i></button>
+                                <button type="button" class="rating-star" data-rating="5" aria-label="5 stars"><i class="fas fa-star"></i></button>
+                            </div>
+                            <span id="ratingHelper" class="rating-helper">Select a rating from 1 to 5.</span>
+                        </div>
+
+                        <div class="feedback-form">
+                            <label class="field-label" for="feedbackNoteInput">Feedback Note</label>
+                            <textarea id="feedbackNoteInput" rows="5" placeholder="Share what went well, what was delayed, or what needs follow-up..."></textarea>
+                        </div>
+
+                        <div class="modal-actions">
+                            <button id="closeFeedbackBtn" type="button" class="btn btn-secondary">Close</button>
+                            <button id="saveFeedbackBtn" type="button" class="btn btn-success"><i class="fas fa-paper-plane"></i> Send to Admin</button>
+                        </div>
+                    </article>
+
+                    <article class="review-panel">
+                        <div class="panel-head">
+                            <div>
+                                <h4><i class="fas fa-comments"></i> Submitted Feedback</h4>
+                                <p>All dispatcher notes and ratings recorded for this incident.</p>
+                            </div>
+                            <div id="feedbackSummary" class="feedback-summary-chips"></div>
+                        </div>
+                        <div id="feedbackList" class="feedback-feed" aria-live="polite"></div>
+                    </article>
+                </section>
+
+                <section class="review-panel proof-panel">
+                    <div class="panel-head">
+                        <div>
+                            <h4><i class="fas fa-camera"></i> Resolution Proof</h4>
+                            <p>Uploaded responder images and proof records for this incident.</p>
+                        </div>
+                    </div>
+                    <div id="proofGallery" class="proof-gallery" aria-live="polite"></div>
+                </section>
+            </div>
         </div>
     </div>
 

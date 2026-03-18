@@ -1,8 +1,10 @@
 <?php
 declare(strict_types=1);
+
 header('Content-Type: application/json');
 
 require_once __DIR__ . '/../includes/db.php';
+
 $pdo = get_db_connection();
 if (!$pdo) {
     http_response_code(500);
@@ -10,68 +12,153 @@ if (!$pdo) {
     exit;
 }
 
-// Optional filters (client-side filtering also supported)
+function ers_table_exists(PDO $pdo, string $table): bool
+{
+    try {
+        $stmt = $pdo->prepare('SHOW TABLES LIKE ?');
+        $stmt->execute([$table]);
+        return (bool)$stmt->fetchColumn();
+    } catch (Throwable $e) {
+        return false;
+    }
+}
+
+function ers_column_exists(PDO $pdo, string $table, string $column): bool
+{
+    try {
+        $stmt = $pdo->prepare("SHOW COLUMNS FROM `{$table}` LIKE ?");
+        $stmt->execute([$column]);
+        return (bool)$stmt->fetchColumn();
+    } catch (Throwable $e) {
+        return false;
+    }
+}
 
 $priority = isset($_GET['priority']) ? trim((string)$_GET['priority']) : '';
 $status = isset($_GET['status']) ? trim((string)$_GET['status']) : '';
 $type = isset($_GET['type']) ? trim((string)$_GET['type']) : '';
 $search = isset($_GET['search']) ? trim((string)$_GET['search']) : '';
-$day = isset($_GET['day']) ? trim((string)$_GET['day']) : ''; // YYYY-MM-DD
-$month = isset($_GET['month']) ? trim((string)$_GET['month']) : ''; // YYYY-MM
+$day = isset($_GET['day']) ? trim((string)$_GET['day']) : '';
+$month = isset($_GET['month']) ? trim((string)$_GET['month']) : '';
 
-$sql = 'SELECT i.id, i.reference_no, i.type, i.priority, i.status, i.location_address, i.description, i.created_at,
-        COALESCE(i.latitude, c.latitude) AS latitude, COALESCE(i.longitude, c.longitude) AS longitude,
-        u.identifier AS unit_identifier, u.unit_type AS unit_type,
-        c.caller_name AS caller_name, c.caller_phone AS caller_phone, i.title AS title,
-        CASE WHEN ld.assigned_at IS NOT NULL AND ld.on_scene_at IS NOT NULL 
-             THEN TIMESTAMPDIFF(MINUTE, ld.assigned_at, ld.on_scene_at) ELSE NULL END AS response_time_min
+$hasAdminResources = ers_table_exists($pdo, 'admin_resources');
+$hasIncidentNotes = ers_table_exists($pdo, 'incident_notes');
+$hasRatingColumn = $hasIncidentNotes && ers_column_exists($pdo, 'incident_notes', 'rating');
+
+$resourceSelect = ', NULL AS vehicle_name, NULL AS driver_name, NULL AS plate_number';
+$resourceJoin = '';
+if ($hasAdminResources) {
+    $resourceSelect = ', ar.name AS vehicle_name, ar.driver_name AS driver_name, ar.plate_number AS plate_number';
+    $resourceJoin = ' LEFT JOIN admin_resources ar ON ar.code = u.identifier ';
+}
+
+$feedbackSelect = ', 0 AS feedback_count, NULL AS avg_rating, 0 AS rating_count';
+if ($hasIncidentNotes && $hasRatingColumn) {
+    $feedbackSelect = ',
+        (SELECT COUNT(*) FROM incident_notes n WHERE n.incident_id = i.id) AS feedback_count,
+        (SELECT ROUND(AVG(n.rating), 1) FROM incident_notes n WHERE n.incident_id = i.id AND n.rating IS NOT NULL) AS avg_rating,
+        (SELECT COUNT(*) FROM incident_notes n WHERE n.incident_id = i.id AND n.rating IS NOT NULL) AS rating_count';
+} elseif ($hasIncidentNotes) {
+    $feedbackSelect = ',
+        (SELECT COUNT(*) FROM incident_notes n WHERE n.incident_id = i.id) AS feedback_count,
+        NULL AS avg_rating,
+        0 AS rating_count';
+}
+
+$sql = "SELECT
+            i.id,
+            i.reference_no,
+            i.type,
+            i.priority,
+            i.status,
+            i.location_address,
+            i.description,
+            i.created_at,
+            i.updated_at,
+            i.resolved_at,
+            COALESCE(i.latitude, c.latitude) AS latitude,
+            COALESCE(i.longitude, c.longitude) AS longitude,
+            i.title,
+            c.caller_name,
+            c.caller_phone,
+            ld.assigned_at,
+            ld.acknowledged_at,
+            ld.enroute_at,
+            ld.on_scene_at,
+            ld.cleared_at,
+            ld.status AS latest_dispatch_status,
+            u.identifier AS unit_identifier,
+            u.unit_type AS unit_type
+            {$resourceSelect}
+            {$feedbackSelect},
+            CASE
+                WHEN ld.assigned_at IS NOT NULL AND ld.on_scene_at IS NOT NULL
+                    THEN TIMESTAMPDIFF(MINUTE, ld.assigned_at, ld.on_scene_at)
+                ELSE NULL
+            END AS response_time_min,
+            CASE
+                WHEN ld.assigned_at IS NOT NULL AND COALESCE(i.resolved_at, ld.cleared_at) IS NOT NULL
+                    THEN TIMESTAMPDIFF(MINUTE, ld.assigned_at, COALESCE(i.resolved_at, ld.cleared_at))
+                ELSE NULL
+            END AS resolution_time_min
         FROM incidents i
         LEFT JOIN (
-            SELECT d1.incident_id, d1.unit_id, d1.assigned_at, d1.on_scene_at
+            SELECT d1.id, d1.incident_id, d1.unit_id, d1.status, d1.assigned_at, d1.acknowledged_at, d1.enroute_at, d1.on_scene_at, d1.cleared_at
             FROM dispatches d1
             INNER JOIN (
-                SELECT incident_id, MAX(assigned_at) AS max_assigned_at
+                SELECT incident_id, MAX(id) AS max_id
                 FROM dispatches
                 GROUP BY incident_id
-            ) t ON t.incident_id = d1.incident_id AND t.max_assigned_at = d1.assigned_at
+            ) latest ON latest.max_id = d1.id
         ) ld ON ld.incident_id = i.id
         LEFT JOIN units u ON u.id = ld.unit_id
-        LEFT JOIN calls c ON c.id = i.reported_by_call_id';
+        {$resourceJoin}
+        LEFT JOIN calls c ON c.id = i.reported_by_call_id";
+
 $where = [];
 $params = [];
-
 
 if ($priority !== '') {
     $where[] = 'i.priority = :priority';
     $params[':priority'] = $priority;
 }
+
 if ($status !== '') {
-    // Map status filter to DB values
     if ($status === 'active') {
         $where[] = "(i.status = 'pending' OR i.status = 'dispatched')";
     } elseif ($status === 'dispatched') {
         $where[] = "i.status = 'dispatched'";
-    } elseif ($status === 'resolved') {
+    } elseif ($status === 'resolved' || $status === 'closed') {
         $where[] = "(i.status = 'resolved' OR i.status = 'cancelled')";
+    } elseif ($status === 'resolved_only') {
+        $where[] = "i.status = 'resolved'";
+    } elseif ($status === 'cancelled') {
+        $where[] = "i.status = 'cancelled'";
     }
 }
+
 if ($type !== '') {
     $where[] = 'i.type = :type';
     $params[':type'] = $type;
 }
+
 if ($search !== '') {
     $where[] = "(
         i.reference_no LIKE :search OR
         i.type LIKE :search OR
         i.location_address LIKE :search OR
-        i.description LIKE :search
-    )";
+        i.description LIKE :search OR
+        u.identifier LIKE :search" .
+        ($hasAdminResources ? " OR ar.name LIKE :search OR ar.driver_name LIKE :search OR ar.plate_number LIKE :search" : '') .
+    ')';
     $params[':search'] = '%' . $search . '%';
 }
+
 if ($day !== '') {
     $where[] = 'DATE(i.created_at) = :day';
     $params[':day'] = $day;
 }
+
 if ($month !== '') {
     $where[] = 'DATE_FORMAT(i.created_at, "%Y-%m") = :month';
     $params[':month'] = $month;
@@ -81,33 +168,49 @@ if ($where) {
     $sql .= ' WHERE ' . implode(' AND ', $where);
 }
 
-$sql .= ' ORDER BY i.created_at DESC LIMIT 200';
+$sql .= ' ORDER BY COALESCE(i.resolved_at, ld.cleared_at, i.updated_at, i.created_at) DESC, i.id DESC LIMIT 200';
 
 try {
     $stmt = $pdo->prepare($sql);
     $stmt->execute($params);
     $rows = $stmt->fetchAll();
-    // Transform to client structure
-    $items = array_map(function ($r) {
+
+    $items = array_map(static function (array $row): array {
         return [
-            'id' => $r['id'],
-            'incident_code' => $r['reference_no'],
-            'type' => $r['type'],
-            'title' => $r['title'],
-            'location' => $r['location_address'],
-            'description' => $r['description'],
-            'priority' => $r['priority'],
-            'status' => $r['status'],
-            'created_at' => $r['created_at'],
-            'latitude' => isset($r['latitude']) && $r['latitude'] !== null ? (float)$r['latitude'] : null,
-            'longitude' => isset($r['longitude']) && $r['longitude'] !== null ? (float)$r['longitude'] : null,
-            'assigned_unit' => $r['unit_identifier'] ?? null,
-            'assigned_unit_type' => $r['unit_type'] ?? null,
-            'caller_name' => $r['caller_name'] ?? null,
-            'caller_phone' => $r['caller_phone'] ?? null,
-            'response_time_min' => isset($r['response_time_min']) ? (int)$r['response_time_min'] : null,
+            'id' => isset($row['id']) ? (int)$row['id'] : 0,
+            'incident_code' => $row['reference_no'] ?? '',
+            'type' => $row['type'] ?? '',
+            'title' => $row['title'] ?? '',
+            'location' => $row['location_address'] ?? '',
+            'description' => $row['description'] ?? '',
+            'priority' => $row['priority'] ?? '',
+            'status' => $row['status'] ?? '',
+            'created_at' => $row['created_at'] ?? null,
+            'updated_at' => $row['updated_at'] ?? null,
+            'resolved_at' => $row['resolved_at'] ?? null,
+            'latitude' => isset($row['latitude']) && $row['latitude'] !== null ? (float)$row['latitude'] : null,
+            'longitude' => isset($row['longitude']) && $row['longitude'] !== null ? (float)$row['longitude'] : null,
+            'assigned_unit' => $row['unit_identifier'] ?? null,
+            'assigned_unit_type' => $row['unit_type'] ?? null,
+            'vehicle_name' => $row['vehicle_name'] ?? null,
+            'driver_name' => $row['driver_name'] ?? null,
+            'plate_number' => $row['plate_number'] ?? null,
+            'caller_name' => $row['caller_name'] ?? null,
+            'caller_phone' => $row['caller_phone'] ?? null,
+            'assigned_at' => $row['assigned_at'] ?? null,
+            'acknowledged_at' => $row['acknowledged_at'] ?? null,
+            'enroute_at' => $row['enroute_at'] ?? null,
+            'on_scene_at' => $row['on_scene_at'] ?? null,
+            'cleared_at' => $row['cleared_at'] ?? null,
+            'latest_dispatch_status' => $row['latest_dispatch_status'] ?? null,
+            'response_time_min' => isset($row['response_time_min']) && $row['response_time_min'] !== null ? (int)$row['response_time_min'] : null,
+            'resolution_time_min' => isset($row['resolution_time_min']) && $row['resolution_time_min'] !== null ? (int)$row['resolution_time_min'] : null,
+            'feedback_count' => isset($row['feedback_count']) ? (int)$row['feedback_count'] : 0,
+            'avg_rating' => isset($row['avg_rating']) && $row['avg_rating'] !== null ? (float)$row['avg_rating'] : null,
+            'rating_count' => isset($row['rating_count']) ? (int)$row['rating_count'] : 0,
         ];
     }, $rows);
+
     echo json_encode(['ok' => true, 'items' => $items]);
 } catch (Throwable $e) {
     http_response_code(500);

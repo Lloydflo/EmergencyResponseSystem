@@ -547,8 +547,13 @@
 
 /* Incidents Table Styles */
 .incidents-table-wrapper {
+    position: relative;
     overflow-x: auto;
+    overflow-y: auto;
     width: 100%;
+    max-height: 32rem;
+    scrollbar-width: thin;
+    scrollbar-color: #94a3b8 #e5e7eb;
 }
 
 .incidents-table {
@@ -593,14 +598,99 @@
 
 .incidents-table tbody tr.priority-high {
     border-left: 4px solid #f44336;
+    background-color: #ffffff !important;
 }
 
 .incidents-table tbody tr.priority-medium {
     border-left: 4px solid #ff9800;
+    background-color: #ffffff !important;
 }
 
 .incidents-table tbody tr.priority-low {
     border-left: 4px solid #4caf50;
+    background-color: #ffffff !important;
+}
+
+.incidents-table tbody tr.priority-high td,
+.incidents-table tbody tr.priority-medium td,
+.incidents-table tbody tr.priority-low td {
+    background-color: transparent;
+    color: #0f172a;
+}
+
+.logged-incidents-table {
+    margin-top: 1rem;
+    border-radius: 14px;
+    border: 1px solid #e5e7eb;
+    box-shadow: 0 10px 30px rgba(15, 23, 42, 0.08);
+    background: #ffffff;
+}
+
+.logged-incidents-table .incidents-table {
+    min-width: 980px;
+}
+
+.logged-incidents-table .incidents-table td {
+    line-height: 1.45;
+}
+
+.incident-ref-cell {
+    font-weight: 700;
+    color: #0f172a;
+    white-space: nowrap;
+}
+
+.incident-description-cell {
+    min-width: 240px;
+    max-width: 340px;
+    white-space: normal;
+    word-break: break-word;
+}
+
+.incident-location-cell {
+    min-width: 220px;
+    max-width: 320px;
+    white-space: normal;
+    word-break: break-word;
+}
+
+.incident-description-cell,
+.incident-location-cell {
+    color: #334155;
+}
+
+.incident-date-cell {
+    white-space: nowrap;
+    color: #334155;
+}
+
+.logged-incidents-table .incidents-table th {
+    background: #ffffff;
+    color: #111827;
+}
+
+.logged-incidents-table .incidents-table td {
+    color: #0f172a;
+}
+
+.logged-incidents-table::-webkit-scrollbar {
+    width: 12px;
+    height: 12px;
+}
+
+.logged-incidents-table::-webkit-scrollbar-track {
+    background: #e5e7eb;
+    border-radius: 999px;
+}
+
+.logged-incidents-table::-webkit-scrollbar-thumb {
+    background: #94a3b8;
+    border-radius: 999px;
+    border: 2px solid #e5e7eb;
+}
+
+.logged-incidents-table::-webkit-scrollbar-thumb:hover {
+    background: #64748b;
 }
 
 .priority-badge {
@@ -631,6 +721,7 @@
     display: flex;
     gap: 0.5rem;
     align-items: center;
+    flex-wrap: wrap;
 }
 
 .btn-table-action {
@@ -648,6 +739,15 @@
     color: #6b7280;
 }
 
+.btn-table-action i {
+    color: currentColor;
+}
+
+.btn-table-action.btn-priority {
+    width: 36px;
+    height: 36px;
+}
+
 .btn-view-resolved{
     padding: 20px 26px;
     gap: 1rem;
@@ -658,6 +758,19 @@
     border-color: #d1d5db;
     color: #1f2937;
     transform: translateY(-1px);
+}
+
+#btn-view-resolved {
+    background: #ffffff;
+    color: #111827;
+    border-color: #d1d5db;
+    font-weight: 700;
+}
+
+#btn-view-resolved:hover {
+    background: #f8fafc;
+    color: #0f172a;
+    border-color: #94a3b8;
 }
 
 .btn-table-action.btn-priority.priority-high {
@@ -722,11 +835,17 @@
     .table-actions {
         flex-direction: column;
         gap: 0.25rem;
+        align-items: stretch;
     }
 
     .btn-table-action {
         width: 28px;
         height: 28px;
         padding: 0.25rem;
+    }
+
+    .btn-table-action.btn-priority {
+        width: 28px;
+        height: 28px;
     }
 }

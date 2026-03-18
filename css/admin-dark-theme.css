@@ -553,3 +553,520 @@
     color: #94a3b8 !important;
     background: #0f172a !important;
 }
+
+/* Dispatcher dark-mode coverage */
+[data-theme="dark"] .dispatch-panel,
+[data-theme="dark"] .call-center-grid .incident-form,
+[data-theme="dark"] .call-center-grid .recent-incidents,
+[data-theme="dark"] .stats-bar .stat-card,
+[data-theme="dark"] .filters-section,
+[data-theme="dark"] .incident-card,
+[data-theme="dark"] .stats-card,
+[data-theme="dark"] .incidents-modal-content,
+[data-theme="dark"] .resource-request-modal .modal-content,
+[data-theme="dark"] .resources-grid .resource-card,
+[data-theme="dark"] .maintenance-schedule,
+[data-theme="dark"] .resource-overview .overview-card,
+[data-theme="dark"] .resource-filters,
+[data-theme="dark"] .gps-grid .map-container,
+[data-theme="dark"] .gps-grid .unit-panel,
+[data-theme="dark"] .tracking-controls,
+[data-theme="dark"] .route-panel,
+[data-theme="dark"] .unit-card,
+[data-theme="dark"] .call-card,
+[data-theme="dark"] .active-call-panel,
+[data-theme="dark"] .logged-incidents-table {
+    background: #111827 !important;
+    color: #e5eef9 !important;
+    border-color: #334155 !important;
+    box-shadow: 0 14px 34px rgba(2, 6, 23, 0.35) !important;
+}
+
+[data-theme="dark"] .resource-tabs,
+[data-theme="dark"] .map-header,
+[data-theme="dark"] .incidents-modal-header,
+[data-theme="dark"] .incidents-modal-footer,
+[data-theme="dark"] .resource-metrics,
+[data-theme="dark"] .resources-hero .hero-aside-card,
+[data-theme="dark"] .dispatcher-resources-page .resource-overview,
+[data-theme="dark"] .dispatcher-resources-page .quick-actions,
+[data-theme="dark"] .resources-panel,
+[data-theme="dark"] .table-shell {
+    background: #0f172a !important;
+    color: #e5eef9 !important;
+    border-color: #334155 !important;
+}
+
+[data-theme="dark"] .resource-tab,
+[data-theme="dark"] .filter-tab,
+[data-theme="dark"] .map-btn,
+[data-theme="dark"] .btn-unit,
+[data-theme="dark"] .btn-resource,
+[data-theme="dark"] .btn-action,
+[data-theme="dark"] .btn-table-action,
+[data-theme="dark"] .btn-action-small {
+    background: #0f172a !important;
+    color: #e5eef9 !important;
+    border-color: #475569 !important;
+}
+
+[data-theme="dark"] .btn-action i,
+[data-theme="dark"] .btn-table-action i,
+[data-theme="dark"] .btn-action-small i {
+    color: currentColor !important;
+}
+
+[data-theme="dark"] .resource-tab:hover,
+[data-theme="dark"] .filter-tab:hover,
+[data-theme="dark"] .map-btn:hover,
+[data-theme="dark"] .btn-unit:hover,
+[data-theme="dark"] .btn-resource:hover,
+[data-theme="dark"] .btn-action:hover,
+[data-theme="dark"] .btn-table-action:hover,
+[data-theme="dark"] .btn-action-small:hover {
+    background: #172033 !important;
+    color: #f8fafc !important;
+    border-color: #64748b !important;
+}
+
+[data-theme="dark"] .resource-tab.active,
+[data-theme="dark"] .filter-tab.active,
+[data-theme="dark"] .map-btn.active,
+[data-theme="dark"] .btn-unit.active,
+[data-theme="dark"] .btn-resource.active {
+    background: #1d4ed8 !important;
+    color: #eff6ff !important;
+    border-color: #2563eb !important;
+}
+
+[data-theme="dark"] .call-center-grid .form-group label,
+[data-theme="dark"] .control-group label,
+[data-theme="dark"] .incident-title,
+[data-theme="dark"] .resource-title,
+[data-theme="dark"] .maintenance-title,
+[data-theme="dark"] .unit-name,
+[data-theme="dark"] .route-title,
+[data-theme="dark"] .dispatch-panel .panel-title,
+[data-theme="dark"] .dispatch-panel .panel-title i,
+[data-theme="dark"] .sidebar-header h3,
+[data-theme="dark"] .incident-id,
+[data-theme="dark"] .incident-type,
+[data-theme="dark"] .stats-content h3,
+[data-theme="dark"] .incidents-modal-header h3,
+[data-theme="dark"] .incidents-table th,
+[data-theme="dark"] .incidents-table td,
+[data-theme="dark"] .resources-kicker,
+[data-theme="dark"] .resources-hero-copy h1,
+[data-theme="dark"] .hero-aside-card strong,
+[data-theme="dark"] .section-heading,
+[data-theme="dark"] .route-number {
+    color: #f8fafc !important;
+}
+
+[data-theme="dark"] .section-title,
+[data-theme="dark"] .detail-value,
+[data-theme="dark"] .metric-value,
+[data-theme="dark"] .overview-value,
+[data-theme="dark"] .call-center-grid .section-title,
+[data-theme="dark"] .call-center-grid .form-group input,
+[data-theme="dark"] .call-center-grid .form-group select,
+[data-theme="dark"] .call-center-grid .form-group textarea,
+[data-theme="dark"] .control-group input,
+[data-theme="dark"] .control-group select,
+[data-theme="dark"] .incidents-table,
+[data-theme="dark"] .incidents-table tbody tr,
+[data-theme="dark"] .resource-details .detail-value,
+[data-theme="dark"] .incident-details .detail-value,
+[data-theme="dark"] .incident-ref-cell,
+[data-theme="dark"] .dispatch-panel .unit-name,
+[data-theme="dark"] .dispatch-panel .call-title {
+    color: #e5eef9 !important;
+}
+
+[data-theme="dark"] .incident-meta,
+[data-theme="dark"] .detail-label,
+[data-theme="dark"] .incident-location,
+[data-theme="dark"] .incident-time,
+[data-theme="dark"] .stats-content p,
+[data-theme="dark"] .stat-label,
+[data-theme="dark"] .stat-extra,
+[data-theme="dark"] .resource-details,
+[data-theme="dark"] .maintenance-details,
+[data-theme="dark"] .unit-details,
+[data-theme="dark"] .route-meta,
+[data-theme="dark"] .incident-description-cell,
+[data-theme="dark"] .incident-location-cell,
+[data-theme="dark"] .incident-date-cell,
+[data-theme="dark"] .resources-hero-copy p,
+[data-theme="dark"] .hero-aside-label,
+[data-theme="dark"] .hero-aside-card p,
+[data-theme="dark"] .section-heading-note,
+[data-theme="dark"] .dispatch-panel .unit-meta,
+[data-theme="dark"] .dispatch-panel .call-meta,
+[data-theme="dark"] .dispatch-panel .map-placeholder {
+    color: #94a3b8 !important;
+}
+
+[data-theme="dark"] .resources-hero {
+    background:
+        radial-gradient(circle at top right, rgba(248, 113, 113, 0.12), transparent 28%),
+        radial-gradient(circle at bottom left, rgba(59, 130, 246, 0.14), transparent 30%),
+        linear-gradient(135deg, #0f172a 0%, #111827 45%, #172554 100%) !important;
+    box-shadow: 0 24px 50px rgba(2, 6, 23, 0.4) !important;
+}
+
+[data-theme="dark"] .resources-hero .hero-aside-card.accent {
+    background: rgba(2, 6, 23, 0.42) !important;
+}
+
+[data-theme="dark"] .dispatcher-resources-page .overview-card {
+    background: linear-gradient(180deg, #111827 0%, #0f172a 100%) !important;
+    border-color: #334155 !important;
+}
+
+[data-theme="dark"] .dispatcher-resources-page .overview-label,
+[data-theme="dark"] .dispatcher-resources-page .filter-group label {
+    color: #cbd5e1 !important;
+}
+
+[data-theme="dark"] .dispatcher-resources-page .overview-value {
+    color: #f8fafc !important;
+}
+
+[data-theme="dark"] .dispatcher-resources-page .filter-group select,
+[data-theme="dark"] .dispatcher-resources-page .filter-group input {
+    background: #111827 !important;
+    color: #e5eef9 !important;
+    border-color: #475569 !important;
+}
+
+[data-theme="dark"] .dispatcher-resources-page .resource-table th,
+[data-theme="dark"] .dispatcher-resources-page .request-table th {
+    background: #111827 !important;
+    color: #cbd5e1 !important;
+    border-color: #334155 !important;
+}
+
+[data-theme="dark"] .dispatcher-resources-page .resource-table td,
+[data-theme="dark"] .dispatcher-resources-page .request-table td {
+    color: #e5eef9 !important;
+    border-color: #334155 !important;
+}
+
+[data-theme="dark"] .dispatcher-resources-page .resource-table tr.resource-row-vehicle {
+    background: rgba(14, 165, 233, 0.08) !important;
+}
+
+[data-theme="dark"] .dispatcher-resources-page .resource-table tr.resource-row-personnel {
+    background: rgba(245, 158, 11, 0.08) !important;
+}
+
+[data-theme="dark"] .dispatcher-resources-page .resource-table tr.resource-row-equipment {
+    background: rgba(16, 185, 129, 0.08) !important;
+}
+
+[data-theme="dark"] .dispatcher-resources-page .resource-table tr:hover,
+[data-theme="dark"] .dispatcher-resources-page .request-table tr:hover {
+    background: #172033 !important;
+}
+
+[data-theme="dark"] .dispatcher-resources-page .resource-action-btn,
+[data-theme="dark"] .dispatcher-resources-page .request-action-btn {
+    background: #111827 !important;
+    color: #e5eef9 !important;
+    border-color: #475569 !important;
+}
+
+[data-theme="dark"] .dispatcher-resources-page .resource-action-btn:hover,
+[data-theme="dark"] .dispatcher-resources-page .request-action-btn:hover {
+    background: #2563eb !important;
+    color: #eff6ff !important;
+    border-color: #2563eb !important;
+}
+
+[data-theme="dark"] .logged-incidents-table {
+    scrollbar-color: #475569 #0f172a;
+}
+
+[data-theme="dark"] .logged-incidents-table::-webkit-scrollbar-track {
+    background: #0f172a;
+}
+
+[data-theme="dark"] .logged-incidents-table::-webkit-scrollbar-thumb {
+    background: #475569;
+    border-color: #0f172a;
+}
+
+[data-theme="dark"] .logged-incidents-table::-webkit-scrollbar-thumb:hover {
+    background: #64748b;
+}
+
+[data-theme="dark"] .call-center-grid .form-group input,
+[data-theme="dark"] .call-center-grid .form-group select,
+[data-theme="dark"] .call-center-grid .form-group textarea,
+[data-theme="dark"] .control-group input,
+[data-theme="dark"] .control-group select {
+    background: #0f172a !important;
+    border-color: #475569 !important;
+}
+
+[data-theme="dark"] .call-center-grid .form-group input:focus,
+[data-theme="dark"] .call-center-grid .form-group select:focus,
+[data-theme="dark"] .call-center-grid .form-group textarea:focus,
+[data-theme="dark"] .control-group input:focus,
+[data-theme="dark"] .control-group select:focus {
+    background: #0f172a !important;
+    border-color: #60a5fa !important;
+    box-shadow: 0 0 0 3px rgba(96, 165, 250, 0.18) !important;
+}
+
+[data-theme="dark"] .call-center-grid .form-group input::placeholder,
+[data-theme="dark"] .call-center-grid .form-group textarea::placeholder,
+[data-theme="dark"] .control-group input::placeholder {
+    color: #94a3b8 !important;
+}
+
+[data-theme="dark"] .incidents-table thead {
+    background: #0f172a !important;
+}
+
+[data-theme="dark"] .incidents-table th,
+[data-theme="dark"] .incidents-table td,
+[data-theme="dark"] .incidents-modal-header,
+[data-theme="dark"] .incidents-modal-footer {
+    border-color: #334155 !important;
+}
+
+[data-theme="dark"] .logged-incidents-table,
+[data-theme="dark"] .logged-incidents-table .incidents-table,
+[data-theme="dark"] .logged-incidents-table .incidents-table tbody tr,
+[data-theme="dark"] .logged-incidents-table .incidents-table tbody tr td {
+    background: #000000 !important;
+}
+
+[data-theme="dark"] .logged-incidents-table .incidents-table thead,
+[data-theme="dark"] .logged-incidents-table .incidents-table th {
+    background: #000000 !important;
+    color: #f8fafc !important;
+}
+
+[data-theme="dark"] .logged-incidents-table .incidents-table tbody tr.priority-high,
+[data-theme="dark"] .logged-incidents-table .incidents-table tbody tr.priority-medium,
+[data-theme="dark"] .logged-incidents-table .incidents-table tbody tr.priority-low {
+    background: #000000 !important;
+}
+
+[data-theme="dark"] .logged-incidents-table .btn-table-action {
+    background: #111827 !important;
+    color: #f8fafc !important;
+    border-color: #475569 !important;
+    box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.03);
+}
+
+[data-theme="dark"] .logged-incidents-table .btn-table-action:hover {
+    background: #1f2937 !important;
+    color: #ffffff !important;
+    border-color: #64748b !important;
+}
+
+[data-theme="dark"] .logged-incidents-table .btn-table-action.btn-priority.priority-high {
+    background: #3f0d12 !important;
+    color: #fecaca !important;
+    border-color: #7f1d1d !important;
+}
+
+[data-theme="dark"] .logged-incidents-table .btn-table-action.btn-priority.priority-medium {
+    background: #3f2a08 !important;
+    color: #fde68a !important;
+    border-color: #b45309 !important;
+}
+
+[data-theme="dark"] .logged-incidents-table .btn-table-action.btn-priority.priority-low {
+    background: #052e16 !important;
+    color: #bbf7d0 !important;
+    border-color: #166534 !important;
+}
+
+[data-theme="dark"] #btn-view-resolved {
+    background: #111827 !important;
+    color: #f8fafc !important;
+    border-color: #475569 !important;
+}
+
+[data-theme="dark"] #btn-view-resolved:hover {
+    background: #1f2937 !important;
+    color: #ffffff !important;
+    border-color: #64748b !important;
+}
+
+[data-theme="dark"] .logged-incidents-table .incidents-table tbody tr:hover,
+[data-theme="dark"] .logged-incidents-table .incidents-table tbody tr:hover td {
+    background: #111827 !important;
+}
+
+[data-theme="dark"] .incidents-table tbody tr:hover,
+[data-theme="dark"] .route-item:hover {
+    background: #172033 !important;
+}
+
+[data-theme="dark"] .route-item {
+    border-color: #334155 !important;
+}
+
+[data-theme="dark"] .route-item.active {
+    background: #172554 !important;
+    border-left-color: #60a5fa !important;
+}
+
+[data-theme="dark"] .gps-grid .map-viewport {
+    background: linear-gradient(45deg, rgba(30, 41, 59, 0.92) 25%, transparent 25%),
+                linear-gradient(-45deg, rgba(30, 41, 59, 0.92) 25%, transparent 25%),
+                linear-gradient(45deg, transparent 75%, rgba(30, 41, 59, 0.92) 75%),
+                linear-gradient(-45deg, transparent 75%, rgba(30, 41, 59, 0.92) 75%) !important;
+    background-color: #0b1120 !important;
+}
+
+[data-theme="dark"] .map-container .leaflet-routing-container {
+    background: rgba(15, 23, 42, 0.96) !important;
+    border-color: #334155 !important;
+    color: #e5eef9 !important;
+}
+
+[data-theme="dark"] .map-container .leaflet-routing-container h2,
+[data-theme="dark"] .map-container .leaflet-routing-container h3,
+[data-theme="dark"] .map-container .leaflet-routing-container p,
+[data-theme="dark"] .map-container .leaflet-routing-container td,
+[data-theme="dark"] .map-container .leaflet-routing-container div,
+[data-theme="dark"] .map-container .leaflet-routing-container span {
+    color: #e5eef9 !important;
+}
+
+[data-theme="dark"] .map-container .leaflet-routing-alt tr:hover {
+    background: rgba(59, 130, 246, 0.18) !important;
+}
+
+[data-theme="dark"] .ai-analysis-card,
+[data-theme="dark"] .ai-analysis-content,
+[data-theme="dark"] .ai-predictive-card,
+[data-theme="dark"] .ai-predictive-content,
+[data-theme="dark"] .ai-recommendations-card,
+[data-theme="dark"] .ai-recommendations-content {
+    color: #e5eef9 !important;
+    border-color: rgba(96, 165, 250, 0.18) !important;
+}
+
+[data-theme="dark"] .ai-analysis-card,
+[data-theme="dark"] .ai-predictive-card,
+[data-theme="dark"] .ai-recommendations-card {
+    background: radial-gradient(circle at top right, rgba(59, 130, 246, 0.16), transparent 44%),
+                linear-gradient(145deg, #111827 0%, #0f172a 100%) !important;
+    box-shadow: 0 16px 36px rgba(2, 6, 23, 0.34) !important;
+}
+
+[data-theme="dark"] .ai-analysis-content,
+[data-theme="dark"] .ai-predictive-content,
+[data-theme="dark"] .ai-recommendations-content {
+    background: linear-gradient(180deg, #0f172a 0%, #111827 100%) !important;
+    box-shadow: inset 0 1px 2px rgba(255, 255, 255, 0.02) !important;
+}
+
+[data-theme="dark"] .ai-analysis-header h2,
+[data-theme="dark"] .ai-predictive-header h2,
+[data-theme="dark"] .ai-recommendations-header h2,
+[data-theme="dark"] .ai-analysis-text,
+[data-theme="dark"] .ai-analysis-text strong,
+[data-theme="dark"] .ai-predictive-text,
+[data-theme="dark"] .ai-predictive-text strong,
+[data-theme="dark"] .ai-recommendation-text,
+[data-theme="dark"] .ai-recommendation-text strong {
+    color: #e5eef9 !important;
+}
+
+[data-theme="dark"] .ai-analysis-text li,
+[data-theme="dark"] .ai-predictive-text li,
+[data-theme="dark"] .ai-recommendation-text li {
+    color: #cbd5e1 !important;
+}
+
+[data-theme="dark"] .status-badge.status-active,
+[data-theme="dark"] .status-badge.status-dispatched,
+[data-theme="dark"] .status-badge.status-resolved,
+[data-theme="dark"] .resource-status.status-available,
+[data-theme="dark"] .resource-status.status-inuse,
+[data-theme="dark"] .resource-status.status-maintenance,
+[data-theme="dark"] .resource-status.status-offline,
+[data-theme="dark"] .unit-status.status-active,
+[data-theme="dark"] .unit-status.status-enroute,
+[data-theme="dark"] .unit-status.status-emergency,
+[data-theme="dark"] .priority-badge.priority-high,
+[data-theme="dark"] .priority-badge.priority-medium,
+[data-theme="dark"] .priority-badge.priority-low,
+[data-theme="dark"] .incident-priority.critical,
+[data-theme="dark"] .incident-priority.high,
+[data-theme="dark"] .incident-priority.medium,
+[data-theme="dark"] .incident-priority.low,
+[data-theme="dark"] .pill.priority-critical,
+[data-theme="dark"] .pill.priority-high,
+[data-theme="dark"] .pill.priority-medium,
+[data-theme="dark"] .pill.priority-low,
+[data-theme="dark"] .pill.status,
+[data-theme="dark"] .pill.status-available,
+[data-theme="dark"] .pill.status-assigned,
+[data-theme="dark"] .pill.status-enroute,
+[data-theme="dark"] .pill.status-other {
+    color: #f8fafc !important;
+}
+
+[data-theme="dark"] .status-badge.status-active,
+[data-theme="dark"] .resource-status.status-inuse,
+[data-theme="dark"] .unit-status.status-enroute,
+[data-theme="dark"] .priority-badge.priority-medium,
+[data-theme="dark"] .incident-priority.high,
+[data-theme="dark"] .pill.priority-medium {
+    background: rgba(245, 158, 11, 0.18) !important;
+    border-color: rgba(245, 158, 11, 0.35) !important;
+}
+
+[data-theme="dark"] .status-badge.status-dispatched,
+[data-theme="dark"] .pill.status-assigned {
+    background: rgba(59, 130, 246, 0.18) !important;
+    border-color: rgba(59, 130, 246, 0.35) !important;
+}
+
+[data-theme="dark"] .status-badge.status-resolved,
+[data-theme="dark"] .resource-status.status-available,
+[data-theme="dark"] .unit-status.status-active,
+[data-theme="dark"] .priority-badge.priority-low,
+[data-theme="dark"] .incident-priority.low,
+[data-theme="dark"] .pill.priority-low,
+[data-theme="dark"] .pill.status-available {
+    background: rgba(34, 197, 94, 0.18) !important;
+    border-color: rgba(34, 197, 94, 0.35) !important;
+}
+
+[data-theme="dark"] .resource-status.status-maintenance,
+[data-theme="dark"] .unit-status.status-emergency,
+[data-theme="dark"] .priority-badge.priority-high,
+[data-theme="dark"] .incident-priority.critical,
+[data-theme="dark"] .pill.priority-critical {
+    background: rgba(239, 68, 68, 0.18) !important;
+    border-color: rgba(239, 68, 68, 0.35) !important;
+}
+
+[data-theme="dark"] .incident-priority.high,
+[data-theme="dark"] .pill.priority-high {
+    background: rgba(249, 115, 22, 0.18) !important;
+    border-color: rgba(249, 115, 22, 0.35) !important;
+}
+
+[data-theme="dark"] .resource-status.status-offline,
+[data-theme="dark"] .pill.status,
+[data-theme="dark"] .pill.status-other {
+    background: rgba(148, 163, 184, 0.16) !important;
+    border-color: rgba(148, 163, 184, 0.35) !important;
+}
+
+[data-theme="dark"] .pill.status-enroute {
+    background: rgba(124, 58, 237, 0.18) !important;
+    border-color: rgba(124, 58, 237, 0.35) !important;
+}
