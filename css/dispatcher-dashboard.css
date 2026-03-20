@@ -1,6 +1,7 @@
 .dispatcher-shell {
     margin-top: 0;
     padding-bottom: 1rem;
+    padding-top: 3rem;
 }
 
 .dispatcher-hero {
@@ -514,6 +515,11 @@
 }
 
 @media (max-width: 720px) {
+    .dispatcher-shell {
+        padding-top: 1rem;
+        padding-bottom: 0.75rem;
+    }
+
     .dispatcher-hero {
         flex-direction: column;
         align-items: flex-start;

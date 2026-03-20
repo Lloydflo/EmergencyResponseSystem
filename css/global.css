@@ -65,6 +65,8 @@ body {
     min-width: 0;
     min-height: 100vh;
     padding: calc(var(--app-header-height-1) + 1rem) 1.5rem 2rem;
+    box-sizing: border-box;
+    overflow-x: clip;
 }
 
 .main-container {
@@ -72,6 +74,10 @@ body {
     max-width: 100%;
     min-width: 0;
     margin: 0 auto;
+}
+
+.main-content > * {
+    min-width: 0;
 }
 
 /* Fluid media to prevent overflow on small screens */
@@ -741,7 +747,21 @@ html {
     .main-content {
         margin-left: 0;
         width: 100%;
-        padding: calc(var(--app-header-height-mobile-1) + 0.85rem) 1rem 1.5rem;
+        min-height: calc(100vh - var(--app-header-height-mobile-1));
+        padding:
+            calc(var(--app-header-height-mobile-1) + 0.9rem)
+            max(1rem, env(safe-area-inset-right))
+            1.5rem
+            max(1rem, env(safe-area-inset-left));
+    }
+
+    .main-container,
+    .main-content > .review-dashboard,
+    .main-content > .dispatcher-shell {
+        width: 100%;
+        max-width: min(100%, 1600px);
+        margin-left: auto;
+        margin-right: auto;
     }
 
     .header-container {
@@ -808,7 +828,12 @@ html {
     }
     
     .main-content {
-        padding: calc(var(--app-header-height-mobile-1) + 0.75rem) 0.75rem 1.25rem;
+        min-height: calc(100vh - var(--app-header-height-mobile-1));
+        padding:
+            calc(var(--app-header-height-mobile-1) + 0.75rem)
+            max(0.75rem, env(safe-area-inset-right))
+            1.25rem
+            max(0.75rem, env(safe-area-inset-left));
     }
     
     .footer-container {
