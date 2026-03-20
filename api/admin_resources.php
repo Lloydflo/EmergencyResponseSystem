@@ -26,6 +26,20 @@ if (!$pdo) {
     exit;
 }
 
+function table_column_exists(PDO $pdo, string $tableName, string $columnName): bool {
+    $stmt = $pdo->prepare("SHOW COLUMNS FROM `$tableName` LIKE ?");
+    $stmt->execute([$columnName]);
+    return (bool)$stmt->fetch(PDO::FETCH_ASSOC);
+}
+
+function add_column_if_missing(PDO $pdo, string $tableName, string $columnName, string $definition): void {
+    if (table_column_exists($pdo, $tableName, $columnName)) {
+        return;
+    }
+
+    $pdo->exec("ALTER TABLE `$tableName` ADD COLUMN `$columnName` $definition");
+}
+
 function ensure_admin_resources_table(PDO $pdo): void {
     $pdo->exec(
         "CREATE TABLE IF NOT EXISTS `admin_resources` (
@@ -49,9 +63,9 @@ function ensure_admin_resources_table(PDO $pdo): void {
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci"
     );
 
-    $pdo->exec("ALTER TABLE `admin_resources` ADD COLUMN IF NOT EXISTS `driver_name` VARCHAR(150) DEFAULT NULL AFTER `location`");
-    $pdo->exec("ALTER TABLE `admin_resources` ADD COLUMN IF NOT EXISTS `plate_number` VARCHAR(50) DEFAULT NULL AFTER `driver_name`");
-    $pdo->exec("ALTER TABLE `admin_resources` ADD COLUMN IF NOT EXISTS `position_title` VARCHAR(150) DEFAULT NULL AFTER `plate_number`");
+    add_column_if_missing($pdo, 'admin_resources', 'driver_name', "VARCHAR(150) DEFAULT NULL AFTER `location`");
+    add_column_if_missing($pdo, 'admin_resources', 'plate_number', "VARCHAR(50) DEFAULT NULL AFTER `driver_name`");
+    add_column_if_missing($pdo, 'admin_resources', 'position_title', "VARCHAR(150) DEFAULT NULL AFTER `plate_number`");
 }
 
 function ensure_admin_resources_archive_table(PDO $pdo): void {
@@ -79,9 +93,9 @@ function ensure_admin_resources_archive_table(PDO $pdo): void {
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci"
     );
 
-    $pdo->exec("ALTER TABLE `admin_resources_archive` ADD COLUMN IF NOT EXISTS `driver_name` VARCHAR(150) DEFAULT NULL AFTER `location`");
-    $pdo->exec("ALTER TABLE `admin_resources_archive` ADD COLUMN IF NOT EXISTS `plate_number` VARCHAR(50) DEFAULT NULL AFTER `driver_name`");
-    $pdo->exec("ALTER TABLE `admin_resources_archive` ADD COLUMN IF NOT EXISTS `position_title` VARCHAR(150) DEFAULT NULL AFTER `plate_number`");
+    add_column_if_missing($pdo, 'admin_resources_archive', 'driver_name', "VARCHAR(150) DEFAULT NULL AFTER `location`");
+    add_column_if_missing($pdo, 'admin_resources_archive', 'plate_number', "VARCHAR(50) DEFAULT NULL AFTER `driver_name`");
+    add_column_if_missing($pdo, 'admin_resources_archive', 'position_title', "VARCHAR(150) DEFAULT NULL AFTER `plate_number`");
 }
 
 function parse_payload(): array {
@@ -473,6 +487,7 @@ try {
     http_response_code(400);
     echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
 } catch (PDOException $e) {
+    error_log('admin_resources PDO error: ' . $e->getMessage());
     if ((string)$e->getCode() === '23000') {
         http_response_code(409);
         echo json_encode(['ok' => false, 'error' => 'Resource ID already exists']);
@@ -481,6 +496,7 @@ try {
     http_response_code(500);
     echo json_encode(['ok' => false, 'error' => 'Database operation failed']);
 } catch (Throwable $e) {
+    error_log('admin_resources unexpected error: ' . $e->getMessage());
     http_response_code(500);
     echo json_encode(['ok' => false, 'error' => 'Unexpected server error']);
 }

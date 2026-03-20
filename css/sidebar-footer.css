@@ -2,6 +2,11 @@
    FULL-WIDTH ADMIN FOOTER (FIXED)
    =============================== */
 
+/* Keep the footer anchored consistently across short and tall pages */
+.main-content {
+    flex: 1 0 auto;
+}
+
 /* Footer background spans full screen */
 .admin-footer {
     width: 100%;
@@ -11,6 +16,7 @@
     background-color: var(--footer-bg-1);
     border-top: 1px solid var(--border-color-1);
     z-index: 990;
+    margin-top: auto;
     padding: 20px 0;
     box-sizing: border-box;
 }
