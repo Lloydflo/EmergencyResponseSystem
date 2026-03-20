@@ -81,20 +81,61 @@ try {
     if ($typeFilter === 'accident') { $typeFilter = 'traffic'; }
     if ($typeFilter === 'crime') { $typeFilter = 'police'; }
 
-    // Totals for period and previous period
-    $sqlIncBase = 'FROM incidents WHERE created_at BETWEEN :s AND :e';
-    $paramsInc = [':s' => $startAt, ':e' => $endAt];
-    if ($typeFilter !== '') { $sqlIncBase .= ' AND type = :type'; $paramsInc[':type'] = $typeFilter; }
-    if ($priorityFilter !== '') { $sqlIncBase .= ' AND priority = :prio'; $paramsInc[':prio'] = $priorityFilter; }
+    // Totals for period and previous period.
+    // Treat an incident as part of the selected window if it was created,
+    // updated, or dispatched during that period so incident charts stay in
+    // sync with the dispatch-based charts.
+    $incidentActivityWhere = "
+        (
+            i.created_at BETWEEN :s AND :e
+            OR (i.updated_at IS NOT NULL AND i.updated_at BETWEEN :us AND :ue)
+            OR EXISTS (
+                SELECT 1
+                FROM dispatches d_window
+                WHERE d_window.incident_id = i.id
+                  AND d_window.assigned_at BETWEEN :ds AND :de
+            )
+        )
+    ";
+    $sqlIncBase = 'FROM incidents i WHERE ' . $incidentActivityWhere;
+    $paramsInc = [
+        ':s' => $startAt,
+        ':e' => $endAt,
+        ':us' => $startAt,
+        ':ue' => $endAt,
+        ':ds' => $startAt,
+        ':de' => $endAt,
+    ];
+    if ($typeFilter !== '') { $sqlIncBase .= ' AND i.type = :type'; $paramsInc[':type'] = $typeFilter; }
+    if ($priorityFilter !== '') { $sqlIncBase .= ' AND i.priority = :prio'; $paramsInc[':prio'] = $priorityFilter; }
 
     $stmt = $pdo->prepare('SELECT COUNT(*) AS c ' . $sqlIncBase);
     $stmt->execute($paramsInc);
     $total_incidents_month = (int)($stmt->fetch()['c'] ?? 0);
 
-    $paramsPrev = [':s' => $prevStartAt, ':e' => $prevEndAt];
-    $sqlPrev = 'FROM incidents WHERE created_at BETWEEN :s AND :e';
-    if ($typeFilter !== '') { $sqlPrev .= ' AND type = :type'; $paramsPrev[':type'] = $typeFilter; }
-    if ($priorityFilter !== '') { $sqlPrev .= ' AND priority = :prio'; $paramsPrev[':prio'] = $priorityFilter; }
+    $incidentActivityWherePrev = "
+        (
+            i.created_at BETWEEN :s AND :e
+            OR (i.updated_at IS NOT NULL AND i.updated_at BETWEEN :us AND :ue)
+            OR EXISTS (
+                SELECT 1
+                FROM dispatches d_window
+                WHERE d_window.incident_id = i.id
+                  AND d_window.assigned_at BETWEEN :ds AND :de
+            )
+        )
+    ";
+    $paramsPrev = [
+        ':s' => $prevStartAt,
+        ':e' => $prevEndAt,
+        ':us' => $prevStartAt,
+        ':ue' => $prevEndAt,
+        ':ds' => $prevStartAt,
+        ':de' => $prevEndAt,
+    ];
+    $sqlPrev = 'FROM incidents i WHERE ' . $incidentActivityWherePrev;
+    if ($typeFilter !== '') { $sqlPrev .= ' AND i.type = :type'; $paramsPrev[':type'] = $typeFilter; }
+    if ($priorityFilter !== '') { $sqlPrev .= ' AND i.priority = :prio'; $paramsPrev[':prio'] = $priorityFilter; }
     $stmt = $pdo->prepare('SELECT COUNT(*) AS c ' . $sqlPrev);
     $stmt->execute($paramsPrev);
     $total_incidents_last_month = (int)($stmt->fetch()['c'] ?? 0);
@@ -118,14 +159,14 @@ try {
         ->fetch()['c'];
     $resource_utilization = $total_units > 0 ? round(($busy_units / $total_units) * 100, 1) : 0.0;
 
-    // Avg response time (minutes): call received / incident created -> dispatch assigned
+    // Avg response time (minutes): dispatch assigned -> on-scene/cleared.
     $avg_response_time = 0.0;
     $sqlResp = '
-        SELECT AVG(TIMESTAMPDIFF(MINUTE, COALESCE(c.received_at, i.created_at), d.assigned_at)) AS avg_min
+        SELECT AVG(TIMESTAMPDIFF(MINUTE, d.assigned_at, COALESCE(d.on_scene_at, d.cleared_at))) AS avg_min
         FROM dispatches d
         INNER JOIN incidents i ON i.id = d.incident_id
-        LEFT JOIN calls c ON c.id = i.reported_by_call_id
         WHERE d.assigned_at BETWEEN :s AND :e
+          AND COALESCE(d.on_scene_at, d.cleared_at) IS NOT NULL
     ';
     $paramsResp = [':s' => $startAt, ':e' => $endAt];
     if ($typeFilter !== '') {
@@ -143,9 +184,26 @@ try {
         $avg_response_time = round((float)$row['avg_min'], 1);
     }
 
-    // Incidents by priority within period
+    // Chart counts should also include incidents that are still open right now,
+    // even if they were created before the selected date range. This keeps the
+    // report workload charts aligned with the dispatcher's active incident view.
+    $chartIncidentWhere = '
+        (
+            ' . $incidentActivityWhere . '
+            OR i.status IN ("pending", "dispatched", "active", "in_progress")
+        )
+    ';
+    $sqlChartBase = 'FROM incidents i WHERE ' . $chartIncidentWhere;
+    if ($typeFilter !== '') {
+        $sqlChartBase .= ' AND i.type = :type';
+    }
+    if ($priorityFilter !== '') {
+        $sqlChartBase .= ' AND i.priority = :prio';
+    }
+
+    // Incidents by priority within the report scope plus current open incidents.
     $priorityCounts = [ 'critical' => 0, 'high' => 0, 'medium' => 0, 'low' => 0 ];
-    $sqlP = 'SELECT priority, COUNT(*) AS c ' . $sqlIncBase . ' GROUP BY priority';
+    $sqlP = 'SELECT i.priority, COUNT(*) AS c ' . $sqlChartBase . ' GROUP BY i.priority';
     $stmt = $pdo->prepare($sqlP);
     $stmt->execute($paramsInc);
     foreach ($stmt->fetchAll() as $r) {
@@ -155,9 +213,10 @@ try {
         }
     }
 
-    // Incidents by type within period (normalize accident->traffic, crime->police)
+    // Incidents by type within the report scope plus current open incidents
+    // (normalize accident->traffic, crime->police).
     $typeCounts = [ 'medical' => 0, 'fire' => 0, 'police' => 0, 'traffic' => 0, 'other' => 0 ];
-    $sqlT = 'SELECT type, COUNT(*) AS c ' . $sqlIncBase . ' GROUP BY type';
+    $sqlT = 'SELECT i.type, COUNT(*) AS c ' . $sqlChartBase . ' GROUP BY i.type';
     $stmt = $pdo->prepare($sqlT);
     $stmt->execute($paramsInc);
     foreach ($stmt->fetchAll() as $r) {

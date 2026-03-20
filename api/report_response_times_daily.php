@@ -55,11 +55,11 @@ try {
 
     $sql = "
         SELECT DATE(d.assigned_at) AS d,
-               ROUND(AVG(TIMESTAMPDIFF(MINUTE, COALESCE(c.received_at, i.created_at), d.assigned_at)), 1) AS avg_min
+               ROUND(AVG(TIMESTAMPDIFF(MINUTE, d.assigned_at, COALESCE(d.on_scene_at, d.cleared_at))), 1) AS avg_min
         FROM dispatches d
         INNER JOIN incidents i ON i.id = d.incident_id
-        LEFT JOIN calls c ON c.id = i.reported_by_call_id
         WHERE d.assigned_at BETWEEN :start AND :end
+          AND COALESCE(d.on_scene_at, d.cleared_at) IS NOT NULL
     ";
     $params = [
         ':start' => $startAt,

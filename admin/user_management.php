@@ -729,7 +729,7 @@ $adminName = $_SESSION['user_name'] ?? 'Admin';
                             <label for="newUserEmail">Email</label>
                             <input id="newUserEmail" type="email" class="um-input" maxlength="120" required>
                         </div>
-                        <div class="um-field">
+                        <div class="um-field" id="newUserPasswordField">
                             <label for="newUserPassword">Password</label>
                             <div class="um-password-wrap">
                                 <input id="newUserPassword" type="password" class="um-input" minlength="8" maxlength="128" placeholder="Minimum 8 characters" required>
@@ -793,6 +793,7 @@ $adminName = $_SESSION['user_name'] ?? 'Admin';
         const addUserForm = document.getElementById('addUserForm');
         const newUserName = document.getElementById('newUserName');
         const newUserEmail = document.getElementById('newUserEmail');
+        const newUserPasswordField = document.getElementById('newUserPasswordField');
         const newUserPassword = document.getElementById('newUserPassword');
         const toggleNewUserPassword = document.getElementById('toggleNewUserPassword');
         const newUserRole = document.getElementById('newUserRole');
@@ -838,12 +839,41 @@ $adminName = $_SESSION['user_name'] ?? 'Admin';
             return Object.values(rules).every(Boolean);
         }
 
+        function isPasswordRequiredForRole(role) {
+            return role !== 'responder';
+        }
+
+        function syncPasswordFieldForRole() {
+            if (!newUserRole || !newUserPassword) return;
+
+            const passwordRequired = isPasswordRequiredForRole(newUserRole.value);
+
+            if (newUserPasswordField) {
+                newUserPasswordField.hidden = !passwordRequired;
+            }
+
+            newUserPassword.required = passwordRequired;
+
+            if (passwordRequired) {
+                newUserPassword.setAttribute('minlength', '8');
+                newUserPassword.placeholder = 'Minimum 8 characters';
+            } else {
+                newUserPassword.removeAttribute('minlength');
+                newUserPassword.value = '';
+                newUserPassword.placeholder = 'Not required for responder';
+                resetPasswordToggle();
+            }
+
+            updatePasswordRequirements(false);
+        }
+
         function updatePasswordRequirements(forceVisible = false) {
             if (!passwordRequirements || !newUserPassword) return;
 
             const passwordValue = newUserPassword.value || '';
             const rules = validatePassword(passwordValue);
-            const shouldShow = forceVisible || passwordValue.length > 0;
+            const passwordRequired = newUserRole ? isPasswordRequiredForRole(newUserRole.value) : true;
+            const shouldShow = passwordRequired && (forceVisible || passwordValue.length > 0);
 
             passwordRequirements.hidden = !shouldShow;
 
@@ -944,6 +974,7 @@ $adminName = $_SESSION['user_name'] ?? 'Admin';
             addUserModal.classList.add('show');
             addUserModal.setAttribute('aria-hidden', 'false');
             document.body.style.overflow = 'hidden';
+            syncPasswordFieldForRole();
             updatePasswordRequirements(false);
             newUserName.focus();
         }
@@ -966,6 +997,7 @@ $adminName = $_SESSION['user_name'] ?? 'Admin';
             document.body.style.overflow = '';
             addUserForm.reset();
             resetPasswordToggle();
+            syncPasswordFieldForRole();
             updatePasswordRequirements(false);
         }
 
@@ -1084,12 +1116,13 @@ $adminName = $_SESSION['user_name'] ?? 'Admin';
                 department: newUserDepartment.value.trim(),
                 status: newUserStatus.value
             };
+            const passwordRequired = isPasswordRequiredForRole(payload.role);
 
-            if (!payload.name || !payload.email || !payload.department || !payload.password) {
+            if (!payload.name || !payload.email || !payload.department || (passwordRequired && !payload.password)) {
                 showToast('Please complete required fields.');
                 return;
             }
-            if (!passwordMeetsRequirements(payload.password)) {
+            if (payload.password && !passwordMeetsRequirements(payload.password)) {
                 updatePasswordRequirements(true);
                 showToast('Password does not meet the requirements.');
                 return;
@@ -1161,6 +1194,11 @@ $adminName = $_SESSION['user_name'] ?? 'Admin';
             newUserPassword.addEventListener('blur', () => {
                 updatePasswordRequirements(false);
             });
+        }
+
+        if (newUserRole) {
+            newUserRole.addEventListener('change', syncPasswordFieldForRole);
+            syncPasswordFieldForRole();
         }
 
         userSearchInput.addEventListener('input', renderRows);

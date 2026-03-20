@@ -6,7 +6,13 @@ require_once __DIR__ . '/../includes/db.php';
 function ers_table_exists(PDO $pdo, string $table): bool
 {
     try {
-        $stmt = $pdo->prepare('SHOW TABLES LIKE ?');
+        $stmt = $pdo->prepare(
+            "SELECT 1
+             FROM INFORMATION_SCHEMA.TABLES
+             WHERE TABLE_SCHEMA = DATABASE()
+               AND TABLE_NAME = ?
+             LIMIT 1"
+        );
         $stmt->execute([$table]);
         return (bool)$stmt->fetchColumn();
     } catch (Throwable $e) {
@@ -17,8 +23,15 @@ function ers_table_exists(PDO $pdo, string $table): bool
 function ers_column_exists(PDO $pdo, string $table, string $column): bool
 {
     try {
-        $stmt = $pdo->prepare("SHOW COLUMNS FROM `{$table}` LIKE ?");
-        $stmt->execute([$column]);
+        $stmt = $pdo->prepare(
+            "SELECT 1
+             FROM INFORMATION_SCHEMA.COLUMNS
+             WHERE TABLE_SCHEMA = DATABASE()
+               AND TABLE_NAME = ?
+               AND COLUMN_NAME = ?
+             LIMIT 1"
+        );
+        $stmt->execute([$table, $column]);
         return (bool)$stmt->fetchColumn();
     } catch (Throwable $e) {
         return false;
@@ -71,15 +84,20 @@ try {
             unset($incident['call_latitude'], $incident['call_longitude']);
 
             $incidentId = (int)$incident['id'];
-            $hasAdminResources = ers_table_exists($pdo, 'admin_resources');
+            $resourceRecordsTable = null;
+            if (ers_table_exists($pdo, 'resource_records')) {
+                $resourceRecordsTable = 'resource_records';
+            } elseif (ers_table_exists($pdo, 'admin_resources')) {
+                $resourceRecordsTable = 'admin_resources';
+            }
             $hasIncidentNotes = ers_table_exists($pdo, 'incident_notes');
             $hasRatingColumn = $hasIncidentNotes && ers_column_exists($pdo, 'incident_notes', 'rating');
 
             $dispatchSelect = 'NULL AS vehicle_name, NULL AS driver_name, NULL AS plate_number';
             $dispatchJoin = '';
-            if ($hasAdminResources) {
+            if ($resourceRecordsTable !== null) {
                 $dispatchSelect = 'ar.name AS vehicle_name, ar.driver_name AS driver_name, ar.plate_number AS plate_number';
-                $dispatchJoin = ' LEFT JOIN admin_resources ar ON ar.code = u.identifier ';
+                $dispatchJoin = ' LEFT JOIN `' . $resourceRecordsTable . '` ar ON ar.code = u.identifier ';
             }
 
             $dispatchStmt = $pdo->prepare(

@@ -112,15 +112,40 @@ try {
         ? round(($breaches / (int)$breachRow['total']) * 100, 1)
         : 0.0;
 
+    // The dispatch load chart should reflect units that are currently carrying
+    // active work, even if those dispatches were assigned before the selected
+    // report window. This keeps the chart aligned with the dispatcher's live
+    // queue of pending/dispatched incidents.
+    $loadWhere = '
+        (
+            d.assigned_at BETWEEN :load_s AND :load_e
+            OR d.status IN ("assigned", "acknowledged", "enroute", "on_scene")
+            OR i_load.status IN ("pending", "dispatched", "active", "in_progress")
+        )
+    ';
+    $loadParams = [
+        ':load_s' => $startAt,
+        ':load_e' => $endAt,
+    ];
+    if ($typeFilter !== '') {
+        $loadWhere .= ' AND i_load.type = :type';
+        $loadParams[':type'] = $typeFilter;
+    }
+    if ($priorityFilter !== '') {
+        $loadWhere .= ' AND i_load.priority = :prio';
+        $loadParams[':prio'] = $priorityFilter;
+    }
+
     $types = ['ambulance' => 0, 'fire' => 0, 'police' => 0, 'rescue' => 0, 'other' => 0];
     $stmt = $pdo->prepare("
         SELECT u.unit_type, COUNT(*) AS c
         FROM dispatches d
-        INNER JOIN units u ON u.id = d.unit_id{$dispatchJoin}
-        WHERE {$dispatchWhere}
+        INNER JOIN units u ON u.id = d.unit_id
+        INNER JOIN incidents i_load ON i_load.id = d.incident_id
+        WHERE {$loadWhere}
         GROUP BY u.unit_type
     ");
-    $stmt->execute($dispatchParams);
+    $stmt->execute($loadParams);
     foreach ($stmt->fetchAll() as $row) {
         $unitType = (string)($row['unit_type'] ?? 'other');
         if (!isset($types[$unitType])) {
@@ -133,13 +158,14 @@ try {
     $stmt = $pdo->prepare("
         SELECT u.identifier, u.unit_type, COUNT(*) AS c
         FROM dispatches d
-        INNER JOIN units u ON u.id = d.unit_id{$dispatchJoin}
-        WHERE {$dispatchWhere}
+        INNER JOIN units u ON u.id = d.unit_id
+        INNER JOIN incidents i_load ON i_load.id = d.incident_id
+        WHERE {$loadWhere}
         GROUP BY u.id, u.identifier, u.unit_type
         ORDER BY c DESC, u.identifier ASC
         LIMIT 10
     ");
-    $stmt->execute($dispatchParams);
+    $stmt->execute($loadParams);
     foreach ($stmt->fetchAll() as $row) {
         $topUnits[] = [
             'identifier' => (string)$row['identifier'],
@@ -157,19 +183,19 @@ try {
     $stmt = $pdo->prepare("
         SELECT
             CASE
-                WHEN i.type = 'medical' THEN 'ambulance'
-                WHEN i.type = 'fire' THEN 'fire'
-                WHEN i.type IN ('police', 'crime') THEN 'police'
-                WHEN i.type IN ('traffic', 'accident') THEN 'traffic'
+                WHEN i_load.type = 'medical' THEN 'ambulance'
+                WHEN i_load.type = 'fire' THEN 'fire'
+                WHEN i_load.type IN ('police', 'crime') THEN 'police'
+                WHEN i_load.type IN ('traffic', 'accident') THEN 'traffic'
                 ELSE 'other'
             END AS service_key,
             COUNT(*) AS c
         FROM dispatches d
-        INNER JOIN incidents i ON i.id = d.incident_id
-        WHERE {$dispatchWhere}
+        INNER JOIN incidents i_load ON i_load.id = d.incident_id
+        WHERE {$loadWhere}
         GROUP BY service_key
     ");
-    $stmt->execute($dispatchParams);
+    $stmt->execute($loadParams);
     foreach ($stmt->fetchAll() as $row) {
         $serviceKey = (string)($row['service_key'] ?? 'other');
         if (isset($serviceSummary[$serviceKey])) {
@@ -187,14 +213,14 @@ try {
         LEFT JOIN (
             SELECT d.unit_id, COUNT(*) AS c
             FROM dispatches d
-            INNER JOIN incidents i ON i.id = d.incident_id
-            WHERE {$dispatchWhere}
+            INNER JOIN incidents i_load ON i_load.id = d.incident_id
+            WHERE {$loadWhere}
             GROUP BY d.unit_id
         ) dispatch_counts ON dispatch_counts.unit_id = u.id
         ORDER BY c DESC, u.identifier ASC
     ";
     $stmt = $pdo->prepare($unitSummarySql);
-    $stmt->execute($dispatchParams);
+    $stmt->execute($loadParams);
     foreach ($stmt->fetchAll() as $row) {
         $allUnits[] = [
             'identifier' => (string)$row['identifier'],

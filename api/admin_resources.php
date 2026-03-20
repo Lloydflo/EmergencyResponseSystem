@@ -6,6 +6,19 @@ header('Content-Type: application/json');
 require_once __DIR__ . '/../includes/db.php';
 require_once __DIR__ . '/../includes/auth.php';
 
+if (!defined('RESOURCE_RECORDS_TABLE')) {
+    define('RESOURCE_RECORDS_TABLE', 'resource_records');
+}
+if (!defined('RESOURCE_RECORDS_ARCHIVE_TABLE')) {
+    define('RESOURCE_RECORDS_ARCHIVE_TABLE', 'resource_records_archive');
+}
+if (!defined('LEGACY_ADMIN_RESOURCES_TABLE')) {
+    define('LEGACY_ADMIN_RESOURCES_TABLE', 'admin_resources');
+}
+if (!defined('LEGACY_ADMIN_RESOURCES_ARCHIVE_TABLE')) {
+    define('LEGACY_ADMIN_RESOURCES_ARCHIVE_TABLE', 'admin_resources_archive');
+}
+
 if (!is_logged_in()) {
     http_response_code(401);
     echo json_encode(['ok' => false, 'error' => 'Unauthorized']);
@@ -27,9 +40,28 @@ if (!$pdo) {
 }
 
 function table_column_exists(PDO $pdo, string $tableName, string $columnName): bool {
-    $stmt = $pdo->prepare("SHOW COLUMNS FROM `$tableName` LIKE ?");
-    $stmt->execute([$columnName]);
-    return (bool)$stmt->fetch(PDO::FETCH_ASSOC);
+    $stmt = $pdo->prepare(
+        "SELECT 1
+         FROM INFORMATION_SCHEMA.COLUMNS
+         WHERE TABLE_SCHEMA = DATABASE()
+           AND TABLE_NAME = ?
+           AND COLUMN_NAME = ?
+         LIMIT 1"
+    );
+    $stmt->execute([$tableName, $columnName]);
+    return (bool)$stmt->fetchColumn();
+}
+
+function table_exists(PDO $pdo, string $tableName): bool {
+    $stmt = $pdo->prepare(
+        "SELECT 1
+         FROM INFORMATION_SCHEMA.TABLES
+         WHERE TABLE_SCHEMA = DATABASE()
+           AND TABLE_NAME = ?
+         LIMIT 1"
+    );
+    $stmt->execute([$tableName]);
+    return (bool)$stmt->fetchColumn();
 }
 
 function add_column_if_missing(PDO $pdo, string $tableName, string $columnName, string $definition): void {
@@ -40,9 +72,9 @@ function add_column_if_missing(PDO $pdo, string $tableName, string $columnName, 
     $pdo->exec("ALTER TABLE `$tableName` ADD COLUMN `$columnName` $definition");
 }
 
-function ensure_admin_resources_table(PDO $pdo): void {
+function ensure_resource_records_table(PDO $pdo): void {
     $pdo->exec(
-        "CREATE TABLE IF NOT EXISTS `admin_resources` (
+        "CREATE TABLE IF NOT EXISTS `" . RESOURCE_RECORDS_TABLE . "` (
             `id` BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
             `code` VARCHAR(50) NOT NULL,
             `name` VARCHAR(200) NOT NULL,
@@ -57,20 +89,20 @@ function ensure_admin_resources_table(PDO $pdo): void {
             `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
             `updated_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
             PRIMARY KEY (`id`),
-            UNIQUE KEY `uk_admin_resources_code` (`code`),
-            KEY `idx_admin_resources_category` (`category`),
-            KEY `idx_admin_resources_status` (`status`)
+            UNIQUE KEY `uk_resource_records_code` (`code`),
+            KEY `idx_resource_records_category` (`category`),
+            KEY `idx_resource_records_status` (`status`)
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci"
     );
 
-    add_column_if_missing($pdo, 'admin_resources', 'driver_name', "VARCHAR(150) DEFAULT NULL AFTER `location`");
-    add_column_if_missing($pdo, 'admin_resources', 'plate_number', "VARCHAR(50) DEFAULT NULL AFTER `driver_name`");
-    add_column_if_missing($pdo, 'admin_resources', 'position_title', "VARCHAR(150) DEFAULT NULL AFTER `plate_number`");
+    add_column_if_missing($pdo, RESOURCE_RECORDS_TABLE, 'driver_name', "VARCHAR(150) DEFAULT NULL AFTER `location`");
+    add_column_if_missing($pdo, RESOURCE_RECORDS_TABLE, 'plate_number', "VARCHAR(50) DEFAULT NULL AFTER `driver_name`");
+    add_column_if_missing($pdo, RESOURCE_RECORDS_TABLE, 'position_title', "VARCHAR(150) DEFAULT NULL AFTER `plate_number`");
 }
 
-function ensure_admin_resources_archive_table(PDO $pdo): void {
+function ensure_resource_records_archive_table(PDO $pdo): void {
     $pdo->exec(
-        "CREATE TABLE IF NOT EXISTS `admin_resources_archive` (
+        "CREATE TABLE IF NOT EXISTS `" . RESOURCE_RECORDS_ARCHIVE_TABLE . "` (
             `id` BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
             `resource_id` BIGINT UNSIGNED NOT NULL,
             `code` VARCHAR(50) NOT NULL,
@@ -87,15 +119,53 @@ function ensure_admin_resources_archive_table(PDO $pdo): void {
             `updated_at` DATETIME NOT NULL,
             `deleted_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
             PRIMARY KEY (`id`),
-            KEY `idx_admin_resources_archive_resource_id` (`resource_id`),
-            KEY `idx_admin_resources_archive_deleted_at` (`deleted_at`),
-            KEY `idx_admin_resources_archive_category` (`category`)
+            KEY `idx_resource_records_archive_resource_id` (`resource_id`),
+            KEY `idx_resource_records_archive_deleted_at` (`deleted_at`),
+            KEY `idx_resource_records_archive_category` (`category`)
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci"
     );
 
-    add_column_if_missing($pdo, 'admin_resources_archive', 'driver_name', "VARCHAR(150) DEFAULT NULL AFTER `location`");
-    add_column_if_missing($pdo, 'admin_resources_archive', 'plate_number', "VARCHAR(50) DEFAULT NULL AFTER `driver_name`");
-    add_column_if_missing($pdo, 'admin_resources_archive', 'position_title', "VARCHAR(150) DEFAULT NULL AFTER `plate_number`");
+    add_column_if_missing($pdo, RESOURCE_RECORDS_ARCHIVE_TABLE, 'driver_name', "VARCHAR(150) DEFAULT NULL AFTER `location`");
+    add_column_if_missing($pdo, RESOURCE_RECORDS_ARCHIVE_TABLE, 'plate_number', "VARCHAR(50) DEFAULT NULL AFTER `driver_name`");
+    add_column_if_missing($pdo, RESOURCE_RECORDS_ARCHIVE_TABLE, 'position_title', "VARCHAR(150) DEFAULT NULL AFTER `plate_number`");
+}
+
+function migrate_legacy_admin_resource_tables(PDO $pdo): void {
+    if (!table_exists($pdo, LEGACY_ADMIN_RESOURCES_TABLE) || !table_exists($pdo, RESOURCE_RECORDS_TABLE)) {
+        return;
+    }
+
+    $newCount = (int)$pdo->query("SELECT COUNT(*) AS c FROM `" . RESOURCE_RECORDS_TABLE . "`")->fetch()['c'];
+    $legacyCount = (int)$pdo->query("SELECT COUNT(*) AS c FROM `" . LEGACY_ADMIN_RESOURCES_TABLE . "`")->fetch()['c'];
+
+    if ($newCount === 0 && $legacyCount > 0) {
+        $pdo->exec(
+            "INSERT INTO `" . RESOURCE_RECORDS_TABLE . "` (
+                id, code, name, category, status, location, driver_name, plate_number, position_title, assignment, notes, created_at, updated_at
+             )
+             SELECT
+                id, code, name, category, status, location, driver_name, plate_number, position_title, assignment, notes, created_at, updated_at
+             FROM `" . LEGACY_ADMIN_RESOURCES_TABLE . "`"
+        );
+    }
+
+    if (!table_exists($pdo, LEGACY_ADMIN_RESOURCES_ARCHIVE_TABLE) || !table_exists($pdo, RESOURCE_RECORDS_ARCHIVE_TABLE)) {
+        return;
+    }
+
+    $newArchiveCount = (int)$pdo->query("SELECT COUNT(*) AS c FROM `" . RESOURCE_RECORDS_ARCHIVE_TABLE . "`")->fetch()['c'];
+    $legacyArchiveCount = (int)$pdo->query("SELECT COUNT(*) AS c FROM `" . LEGACY_ADMIN_RESOURCES_ARCHIVE_TABLE . "`")->fetch()['c'];
+
+    if ($newArchiveCount === 0 && $legacyArchiveCount > 0) {
+        $pdo->exec(
+            "INSERT INTO `" . RESOURCE_RECORDS_ARCHIVE_TABLE . "` (
+                id, resource_id, code, name, category, status, location, driver_name, plate_number, position_title, assignment, notes, created_at, updated_at, deleted_at
+             )
+             SELECT
+                id, resource_id, code, name, category, status, location, driver_name, plate_number, position_title, assignment, notes, created_at, updated_at, deleted_at
+             FROM `" . LEGACY_ADMIN_RESOURCES_ARCHIVE_TABLE . "`"
+        );
+    }
 }
 
 function parse_payload(): array {
@@ -210,7 +280,7 @@ function archive_row_to_item(array $row): array {
 function fetch_item(PDO $pdo, int $id): ?array {
     $stmt = $pdo->prepare(
         "SELECT id, code, name, category, status, location, driver_name, plate_number, position_title, assignment, notes, updated_at
-         FROM admin_resources
+         FROM `" . RESOURCE_RECORDS_TABLE . "`
          WHERE id = ?
          LIMIT 1"
     );
@@ -222,7 +292,7 @@ function fetch_item(PDO $pdo, int $id): ?array {
 function fetch_active_resource_row(PDO $pdo, int $id): ?array {
     $stmt = $pdo->prepare(
         "SELECT id, code, name, category, status, location, driver_name, plate_number, position_title, assignment, notes, created_at, updated_at
-         FROM admin_resources
+         FROM `" . RESOURCE_RECORDS_TABLE . "`
          WHERE id = ?
          LIMIT 1"
     );
@@ -234,7 +304,7 @@ function fetch_active_resource_row(PDO $pdo, int $id): ?array {
 function fetch_archived_resource_row(PDO $pdo, int $archiveId): ?array {
     $stmt = $pdo->prepare(
         "SELECT id, resource_id, code, name, category, status, location, driver_name, plate_number, position_title, assignment, notes, created_at, updated_at, deleted_at
-         FROM admin_resources_archive
+         FROM `" . RESOURCE_RECORDS_ARCHIVE_TABLE . "`
          WHERE id = ?
          LIMIT 1"
     );
@@ -245,15 +315,16 @@ function fetch_archived_resource_row(PDO $pdo, int $archiveId): ?array {
 
 function purge_expired_archived_resources(PDO $pdo): void {
     $stmt = $pdo->prepare(
-        "DELETE FROM admin_resources_archive
+        "DELETE FROM `" . RESOURCE_RECORDS_ARCHIVE_TABLE . "`
          WHERE deleted_at <= DATE_SUB(NOW(), INTERVAL 60 DAY)"
     );
     $stmt->execute();
 }
 
 try {
-    ensure_admin_resources_table($pdo);
-    ensure_admin_resources_archive_table($pdo);
+    ensure_resource_records_table($pdo);
+    ensure_resource_records_archive_table($pdo);
+    migrate_legacy_admin_resource_tables($pdo);
     purge_expired_archived_resources($pdo);
 
     $method = strtoupper((string)($_SERVER['REQUEST_METHOD'] ?? 'GET'));
@@ -264,7 +335,7 @@ try {
                 "SELECT id, resource_id, code, name, category, status, location, assignment, notes, updated_at, deleted_at,
                         driver_name, plate_number, position_title,
                         DATE_ADD(deleted_at, INTERVAL 60 DAY) AS purge_at
-                 FROM admin_resources_archive
+                 FROM `" . RESOURCE_RECORDS_ARCHIVE_TABLE . "`
                  ORDER BY deleted_at DESC, id DESC"
             );
             $rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
@@ -273,7 +344,7 @@ try {
             $stmt = $pdo->query(
                 "SELECT id, code, name, category, status, location, assignment, notes, updated_at
                  , driver_name, plate_number, position_title
-                 FROM admin_resources
+                 FROM `" . RESOURCE_RECORDS_TABLE . "`
                  ORDER BY updated_at DESC, id DESC"
             );
             $rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
@@ -304,7 +375,7 @@ try {
 
             $codeCheckStmt = $pdo->prepare(
                 "SELECT id
-                 FROM admin_resources
+                 FROM `" . RESOURCE_RECORDS_TABLE . "`
                  WHERE code = ?
                  LIMIT 1"
             );
@@ -318,7 +389,7 @@ try {
             $pdo->beginTransaction();
             try {
                 $restoreStmt = $pdo->prepare(
-                    "INSERT INTO admin_resources (code, name, category, status, location, driver_name, plate_number, position_title, assignment, notes, created_at, updated_at)
+                    "INSERT INTO `" . RESOURCE_RECORDS_TABLE . "` (code, name, category, status, location, driver_name, plate_number, position_title, assignment, notes, created_at, updated_at)
                      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())"
                 );
                 $restoreStmt->execute([
@@ -336,7 +407,7 @@ try {
                 ]);
                 $restoredId = (int)$pdo->lastInsertId();
 
-                $deleteArchiveStmt = $pdo->prepare("DELETE FROM admin_resources_archive WHERE id = ?");
+                $deleteArchiveStmt = $pdo->prepare("DELETE FROM `" . RESOURCE_RECORDS_ARCHIVE_TABLE . "` WHERE id = ?");
                 $deleteArchiveStmt->execute([$archiveId]);
                 if ($deleteArchiveStmt->rowCount() === 0) {
                     throw new RuntimeException('Archived resource not found during restore');
@@ -361,7 +432,7 @@ try {
 
         $payload = normalize_payload($rawPayload);
         $stmt = $pdo->prepare(
-            "INSERT INTO admin_resources (code, name, category, status, location, driver_name, plate_number, position_title, assignment, notes, created_at, updated_at)
+            "INSERT INTO `" . RESOURCE_RECORDS_TABLE . "` (code, name, category, status, location, driver_name, plate_number, position_title, assignment, notes, created_at, updated_at)
              VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW())"
         );
         $stmt->execute([
@@ -393,7 +464,7 @@ try {
 
         $payload = normalize_payload($rawPayload);
         $stmt = $pdo->prepare(
-            "UPDATE admin_resources
+            "UPDATE `" . RESOURCE_RECORDS_TABLE . "`
              SET code = ?, name = ?, category = ?, status = ?, location = ?, driver_name = ?, plate_number = ?, position_title = ?, assignment = ?, notes = ?, updated_at = NOW()
              WHERE id = ?"
         );
@@ -439,7 +510,7 @@ try {
         $pdo->beginTransaction();
         try {
             $archiveStmt = $pdo->prepare(
-                "INSERT INTO admin_resources_archive (
+                "INSERT INTO `" . RESOURCE_RECORDS_ARCHIVE_TABLE . "` (
                     resource_id, code, name, category, status, location, driver_name, plate_number, position_title, assignment, notes, created_at, updated_at, deleted_at
                  ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())"
             );
@@ -460,7 +531,7 @@ try {
             ]);
             $archiveId = (int)$pdo->lastInsertId();
 
-            $deleteStmt = $pdo->prepare("DELETE FROM admin_resources WHERE id = ?");
+            $deleteStmt = $pdo->prepare("DELETE FROM `" . RESOURCE_RECORDS_TABLE . "` WHERE id = ?");
             $deleteStmt->execute([$id]);
             if ($deleteStmt->rowCount() === 0) {
                 throw new RuntimeException('Resource not found during delete');
@@ -487,7 +558,7 @@ try {
     http_response_code(400);
     echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
 } catch (PDOException $e) {
-    error_log('admin_resources PDO error: ' . $e->getMessage());
+    error_log('resource_records PDO error: ' . $e->getMessage());
     if ((string)$e->getCode() === '23000') {
         http_response_code(409);
         echo json_encode(['ok' => false, 'error' => 'Resource ID already exists']);
@@ -496,7 +567,7 @@ try {
     http_response_code(500);
     echo json_encode(['ok' => false, 'error' => 'Database operation failed']);
 } catch (Throwable $e) {
-    error_log('admin_resources unexpected error: ' . $e->getMessage());
+    error_log('resource_records unexpected error: ' . $e->getMessage());
     http_response_code(500);
     echo json_encode(['ok' => false, 'error' => 'Unexpected server error']);
 }

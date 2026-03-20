@@ -71,38 +71,61 @@ try {
     <div class="main-content">
         <div class="main-container">
 
-            <div style="height: 3.5rem;"></div>
+            <section class="incident-hero">
+                <div class="incident-hero-main">
+                    <div class="incident-kicker">Emergency Response Incident Console</div>
+                    <h1 class="incident-hero-title">Incident Priority Management</h1>
+                    <p class="incident-hero-text">
+                        Review active cases, adjust urgency levels, and keep dispatch decisions aligned with real-time field conditions.
+                    </p>
 
-            <!-- Statistics Cards -->
-            <div class="stats-cards">
-                <div class="stats-card">
+                    <div class="incident-hero-chips">
+                        <span class="incident-chip incident-chip-live"><span class="incident-chip-dot"></span> Priority Queue Live</span>
+                        <span class="incident-chip">Dispatcher Review Ready</span>
+                        <span class="incident-chip">AI Analysis Enabled</span>
+                    </div>
+                </div>
+
+                <div class="incident-hero-side">
+                    <div class="incident-focus-card">
+                        <div class="incident-focus-label">Current Escalation Focus</div>
+                        <div class="incident-focus-value"><?php echo htmlspecialchars($aiIncidentData['type']); ?></div>
+                        <div class="incident-focus-meta"><?php echo htmlspecialchars($aiIncidentData['location']); ?></div>
+                        <div class="incident-focus-severity">Priority: <?php echo htmlspecialchars($aiIncidentData['severity']); ?></div>
+                        <div class="incident-focus-desc"><?php echo htmlspecialchars($aiIncidentData['description']); ?></div>
+                    </div>
+                </div>
+            </section>
+
+            <section class="stats-cards">
+                <div class="stats-card priority-high-card">
                     <div class="stats-icon high">
                         <i class="fas fa-fire"></i>
                     </div>
                     <div class="stats-content">
-                        <h3>12</h3>
+                        <h3>0</h3>
                         <p>High Priority Incidents</p>
                     </div>
                 </div>
-                <div class="stats-card">
+                <div class="stats-card priority-medium-card">
                     <div class="stats-icon medium">
                         <i class="fas fa-ambulance"></i>
                     </div>
                     <div class="stats-content">
-                        <h3>8</h3>
+                        <h3>0</h3>
                         <p>Medium Priority Incidents</p>
                     </div>
                 </div>
-                <div class="stats-card">
+                <div class="stats-card priority-low-card">
                     <div class="stats-icon low">
                         <i class="fas fa-info-circle"></i>
                     </div>
                     <div class="stats-content">
-                        <h3>15</h3>
+                        <h3>0</h3>
                         <p>Low Priority Incidents</p>
                     </div>
                 </div>
-                <div class="stats-card">
+                <div class="stats-card resolved-card">
                     <div class="stats-icon resolved">
                         <i class="fas fa-check-circle"></i>
                     </div>
@@ -111,14 +134,21 @@ try {
                         <p>Resolved Incidents</p>
                     </div>
                 </div>
-            </div>
+            </section>
 
-            <!-- Filters Section -->
-            <div class="filters-section">
-                <h2 class="section-title" style="font-size: 1.2rem; margin-bottom: 1rem;">
-                    <i class="fas fa-filter"></i>
-                    Filter Incidents
-                </h2>
+            <section class="filters-section">
+                <div class="section-header filters-header">
+                    <div>
+                        <div class="section-eyebrow">Incident Filters</div>
+                        <h2 class="section-title">
+                            <i class="fas fa-filter"></i>
+                            Priority and Response Filters
+                        </h2>
+                    </div>
+                    <div class="filters-support-text">
+                        Narrow the queue by urgency, status, incident type, or free-text search.
+                    </div>
+                </div>
                 <div class="filters-grid">
                     <div class="filter-group">
                         <label for="priority-filter">Priority Level</label>
@@ -148,54 +178,58 @@ try {
                             <option value="traffic">Traffic Accident</option>
                         </select>
                     </div>
-                    <div class="filter-group">
+                    <div class="filter-group filter-group-search">
                         <label for="search">Search</label>
-                        <input type="text" id="search" placeholder="Search incidents...">
+                        <input type="text" id="search" placeholder="Search reference, type, location, description...">
                     </div>
                 </div>
-            </div>
+            </section>
 
-            <!-- Logged Incidents (Dynamic) -->
-            <div class="priority-section" style="margin-top: 1.5rem;">
-                <div class="section-header" style="display:flex;align-items:center;justify-content:space-between;gap:1rem;">
-                    <h2 class="section-title" style="font-size: 1.2rem; margin:0;">
-                        <i class="fas fa-list"></i>
-                        Logged Incidents
-                    </h2>
-                    <button id="btn-view-resolved" class="btn-action" title="Show all resolved incidents">View Resolved</button>
-                </div>
-                <div id="incident-list-dynamic"></div>
-                <!-- Table will be rendered here by JS -->
-            </div>
-
-            <!-- AI-Powered Incident Analysis -->
-            <div class="ai-analysis-section">
-                <div class="ai-analysis-card">
-                    <div class="ai-analysis-header">
-                        <h2><i class="fas fa-brain"></i> AI Incident Analysis</h2>
-                        <span class="ai-badge"><i class="fas fa-robot"></i> Powered by Gemini AI</span>
+            <div class="incident-console-grid">
+                <section class="priority-section">
+                    <div class="section-header incident-log-header">
+                        <div>
+                            <div class="section-eyebrow">Incident Queue</div>
+                            <h2 class="section-title">
+                                <i class="fas fa-list"></i>
+                                Logged Incidents
+                            </h2>
+                        </div>
+                        <button id="btn-view-resolved" class="btn-action" title="Show all resolved incidents">View Resolved</button>
                     </div>
-                    <div class="ai-analysis-content" id="ai-analysis-content">
-                        <?php
-                        include $rootDir . '/includes/gemini_helper.php';
-                        $analysis = analyzeIncident($aiIncidentData);
-                        if ($analysis) {
-                            echo '<div class="ai-analysis-text">' . nl2br(htmlspecialchars($analysis)) . '</div>';
-                        } else {
-                            $aiError = function_exists('getGeminiLastError') ? trim((string) getGeminiLastError()) : '';
-                            if ($aiError === '') {
-                                $aiError = 'Unable to generate AI analysis at this time.';
+                    <div class="incident-list-panel">
+                        <div id="incident-list-dynamic"></div>
+                    </div>
+                </section>
+
+                <aside class="ai-analysis-section">
+                    <div class="ai-analysis-card">
+                        <div class="ai-analysis-header">
+                            <h2><i class="fas fa-brain"></i> AI Incident Analysis</h2>
+                            <span class="ai-badge"><i class="fas fa-robot"></i> Powered by Gemini AI</span>
+                        </div>
+                        <div class="ai-analysis-content" id="ai-analysis-content">
+                            <?php
+                            include $rootDir . '/includes/gemini_helper.php';
+                            $analysis = analyzeIncident($aiIncidentData);
+                            if ($analysis) {
+                                echo '<div class="ai-analysis-text">' . nl2br(htmlspecialchars($analysis)) . '</div>';
+                            } else {
+                                $aiError = function_exists('getGeminiLastError') ? trim((string) getGeminiLastError()) : '';
+                                if ($aiError === '') {
+                                    $aiError = 'Unable to generate AI analysis at this time.';
+                                }
+                                echo '<div class="ai-error"><i class="fas fa-exclamation-triangle"></i> ' . htmlspecialchars($aiError) . '</div>';
                             }
-                            echo '<div class="ai-error"><i class="fas fa-exclamation-triangle"></i> ' . htmlspecialchars($aiError) . '</div>';
-                        }
-                        ?>
+                            ?>
+                        </div>
+                        <div class="ai-analysis-actions">
+                            <button class="btn-ai-refresh" onclick="refreshAIAnalysis()">
+                                <i class="fas fa-sync"></i> Analyze Incidents
+                            </button>
+                        </div>
                     </div>
-                    <div class="ai-analysis-actions">
-                        <button class="btn-ai-refresh" onclick="refreshAIAnalysis()">
-                            <i class="fas fa-sync"></i> Analyze Incidents
-                        </button>
-                    </div>
-                </div>
+                </aside>
             </div>
 
         </div>
@@ -422,7 +456,7 @@ try {
             const filtered = INCIDENTS.filter(passFilters);
             let highCount = 0, mediumCount = 0, lowCount = 0;
             filtered.forEach(i => {
-                const p = (i.priority || 'low').toLowerCase();
+                const p = normalizePriority(i.priority);
                 if (p === 'high') highCount++;
                 else if (p === 'medium') mediumCount++;
                 else lowCount++;
@@ -446,6 +480,13 @@ try {
             if (s === 'dispatched') return { cls: 'status-dispatched', label: 'Dispatched' };
             if (s === 'resolved' || s === 'cancelled') return { cls: 'status-resolved', label: 'Resolved' };
             return { cls: 'status-active', label: 'Active' }; // pending / default
+        }
+
+        function normalizePriority(priority) {
+            const value = String(priority || 'low').trim().toLowerCase();
+            if (value === 'critical' || value === 'high') return 'high';
+            if (value === 'medium') return 'medium';
+            return 'low';
         }
 
         function capitalize(s) { return (s || '').charAt(0).toUpperCase() + (s || '').slice(1); }
@@ -476,7 +517,7 @@ try {
         }
 
         function incidentCardHtml(i) {
-            const priority = (i.priority || 'low').toLowerCase();
+            const priority = normalizePriority(i.priority);
             const statusInfo = mapStatusToBadge(i.status);
             const created = new Date(i.created_at || Date.now());
             const location = i.location || i.location_address || 'Unknown location';
@@ -525,7 +566,7 @@ try {
             const typeValue = (typeFilter.value || '').toLowerCase();
             const searchValue = currentSearch.trim().toLowerCase();
 
-            if (priorityValue && (i.priority || '').toLowerCase() !== priorityValue) return false;
+            if (priorityValue && normalizePriority(i.priority) !== priorityValue) return false;
 
             // Default: exclude resolved incidents from logged list unless explicitly filtered
             {

@@ -155,6 +155,52 @@ CREATE TABLE `admin_resources_archive` (
 -- --------------------------------------------------------
 
 --
+-- Table structure for table `resource_records`
+--
+
+CREATE TABLE `resource_records` (
+  `id` bigint(20) UNSIGNED NOT NULL,
+  `code` varchar(50) NOT NULL,
+  `name` varchar(200) NOT NULL,
+  `category` enum('vehicles','personnel','equipment') NOT NULL,
+  `status` enum('available','in_use','maintenance','offline') NOT NULL DEFAULT 'available',
+  `location` varchar(255) NOT NULL,
+  `driver_name` varchar(150) DEFAULT NULL,
+  `plate_number` varchar(50) DEFAULT NULL,
+  `position_title` varchar(150) DEFAULT NULL,
+  `assignment` varchar(255) DEFAULT NULL,
+  `notes` text DEFAULT NULL,
+  `created_at` datetime NOT NULL DEFAULT current_timestamp(),
+  `updated_at` datetime NOT NULL DEFAULT current_timestamp() ON UPDATE current_timestamp()
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- --------------------------------------------------------
+
+--
+-- Table structure for table `resource_records_archive`
+--
+
+CREATE TABLE `resource_records_archive` (
+  `id` bigint(20) UNSIGNED NOT NULL,
+  `resource_id` bigint(20) UNSIGNED NOT NULL,
+  `code` varchar(50) NOT NULL,
+  `name` varchar(200) NOT NULL,
+  `category` enum('vehicles','personnel','equipment') NOT NULL,
+  `status` enum('available','in_use','maintenance','offline') NOT NULL DEFAULT 'available',
+  `location` varchar(255) NOT NULL,
+  `driver_name` varchar(150) DEFAULT NULL,
+  `plate_number` varchar(50) DEFAULT NULL,
+  `position_title` varchar(150) DEFAULT NULL,
+  `assignment` varchar(255) DEFAULT NULL,
+  `notes` text DEFAULT NULL,
+  `created_at` datetime NOT NULL,
+  `updated_at` datetime NOT NULL,
+  `deleted_at` datetime NOT NULL DEFAULT current_timestamp()
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- --------------------------------------------------------
+
+--
 -- Table structure for table `agencies`
 --
 
@@ -735,6 +781,24 @@ ALTER TABLE `admin_resources_archive`
   ADD KEY `idx_admin_resources_archive_category` (`category`);
 
 --
+-- Indexes for table `resource_records`
+--
+ALTER TABLE `resource_records`
+  ADD PRIMARY KEY (`id`),
+  ADD UNIQUE KEY `uk_resource_records_code` (`code`),
+  ADD KEY `idx_resource_records_category` (`category`),
+  ADD KEY `idx_resource_records_status` (`status`);
+
+--
+-- Indexes for table `resource_records_archive`
+--
+ALTER TABLE `resource_records_archive`
+  ADD PRIMARY KEY (`id`),
+  ADD KEY `idx_resource_records_archive_resource_id` (`resource_id`),
+  ADD KEY `idx_resource_records_archive_deleted_at` (`deleted_at`),
+  ADD KEY `idx_resource_records_archive_category` (`category`);
+
+--
 -- Indexes for table `agencies`
 --
 ALTER TABLE `agencies`
@@ -873,6 +937,18 @@ ALTER TABLE `admin_resources`
 -- AUTO_INCREMENT for table `admin_resources_archive`
 --
 ALTER TABLE `admin_resources_archive`
+  MODIFY `id` bigint(20) UNSIGNED NOT NULL AUTO_INCREMENT;
+
+--
+-- AUTO_INCREMENT for table `resource_records`
+--
+ALTER TABLE `resource_records`
+  MODIFY `id` bigint(20) UNSIGNED NOT NULL AUTO_INCREMENT;
+
+--
+-- AUTO_INCREMENT for table `resource_records_archive`
+--
+ALTER TABLE `resource_records_archive`
   MODIFY `id` bigint(20) UNSIGNED NOT NULL AUTO_INCREMENT;
 
 --

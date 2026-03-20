@@ -1,15 +1,72 @@
 <?php
-// Deploy resource: vehicles -> units.status=inuse (assigned), personnel -> staff.status=on_duty, equipment -> resources.status=deployed
+// Deploy resource: legacy tables keep their existing status flow, admin-managed resources move to in_use.
 header('Content-Type: application/json');
+
 require_once __DIR__ . '/../includes/db.php';
+
+if (!defined('RESOURCE_RECORDS_TABLE')) {
+    define('RESOURCE_RECORDS_TABLE', 'resource_records');
+}
+if (!defined('LEGACY_ADMIN_RESOURCES_TABLE')) {
+    define('LEGACY_ADMIN_RESOURCES_TABLE', 'admin_resources');
+}
+
 $pdo = get_db_connection();
-if (!$pdo) { http_response_code(500); echo json_encode(['ok'=>false,'error'=>'DB unavailable']); exit; }
-if ($_SERVER['REQUEST_METHOD'] !== 'POST') { http_response_code(405); echo json_encode(['ok'=>false,'error'=>'Method not allowed']); exit; }
+if (!$pdo) {
+    http_response_code(500);
+    echo json_encode(['ok' => false, 'error' => 'DB unavailable']);
+    exit;
+}
+
+if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
+    http_response_code(405);
+    echo json_encode(['ok' => false, 'error' => 'Method not allowed']);
+    exit;
+}
+
 $input = json_decode(file_get_contents('php://input'), true);
 $id = isset($input['id']) ? (int)$input['id'] : 0;
 $type = isset($input['type']) ? strtolower(trim((string)$input['type'])) : '';
-if (!$id || $type==='') { http_response_code(400); echo json_encode(['ok'=>false,'error'=>'Missing id/type']); exit; }
+$source = isset($input['source']) ? strtolower(trim((string)$input['source'])) : '';
+$location = isset($input['location']) ? trim((string)$input['location']) : '';
+
+if (!$id || $type === '') {
+    http_response_code(400);
+    echo json_encode(['ok' => false, 'error' => 'Missing id/type']);
+    exit;
+}
+
 try {
+    $resourceTable = null;
+    if ($source === RESOURCE_RECORDS_TABLE) {
+        $resourceTable = RESOURCE_RECORDS_TABLE;
+    } elseif ($source === LEGACY_ADMIN_RESOURCES_TABLE) {
+        $resourceTable = LEGACY_ADMIN_RESOURCES_TABLE;
+    }
+
+    if ($resourceTable !== null) {
+        $stmt = $pdo->prepare(
+            "UPDATE `" . $resourceTable . "`
+             SET status = 'in_use',
+                 location = CASE WHEN ? <> '' THEN ? ELSE location END,
+                 updated_at = CURRENT_TIMESTAMP
+             WHERE id = ? AND category = ?"
+        );
+        $stmt->execute([$location, $location, $id, $type]);
+        if ($stmt->rowCount() === 0) {
+            $checkStmt = $pdo->prepare("SELECT id FROM `" . $resourceTable . "` WHERE id = ? AND category = ? LIMIT 1");
+            $checkStmt->execute([$id, $type]);
+            if (!$checkStmt->fetch(PDO::FETCH_ASSOC)) {
+                http_response_code(404);
+                echo json_encode(['ok' => false, 'error' => 'Resource record not found']);
+                exit;
+            }
+        }
+
+        echo json_encode(['ok' => true]);
+        exit;
+    }
+
     if ($type === 'vehicles') {
         $stmt = $pdo->prepare("UPDATE units SET status = 'assigned', last_status_at = CURRENT_TIMESTAMP WHERE id = ?");
         $stmt->execute([$id]);
@@ -21,11 +78,12 @@ try {
         $stmt->execute([$id]);
     } else {
         http_response_code(400);
-        echo json_encode(['ok'=>false,'error'=>'Unsupported type']);
+        echo json_encode(['ok' => false, 'error' => 'Unsupported type']);
         exit;
     }
-    echo json_encode(['ok'=>true]);
+
+    echo json_encode(['ok' => true]);
 } catch (Throwable $e) {
     http_response_code(500);
-    echo json_encode(['ok'=>false,'error'=>'Update failed']);
+    echo json_encode(['ok' => false, 'error' => 'Update failed']);
 }

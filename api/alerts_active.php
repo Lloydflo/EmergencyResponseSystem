@@ -12,7 +12,13 @@ if (!$pdo) {
 
 $table_exists = function (string $table) use ($pdo): bool {
     try {
-        $stmt = $pdo->prepare("SHOW TABLES LIKE ?");
+        $stmt = $pdo->prepare(
+            "SELECT 1
+             FROM INFORMATION_SCHEMA.TABLES
+             WHERE TABLE_SCHEMA = DATABASE()
+               AND TABLE_NAME = ?
+             LIMIT 1"
+        );
         $stmt->execute([$table]);
         return (bool)$stmt->fetchColumn();
     } catch (Throwable $e) {
@@ -118,12 +124,19 @@ if ($table_exists('shared_resources')) {
     }
 }
 
-if ($table_exists('admin_resources')) {
+$resourceRecordsTable = null;
+if ($table_exists('resource_records')) {
+    $resourceRecordsTable = 'resource_records';
+} elseif ($table_exists('admin_resources')) {
+    $resourceRecordsTable = 'admin_resources';
+}
+
+if ($resourceRecordsTable !== null) {
     $equipmentSummary = $pdo->query(
         "SELECT
             COUNT(*) AS total_equipment,
             SUM(CASE WHEN status = 'available' THEN 1 ELSE 0 END) AS available_equipment
-         FROM admin_resources
+         FROM `" . $resourceRecordsTable . "`
          WHERE category = 'equipment'"
     )->fetch(PDO::FETCH_ASSOC);
 
@@ -135,7 +148,7 @@ if ($table_exists('admin_resources')) {
         if ($all) {
             $equipmentRows = $pdo->query(
                 "SELECT id, code, name, status, location
-                 FROM admin_resources
+                 FROM `" . $resourceRecordsTable . "`
                  WHERE category = 'equipment'
                    AND status <> 'available'
                  ORDER BY updated_at DESC, id DESC"

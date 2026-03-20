@@ -8,6 +8,9 @@ $normalized_user_role = strtolower((string)$user_role);
 $interagency_page = $normalized_user_role === 'dispatcher'
     ? 'dispatcher/interagency.php'
     : 'admin/interagency.php';
+$resources_page = $normalized_user_role === 'dispatcher'
+    ? 'dispatcher/resources.php'
+    : 'admin/resources.php';
 $profile_page = 'profile.php';
 $account_settings_page = 'account_settings.php';
 $user_avatar = trim((string)($_SESSION['user_avatar'] ?? ''));
@@ -313,7 +316,7 @@ $avatar_source = $user_avatar !== ''
     </div>
 </div>
 
-<div class="header-live-toast" id="headerLiveToast" hidden data-open-interagency="1" role="status" aria-live="polite">
+<div class="header-live-toast" id="headerLiveToast" hidden role="status" aria-live="polite">
     <i class="fas fa-envelope"></i>
     <div>
         <strong id="headerLiveToastTitle">Interagency</strong>
@@ -339,10 +342,14 @@ document.addEventListener('DOMContentLoaded', function() {
     const liveToastTitle = document.getElementById('headerLiveToastTitle');
     const liveToastText = document.getElementById('headerLiveToastText');
     const interagencyUrl = <?php echo json_encode($interagency_page); ?>;
+    const resourcesUrl = <?php echo json_encode($resources_page); ?>;
+    const userRole = <?php echo json_encode($normalized_user_role); ?>;
     const state = {
         lastUnreadCount: null,
+        lastBackupCount: null,
         recentThreads: [],
         unreadThreads: [],
+        backupRequests: [],
         toastTimer: null,
         poller: null
     };
@@ -385,6 +392,17 @@ document.addEventListener('DOMContentLoaded', function() {
         if (count <= 0) return 'No new messages';
         if (count === 1) return '1 new messages';
         return count + ' new messages';
+    }
+
+    function backupUnreadText(count) {
+        if (userRole === 'dispatcher') {
+            if (count <= 0) return 'No backup requests';
+            if (count === 1) return '1 pending backup request';
+            return count + ' pending backup requests';
+        }
+        if (count <= 0) return 'No pending resource requests';
+        if (count === 1) return '1 pending resource request';
+        return count + ' pending resource requests';
     }
 
     function threadTitle(item) {
@@ -434,23 +452,53 @@ document.addEventListener('DOMContentLoaded', function() {
     function renderNotificationList(unreadCount) {
         if (!notificationList) return;
         const latest = state.unreadThreads[0] || state.recentThreads[0] || null;
-        if (unreadCount <= 0 || !latest) {
+        const backupCount = Array.isArray(state.backupRequests) ? state.backupRequests.length : 0;
+        const latestBackup = backupCount > 0 ? state.backupRequests[0] : null;
+        const parts = [];
+
+        if (latestBackup) {
+            const incidentLabel = latestBackup.incident_code
+                ? `${latestBackup.incident_code}${latestBackup.incident_id ? ` (#${latestBackup.incident_id})` : ''}`
+                : `Incident #${latestBackup.incident_id || ''}`;
+            const notificationText = userRole === 'dispatcher'
+                ? `${latestBackup.resource_name || 'Backup request'} for ${incidentLabel}`
+                : `${latestBackup.requestor || 'Responder'} requested ${latestBackup.resource_name || 'resources'}`;
+            const iconClass = userRole === 'dispatcher' ? 'fa-truck-medical' : 'fa-hand-holding-medical';
+            parts.push(`
+                <button type="button" class="notification-item header-reset-button" data-open-resources="1">
+                    <div class="notification-icon">
+                        <i class="fas ${iconClass}"></i>
+                    </div>
+                    <div class="notification-details">
+                        <div class="notification-title">${escapeHtml(backupUnreadText(backupCount))}</div>
+                        <div class="notification-text">${escapeHtml(notificationText)}</div>
+                        <div class="notification-time">${escapeHtml(relativeTime(latestBackup.date_requested))}</div>
+                    </div>
+                </button>
+            `);
+        }
+
+        if (unreadCount > 0 && latest) {
+            parts.push(`
+                <button type="button" class="notification-item header-reset-button" data-open-interagency="1">
+                    <div class="notification-icon">
+                        <i class="fas fa-envelope"></i>
+                    </div>
+                    <div class="notification-details">
+                        <div class="notification-title">${escapeHtml(unreadText(unreadCount))}</div>
+                        <div class="notification-text">${escapeHtml(threadTitle(latest))}: ${escapeHtml(previewText(latest))}</div>
+                        <div class="notification-time">${escapeHtml(relativeTime(latest.last_at))}</div>
+                    </div>
+                </button>
+            `);
+        }
+
+        if (!parts.length) {
             notificationList.innerHTML = emptyState('fa-bell-slash', 'No new notifications.');
             return;
         }
 
-        notificationList.innerHTML = `
-            <button type="button" class="notification-item header-reset-button" data-open-interagency="1">
-                <div class="notification-icon">
-                    <i class="fas fa-envelope"></i>
-                </div>
-                <div class="notification-details">
-                    <div class="notification-title">${escapeHtml(unreadText(unreadCount))}</div>
-                    <div class="notification-text">${escapeHtml(threadTitle(latest))}: ${escapeHtml(previewText(latest))}</div>
-                    <div class="notification-time">${escapeHtml(relativeTime(latest.last_at))}</div>
-                </div>
-            </button>
-        `;
+        notificationList.innerHTML = parts.join('');
     }
 
     function renderMessageList() {
@@ -493,6 +541,20 @@ document.addEventListener('DOMContentLoaded', function() {
         if (!liveToast || count <= 0) return;
         if (liveToastTitle) liveToastTitle.textContent = 'Interagency';
         if (liveToastText) liveToastText.textContent = unreadText(count);
+        liveToast.setAttribute('data-toast-target', 'interagency');
+        liveToast.hidden = false;
+        window.clearTimeout(state.toastTimer);
+        window.requestAnimationFrame(function() {
+            liveToast.classList.add('show');
+        });
+        state.toastTimer = window.setTimeout(hideLiveToast, 4000);
+    }
+
+    function showBackupToast(count) {
+        if (!liveToast || count <= 0) return;
+        if (liveToastTitle) liveToastTitle.textContent = userRole === 'dispatcher' ? 'Backup Requests' : 'Resource Requests';
+        if (liveToastText) liveToastText.textContent = backupUnreadText(count);
+        liveToast.setAttribute('data-toast-target', 'resources');
         liveToast.hidden = false;
         window.clearTimeout(state.toastTimer);
         window.requestAnimationFrame(function() {
@@ -534,6 +596,41 @@ document.addEventListener('DOMContentLoaded', function() {
         window.location.href = interagencyUrl;
     }
 
+    function openResources() {
+        window.location.href = resourcesUrl;
+    }
+
+    async function loadBackupRequestSummary() {
+        if (!['dispatcher', 'admin'].includes(userRole)) {
+            state.backupRequests = [];
+            state.lastBackupCount = 0;
+            return;
+        }
+
+        try {
+            const endpoint = userRole === 'dispatcher'
+                ? 'api/dispatcher_backup_requests.php?limit=10'
+                : 'api/admin_resource_requests.php?limit=10';
+            const response = await fetch(endpoint, {
+                cache: 'no-store',
+                credentials: 'same-origin'
+            });
+            if (!response.ok) return;
+            const data = await response.json();
+            if (!data || !data.success) return;
+
+            const backupRequests = Array.isArray(data.requests) ? data.requests : [];
+            const backupCount = backupRequests.length;
+
+            if (state.lastBackupCount !== null && backupCount > state.lastBackupCount) {
+                showBackupToast(backupCount - state.lastBackupCount);
+            }
+
+            state.lastBackupCount = backupCount;
+            state.backupRequests = backupRequests;
+        } catch (_) {}
+    }
+
     async function loadInteragencySummary() {
         try {
             const response = await fetch('api/interagency_chat_threads.php', {
@@ -566,11 +663,17 @@ document.addEventListener('DOMContentLoaded', function() {
             state.recentThreads = threads;
             state.unreadThreads = unreadThreads;
 
-            setBadge(notificationBadge, unreadCount);
+            const backupCount = Array.isArray(state.backupRequests) ? state.backupRequests.length : 0;
+            setBadge(notificationBadge, unreadCount + backupCount);
             setBadge(messageBadge, unreadCount);
             renderNotificationList(unreadCount);
             renderMessageList();
         } catch (_) {}
+    }
+
+    async function loadHeaderSummary() {
+        await loadBackupRequestSummary();
+        await loadInteragencySummary();
     }
 
     if (menuToggle) {
@@ -585,7 +688,7 @@ document.addEventListener('DOMContentLoaded', function() {
         notificationBtn.addEventListener('click', async function(event) {
             event.preventDefault();
             event.stopPropagation();
-            await loadInteragencySummary();
+            await loadHeaderSummary();
             toggleModal(notificationModal, notificationBtn, messageModal, messageBtn);
         });
     }
@@ -615,6 +718,13 @@ document.addEventListener('DOMContentLoaded', function() {
         if (trigger) {
             event.preventDefault();
             openInteragency();
+            return;
+        }
+
+        const resourceTrigger = event.target.closest('[data-open-resources]');
+        if (resourceTrigger) {
+            event.preventDefault();
+            openResources();
             return;
         }
 
@@ -648,6 +758,10 @@ document.addEventListener('DOMContentLoaded', function() {
     if (liveToast) {
         liveToast.addEventListener('click', function(event) {
             event.preventDefault();
+            if (liveToast.getAttribute('data-toast-target') === 'resources') {
+                openResources();
+                return;
+            }
             openInteragency();
         });
     }
@@ -655,7 +769,7 @@ document.addEventListener('DOMContentLoaded', function() {
     window.closeModal = closeModal;
     window.closeAllModals = closeAllModals;
 
-    loadInteragencySummary();
-    state.poller = window.setInterval(loadInteragencySummary, 5000);
+    loadHeaderSummary();
+    state.poller = window.setInterval(loadHeaderSummary, 5000);
 });
 </script>

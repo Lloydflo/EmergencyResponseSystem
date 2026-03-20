@@ -2,6 +2,10 @@
 $rootDir = dirname(__DIR__);
 require_once $rootDir . '/includes/auth.php';
 require_role('admin', 'admin/resources.php');
+$currentUser = function_exists('get_logged_in_user') ? get_logged_in_user() : null;
+$requestorName = $currentUser
+    ? (string)($currentUser['name'] ?? ($currentUser['email'] ?? 'Admin Resource Desk'))
+    : 'Admin Resource Desk';
 
 $pageTitle = 'Resources Status';
 ?>
@@ -511,6 +515,30 @@ $pageTitle = 'Resources Status';
             width: min(900px, 100%);
         }
 
+        .modal-card.request-card {
+            width: min(1080px, 100%);
+            max-height: calc(100vh - 2rem);
+            display: flex;
+            flex-direction: column;
+        }
+
+        #requestBackupForm {
+            display: flex;
+            flex-direction: column;
+            min-height: 0;
+            flex: 1;
+        }
+
+        #requestBackupModal .modal-body {
+            overflow-y: auto;
+            min-height: 0;
+            flex: 1;
+        }
+
+        #requestBackupModal .modal-foot {
+            flex-shrink: 0;
+        }
+
         .archive-summary {
             border: 1px solid #dbeafe;
             background: linear-gradient(135deg, #eff6ff, #f8fafc);
@@ -578,6 +606,191 @@ $pageTitle = 'Resources Status';
             white-space: nowrap;
         }
 
+        .request-layout {
+            display: grid;
+            grid-template-columns: 1fr;
+            gap: 1rem;
+        }
+
+        .request-panel {
+            border: 1px solid var(--rs-border);
+            border-radius: 12px;
+            background: #fff;
+            overflow: hidden;
+        }
+
+        .request-panel-head {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 0.75rem;
+            padding: 0.85rem 0.95rem;
+            border-bottom: 1px solid var(--rs-border);
+            background: #f8fafc;
+        }
+
+        .request-panel-head h3 {
+            margin: 0;
+            color: #0f172a;
+            font-size: 0.98rem;
+        }
+
+        .request-panel-head span {
+            color: #64748b;
+            font-size: 0.82rem;
+        }
+
+        .request-count-chip {
+            display: inline-flex;
+            align-items: center;
+            border-radius: 999px;
+            background: #ecfdf5;
+            color: #166534;
+            font-size: 0.76rem;
+            font-weight: 800;
+            padding: 0.28rem 0.58rem;
+        }
+
+        .request-resource-table-wrap {
+            max-height: 360px;
+            overflow: auto;
+        }
+
+        .request-resource-table {
+            width: 100%;
+            border-collapse: collapse;
+            min-width: 680px;
+        }
+
+        .request-resource-table th {
+            position: sticky;
+            top: 0;
+            z-index: 1;
+            background: #f8fafc;
+            color: #334155;
+            font-size: 0.79rem;
+            text-transform: uppercase;
+            letter-spacing: 0.04em;
+            padding: 0.78rem 0.75rem;
+            text-align: left;
+            border-bottom: 1px solid var(--rs-border);
+        }
+
+        .request-resource-table td {
+            padding: 0.78rem 0.75rem;
+            border-bottom: 1px solid #eef2f7;
+            color: var(--rs-text);
+            font-size: 0.9rem;
+            vertical-align: middle;
+        }
+
+        .request-resource-table tbody tr:hover {
+            background: #f8fbff;
+        }
+
+        .request-pick-btn {
+            width: 34px;
+            height: 34px;
+            border: 1px solid #a7f3d0;
+            border-radius: 8px;
+            background: #f0fdf4;
+            color: #166534;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            transition: 0.2s ease;
+        }
+
+        .request-pick-btn:hover {
+            transform: translateY(-1px);
+            border-color: #34d399;
+            background: #dcfce7;
+        }
+
+        .request-pick-btn.selected {
+            border-color: #0f766e;
+            background: #0f766e;
+            color: #fff;
+        }
+
+        .request-empty {
+            text-align: center;
+            color: var(--rs-muted);
+            padding: 1rem;
+        }
+
+        .request-selected-wrap {
+            padding: 0.85rem 0.95rem;
+            border-top: 1px solid var(--rs-border);
+            background: linear-gradient(180deg, #ffffff, #f8fafc);
+        }
+
+        .request-selected-wrap strong {
+            display: block;
+            color: #0f172a;
+            font-size: 0.9rem;
+            margin-bottom: 0.55rem;
+        }
+
+        .request-selected-list {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 0.45rem;
+        }
+
+        .request-selected-chip {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.45rem;
+            border-radius: 999px;
+            background: #eff6ff;
+            color: #1d4ed8;
+            border: 1px solid #bfdbfe;
+            padding: 0.32rem 0.6rem;
+            font-size: 0.78rem;
+            font-weight: 700;
+        }
+
+        .request-selected-chip button {
+            border: none;
+            background: transparent;
+            color: inherit;
+            cursor: pointer;
+            padding: 0;
+            line-height: 1;
+            font-size: 0.82rem;
+        }
+
+        .request-form-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 0.75rem;
+        }
+
+        .request-form-grid .form-group.full {
+            grid-column: 1 / -1;
+        }
+
+        .request-incident-meta {
+            margin-top: 0.35rem;
+            border: 1px solid #dbeafe;
+            background: #eff6ff;
+            border-radius: 10px;
+            padding: 0.7rem 0.8rem;
+            color: #1e3a8a;
+            font-size: 0.82rem;
+            line-height: 1.45;
+            min-height: 64px;
+        }
+
+        .request-foot-note {
+            margin-top: 0.55rem;
+            color: #64748b;
+            font-size: 0.79rem;
+            line-height: 1.45;
+        }
+
         .toast {
             position: fixed;
             right: 16px;
@@ -626,7 +839,9 @@ $pageTitle = 'Resources Status';
         html[data-theme="dark"] .modal-helper p,
         html[data-theme="dark"] .archive-summary span,
         html[data-theme="dark"] .name-cell span,
-        html[data-theme="dark"] .resource-meta-note {
+        html[data-theme="dark"] .resource-meta-note,
+        html[data-theme="dark"] .request-panel-head span,
+        html[data-theme="dark"] .request-foot-note {
             color: #cbd5e1 !important;
         }
 
@@ -664,6 +879,61 @@ $pageTitle = 'Resources Status';
             color: #e5eef9 !important;
         }
 
+        html[data-theme="dark"] .request-panel {
+            background: #111827 !important;
+            border-color: #334155 !important;
+        }
+
+        html[data-theme="dark"] .request-panel-head {
+            background: #0f172a !important;
+            border-bottom-color: #334155 !important;
+        }
+
+        html[data-theme="dark"] .request-panel-head h3,
+        html[data-theme="dark"] .request-selected-wrap strong,
+        html[data-theme="dark"] .request-resource-table td,
+        html[data-theme="dark"] .request-resource-table th {
+            color: #f8fafc !important;
+        }
+
+        html[data-theme="dark"] .request-resource-table th {
+            background: #0f172a !important;
+            border-bottom-color: #334155 !important;
+        }
+
+        html[data-theme="dark"] .request-resource-table td {
+            border-bottom-color: #1f2937 !important;
+        }
+
+        html[data-theme="dark"] .request-selected-wrap {
+            background: linear-gradient(180deg, #111827, #0f172a) !important;
+            border-top-color: #334155 !important;
+        }
+
+        html[data-theme="dark"] .request-selected-chip {
+            background: rgba(30, 64, 175, 0.2) !important;
+            border-color: rgba(147, 197, 253, 0.35) !important;
+            color: #bfdbfe !important;
+        }
+
+        html[data-theme="dark"] .request-incident-meta {
+            background: #0f172a !important;
+            border-color: #334155 !important;
+            color: #bfdbfe !important;
+        }
+
+        html[data-theme="dark"] .request-pick-btn {
+            background: #0f172a !important;
+            border-color: #334155 !important;
+            color: #86efac !important;
+        }
+
+        html[data-theme="dark"] .request-pick-btn.selected {
+            background: #0f766e !important;
+            border-color: #14b8a6 !important;
+            color: #ffffff !important;
+        }
+
         html[data-theme="dark"] .countdown-chip {
             background: rgba(251, 191, 36, 0.16) !important;
             color: #fde68a !important;
@@ -690,6 +960,57 @@ $pageTitle = 'Resources Status';
         html[data-theme="dark"] .modal .btn-outline:hover {
             background: #1e293b !important;
             color: #ffffff !important;
+        }
+
+        html[data-theme="dark"] #requestBackupModal .modal-card.request-card {
+            background: #111827 !important;
+            border-color: #334155 !important;
+        }
+
+        html[data-theme="dark"] #requestBackupModal .request-resource-table-wrap {
+            background: #0f172a !important;
+            border: 1px solid #334155 !important;
+            border-radius: 10px;
+        }
+
+        html[data-theme="dark"] #requestBackupModal .request-resource-table {
+            background: transparent !important;
+        }
+
+        html[data-theme="dark"] #requestBackupModal .request-resource-table tbody tr:hover {
+            background: rgba(30, 41, 59, 0.85) !important;
+        }
+
+        html[data-theme="dark"] #requestBackupModal .request-count-chip {
+            background: rgba(20, 184, 166, 0.16) !important;
+            border: 1px solid rgba(45, 212, 191, 0.3) !important;
+            color: #99f6e4 !important;
+        }
+
+        html[data-theme="dark"] #requestBackupModal .request-empty {
+            color: #94a3b8 !important;
+        }
+
+        html[data-theme="dark"] #requestBackupModal .form-select,
+        html[data-theme="dark"] #requestBackupModal .form-textarea {
+            background: #0f172a !important;
+            border-color: #334155 !important;
+            color: #e5eef9 !important;
+        }
+
+        html[data-theme="dark"] #requestBackupModal .form-select:focus,
+        html[data-theme="dark"] #requestBackupModal .form-textarea:focus {
+            border-color: #60a5fa !important;
+            box-shadow: 0 0 0 3px rgba(96, 165, 250, 0.18) !important;
+        }
+
+        html[data-theme="dark"] #requestBackupModal .form-select option {
+            background: #0f172a !important;
+            color: #e5eef9 !important;
+        }
+
+        html[data-theme="dark"] #requestBackupModal .request-selected-list {
+            color: #e5eef9 !important;
         }
 
         html[data-theme="dark"] .form-input::placeholder,
@@ -733,6 +1054,10 @@ $pageTitle = 'Resources Status';
 
             .archive-table {
                 min-width: 760px;
+            }
+
+            .request-resource-table {
+                min-width: 700px;
             }
 
             .overview-grid {
@@ -781,6 +1106,15 @@ $pageTitle = 'Resources Status';
                         </button>
                         <span class="archive-badge" id="archiveBadge" aria-hidden="true">0</span>
                     </div>
+                    <button
+                        type="button"
+                        class="btn-secondary"
+                        id="requestBackupBtn"
+                        aria-haspopup="dialog"
+                        aria-controls="requestBackupModal"
+                    >
+                        <i class="fas fa-truck-medical"></i> Request
+                    </button>
                     <button
                         type="button"
                         class="btn-primary"
@@ -978,13 +1312,146 @@ $pageTitle = 'Resources Status';
         </div>
     </div>
 
+    <div class="modal" id="requestBackupModal" aria-hidden="true" role="dialog" aria-modal="true" aria-labelledby="requestBackupModalTitle">
+        <div class="modal-card request-card">
+            <div class="modal-head">
+                <h2 id="requestBackupModalTitle">Request Backup Resources</h2>
+                <button type="button" class="action-btn" id="closeRequestBackupBtn" aria-label="Close backup request">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+            <form id="requestBackupForm">
+                <div class="modal-body">
+                    <div class="modal-helper">
+                        <p>Select one or more currently available resources, then link the request to an active incident so the backup need is recorded clearly.</p>
+                    </div>
+                    <div class="request-layout">
+                        <section class="request-panel">
+                            <div class="request-panel-head">
+                                <div>
+                                    <h3>Incoming Requests</h3>
+                                    <span>Pending resource requests from responders and dispatch will appear here.</span>
+                                </div>
+                                <span class="request-count-chip"><span id="incomingRequestCount">0</span> pending</span>
+                            </div>
+                            <div class="request-resource-table-wrap">
+                                <table class="request-resource-table">
+                                    <thead>
+                                        <tr>
+                                            <th>Requestor</th>
+                                            <th>Resource</th>
+                                            <th>Type</th>
+                                            <th>Qty</th>
+                                            <th>Priority</th>
+                                            <th>Details</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="incomingRequestTableBody">
+                                        <tr>
+                                            <td colspan="6" class="request-empty">No pending incoming requests.</td>
+                                        </tr>
+                                    </tbody>
+                                </table>
+                            </div>
+                        </section>
+
+                        <section class="request-panel">
+                            <div class="request-panel-head">
+                                <div>
+                                    <h3>Available Resources</h3>
+                                    <span>Only resources with `Available` status are listed here.</span>
+                                </div>
+                                <span class="request-count-chip"><span id="requestSelectedCount">0</span> selected</span>
+                            </div>
+                            <div class="request-resource-table-wrap">
+                                <table class="request-resource-table">
+                                    <thead>
+                                        <tr>
+                                            <th>ID</th>
+                                            <th>Resource</th>
+                                            <th>Category</th>
+                                            <th>Location</th>
+                                            <th>Add</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="requestResourcePickerBody">
+                                        <tr>
+                                            <td colspan="5" class="request-empty">No available resources.</td>
+                                        </tr>
+                                    </tbody>
+                                </table>
+                            </div>
+                            <div class="request-selected-wrap">
+                                <strong>Selected backup resources</strong>
+                                <div class="request-selected-list" id="requestSelectedList">
+                                    <span class="request-empty">Choose resources using the + button.</span>
+                                </div>
+                            </div>
+                        </section>
+
+                        <section class="request-panel">
+                            <div class="request-panel-head">
+                                <div>
+                                    <h3>Backup Request Form</h3>
+                                    <span>Connect the request to the incident that needs additional support.</span>
+                                </div>
+                            </div>
+                            <div style="padding: 0.95rem;">
+                                <div class="request-form-grid">
+                                    <div class="form-group full">
+                                        <label for="requestIncidentSelect">Incident</label>
+                                        <select id="requestIncidentSelect" class="form-select" required>
+                                            <option value="">Select active incident</option>
+                                        </select>
+                                        <div class="request-incident-meta" id="requestIncidentMeta">Choose an active incident to show its reference, title, and location.</div>
+                                    </div>
+                                    <div class="form-group">
+                                        <label for="requestPriorityInput">Priority</label>
+                                        <select id="requestPriorityInput" class="form-select">
+                                            <option value="high">High</option>
+                                            <option value="medium">Medium</option>
+                                            <option value="low">Low</option>
+                                        </select>
+                                    </div>
+                                    <div class="form-group">
+                                        <label for="requestUrgencyInput">Urgency</label>
+                                        <select id="requestUrgencyInput" class="form-select">
+                                            <option value="urgent">Urgent</option>
+                                            <option value="normal">Normal</option>
+                                        </select>
+                                    </div>
+                                    <div class="form-group full">
+                                        <label for="requestBackupNotes">Reason / Backup Need</label>
+                                        <textarea id="requestBackupNotes" class="form-textarea" maxlength="400" placeholder="Example: Need two additional ambulances and one responder team for sustained operations at the incident scene." required></textarea>
+                                        <div class="request-foot-note">This creates a backup request record tied to the selected incident and chosen resources.</div>
+                                    </div>
+                                </div>
+                            </div>
+                        </section>
+                    </div>
+                </div>
+                <div class="modal-foot">
+                    <button type="button" class="btn-outline" id="cancelRequestBackupBtn">Cancel</button>
+                    <button type="submit" class="btn-primary" id="submitRequestBackupBtn">Submit Request</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
     <div class="toast" id="toast"></div>
 
     <script>
         const API_ENDPOINT = 'api/admin_resources.php';
         const ARCHIVE_ENDPOINT = `${API_ENDPOINT}?archived=1`;
+        const INCIDENT_OPTIONS_ENDPOINT = 'api/incidents_list.php?status=active';
+        const REQUEST_RESOURCE_ENDPOINT = 'api/request_resource.php';
+        const INCOMING_REQUESTS_ENDPOINT = 'api/admin_resource_requests.php';
+        const REQUEST_REQUESTOR = <?php echo json_encode($requestorName, JSON_UNESCAPED_UNICODE); ?>;
         let resources = [];
         let archivedResources = [];
+        let backupIncidents = [];
+        let incomingRequests = [];
+        const selectedBackupResourceIds = new Set();
 
         let selectedId = null;
         let lastFocusedTrigger = null;
@@ -1020,6 +1487,7 @@ $pageTitle = 'Resources Status';
         const saveResourceBtn = document.getElementById('saveResourceBtn');
         const addResourceBtn = document.getElementById('addResourceBtn');
         const archiveResourceBtn = document.getElementById('archiveResourceBtn');
+        const requestBackupBtn = document.getElementById('requestBackupBtn');
         const closeModalBtn = document.getElementById('closeModalBtn');
         const cancelModalBtn = document.getElementById('cancelModalBtn');
         const closeArchiveBtn = document.getElementById('closeArchiveBtn');
@@ -1027,6 +1495,21 @@ $pageTitle = 'Resources Status';
         const archiveTableBody = document.getElementById('archiveTableBody');
         const archiveCount = document.getElementById('archiveCount');
         const archiveBadge = document.getElementById('archiveBadge');
+        const requestBackupModal = document.getElementById('requestBackupModal');
+        const requestBackupForm = document.getElementById('requestBackupForm');
+        const closeRequestBackupBtn = document.getElementById('closeRequestBackupBtn');
+        const cancelRequestBackupBtn = document.getElementById('cancelRequestBackupBtn');
+        const submitRequestBackupBtn = document.getElementById('submitRequestBackupBtn');
+        const incomingRequestTableBody = document.getElementById('incomingRequestTableBody');
+        const incomingRequestCount = document.getElementById('incomingRequestCount');
+        const requestResourcePickerBody = document.getElementById('requestResourcePickerBody');
+        const requestSelectedList = document.getElementById('requestSelectedList');
+        const requestSelectedCount = document.getElementById('requestSelectedCount');
+        const requestIncidentSelect = document.getElementById('requestIncidentSelect');
+        const requestIncidentMeta = document.getElementById('requestIncidentMeta');
+        const requestPriorityInput = document.getElementById('requestPriorityInput');
+        const requestUrgencyInput = document.getElementById('requestUrgencyInput');
+        const requestBackupNotes = document.getElementById('requestBackupNotes');
         const toastEl = document.getElementById('toast');
         const presetButtons = Array.from(document.querySelectorAll('[data-preset]'));
 
@@ -1155,6 +1638,26 @@ $pageTitle = 'Resources Status';
             return data.item ? normalizeItem(data.item) : null;
         }
 
+        async function loadBackupIncidents() {
+            const res = await fetch(INCIDENT_OPTIONS_ENDPOINT, { cache: 'no-store' });
+            const data = await res.json();
+            if (!res.ok || !data || !data.ok) {
+                throw new Error((data && data.error) ? String(data.error) : 'Failed to load incidents');
+            }
+
+            backupIncidents = Array.isArray(data.items) ? data.items.map((item) => ({
+                id: Number(item.id) || 0,
+                code: String(item.incident_code || '').trim(),
+                title: String(item.title || item.type || 'Untitled incident').trim(),
+                location: String(item.location || '').trim(),
+                priority: String(item.priority || '').trim(),
+                status: String(item.status || '').trim()
+            })) : [];
+
+            renderBackupIncidentOptions();
+            updateBackupIncidentMeta();
+        }
+
         function formatStatus(status) {
             if (status === 'in_use') return 'In Use';
             return status.charAt(0).toUpperCase() + status.slice(1);
@@ -1172,6 +1675,19 @@ $pageTitle = 'Resources Status';
             const date = new Date(value.replace(' ', 'T'));
             if (Number.isNaN(date.getTime())) return value;
             return date.toLocaleString();
+        }
+
+        function relativeRequestTime(value) {
+            const raw = String(value || '').trim();
+            if (!raw) return 'Just now';
+            const parsed = new Date(raw.replace(' ', 'T'));
+            if (Number.isNaN(parsed.getTime())) return raw;
+            const diffSeconds = Math.max(0, Math.floor((Date.now() - parsed.getTime()) / 1000));
+            if (diffSeconds < 60) return 'Just now';
+            if (diffSeconds < 3600) return `${Math.floor(diffSeconds / 60)} min ago`;
+            if (diffSeconds < 86400) return `${Math.floor(diffSeconds / 3600)} hr ago`;
+            const days = Math.floor(diffSeconds / 86400);
+            return `${days} day${days === 1 ? '' : 's'} ago`;
         }
 
         function formatResourceMeta(item) {
@@ -1199,6 +1715,185 @@ $pageTitle = 'Resources Status';
                 return item.positionTitle || 'No position';
             }
             return item.assignment || 'N/A';
+        }
+
+        function renderIncomingRequests() {
+            if (!incomingRequestTableBody || !incomingRequestCount) return;
+
+            incomingRequestCount.textContent = String(incomingRequests.length);
+            if (incomingRequests.length === 0) {
+                incomingRequestTableBody.innerHTML = '<tr><td colspan="6" class="request-empty">No pending incoming requests.</td></tr>';
+                return;
+            }
+
+            incomingRequestTableBody.innerHTML = incomingRequests.map((item) => {
+                const typeLabel = item.type
+                    ? String(item.type).charAt(0).toUpperCase() + String(item.type).slice(1)
+                    : 'Other';
+                const detailParts = [];
+                if (item.location) detailParts.push(item.location);
+                if (item.notes) detailParts.push(item.notes);
+                if (item.incident_code || item.incident_id) {
+                    detailParts.push(item.incident_code || `Incident #${item.incident_id}`);
+                }
+                return `
+                    <tr>
+                        <td>${escapeHtml(item.requestor || 'Responder')}</td>
+                        <td>
+                            <strong>${escapeHtml(item.resource_name || 'Request')}</strong><br>
+                            <span class="resource-meta-note">${escapeHtml(relativeRequestTime(item.date_requested || ''))}</span>
+                        </td>
+                        <td>${escapeHtml(typeLabel)}</td>
+                        <td>${escapeHtml(item.quantity || 1)}</td>
+                        <td>${escapeHtml((item.priority || 'normal').toUpperCase())}<br><span class="resource-meta-note">${escapeHtml(item.urgency || 'normal')}</span></td>
+                        <td>${escapeHtml(detailParts.join(' | ') || 'No details provided.')}</td>
+                    </tr>
+                `;
+            }).join('');
+        }
+
+        async function loadIncomingRequests() {
+            const res = await fetch(INCOMING_REQUESTS_ENDPOINT, { cache: 'no-store' });
+            const data = await res.json();
+            if (!res.ok || !data || !data.success) {
+                throw new Error((data && data.error) ? String(data.error) : 'Failed to load incoming requests');
+            }
+
+            incomingRequests = Array.isArray(data.requests) ? data.requests.map((item) => ({
+                id: Number(item.id) || 0,
+                requestor: String(item.requestor || '').trim(),
+                resource_name: String(item.resource_name || '').trim(),
+                date_requested: String(item.date_requested || '').trim(),
+                status: String(item.status || 'pending').trim(),
+                type: String(item.type || '').trim(),
+                quantity: Math.max(1, Number(item.quantity) || 1),
+                priority: String(item.priority || '').trim(),
+                location: String(item.location || '').trim(),
+                notes: String(item.notes || '').trim(),
+                urgency: String(item.urgency || '').trim(),
+                incident_id: Number(item.incident_id) || 0,
+                incident_code: String(item.incident_code || '').trim()
+            })) : [];
+
+            renderIncomingRequests();
+        }
+
+        function getAvailableBackupResources() {
+            return resources
+                .filter((item) => item.status === 'available')
+                .slice()
+                .sort((a, b) => {
+                    const codeA = String(a.code || '').toLowerCase();
+                    const codeB = String(b.code || '').toLowerCase();
+                    if (codeA !== codeB) return codeA.localeCompare(codeB);
+                    return String(a.name || '').localeCompare(String(b.name || ''));
+                });
+        }
+
+        function getSelectedBackupResources() {
+            return resources.filter((item) => selectedBackupResourceIds.has(item.id));
+        }
+
+        function inferBackupResourceType(items) {
+            const categories = Array.from(new Set(items.map((item) => String(item.category || '').trim()).filter(Boolean)));
+            if (categories.length !== 1) return 'other';
+            if (categories[0] === 'vehicles') return 'vehicle';
+            if (categories[0] === 'personnel') return 'personnel';
+            if (categories[0] === 'equipment') return 'equipment';
+            return 'other';
+        }
+
+        function renderBackupIncidentOptions() {
+            const previousValue = requestIncidentSelect.value;
+            const options = backupIncidents.map((incident) => {
+                const code = incident.code || `INC-${incident.id}`;
+                const title = incident.title || 'Untitled incident';
+                return `<option value="${incident.id}">${escapeHtml(code)} - ${escapeHtml(title)}</option>`;
+            }).join('');
+
+            requestIncidentSelect.innerHTML = '<option value="">Select active incident</option>' + options;
+            if (previousValue && backupIncidents.some((incident) => String(incident.id) === previousValue)) {
+                requestIncidentSelect.value = previousValue;
+            }
+        }
+
+        function updateBackupIncidentMeta() {
+            const incidentId = Number.parseInt(requestIncidentSelect.value || '', 10);
+            const incident = backupIncidents.find((item) => item.id === incidentId);
+            if (!incident) {
+                requestIncidentMeta.textContent = 'Choose an active incident to show its reference, title, and location.';
+                return;
+            }
+
+            const details = [
+                incident.code ? `Reference: ${incident.code}` : '',
+                incident.title ? `Title: ${incident.title}` : '',
+                incident.location ? `Location: ${incident.location}` : 'Location: N/A',
+                incident.priority ? `Priority: ${incident.priority}` : '',
+                incident.status ? `Status: ${incident.status}` : ''
+            ].filter(Boolean);
+
+            requestIncidentMeta.innerHTML = details.map((line) => escapeHtml(line)).join('<br>');
+        }
+
+        function renderBackupRequestTable() {
+            const availableResources = getAvailableBackupResources();
+
+            if (availableResources.length === 0) {
+                requestResourcePickerBody.innerHTML = '<tr><td colspan="5" class="request-empty">No available resources ready for backup request.</td></tr>';
+                return;
+            }
+
+            requestResourcePickerBody.innerHTML = availableResources.map((item) => {
+                const detailLine = formatResourceMeta(item) || item.notes || 'No details';
+                const isSelected = selectedBackupResourceIds.has(item.id);
+                return `
+                    <tr>
+                        <td>${escapeHtml(item.code)}</td>
+                        <td class="name-cell">
+                            <strong>${escapeHtml(item.name)}</strong>
+                            <span>${escapeHtml(detailLine)}</span>
+                        </td>
+                        <td>${escapeHtml(formatCategory(item.category))}</td>
+                        <td>${escapeHtml(item.location || 'N/A')}</td>
+                        <td>
+                            <button type="button" class="request-pick-btn ${isSelected ? 'selected' : ''}" data-backup-resource-id="${item.id}" aria-label="${isSelected ? 'Remove resource' : 'Add resource'}">
+                                <i class="fas ${isSelected ? 'fa-check' : 'fa-plus'}"></i>
+                            </button>
+                        </td>
+                    </tr>
+                `;
+            }).join('');
+        }
+
+        function renderSelectedBackupResources() {
+            const selectedItems = getSelectedBackupResources();
+            requestSelectedCount.textContent = String(selectedItems.length);
+
+            if (selectedItems.length === 0) {
+                requestSelectedList.innerHTML = '<span class="request-empty">Choose resources using the + button.</span>';
+                return;
+            }
+
+            requestSelectedList.innerHTML = selectedItems.map((item) => `
+                <span class="request-selected-chip">
+                    <span>${escapeHtml(item.code)} - ${escapeHtml(item.name)}</span>
+                    <button type="button" data-remove-backup-resource-id="${item.id}" aria-label="Remove ${escapeHtml(item.name)}">
+                        <i class="fas fa-times"></i>
+                    </button>
+                </span>
+            `).join('');
+        }
+
+        function resetBackupRequestState() {
+            selectedBackupResourceIds.clear();
+            requestBackupForm.reset();
+            requestPriorityInput.value = 'high';
+            requestUrgencyInput.value = 'urgent';
+            renderBackupRequestTable();
+            renderSelectedBackupResources();
+            renderBackupIncidentOptions();
+            updateBackupIncidentMeta();
         }
 
         function formatDaysLeft(value) {
@@ -1534,6 +2229,100 @@ $pageTitle = 'Resources Status';
             }
         }
 
+        async function openRequestBackupModal() {
+            rememberTrigger(requestBackupBtn);
+            await loadBackupIncidents();
+            await loadIncomingRequests();
+            resetBackupRequestState();
+            requestBackupModal.classList.add('show');
+            requestBackupModal.setAttribute('aria-hidden', 'false');
+            document.body.style.overflow = 'hidden';
+            requestIncidentSelect.focus();
+        }
+
+        function closeRequestBackupModal() {
+            requestBackupModal.classList.remove('show');
+            requestBackupModal.setAttribute('aria-hidden', 'true');
+            document.body.style.overflow = '';
+            if (lastFocusedTrigger && typeof lastFocusedTrigger.focus === 'function') {
+                lastFocusedTrigger.focus();
+            } else if (requestBackupBtn) {
+                requestBackupBtn.focus();
+            }
+        }
+
+        async function submitBackupRequest(event) {
+            event.preventDefault();
+
+            const selectedItems = getSelectedBackupResources();
+            if (selectedItems.length === 0) {
+                showToast('Select at least one available resource.');
+                return;
+            }
+
+            const incidentId = Number.parseInt(requestIncidentSelect.value || '', 10);
+            const incident = backupIncidents.find((item) => item.id === incidentId);
+            if (!incident) {
+                showToast('Choose an active incident for the backup request.');
+                return;
+            }
+
+            const reason = requestBackupNotes.value.trim();
+            if (!reason) {
+                showToast('Enter the backup reason for this incident.');
+                requestBackupNotes.focus();
+                return;
+            }
+
+            const requestType = inferBackupResourceType(selectedItems);
+            const incidentCode = incident.code || `INC-${incident.id}`;
+            const summaryName = selectedItems.length === 1
+                ? `${selectedItems[0].code} - ${selectedItems[0].name}`
+                : `${selectedItems.length} backup resources for ${incidentCode}`;
+
+            const formData = new FormData();
+            formData.append('requestor', REQUEST_REQUESTOR);
+            formData.append('resource_name', summaryName);
+            formData.append('resource_type', requestType);
+            formData.append('quantity', String(selectedItems.length));
+            formData.append('priority', requestPriorityInput.value || 'high');
+            formData.append('location', incident.location || '');
+            formData.append('notes', reason);
+            formData.append('urgency', requestUrgencyInput.value || 'urgent');
+            formData.append('request_kind', 'backup');
+            formData.append('incident_id', String(incident.id));
+            formData.append('incident_code', incidentCode);
+            formData.append('incident_title', incident.title || '');
+            formData.append('selected_resources_json', JSON.stringify(selectedItems.map((item) => ({
+                id: item.id,
+                code: item.code,
+                name: item.name,
+                category: item.category,
+                location: item.location,
+                assignment: item.assignment || '',
+                notes: item.notes || ''
+            }))));
+
+            submitRequestBackupBtn.disabled = true;
+            submitRequestBackupBtn.style.opacity = '0.75';
+
+            try {
+                const res = await fetch(REQUEST_RESOURCE_ENDPOINT, { method: 'POST', body: formData });
+                const data = await res.json();
+                if (!res.ok || !data || !(data.ok || data.success)) {
+                    throw new Error((data && data.error) ? String(data.error) : 'Failed to submit backup request');
+                }
+                closeRequestBackupModal();
+                resetBackupRequestState();
+                showToast('Backup request submitted.');
+            } catch (err) {
+                showToast((err && err.message) ? String(err.message) : 'Failed to submit backup request.');
+            } finally {
+                submitRequestBackupBtn.disabled = false;
+                submitRequestBackupBtn.style.opacity = '1';
+            }
+        }
+
         function handleEdit(id) {
             openModal('edit', id);
         }
@@ -1643,12 +2432,43 @@ $pageTitle = 'Resources Status';
             await handleRestoreArchive(archiveId);
         });
 
+        requestResourcePickerBody.addEventListener('click', (event) => {
+            const btn = event.target.closest('[data-backup-resource-id]');
+            if (!btn) return;
+            const resourceId = Number.parseInt(btn.getAttribute('data-backup-resource-id') || '', 10);
+            if (!Number.isInteger(resourceId) || resourceId <= 0) return;
+            if (selectedBackupResourceIds.has(resourceId)) {
+                selectedBackupResourceIds.delete(resourceId);
+            } else {
+                selectedBackupResourceIds.add(resourceId);
+            }
+            renderBackupRequestTable();
+            renderSelectedBackupResources();
+        });
+
+        requestSelectedList.addEventListener('click', (event) => {
+            const btn = event.target.closest('[data-remove-backup-resource-id]');
+            if (!btn) return;
+            const resourceId = Number.parseInt(btn.getAttribute('data-remove-backup-resource-id') || '', 10);
+            if (!Number.isInteger(resourceId) || resourceId <= 0) return;
+            selectedBackupResourceIds.delete(resourceId);
+            renderBackupRequestTable();
+            renderSelectedBackupResources();
+        });
+
         addResourceBtn.addEventListener('click', openAddResourceModal);
         archiveResourceBtn.addEventListener('click', async () => {
             try {
                 await openArchiveModal();
             } catch (err) {
                 showToast((err && err.message) ? String(err.message) : 'Unable to load archive.');
+            }
+        });
+        requestBackupBtn.addEventListener('click', async () => {
+            try {
+                await openRequestBackupModal();
+            } catch (err) {
+                showToast((err && err.message) ? String(err.message) : 'Unable to load request data.');
             }
         });
         document.querySelectorAll('[data-open-resource-modal]').forEach((trigger) => {
@@ -1659,6 +2479,10 @@ $pageTitle = 'Resources Status';
         cancelModalBtn.addEventListener('click', closeModal);
         closeArchiveBtn.addEventListener('click', closeArchiveModal);
         archiveDoneBtn.addEventListener('click', closeArchiveModal);
+        closeRequestBackupBtn.addEventListener('click', closeRequestBackupModal);
+        cancelRequestBackupBtn.addEventListener('click', closeRequestBackupModal);
+        requestIncidentSelect.addEventListener('change', updateBackupIncidentMeta);
+        requestBackupForm.addEventListener('submit', submitBackupRequest);
 
         presetButtons.forEach((btn) => {
             btn.addEventListener('click', () => {
@@ -1687,7 +2511,15 @@ $pageTitle = 'Resources Status';
             if (event.target === archiveModal) closeArchiveModal();
         });
 
+        requestBackupModal.addEventListener('click', (event) => {
+            if (event.target === requestBackupModal) closeRequestBackupModal();
+        });
+
         document.addEventListener('keydown', (event) => {
+            if (event.key === 'Escape' && requestBackupModal.classList.contains('show')) {
+                closeRequestBackupModal();
+                return;
+            }
             if (event.key === 'Escape' && archiveModal.classList.contains('show')) {
                 closeArchiveModal();
                 return;

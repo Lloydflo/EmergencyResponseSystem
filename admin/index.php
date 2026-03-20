@@ -70,7 +70,13 @@ if (!function_exists('ers_weather_local_time')) {
 if (!function_exists('ers_table_exists')) {
     function ers_table_exists(PDO $pdo, string $tableName): bool {
         try {
-            $stmt = $pdo->prepare("SHOW TABLES LIKE ?");
+            $stmt = $pdo->prepare(
+                "SELECT 1
+                 FROM INFORMATION_SCHEMA.TABLES
+                 WHERE TABLE_SCHEMA = DATABASE()
+                   AND TABLE_NAME = ?
+                 LIMIT 1"
+            );
             $stmt->execute([$tableName]);
             return (bool)$stmt->fetchColumn();
         } catch (Throwable $e) {
@@ -176,7 +182,9 @@ try {
         $partnerAgencies = (int)$pdo->query("SELECT COUNT(*) AS c FROM agencies WHERE status = 'active'")->fetch()['c'];
     }
 
-    if (ers_table_exists($pdo, 'admin_resources')) {
+    if (ers_table_exists($pdo, 'resource_records')) {
+        $resourceRecords = (int)$pdo->query("SELECT COUNT(*) AS c FROM resource_records")->fetch()['c'];
+    } elseif (ers_table_exists($pdo, 'admin_resources')) {
         $resourceRecords = (int)$pdo->query("SELECT COUNT(*) AS c FROM admin_resources")->fetch()['c'];
     } elseif (ers_table_exists($pdo, 'resources')) {
         $resourceRecords = (int)$pdo->query("SELECT COUNT(*) AS c FROM resources")->fetch()['c'];

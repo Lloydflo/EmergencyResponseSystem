@@ -38,13 +38,45 @@ $pageTitle = 'GPS Tracking System';
         <div class="main-container">
 
 
-            <!-- Tracking Controls -->
-            <div style="height: 3.5rem;"></div>
-            <div class="tracking-controls">
-                <h2 style="font-size: 1.25rem; font-weight: 700; color: #333; margin-bottom: 1.5rem; display: flex; align-items: center;">
-                    <i class="fas fa-sliders-h" style="margin-right: 0.5rem; color: #007bff;"></i>
-                    Tracking Controls
-                </h2>
+            <section class="gps-hero">
+                <div class="gps-hero-main">
+                    <div class="gps-kicker">Dispatcher GPS Console</div>
+                    <h1 class="gps-hero-title">Live GPS Tracking System</h1>
+                    <p class="gps-hero-text">
+                        Monitor dispatched units, incident markers, and hotspot activity from one real-time operational map.
+                    </p>
+
+                    <div class="gps-hero-chips">
+                        <span class="gps-chip gps-chip-live"><span class="gps-chip-dot"></span> Live Tracking Active</span>
+                        <span class="gps-chip">Quezon City Coverage</span>
+                        <span class="gps-chip">Routing + Heatmap Ready</span>
+                    </div>
+                </div>
+
+                <div class="gps-hero-side">
+                    <div class="gps-status-card">
+                        <div class="gps-status-label">Tracking Scope</div>
+                        <div class="gps-status-value">Dispatch units, incidents, and route movement</div>
+                        <div class="gps-status-note">
+                            Use the controls below to filter units, inspect hotspots, and search specific locations without changing the current workflow.
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <section class="tracking-controls">
+                <div class="tracking-controls-header">
+                    <div>
+                        <div class="section-eyebrow">Tracking Controls</div>
+                        <h2 class="section-title">
+                            <i class="fas fa-sliders-h"></i>
+                            GPS Filters and Search
+                        </h2>
+                    </div>
+                    <div class="tracking-controls-note">
+                        Enter an address or coordinates, then press <strong>Enter</strong>.
+                    </div>
+                </div>
                 <div class="control-grid">
                     <div class="control-group">
                         <label for="unit-filter">Track Unit</label>
@@ -64,19 +96,20 @@ $pageTitle = 'GPS Tracking System';
                             <option value="7days">Last 7 Days</option>
                         </select>
                     </div>
-                    <div class="control-group">
+                    <div class="control-group control-group-search">
                         <label for="search-location">Search Location</label>
                         <input type="text" id="search-location" placeholder="Enter address or coordinates" autocomplete="off" style="position:relative;z-index:1100;">
                     </div>
                 </div>
-            </div>
+            </section>
 
-            <!-- GPS Grid -->
             <div class="gps-grid">
-                <!-- Map Panel -->
-                <div class="map-container">
+                <section class="map-container tracking-map-panel">
                     <div class="map-header">
-                        <h3 style="margin: 0; color: #333;">Live GPS Tracking</h3>
+                        <div class="map-heading">
+                            <div class="section-eyebrow">Live Monitoring Grid</div>
+                            <h3 class="map-title">Live GPS Tracking</h3>
+                        </div>
                         <div class="map-controls">
                             <button class="map-btn active" onclick="toggleLayer('unit', this)">
                                 <i class="fas fa-ambulance"></i> Units
@@ -87,7 +120,6 @@ $pageTitle = 'GPS Tracking System';
                             <button class="map-btn" onclick="toggleHeatmap(this)">
                                 <i class="fas fa-fire-alt"></i> Heatmap
                             </button>
-                            
                             <button class="map-btn" onclick="centerMap()">
                                 <i class="fas fa-crosshairs"></i> Center
                             </button>
@@ -96,20 +128,33 @@ $pageTitle = 'GPS Tracking System';
                             </button>
                         </div>
                     </div>
-                    <div class="map-viewport" id="map" style="width:100%;">
-                        
+                    <div class="tracking-map-shell">
+                        <div class="tracking-map-overlay">
+                            <div class="tracking-map-overlay-title">
+                                <i class="fas fa-satellite-dish"></i>
+                                GPS Feed Status
+                            </div>
+                            <div class="tracking-map-overlay-text">
+                                Watch unit movement, incident positions, and heat concentrations in real time.
+                            </div>
+                        </div>
+                        <div class="map-viewport" id="map" style="width:100%;"></div>
                     </div>
-                </div>
+                </section>
 
-                <!-- Units Panel -->
-                <div class="unit-panel">
-                    <h3 style="font-size: 1.25rem; font-weight: 700; color: #333; margin-bottom: 1.5rem; display: flex; align-items: center;">
-                        <i class="fas fa-truck" style="margin-right: 0.5rem; color: #28a745;"></i>
-                        Unit Status & Dispatched
-                    </h3>
-                    <!-- Scrollable container for units -->
+                <aside class="unit-panel">
+                    <div class="unit-panel-header">
+                        <div>
+                            <div class="section-eyebrow">Tracked Units</div>
+                            <h3 class="section-title">
+                                <i class="fas fa-truck"></i>
+                                Unit Status and Dispatch
+                            </h3>
+                        </div>
+                        <div class="unit-panel-note">Auto-updates every few seconds during live polling.</div>
+                    </div>
                     <div class="unit-scroll-container" id="unit-scroll-container"></div>
-                </div>
+                </aside>
             </div>
 
         </div>
@@ -172,6 +217,13 @@ function initMap() {
   L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
     attribution: "© OpenStreetMap contributors"
   }).addTo(map);
+
+    setTimeout(() => {
+        try { map.invalidateSize(); } catch (e) {}
+    }, 180);
+    window.addEventListener('resize', () => {
+        try { map.invalidateSize(); } catch (e) {}
+    });
 
     // Load and display Quezon City border from GeoJSON
     fetch('dispatcher/quezon_city.geojson')

@@ -249,8 +249,9 @@ $password = (string)($input['password'] ?? '');
 $role = admin_users_normalize_role((string)($input['role'] ?? ''));
 $department = trim((string)($input['department'] ?? ''));
 $status = strtolower(trim((string)($input['status'] ?? 'active')));
+$passwordRequired = $role !== 'responder';
 
-if ($name === '' || $email === '' || $password === '' || $department === '') {
+if ($name === '' || $email === '' || $department === '' || ($passwordRequired && $password === '')) {
     admin_users_respond(422, [
         'success' => false,
         'message' => 'Please complete all required fields.',
@@ -278,7 +279,7 @@ if (!in_array($status, ['active', 'inactive'], true)) {
     ]);
 }
 
-$passwordErrors = admin_users_password_errors($password);
+$passwordErrors = $password !== '' ? admin_users_password_errors($password) : [];
 if ($passwordErrors !== []) {
     admin_users_respond(422, [
         'success' => false,
@@ -296,13 +297,17 @@ try {
         ]);
     }
 
+    $passwordHash = $password !== ''
+        ? password_hash($password, PASSWORD_DEFAULT)
+        : password_hash(bin2hex(random_bytes(16)), PASSWORD_DEFAULT);
+
     $insertStmt = $pdo->prepare(
         'INSERT INTO `users` (`email`, `password`, `name`, `department`, `role`, `status`)
          VALUES (?, ?, ?, ?, ?, ?)'
     );
     $insertStmt->execute([
         $email,
-        password_hash($password, PASSWORD_DEFAULT),
+        $passwordHash,
         $name,
         $department,
         $role,

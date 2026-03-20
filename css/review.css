@@ -1,24 +1,19 @@
 .main-content {
-    margin-left: var(--sidebar-width-1);
-    padding: 20px;
-    margin-top: 2rem;
+    padding-bottom: 20px;
 }
 
 .main-content.review-page {
-    display: flex;
-    justify-content: center;
-    width: calc(100% - var(--sidebar-width-1));
+    display: block;
     box-sizing: border-box;
 }
 
 @media (max-width: 767px) {
     .main-content {
-        margin-left: 0;
-        padding: 15px;
+        padding-bottom: 15px;
     }
 
     .main-content.review-page {
-        width: 100%;
+        display: block;
     }
 }
 

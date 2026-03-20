@@ -91,16 +91,57 @@ try {
         <div class="main-container">
 
 
-            <!-- System Alerts -->
+            <section class="dispatch-hero">
+                <div class="dispatch-hero-main">
+                    <div class="dispatch-kicker">Dispatcher Operations Console</div>
+                    <h1 class="dispatch-hero-title">Emergency Dispatch Center</h1>
+                    <p class="dispatch-hero-text">
+                        Real-time command view for incoming incidents, available responders, and live GPS positioning.
+                    </p>
+
+                    <div class="dispatch-stats-grid">
+                        <div class="dispatch-stat-card critical">
+                            <span class="dispatch-stat-label">Active Incidents</span>
+                            <strong class="dispatch-stat-value"><?php echo $activeIncidents; ?></strong>
+                        </div>
+                        <div class="dispatch-stat-card ready">
+                            <span class="dispatch-stat-label">Units Ready</span>
+                            <strong class="dispatch-stat-value"><?php echo $availableUnits; ?></strong>
+                        </div>
+                        <div class="dispatch-stat-card queue">
+                            <span class="dispatch-stat-label">Pending Calls</span>
+                            <strong class="dispatch-stat-value"><?php echo $pendingCalls; ?></strong>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="dispatch-hero-side">
+                    <div class="status-command-card">
+                        <div class="status-command-label">System Status</div>
+                        <div class="status-command-value"><?php echo htmlspecialchars($systemStatus); ?></div>
+                        <div class="status-command-meta">Current priority context</div>
+                        <div class="status-command-summary"><?php echo htmlspecialchars($currentIncidentSummary); ?></div>
+                    </div>
+                </div>
+            </section>
+
             <div class="alert-panel">
-                <i class="fas fa-exclamation-triangle fa-2x"></i>
-                <div>
-                    <strong>System Status:</strong> <?php echo htmlspecialchars($systemStatus); ?> | Active incidents: <?php echo $activeIncidents; ?> | Available units: <?php echo $availableUnits; ?>
+                <div class="alert-icon-wrap">
+                    <i class="fas fa-satellite-dish"></i>
+                </div>
+                <div class="alert-content">
+                    <div class="alert-label">Operational Feed</div>
+                    <div class="alert-message">
+                        <strong>System Status:</strong> <?php echo htmlspecialchars($systemStatus); ?>
+                        <span class="alert-separator">|</span>
+                        Active incidents: <?php echo $activeIncidents; ?>
+                        <span class="alert-separator">|</span>
+                        Available units: <?php echo $availableUnits; ?>
+                    </div>
                 </div>
             </div>
 
-            <!-- Quick Actions -->
-            <div class="quick-actions">
+            <section class="quick-actions dispatch-actions-bar">
                 <button class="quick-action-btn" onclick="emergencyBroadcast()">
                     <i class="fas fa-bullhorn"></i>
                     <span>Emergency Broadcast</span>
@@ -117,58 +158,70 @@ try {
                     <i class="fas fa-box"></i>
                     <span>Resource Request</span>
                 </button>
-            </div>
-
-            <!-- Main Dispatch Grid -->
+            </section>
 
             <div class="dispatch-grid">
-                <div class="dispatch-panel">
+                <section class="dispatch-panel dispatch-panel-calls">
                     <div class="panel-header">
-                        <h2 class="panel-title">
-                            <i class="fas fa-phone"></i>
-                            Active Emergency Calls
-                        </h2>
-                        <span style="background: #dc3545; color: white; padding: 0.25rem 0.75rem; border-radius: 20px; font-size: 0.8rem; font-weight: 600;"><?php echo $activeIncidents; ?> Active</span>
+                        <div>
+                            <div class="panel-eyebrow">Incident Queue</div>
+                            <h2 class="panel-title">
+                                <i class="fas fa-phone"></i>
+                                Active Emergency Calls
+                            </h2>
+                        </div>
+                        <span class="panel-badge panel-badge-danger"><?php echo $activeIncidents; ?> Active</span>
                     </div>
-                    <div id="active-calls-container" style="height: calc(100vh - 320px); overflow-y: auto; padding-right: 4px;">
+                    <div id="active-calls-container" class="dispatch-scroll-list">
                     <?php
                     // ...existing code for active calls...
                     ?>
                     </div>
-                </div>
-                <div class="dispatch-panel">
-                    <div class="panel-header">
-                        <h2 class="panel-title">
-                            <i class="fas fa-ambulance"></i>
-                            Available Units
-                        </h2>
-                        <div style="display:flex; gap:0.5rem; align-items:center;">
-                            <span id="available-units-count" style="background: #28a745; color: white; padding: 0.25rem 0.75rem; border-radius: 20px; font-size: 0.8rem; font-weight: 600;"><?php echo $availableUnits; ?> Available</span>
-                        </div>
-                    </div>
-                    <div id="available-units-container" style="height: calc(100vh - 320px); overflow-y: auto; padding-right: 4px;">
-                    <?php
-                    // ...existing code for available units...
-                    ?>
-                    </div>
-                </div>
-                <div class="dispatch-panel" style="min-width:400px;max-width:600px;flex:1;">
-                    <div class="panel-header">
-                        <h2 class="panel-title">
-                            <i class="fas fa-map"></i>
-                            Live Map
-                        </h2>
+                </section>
+
+                <section class="dispatch-panel dispatch-panel-map">
+                    <div class="panel-header panel-header-map">
                         <div>
+                            <div class="panel-eyebrow">Live GPS Monitor</div>
+                            <h2 class="panel-title">
+                                <i class="fas fa-map-marked-alt"></i>
+                                Live Dispatch Map
+                            </h2>
+                        </div>
+                        <div class="map-toolbar">
+                            <span class="map-live-pill"><span class="map-live-dot"></span> Live Tracking</span>
                             <button class="btn-action-small" onclick="refreshMap()">
                                 <i class="fas fa-sync-alt"></i> Refresh
                             </button>
                         </div>
                     </div>
-                    <div class="map-container">
+                    <div class="map-container dispatch-map-shell">
+                        <div class="map-overlay-note">
+                            <i class="fas fa-broadcast-tower"></i>
+                            Monitor unit movement and incident positions in real time.
+                        </div>
                         <div class="map-placeholder"></div>
                         <div class="map-viewport" id="map" style="width:100%; height:100%;"></div>
                     </div>
-                </div>
+                </section>
+
+                <section class="dispatch-panel dispatch-panel-units">
+                    <div class="panel-header">
+                        <div>
+                            <div class="panel-eyebrow">Response Assets</div>
+                            <h2 class="panel-title">
+                                <i class="fas fa-ambulance"></i>
+                                Available Units
+                            </h2>
+                        </div>
+                        <span id="available-units-count" class="panel-badge panel-badge-success"><?php echo $availableUnits; ?> Available</span>
+                    </div>
+                    <div id="available-units-container" class="dispatch-scroll-list">
+                    <?php
+                    // ...existing code for available units...
+                    ?>
+                    </div>
+                </section>
             </div>
 
             <!-- AI-Powered Dispatch Recommendations -->
@@ -560,6 +613,13 @@ function initMap() {
     L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
         attribution: "© OpenStreetMap contributors"
     }).addTo(map);
+
+    setTimeout(() => {
+        try { map.invalidateSize(); } catch (e) {}
+    }, 180);
+    window.addEventListener('resize', () => {
+        try { map.invalidateSize(); } catch (e) {}
+    });
 
     // Load and display Quezon City border from GeoJSON
     fetch('dispatcher/quezon_city.geojson')

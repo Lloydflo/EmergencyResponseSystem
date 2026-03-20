@@ -42,6 +42,16 @@ $priority = $_POST['priority'] ?? 'medium';
 $location = $_POST['location'] ?? '';
 $notes = $_POST['notes'] ?? '';
 $urgency = $_POST['urgency'] ?? 'normal';
+$request_kind = $_POST['request_kind'] ?? 'standard';
+$incident_id = isset($_POST['incident_id']) ? (int)$_POST['incident_id'] : 0;
+$incident_code = $_POST['incident_code'] ?? '';
+$incident_title = $_POST['incident_title'] ?? '';
+$selected_resources_json = $_POST['selected_resources_json'] ?? '[]';
+
+$selected_resources = json_decode((string)$selected_resources_json, true);
+if (!is_array($selected_resources)) {
+    $selected_resources = [];
+}
 
 if (!$requestor || !$resource_name || !$resource_type) {
     http_response_code(400);
@@ -57,7 +67,12 @@ try {
         'priority' => $priority,
         'location' => $location,
         'notes' => $notes,
-        'urgency' => $urgency
+        'urgency' => $urgency,
+        'request_kind' => $request_kind,
+        'incident_id' => $incident_id,
+        'incident_code' => $incident_code,
+        'incident_title' => $incident_title,
+        'selected_resources' => $selected_resources
     ]);
     $stmt->execute([$requestor, $resource_name, $details]);
     echo json_encode(['success' => true]);

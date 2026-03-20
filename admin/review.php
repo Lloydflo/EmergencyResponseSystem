@@ -23,9 +23,22 @@ if ($adminName === '') {
     <link rel="stylesheet" href="css/admin-header.css">
     <link rel="stylesheet" href="css/sidebar-footer.css">
     <style>
-        .main-content { padding: 1.5rem; background: radial-gradient(circle at top right, rgba(56,189,248,.08), transparent 28%), #f3f7fb; }
-        .ar-shell { width: min(100%, 1360px); margin: 0 auto; display: grid; gap: 1rem; }
-        .ar-hero { background: linear-gradient(135deg, #0f172a, #1e3a8a); color: #f8fafc; border-radius: 22px; padding: 1.3rem 1.4rem; box-shadow: 0 20px 40px rgba(15,23,42,.18); }
+        .main-content { 
+            padding: 4rem; 
+            background: radial-gradient(circle at top right, rgba(56,189,248,.08), transparent 28%), #f3f7fb; 
+        }
+        .ar-shell { 
+            width: min(100%, 1360px); 
+            margin: 0 auto; 
+            display: grid; 
+            gap: 1rem; 
+        }
+        .ar-hero { 
+            background: linear-gradient(135deg, #0f172a, #1e3a8a); 
+            color: #f8fafc; border-radius: 22px; 
+            padding: 1.3rem 1.4rem; 
+            box-shadow: 0 20px 40px rgba(15,23,42,.18); 
+        }
         .ar-hero h1 { margin: 0; font-size: 1.6rem; }
         .ar-hero p { margin: .55rem 0 0; color: rgba(248,250,252,.88); line-height: 1.6; }
         .ar-stats { display: grid; grid-template-columns: repeat(4, minmax(0,1fr)); gap: 1rem; }

@@ -36,56 +36,84 @@ $pageTitle = 'Emergency Call Center';
        =================================== -->
     <div class="main-content">
         <div class="main-container">
-            <div style="height: 1rem;"></div>
+            <section class="call-hero">
+                <div class="call-hero-main">
+                    <div class="call-kicker">Emergency Communications Console</div>
+                    <h1 class="call-hero-title">Emergency Call Center</h1>
+                    <p class="call-hero-text">
+                        Receive incoming calls, document caller details, assess urgency, and push incidents into the response pipeline without changing the existing call intake process.
+                    </p>
 
-            <!-- Stats Bar -->
-            <div class="stats-bar">
-                    <div class="stat-card active-calls">
-                        <div class="stat-content-row">
-                            <span class="stat-icon-box active-calls"><i class="fas fa-phone-volume"></i></span>
-                            <div>
-                                <div class="stat-value" id="statActiveCalls">0</div>
-                                <div class="stat-label">Active Calls</div>
-                            </div>
-                        </div>
+                    <div class="call-hero-chips">
+                        <span class="call-chip call-chip-live"><span class="call-chip-dot"></span> Call Queue Live</span>
+                        <span class="call-chip">Priority Suggestion Active</span>
+                        <span class="call-chip">Incident Logging Ready</span>
                     </div>
-                    <div class="stat-card pending">
-                        <div class="stat-content-row">
-                            <span class="stat-icon-box pending"><i class="fas fa-hourglass-half"></i></span>
-                            <div>
-                                <div class="stat-value" id="statPending">0</div>
-                                <div class="stat-label">Pending Incidents</div>
-                            </div>
-                        </div>
-                    </div>
-                    <div class="stat-card resolved">
-                        <div class="stat-content-row">
-                            <span class="stat-icon-box resolved"><i class="fas fa-check-circle"></i></span>
-                            <div>
-                                <div class="stat-value" id="statResolved">0</div>
-                                <div class="stat-label">Resolved</div>
-                            </div>
-                        </div>
-                    </div>
-                    <div class="stat-card total">
-                        <div class="stat-content-row">
-                            <span class="stat-icon-box total"><i class="fas fa-list-ol"></i></span>
-                            <div>
-                                <div class="stat-value" id="statTotal">0</div>
-                                <div class="stat-label">Total Logged</div>
-                            </div>
-                        </div>
-                    </div>
-            </div>
+                </div>
 
-            <!-- Grid: Intake + Recent Incidents -->
+                <div class="call-hero-side">
+                    <div class="call-focus-card">
+                        <div class="call-focus-label">Operator Focus</div>
+                        <div class="call-focus-value">Receive, assess, and log incidents fast.</div>
+                        <div class="call-focus-note">
+                            Keep caller details complete, confirm location, choose urgency, and let the rest of the dispatcher flow continue as usual.
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <section class="stats-bar">
+                <div class="stat-card active-calls">
+                    <div class="stat-content-row">
+                        <span class="stat-icon-box active-calls"><i class="fas fa-phone-volume"></i></span>
+                        <div>
+                            <div class="stat-value" id="statActiveCalls">0</div>
+                            <div class="stat-label">Active Calls</div>
+                        </div>
+                    </div>
+                </div>
+                <div class="stat-card pending">
+                    <div class="stat-content-row">
+                        <span class="stat-icon-box pending"><i class="fas fa-hourglass-half"></i></span>
+                        <div>
+                            <div class="stat-value" id="statPending">0</div>
+                            <div class="stat-label">Pending Incidents</div>
+                        </div>
+                    </div>
+                </div>
+                <div class="stat-card resolved">
+                    <div class="stat-content-row">
+                        <span class="stat-icon-box resolved"><i class="fas fa-check-circle"></i></span>
+                        <div>
+                            <div class="stat-value" id="statResolved">0</div>
+                            <div class="stat-label">Resolved</div>
+                        </div>
+                    </div>
+                </div>
+                <div class="stat-card total">
+                    <div class="stat-content-row">
+                        <span class="stat-icon-box total"><i class="fas fa-list-ol"></i></span>
+                        <div>
+                            <div class="stat-value" id="statTotal">0</div>
+                            <div class="stat-label">Total Logged</div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
             <div class="call-center-grid">
-                <div>
-                    <!-- Incoming Call Alert -->
+                <section class="call-intake-column">
+                    <div class="call-demo-bar">
+                        <button type="button" class="submit-incident-btn simulate-btn demo-trigger-btn" onclick="simulateIncomingCall()">
+                            <i class="fas fa-bolt"></i> Simulate Incoming Call
+                        </button>
+                    </div>
+
                     <div class="incoming-call-alert" id="incomingCallAlert">
                         <div class="call-info">
                             <i class="fas fa-phone call-icon"></i>
                             <div class="caller-details">
+                                <div class="panel-eyebrow call-alert-eyebrow">Incoming Channel</div>
                                 <h2 id="incomingCallerName">Incoming Call</h2>
                                 <p id="incomingCallerPhone"></p>
                             </div>
@@ -100,15 +128,17 @@ $pageTitle = 'Emergency Call Center';
                         </div>
                     </div>
 
-                    <!-- Active Call Panel -->
                     <div class="active-call-panel" id="activeCallPanel">
                         <div class="call-header">
-                            <div class="call-status">
-                                <span class="status-indicator"></span>
-                                <strong id="activeCallerName">Caller:</strong>
-                                <span id="activeCallerPhone" style="color:#6b7280"></span>
+                            <div class="call-status-wrap">
+                                <div class="panel-eyebrow">Active Call Session</div>
+                                <div class="call-status">
+                                    <span class="status-indicator"></span>
+                                    <strong id="activeCallerName">Caller:</strong>
+                                    <span id="activeCallerPhone" class="call-secondary"></span>
+                                </div>
                             </div>
-                            <div>
+                            <div class="call-session-tools">
                                 <span class="call-timer" id="callTimer">00:00</span>
                                 <button class="end-call-btn" onclick="endCall()">
                                     <i class="fas fa-phone-slash"></i> End Call
@@ -116,7 +146,6 @@ $pageTitle = 'Emergency Call Center';
                             </div>
                         </div>
 
-                        <!-- Incident Form -->
                         <form class="incident-form" id="incidentForm" onsubmit="submitIncident(event)">
                             <div class="form-section">
                                 <div class="section-title">
@@ -161,9 +190,8 @@ $pageTitle = 'Emergency Call Center';
                                     <label for="incidentDescription">Description</label>
                                     <textarea id="incidentDescription" name="incidentDescription" placeholder="Brief description of the situation" required></textarea>
                                 </div>
-                                    <!-- Map picker removed as requested -->
                                 <div class="form-group">
-                                    <label>Priority <span id="prioritySuggestion" style="margin-left:8px;font-size:12px;color:#6b7280;"></span></label>
+                                    <label>Priority <span id="prioritySuggestion" class="priority-suggestion"></span></label>
                                     <div class="priority-select" id="prioritySelect">
                                         <div class="priority-option high" data-value="high">High</div>
                                         <div class="priority-option medium" data-value="medium">Medium</div>
@@ -176,7 +204,7 @@ $pageTitle = 'Emergency Call Center';
                             <div class="form-section">
                                 <div class="section-title">
                                     <i class="fas fa-clipboard-check"></i>
-                                    Actions
+                                    Logging Actions
                                 </div>
                                 <div class="form-row">
                                     <div class="form-group">
@@ -194,42 +222,48 @@ $pageTitle = 'Emergency Call Center';
                                 </div>
                             </div>
 
-                            <button type="submit" class="submit-incident-btn">
-                                <i class="fas fa-save"></i> Log Incident
-                            </button>
+                            <div class="intake-actions">
+                                <button type="submit" class="submit-incident-btn">
+                                    <i class="fas fa-save"></i> Log Incident
+                                </button>
+                                <button type="button" class="submit-incident-btn simulate-btn" onclick="simulateIncomingCall()">
+                                    <i class="fas fa-redo"></i> New Simulated Call
+                                </button>
+                            </div>
                         </form>
                     </div>
+                </section>
 
-                    <!-- Demo: Simulate Incoming Call -->
-                    <div style="margin-top: 12px;">
-                        <button class="submit-incident-btn" style="background:#10b981" onclick="simulateIncomingCall()">
-                            <i class="fas fa-bolt"></i> Simulate Incoming Call
-                        </button>
-                    </div>
-                </div>
-
-                <!-- Sidebar: Recent Incidents -->
                 <aside class="recent-incidents">
                     <div class="sidebar-header">
-                        <h3>Recent Incidents</h3>
-                    </div>
-                    <div class="sidebar-controls" style="display:flex; flex-direction:column; gap:8px; margin:8px 0;">
-                        <input type="search" id="incidentSearch" placeholder="Search Type of Emergency, Location..." style="padding:8px; border:1px solid #e5e7eb; border-radius:8px;">
-                        <div class="date-controls" style="display:flex; gap:8px; flex-wrap:wrap; align-items:center;">
-                            <div style="display:flex; flex-direction:column; gap:4px;">
-                                <label for="filterDay" style="font-size:12px; color:#6b7280;">By Day</label>
-                                <input type="date" id="filterDay" style="padding:6px; border:1px solid #e5e7eb; border-radius:6px;">
-                            </div>
-                            <button class="filter-tab" type="button" onclick="clearIncidentFilters()" title="Clear filters">Clear</button>
+                        <div>
+                            <div class="panel-eyebrow">Incident Queue</div>
+                            <h3>Recent Incidents</h3>
                         </div>
                     </div>
+
+                    <div class="sidebar-controls">
+                        <input type="search" id="incidentSearch" placeholder="Search Type of Emergency, Location...">
+                        <div class="date-controls">
+                            <div class="date-group">
+                                <label for="filterDay">By Day</label>
+                                <input type="date" id="filterDay">
+                            </div>
+                            <div class="date-group">
+                                <label for="filterMonth">By Month</label>
+                                <input type="month" id="filterMonth">
+                            </div>
+                            <button class="filter-tab filter-clear-btn" type="button" onclick="clearIncidentFilters()" title="Clear filters">Clear</button>
+                        </div>
+                    </div>
+
                     <div class="filter-tabs">
                         <button class="filter-tab active" data-filter="all" onclick="setFilter(this)">All</button>
-                        
                         <button class="filter-tab" data-filter="high" onclick="setFilter(this)">High</button>
                         <button class="filter-tab" data-filter="medium" onclick="setFilter(this)">Medium</button>
                         <button class="filter-tab" data-filter="low" onclick="setFilter(this)">Low</button>
                     </div>
+
                     <div class="incident-list" id="incidentList"></div>
                 </aside>
             </div>

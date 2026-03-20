@@ -15,7 +15,13 @@ if (!$pdo) {
 function ers_table_exists(PDO $pdo, string $table): bool
 {
     try {
-        $stmt = $pdo->prepare('SHOW TABLES LIKE ?');
+        $stmt = $pdo->prepare(
+            "SELECT 1
+             FROM INFORMATION_SCHEMA.TABLES
+             WHERE TABLE_SCHEMA = DATABASE()
+               AND TABLE_NAME = ?
+             LIMIT 1"
+        );
         $stmt->execute([$table]);
         return (bool)$stmt->fetchColumn();
     } catch (Throwable $e) {
@@ -26,8 +32,15 @@ function ers_table_exists(PDO $pdo, string $table): bool
 function ers_column_exists(PDO $pdo, string $table, string $column): bool
 {
     try {
-        $stmt = $pdo->prepare("SHOW COLUMNS FROM `{$table}` LIKE ?");
-        $stmt->execute([$column]);
+        $stmt = $pdo->prepare(
+            "SELECT 1
+             FROM INFORMATION_SCHEMA.COLUMNS
+             WHERE TABLE_SCHEMA = DATABASE()
+               AND TABLE_NAME = ?
+               AND COLUMN_NAME = ?
+             LIMIT 1"
+        );
+        $stmt->execute([$table, $column]);
         return (bool)$stmt->fetchColumn();
     } catch (Throwable $e) {
         return false;
@@ -41,15 +54,20 @@ $search = isset($_GET['search']) ? trim((string)$_GET['search']) : '';
 $day = isset($_GET['day']) ? trim((string)$_GET['day']) : '';
 $month = isset($_GET['month']) ? trim((string)$_GET['month']) : '';
 
-$hasAdminResources = ers_table_exists($pdo, 'admin_resources');
+$resourceRecordsTable = null;
+if (ers_table_exists($pdo, 'resource_records')) {
+    $resourceRecordsTable = 'resource_records';
+} elseif (ers_table_exists($pdo, 'admin_resources')) {
+    $resourceRecordsTable = 'admin_resources';
+}
 $hasIncidentNotes = ers_table_exists($pdo, 'incident_notes');
 $hasRatingColumn = $hasIncidentNotes && ers_column_exists($pdo, 'incident_notes', 'rating');
 
 $resourceSelect = ', NULL AS vehicle_name, NULL AS driver_name, NULL AS plate_number';
 $resourceJoin = '';
-if ($hasAdminResources) {
+if ($resourceRecordsTable !== null) {
     $resourceSelect = ', ar.name AS vehicle_name, ar.driver_name AS driver_name, ar.plate_number AS plate_number';
-    $resourceJoin = ' LEFT JOIN admin_resources ar ON ar.code = u.identifier ';
+    $resourceJoin = ' LEFT JOIN `' . $resourceRecordsTable . '` ar ON ar.code = u.identifier ';
 }
 
 $feedbackSelect = ', 0 AS feedback_count, NULL AS avg_rating, 0 AS rating_count';
@@ -149,7 +167,7 @@ if ($search !== '') {
         i.location_address LIKE :search OR
         i.description LIKE :search OR
         u.identifier LIKE :search" .
-        ($hasAdminResources ? " OR ar.name LIKE :search OR ar.driver_name LIKE :search OR ar.plate_number LIKE :search" : '') .
+        ($resourceRecordsTable !== null ? " OR ar.name LIKE :search OR ar.driver_name LIKE :search OR ar.plate_number LIKE :search" : '') .
     ')';
     $params[':search'] = '%' . $search . '%';
 }

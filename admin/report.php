@@ -42,16 +42,51 @@ try {
         $defaultStartDate = $rangeStart;
         $defaultEndDate = $rangeEnd;
 
-        $stmt = $pdo->prepare("SELECT COUNT(*) AS c FROM incidents WHERE created_at BETWEEN :start AND :end");
-        $stmt->execute([':start' => $rangeStart . ' 00:00:00', ':end' => $rangeEnd . ' 23:59:59']);
+        $incidentWindowSql = "
+            FROM incidents i
+            WHERE (
+                i.created_at BETWEEN :start AND :end
+                OR (i.updated_at IS NOT NULL AND i.updated_at BETWEEN :ustart AND :uend)
+                OR EXISTS (
+                    SELECT 1
+                    FROM dispatches d_window
+                    WHERE d_window.incident_id = i.id
+                      AND d_window.assigned_at BETWEEN :dstart AND :dend
+                )
+            )
+        ";
+
+        $stmt = $pdo->prepare("SELECT COUNT(*) AS c " . $incidentWindowSql);
+        $stmt->execute([
+            ':start' => $rangeStart . ' 00:00:00',
+            ':end' => $rangeEnd . ' 23:59:59',
+            ':ustart' => $rangeStart . ' 00:00:00',
+            ':uend' => $rangeEnd . ' 23:59:59',
+            ':dstart' => $rangeStart . ' 00:00:00',
+            ':dend' => $rangeEnd . ' 23:59:59',
+        ]);
         $totalIncidentsMonth = (int)($stmt->fetch()['c'] ?? 0);
 
-        $stmt = $pdo->prepare("SELECT COUNT(*) AS c FROM incidents WHERE created_at BETWEEN :start AND :end");
-        $stmt->execute([':start' => $prevStart . ' 00:00:00', ':end' => $prevEnd . ' 23:59:59']);
+        $stmt = $pdo->prepare("SELECT COUNT(*) AS c " . $incidentWindowSql);
+        $stmt->execute([
+            ':start' => $prevStart . ' 00:00:00',
+            ':end' => $prevEnd . ' 23:59:59',
+            ':ustart' => $prevStart . ' 00:00:00',
+            ':uend' => $prevEnd . ' 23:59:59',
+            ':dstart' => $prevStart . ' 00:00:00',
+            ':dend' => $prevEnd . ' 23:59:59',
+        ]);
         $lastMonthIncidents = (int)($stmt->fetch()['c'] ?? 0);
 
-        $stmt = $pdo->prepare("SELECT COUNT(*) AS total, SUM(CASE WHEN status='resolved' THEN 1 ELSE 0 END) AS resolved FROM incidents WHERE created_at BETWEEN :start AND :end");
-        $stmt->execute([':start' => $rangeStart . ' 00:00:00', ':end' => $rangeEnd . ' 23:59:59']);
+        $stmt = $pdo->prepare("SELECT COUNT(*) AS total, SUM(CASE WHEN i.status='resolved' THEN 1 ELSE 0 END) AS resolved " . $incidentWindowSql);
+        $stmt->execute([
+            ':start' => $rangeStart . ' 00:00:00',
+            ':end' => $rangeEnd . ' 23:59:59',
+            ':ustart' => $rangeStart . ' 00:00:00',
+            ':uend' => $rangeEnd . ' 23:59:59',
+            ':dstart' => $rangeStart . ' 00:00:00',
+            ':dend' => $rangeEnd . ' 23:59:59',
+        ]);
         $rangeStats = $stmt->fetch() ?: [];
         $resolvedCountMonth = (int)($rangeStats['resolved'] ?? 0);
         $totalIncidentsInRange = (int)($rangeStats['total'] ?? 0);
@@ -63,12 +98,12 @@ try {
         $resourceUtilization = $totalUnits > 0 ? round(($busyUnits / $totalUnits) * 100, 1) : 0.0;
 
         $stmt = $pdo->prepare("
-            SELECT AVG(TIMESTAMPDIFF(MINUTE, COALESCE(c.received_at, i.created_at), d.assigned_at)) AS avg_min
+            SELECT AVG(TIMESTAMPDIFF(MINUTE, d.assigned_at, COALESCE(d.on_scene_at, d.cleared_at))) AS avg_min
             FROM dispatches d
             INNER JOIN incidents i ON i.id = d.incident_id
-            LEFT JOIN calls c ON c.id = i.reported_by_call_id
             WHERE d.assigned_at IS NOT NULL
               AND d.assigned_at BETWEEN :start AND :end
+              AND COALESCE(d.on_scene_at, d.cleared_at) IS NOT NULL
         ");
         $stmt->execute([':start' => $rangeStart . ' 00:00:00', ':end' => $rangeEnd . ' 23:59:59']);
         $row = $stmt->fetch();
@@ -1280,9 +1315,9 @@ try {
                 setChartLoading('dispatchDailyChart', true);
                 const qs = buildQuery(filters);
                 const [respRes, metricsRes, dispRes] = await Promise.all([
-                    fetch('api/report_response_times_daily.php' + qs),
-                    fetch('api/report_metrics.php' + qs),
-                    fetch('api/reports_dispatch.php' + qs)
+                    fetch('api/report_response_times_daily.php' + qs, { cache: 'no-store' }),
+                    fetch('api/report_metrics.php' + qs, { cache: 'no-store' }),
+                    fetch('api/reports_dispatch.php' + qs, { cache: 'no-store' })
                 ]);
                 const respData = await respRes.json();
                 const metricsData = await metricsRes.json();
@@ -1354,16 +1389,17 @@ try {
 
                 if (metricsData.ok) {
                     const typeCounts = metricsData.metrics?.incidents_by_type || {};
-                    let typeLabels = ['Medical','Fire','Police','Traffic'];
+                    let typeLabels = ['Medical','Fire','Police','Traffic', 'Other'];
                     let typeValues = [
                         typeCounts.medical || 0,
                         typeCounts.fire || 0,
                         typeCounts.police || 0,
                         typeCounts.traffic || 0,
+                        typeCounts.other || 0,
                     ];
                     // Apply incident type filter if present
                     if (filters.type) {
-                        const map = { medical: 'Medical', fire: 'Fire', police: 'Police', traffic: 'Traffic', accident: 'Traffic', crime: 'Police' };
+                        const map = { medical: 'Medical', fire: 'Fire', police: 'Police', traffic: 'Traffic', accident: 'Traffic', crime: 'Police', other: 'Other' };
                         const wanted = map[filters.type] || filters.type;
                         const idx = typeLabels.indexOf(wanted);
                         if (idx >= 0) { typeLabels = [typeLabels[idx]]; typeValues = [typeValues[idx]]; } else { typeLabels = []; typeValues = []; }
@@ -1378,7 +1414,7 @@ try {
                                 datasets: [{
                                     label: 'Incidents by Type',
                                     data: typeValues,
-                                    backgroundColor: ['#ef4444','#f59e0b','#3b82f6','#22c55e'],
+                                    backgroundColor: ['#ef4444','#f59e0b','#3b82f6','#22c55e','#94a3b8'],
                                     borderRadius: 999,
                                     borderSkipped: false,
                                     barThickness: 28,
@@ -1423,15 +1459,16 @@ try {
                     }
 
                     const priorityCounts = metricsData.metrics?.incidents_by_priority || {};
-                    let priorityLabels = ['High', 'Medium', 'Low'];
+                    let priorityLabels = ['Critical', 'High', 'Medium', 'Low'];
                     let priorityValues = [
+                        priorityCounts.critical || 0,
                         priorityCounts.high || 0,
                         priorityCounts.medium || 0,
                         priorityCounts.low || 0
                     ];
                     if (filters.priority) {
                         const wantedPriority = String(filters.priority).toLowerCase();
-                        const idx = ['high', 'medium', 'low'].indexOf(wantedPriority);
+                        const idx = ['critical', 'high', 'medium', 'low'].indexOf(wantedPriority);
                         if (idx >= 0) {
                             priorityLabels = [priorityLabels[idx]];
                             priorityValues = [priorityValues[idx]];
@@ -1447,8 +1484,8 @@ try {
                                 datasets: [{
                                     label: 'Priority Level Oversight',
                                     data: priorityValues,
-                                    backgroundColor: ['#ef4444', '#f59e0b', '#22c55e'],
-                                    borderColor: ['#fee2e2', '#fde68a', '#bbf7d0'],
+                                    backgroundColor: ['#b91c1c', '#ef4444', '#f59e0b', '#22c55e'],
+                                    borderColor: ['#fecaca', '#fee2e2', '#fde68a', '#bbf7d0'],
                                     borderWidth: 2,
                                     hoverOffset: 10,
                                     spacing: 3,
@@ -1562,7 +1599,9 @@ try {
                         });
                     }
                 }
-            } catch (e) { /* silent */ }
+            } catch (e) {
+                console.error('refreshCharts failed', e);
+            }
             finally {
                 setChartLoading('responseTimeChart', false);
                 setChartLoading('incidentsTypesChart', false);
@@ -1574,7 +1613,7 @@ try {
         async function refreshMetrics(filters = {}) {
             try {
             const qs = buildQuery(filters);
-            const res = await fetch('api/report_metrics.php' + qs);
+            const res = await fetch('api/report_metrics.php' + qs, { cache: 'no-store' });
                 const data = await res.json();
                 if (!data.ok) return;
                 const m = data.metrics || {};
@@ -1625,7 +1664,7 @@ try {
                     }
                 }
                 // Dispatch metrics
-                const dispRes = await fetch('api/reports_dispatch.php' + qs);
+                const dispRes = await fetch('api/reports_dispatch.php' + qs, { cache: 'no-store' });
                 const disp = await dispRes.json();
                 if (disp.ok) {
                     const dm = disp.metrics || {};
@@ -1641,7 +1680,7 @@ try {
                     renderDispatchTopUnits(disp.summary_by_service || {});
                 }
             } catch (e) {
-                // silent fail
+                console.error('refreshMetrics failed', e);
             }
         }
 

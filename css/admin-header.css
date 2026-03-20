@@ -8,7 +8,7 @@
     top: 0;
     left: 0;
     right: 0;
-    height: 70px;
+    height: var(--app-header-height-1);
     background-color: var(--header-bg-1);
     border-bottom: 1px solid var(--border-color-1);
     z-index: 999;
@@ -100,6 +100,7 @@
     align-items: center;
     gap: 1rem;
     flex-shrink: 0;
+    min-width: 0;
     margin-left: auto;
 }
 
@@ -107,6 +108,8 @@
     display: flex;
     align-items: center;
     gap: 0.5rem;
+    min-width: 0;
+    flex-wrap: nowrap;
 }
 
 .notification-item {
@@ -234,9 +237,10 @@
 
 .user-profile-dropdown {
     position: fixed;
-    top: 70px;
+    top: var(--app-header-height-1);
     right: 2rem;
     width: 320px;
+    max-width: calc(100vw - 2rem);
     background-color: var(--card-bg-1);
     border: 1px solid var(--border-color-1);
     border-radius: 0.75rem;
@@ -447,7 +451,7 @@
 @media (max-width: 767px) {
     .admin-header {
         padding: 0 1rem;
-        height: 60px;
+        height: var(--app-header-height-mobile-1);
     }
     
     .admin-header-left {
@@ -518,6 +522,14 @@
     .user-profile {
         padding: 0.375rem;
     }
+
+    .user-profile-dropdown {
+        top: calc(var(--app-header-height-mobile-1) + 0.75rem);
+        left: 1rem;
+        right: 1rem;
+        width: auto;
+        max-width: none;
+    }
 }
 
 /* Small Mobile */
@@ -566,6 +578,11 @@
     
     .header-divider {
         display: none;
+    }
+
+    .theme-toggle {
+        transform: scale(0.92);
+        transform-origin: center;
     }
     
     .user-avatar {
