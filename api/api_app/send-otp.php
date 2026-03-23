@@ -42,7 +42,7 @@ try {
     $stmt->execute([$email]);
     $responder = $stmt->fetch();
 
-    if (!$responder || intval($responder["is_active"]) !== 1) {
+    if (!$responder || $responder["status"] !== "active") {
         echo json_encode(["success" => false, "message" => "Account not found", "otp" => null]);
         exit;
     }
