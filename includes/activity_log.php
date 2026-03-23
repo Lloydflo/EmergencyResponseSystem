@@ -24,6 +24,14 @@ if (!function_exists('ensure_activity_log_auto_increment')) {
     }
 }
 
+if (!function_exists('activity_log_needs_manual_id_fallback')) {
+    function activity_log_needs_manual_id_fallback(string $message): bool {
+        return strpos($message, "Duplicate entry '0' for key 'PRIMARY'") !== false
+            || strpos($message, "Field 'id' doesn't have a default value") !== false
+            || strpos($message, "Field 'id' doesn't have a default") !== false;
+    }
+}
+
 if (!function_exists('log_activity_event')) {
     function log_activity_event(?int $userId, string $action, string $entityType = 'system', ?int $entityId = null, string $details = ''): bool {
         require_once __DIR__ . '/db.php';
@@ -55,8 +63,7 @@ if (!function_exists('log_activity_event')) {
                 $stmt->execute([$userId, $action, $entityType, $entityId, $details]);
             } catch (Throwable $e) {
                 $message = (string)$e->getMessage();
-                $isDuplicateZeroPrimary = (strpos($message, "Duplicate entry '0' for key 'PRIMARY'") !== false);
-                if (!$isDuplicateZeroPrimary) {
+                if (!activity_log_needs_manual_id_fallback($message)) {
                     throw $e;
                 }
 
