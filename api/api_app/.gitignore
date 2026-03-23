@@ -1,0 +1,23 @@
+# ENV (VERY IMPORTANT)
+.env
+
+# PHP Logs
+*.log
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Vendor (if gumagamit ka composer)
+vendor/
+
+# PHPMailer (optional kung naka upload manually sa server)
+PHPMailer/
+
+# Cache / temp
+/tmp
+/cache
+
+# IDE files
+.vscode/
+.idea/
