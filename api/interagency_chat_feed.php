@@ -72,10 +72,11 @@ function ensure_interagency_user_reads_table(PDO $pdo): void {
 function parse_message_details(string $raw): array {
     $text = trim($raw);
     $attachments = [];
+    $replyTo = null;
 
     if ($text !== '' && ($text[0] === '{' || $text[0] === '[')) {
         $decoded = json_decode($text, true);
-        if (is_array($decoded) && (isset($decoded['text']) || isset($decoded['attachments']))) {
+        if (is_array($decoded) && (isset($decoded['text']) || isset($decoded['attachments']) || isset($decoded['reply_to']))) {
             $text = isset($decoded['text']) ? trim((string)$decoded['text']) : '';
             if (isset($decoded['attachments']) && is_array($decoded['attachments'])) {
                 foreach ($decoded['attachments'] as $a) {
@@ -91,10 +92,23 @@ function parse_message_details(string $raw): array {
                     ];
                 }
             }
+            if (isset($decoded['reply_to']) && is_array($decoded['reply_to'])) {
+                $replyText = trim((string)($decoded['reply_to']['text'] ?? ''));
+                $replyAttachments = (int)($decoded['reply_to']['attachment_count'] ?? 0);
+                $replySender = trim((string)($decoded['reply_to']['sender_name'] ?? ''));
+                if ($replyText !== '' || $replyAttachments > 0 || $replySender !== '') {
+                    $replyTo = [
+                        'message_id' => (int)($decoded['reply_to']['message_id'] ?? 0),
+                        'sender_name' => $replySender,
+                        'text' => $replyText,
+                        'attachment_count' => max(0, $replyAttachments),
+                    ];
+                }
+            }
         }
     }
 
-    return ['text' => $text, 'attachments' => $attachments];
+    return ['text' => $text, 'attachments' => $attachments, 'reply_to' => $replyTo];
 }
 
 function load_attachments_by_message(PDO $pdo, array $messageIds): array {
@@ -240,6 +254,7 @@ try {
             'user_id' => $threadKind === 'user' ? $targetUserId : null,
             'text' => (string)$parsed['text'],
             'attachments' => $attachments,
+            'reply_to' => $parsed['reply_to'],
             'created_at' => (string)$row['created_at'],
             'sender_user_id' => $senderUserId > 0 ? $senderUserId : null,
             'sender_name' => (string)$row['sender_name'],

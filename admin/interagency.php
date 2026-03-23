@@ -457,6 +457,110 @@ $pageTitle = 'Inter-Agency Conversations';
             word-break: break-word;
         }
 
+        .ia-message-row {
+            display: flex;
+            align-items: flex-end;
+            gap: 0.42rem;
+        }
+
+        .ia-message-actions {
+            position: relative;
+            flex: 0 0 auto;
+        }
+
+        .ia-message-menu-toggle {
+            border: none;
+            width: 34px;
+            height: 34px;
+            border-radius: 999px;
+            background: rgba(15, 23, 42, 0.08);
+            color: #475569;
+            cursor: pointer;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            transition: 0.2s ease;
+        }
+
+        .ia-message-menu-toggle:hover,
+        .ia-message-menu-toggle:focus-visible,
+        .ia-message-actions.open .ia-message-menu-toggle {
+            background: rgba(15, 23, 42, 0.15);
+            color: #0f172a;
+            outline: none;
+        }
+
+        .ia-message-menu {
+            position: absolute;
+            bottom: calc(100% + 0.45rem);
+            min-width: 150px;
+            background: #1f2937;
+            color: #fff;
+            border-radius: 14px;
+            padding: 0.45rem;
+            box-shadow: 0 18px 36px rgba(15, 23, 42, 0.2);
+            display: none;
+            z-index: 12;
+        }
+
+        .ia-message-actions.open .ia-message-menu {
+            display: block;
+        }
+
+        .ia-message.outgoing .ia-message-menu {
+            right: 0;
+        }
+
+        .ia-message.incoming .ia-message-menu {
+            left: 0;
+        }
+
+        .ia-message-menu button {
+            width: 100%;
+            border: none;
+            background: transparent;
+            color: inherit;
+            text-align: left;
+            font-size: 0.94rem;
+            font-weight: 600;
+            border-radius: 10px;
+            padding: 0.65rem 0.75rem;
+            cursor: pointer;
+        }
+
+        .ia-message-menu button:hover,
+        .ia-message-menu button:focus-visible {
+            background: rgba(255, 255, 255, 0.1);
+            outline: none;
+        }
+
+        .ia-message-state {
+            margin-top: 0.28rem;
+            font-size: 0.68rem;
+            font-weight: 700;
+            color: #0f766e;
+            text-transform: uppercase;
+            letter-spacing: 0.04em;
+        }
+
+        .ia-message.is-pinned .bubble {
+            box-shadow: 0 0 0 2px rgba(20, 184, 166, 0.18), 0 10px 22px rgba(15, 23, 42, 0.12);
+        }
+
+        @media (hover: hover) {
+            .ia-message .ia-message-menu-toggle {
+                opacity: 0;
+                transform: translateY(4px);
+            }
+
+            .ia-message:hover .ia-message-menu-toggle,
+            .ia-message:focus-within .ia-message-menu-toggle,
+            .ia-message-actions.open .ia-message-menu-toggle {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
         .ia-message-text {
             margin-bottom: 0.45rem;
             white-space: pre-wrap;
@@ -464,6 +568,36 @@ $pageTitle = 'Inter-Agency Conversations';
 
         .ia-message-text:last-child {
             margin-bottom: 0;
+        }
+
+        .ia-reply-chip {
+            margin-bottom: 0.55rem;
+            padding: 0.48rem 0.62rem;
+            border-radius: 10px;
+            border-left: 3px solid rgba(15, 118, 110, 0.88);
+            background: rgba(15, 23, 42, 0.08);
+        }
+
+        .ia-message.incoming .ia-reply-chip {
+            background: rgba(15, 23, 42, 0.06);
+            border-left-color: #0f766e;
+            color: #0f172a;
+        }
+
+        .ia-reply-author {
+            display: block;
+            font-size: 0.72rem;
+            font-weight: 700;
+            margin-bottom: 0.18rem;
+            opacity: 0.95;
+        }
+
+        .ia-reply-snippet {
+            display: block;
+            font-size: 0.8rem;
+            line-height: 1.35;
+            opacity: 0.92;
+            word-break: break-word;
         }
 
         .ia-attachments {
@@ -598,6 +732,56 @@ $pageTitle = 'Inter-Agency Conversations';
             display: flex;
             flex-wrap: wrap;
             gap: 0.4rem;
+        }
+
+        .ia-reply-preview {
+            margin-top: 0.6rem;
+            display: flex;
+            align-items: flex-start;
+            justify-content: space-between;
+            gap: 0.75rem;
+            padding: 0.68rem 0.75rem;
+            border-radius: 12px;
+            border: 1px solid #cfe2f3;
+            background: linear-gradient(135deg, #f7fbff 0%, #edf6fb 100%);
+        }
+
+        .ia-reply-preview-main {
+            min-width: 0;
+        }
+
+        .ia-reply-preview-label {
+            margin: 0 0 0.18rem;
+            font-size: 0.72rem;
+            font-weight: 800;
+            color: #0f766e;
+            text-transform: uppercase;
+            letter-spacing: 0.04em;
+        }
+
+        .ia-reply-preview-text {
+            margin: 0;
+            color: #1f2937;
+            font-size: 0.83rem;
+            line-height: 1.38;
+            word-break: break-word;
+        }
+
+        .ia-reply-preview-close {
+            flex: 0 0 auto;
+            border: none;
+            width: 30px;
+            height: 30px;
+            border-radius: 999px;
+            background: rgba(15, 23, 42, 0.08);
+            color: #475569;
+            cursor: pointer;
+        }
+
+        .ia-reply-preview-close:hover,
+        .ia-reply-preview-close:focus-visible {
+            background: rgba(15, 23, 42, 0.14);
+            outline: none;
         }
 
         .ia-file-chip {
@@ -957,6 +1141,7 @@ $pageTitle = 'Inter-Agency Conversations';
                                 </button>
                                 <input type="file" id="messageFiles" multiple hidden>
                             </div>
+                            <div id="replyPreview" class="ia-reply-preview" hidden></div>
                             <div id="filePreview" class="ia-file-preview"></div>
                         </form>
                         <div class="ia-note">Tip: choose thread sa kaliwa, then send incident update directly to that department/responder.</div>
@@ -1004,6 +1189,9 @@ $pageTitle = 'Inter-Agency Conversations';
                 lastIdByDept: {},
                 currentUser: { id: 0, name: 'Admin' },
                 pendingFiles: [],
+                messageItems: {},
+                pinnedMessages: {},
+                replyTo: null,
                 addThreadUsers: [],
                 addThreadQuery: '',
                 addThreadSelectedId: 0,
@@ -1020,6 +1208,7 @@ $pageTitle = 'Inter-Agency Conversations';
             const chatForm = document.getElementById('chatForm');
             const attachFileBtn = document.getElementById('attachFileBtn');
             const messageFilesInput = document.getElementById('messageFiles');
+            const replyPreviewEl = document.getElementById('replyPreview');
             const filePreviewEl = document.getElementById('filePreview');
             const addThreadBtn = document.getElementById('addThreadBtn');
             const addThreadModal = document.getElementById('addThreadModal');
@@ -1223,6 +1412,13 @@ $pageTitle = 'Inter-Agency Conversations';
             function renderMessageBody(item) {
                 const text = String(item.text || '').trim();
                 const attachments = Array.isArray(item.attachments) ? item.attachments : [];
+                const replyTo = item && item.reply_to && typeof item.reply_to === 'object' ? item.reply_to : null;
+                const replyHtml = replyTo ? `
+                    <div class="ia-reply-chip">
+                        <span class="ia-reply-author">${escapeHtml(replyTo.sender_name || 'Message')}</span>
+                        <span class="ia-reply-snippet">${escapeHtml(messageSnippet(replyTo))}</span>
+                    </div>
+                ` : '';
                 const textHtml = text ? `<div class="ia-message-text">${escapeHtml(text)}</div>` : '';
                 const filesHtml = attachments.length ? `
                     <div class="ia-attachments">
@@ -1238,7 +1434,244 @@ $pageTitle = 'Inter-Agency Conversations';
                         }).join('')}
                     </div>
                 ` : '';
-                return textHtml + filesHtml;
+                return replyHtml + textHtml + filesHtml;
+            }
+
+            function stripPriorityPrefix(text) {
+                return String(text || '').replace(/^\[[^\]]+\]\s*/, '').trim();
+            }
+
+            function isEmojiOnlyMessage(text) {
+                const compact = String(text || '').replace(/\s+/g, '');
+                if (!compact) return false;
+                try {
+                    return /^(?:\p{Extended_Pictographic}|\p{Emoji_Presentation}|\uFE0F|\u200D)+$/u.test(compact);
+                } catch (_) {
+                    return false;
+                }
+            }
+
+            function shouldShowMessageActions(item) {
+                const attachments = Array.isArray(item.attachments) ? item.attachments : [];
+                if (attachments.length) {
+                    return true;
+                }
+                const plainText = stripPriorityPrefix(item.text || '');
+                if (!plainText) {
+                    return false;
+                }
+                return !isEmojiOnlyMessage(plainText);
+            }
+
+            function buildForwardPayload(item) {
+                const lines = [];
+                const plainText = stripPriorityPrefix(item.text || '');
+                if (plainText) {
+                    lines.push(plainText);
+                }
+                const attachments = Array.isArray(item.attachments) ? item.attachments : [];
+                attachments.forEach((attachment) => {
+                    const name = String(attachment.name || 'Attachment').trim() || 'Attachment';
+                    const url = String(attachment.url || '').trim();
+                    lines.push(url ? `${name}: ${url}` : name);
+                });
+                return lines.join('\n');
+            }
+
+            function messageSnippet(item) {
+                const plainText = stripPriorityPrefix(item && item.text ? item.text : '');
+                if (plainText) {
+                    return plainText.length > 100 ? `${plainText.slice(0, 100)}...` : plainText;
+                }
+                const attachments = (item && Array.isArray(item.attachments)) ? item.attachments : [];
+                if (attachments.length === 1) {
+                    const attachment = attachments[0] || {};
+                    return attachment.is_image ? 'Photo attachment' : `Attachment: ${String(attachment.name || 'File')}`;
+                }
+                const attachmentCount = Number(item && item.attachment_count ? item.attachment_count : 0);
+                if (!attachments.length && attachmentCount === 1) {
+                    return 'Attachment';
+                }
+                if (attachments.length > 1) {
+                    return `${attachments.length} attachments`;
+                }
+                if (!attachments.length && attachmentCount > 1) {
+                    return `${attachmentCount} attachments`;
+                }
+                return 'Message';
+            }
+
+            function renderReplyPreview() {
+                if (!replyPreviewEl) return;
+                const reply = state.replyTo;
+                if (!reply) {
+                    replyPreviewEl.hidden = true;
+                    replyPreviewEl.innerHTML = '';
+                    return;
+                }
+                replyPreviewEl.hidden = false;
+                replyPreviewEl.innerHTML = `
+                    <div class="ia-reply-preview-main">
+                        <p class="ia-reply-preview-label">Replying to ${escapeHtml(reply.sender_name || 'Message')}</p>
+                        <p class="ia-reply-preview-text">${escapeHtml(reply.snippet || 'Message')}</p>
+                    </div>
+                    <button type="button" class="ia-reply-preview-close" data-clear-reply aria-label="Cancel reply">
+                        <i class="fas fa-times"></i>
+                    </button>
+                `;
+            }
+
+            function clearReplyTarget() {
+                state.replyTo = null;
+                renderReplyPreview();
+            }
+
+            function startReply(item) {
+                if (!item) return;
+                state.replyTo = {
+                    message_id: Number(item.id) || 0,
+                    sender_name: String(item.is_self ? 'You' : (item.sender_name || 'System')),
+                    text: stripPriorityPrefix(item.text || ''),
+                    attachment_count: Array.isArray(item.attachments) ? item.attachments.length : 0,
+                    snippet: messageSnippet(item)
+                };
+                renderReplyPreview();
+                if (messageInput) {
+                    messageInput.focus();
+                }
+            }
+
+            async function copyTextToClipboard(text) {
+                if (!text) {
+                    return false;
+                }
+                if (navigator.clipboard && typeof navigator.clipboard.writeText === 'function') {
+                    try {
+                        await navigator.clipboard.writeText(text);
+                        return true;
+                    } catch (_) {}
+                }
+                const helper = document.createElement('textarea');
+                helper.value = text;
+                helper.setAttribute('readonly', 'readonly');
+                helper.style.position = 'fixed';
+                helper.style.opacity = '0';
+                document.body.appendChild(helper);
+                helper.select();
+                let copied = false;
+                try {
+                    copied = document.execCommand('copy');
+                } catch (_) {
+                    copied = false;
+                }
+                document.body.removeChild(helper);
+                return copied;
+            }
+
+            function setMessageMenuOpen(actionsEl, open) {
+                if (!actionsEl) return;
+                actionsEl.classList.toggle('open', open);
+                const toggle = actionsEl.querySelector('[data-message-menu-toggle]');
+                const menu = actionsEl.querySelector('.ia-message-menu');
+                if (toggle) {
+                    toggle.setAttribute('aria-expanded', open ? 'true' : 'false');
+                }
+                if (menu) {
+                    menu.setAttribute('aria-hidden', open ? 'false' : 'true');
+                }
+            }
+
+            function closeMessageMenus(exceptEl) {
+                chatTimelineEl.querySelectorAll('.ia-message-actions.open').forEach((actionsEl) => {
+                    if (actionsEl !== exceptEl) {
+                        setMessageMenuOpen(actionsEl, false);
+                    }
+                });
+            }
+
+            function syncPinnedMessageState(article, pinned) {
+                if (!article) return;
+                article.classList.toggle('is-pinned', pinned);
+                const stateEl = article.querySelector('[data-message-state]');
+                if (stateEl) {
+                    stateEl.hidden = !pinned;
+                }
+                const pinBtn = article.querySelector('[data-message-action="pin"]');
+                if (pinBtn) {
+                    pinBtn.textContent = pinned ? 'Unpin' : 'Pin';
+                }
+            }
+
+            function renderMessageActions(item, messageId) {
+                if (!shouldShowMessageActions(item)) {
+                    return '';
+                }
+                const pinned = !!state.pinnedMessages[messageId];
+                const actions = [];
+                actions.push({ key: 'reply', label: 'Reply' });
+                if (item.is_self) {
+                    actions.push({ key: 'unsend', label: 'Unsend' });
+                }
+                actions.push({ key: 'forward', label: 'Forward' });
+                actions.push({ key: 'pin', label: pinned ? 'Unpin' : 'Pin' });
+                if (!item.is_self) {
+                    actions.push({ key: 'report', label: 'Report' });
+                }
+                return `
+                    <div class="ia-message-actions" data-message-actions>
+                        <button type="button" class="ia-message-menu-toggle" data-message-menu-toggle aria-label="Open message actions" aria-haspopup="true" aria-expanded="false">
+                            <i class="fas fa-ellipsis-v"></i>
+                        </button>
+                        <div class="ia-message-menu" role="menu" aria-hidden="true">
+                            ${actions.map((action) => `<button type="button" data-message-action="${escapeAttr(action.key)}">${escapeHtml(action.label)}</button>`).join('')}
+                        </div>
+                    </div>
+                `;
+            }
+
+            async function handleMessageAction(action, article, item) {
+                if (!article || !item) {
+                    return;
+                }
+                const messageId = String(article.getAttribute('data-message-id') || '');
+                if (!messageId) {
+                    return;
+                }
+                if (action === 'reply') {
+                    startReply(item);
+                    return;
+                }
+                if (action === 'forward') {
+                    const payload = buildForwardPayload(item);
+                    if (!payload) {
+                        alert('Nothing to forward for this message.');
+                        return;
+                    }
+                    const copied = await copyTextToClipboard(payload);
+                    if (copied) {
+                        alert('Message copied. You can paste it into another chat.');
+                    } else {
+                        window.prompt('Copy this message:', payload);
+                    }
+                    return;
+                }
+                if (action === 'pin') {
+                    const nextPinned = !state.pinnedMessages[messageId];
+                    if (nextPinned) {
+                        state.pinnedMessages[messageId] = true;
+                    } else {
+                        delete state.pinnedMessages[messageId];
+                    }
+                    syncPinnedMessageState(article, nextPinned);
+                    return;
+                }
+                if (action === 'unsend') {
+                    alert('Unsend is ready in the menu, but it still needs a backend endpoint before it can remove the message for everyone.');
+                    return;
+                }
+                if (action === 'report') {
+                    alert('Report is ready in the menu, but it still needs backend handling before it can submit a report.');
+                }
             }
 
             function rel(dateLike) {
@@ -1358,10 +1791,19 @@ $pageTitle = 'Inter-Agency Conversations';
                 const outgoing = !!item.is_self;
                 const who = outgoing ? 'You' : (item.sender_name || 'System');
                 const body = renderMessageBody(item) || '<div class="ia-message-text">Attachment</div>';
+                const messageId = String(item.id || `msg-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`);
+                const actions = renderMessageActions(item, messageId);
+                const pinned = !!state.pinnedMessages[messageId];
+                state.messageItems[messageId] = item;
                 const html = `
-                    <article class="ia-message ${outgoing ? 'outgoing' : 'incoming'}">
+                    <article class="ia-message ${outgoing ? 'outgoing' : 'incoming'} ${pinned ? 'is-pinned' : ''}" data-message-id="${escapeAttr(messageId)}">
                         <div class="meta">${escapeHtml(who)} · ${escapeHtml(time(item.created_at))}</div>
-                        <div class="bubble">${body}</div>
+                        <div class="ia-message-row">
+                            ${outgoing ? actions : ''}
+                            <div class="bubble">${body}</div>
+                            ${outgoing ? '' : actions}
+                        </div>
+                        <div class="ia-message-state" data-message-state ${pinned ? '' : 'hidden'}>Pinned</div>
                     </article>
                 `;
                 chatTimelineEl.insertAdjacentHTML('beforeend', html);
@@ -1411,7 +1853,11 @@ $pageTitle = 'Inter-Agency Conversations';
                 const data = await res.json();
                 if (!data || !data.ok) return;
 
-                if (initial) chatTimelineEl.innerHTML = '';
+                if (initial) {
+                    chatTimelineEl.innerHTML = '';
+                    state.messageItems = {};
+                    closeMessageMenus();
+                }
                 const items = Array.isArray(data.items) ? data.items : [];
                 if (!items.length) {
                     if (initial) chatTimelineEl.innerHTML = '<div class="ia-empty-list">No messages yet for this thread.</div>';
@@ -1450,9 +1896,12 @@ $pageTitle = 'Inter-Agency Conversations';
                 state.activeId = target.id;
                 state.lastIdByDept[threadKey(target)] = 0;
                 clearPendingFiles();
+                clearReplyTarget();
                 renderThreadList();
                 renderChatHeader();
                 chatTimelineEl.innerHTML = '';
+                state.messageItems = {};
+                closeMessageMenus();
                 try {
                     await loadMessages(true, true);
                     await loadThreads();
@@ -1471,6 +1920,12 @@ $pageTitle = 'Inter-Agency Conversations';
 
                 const priority = String(messagePriority.value || 'Routine');
                 const payloadText = text ? `[${priority.toUpperCase()}] ${text}` : '';
+                const replyTo = state.replyTo ? {
+                    message_id: Number(state.replyTo.message_id) || 0,
+                    sender_name: String(state.replyTo.sender_name || ''),
+                    text: String(state.replyTo.text || ''),
+                    attachment_count: Number(state.replyTo.attachment_count || 0)
+                } : null;
                 const isUserThread = String(active.thread_kind || '') === 'user';
                 const entityType = isUserThread ? 'agency_user_chat' : 'agency_chat';
                 const entityId = isUserThread
@@ -1486,6 +1941,9 @@ $pageTitle = 'Inter-Agency Conversations';
                         text: payloadText,
                         attachments: attachments
                     };
+                    if (replyTo) {
+                        payloadObj.reply_to = replyTo;
+                    }
                     const details = JSON.stringify(payloadObj);
 
                     const res = await fetch('api/activity_event.php', {
@@ -1506,6 +1964,7 @@ $pageTitle = 'Inter-Agency Conversations';
                     }
                     messageInput.value = '';
                     clearPendingFiles();
+                    clearReplyTarget();
                     await loadMessages(false, true);
                     await loadThreads();
                 } catch (error) {
@@ -1684,6 +2143,29 @@ $pageTitle = 'Inter-Agency Conversations';
                     }
                 });
 
+                chatTimelineEl.addEventListener('click', async (event) => {
+                    const toggle = event.target.closest('[data-message-menu-toggle]');
+                    if (toggle) {
+                        event.preventDefault();
+                        event.stopPropagation();
+                        const actionsEl = toggle.closest('[data-message-actions]');
+                        if (!actionsEl) return;
+                        const shouldOpen = !actionsEl.classList.contains('open');
+                        closeMessageMenus(actionsEl);
+                        setMessageMenuOpen(actionsEl, shouldOpen);
+                        return;
+                    }
+
+                    const actionBtn = event.target.closest('[data-message-action]');
+                    if (!actionBtn) return;
+                    event.preventDefault();
+                    const article = actionBtn.closest('.ia-message');
+                    const messageId = article ? String(article.getAttribute('data-message-id') || '') : '';
+                    const item = messageId ? state.messageItems[messageId] : null;
+                    closeMessageMenus();
+                    await handleMessageAction(String(actionBtn.getAttribute('data-message-action') || ''), article, item);
+                });
+
                 chatForm.addEventListener('submit', handleSendMessage);
                 if (attachFileBtn && messageFilesInput) {
                     attachFileBtn.addEventListener('click', () => messageFilesInput.click());
@@ -1731,9 +2213,21 @@ $pageTitle = 'Inter-Agency Conversations';
                         }
                     });
                 }
+                document.addEventListener('click', (event) => {
+                    if (event.target.closest('[data-clear-reply]')) {
+                        clearReplyTarget();
+                        return;
+                    }
+                    if (!event.target.closest('[data-message-actions]')) {
+                        closeMessageMenus();
+                    }
+                });
                 document.addEventListener('keydown', (event) => {
-                    if (event.key === 'Escape' && isAddThreadModalOpen()) {
-                        closeAddThreadModal();
+                    if (event.key === 'Escape') {
+                        closeMessageMenus();
+                        if (isAddThreadModalOpen()) {
+                            closeAddThreadModal();
+                        }
                     }
                 });
             }
