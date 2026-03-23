@@ -55,7 +55,7 @@ try {
   $upd->execute([$row["id"]]);
 
   // return responder user
-  $u = $pdo->prepare("SELECT id, name, email FROM responders WHERE email=? LIMIT 1");
+  $u = $pdo->prepare("SELECT id, name, email FROM users WHERE email=? LIMIT 1");
   $u->execute([$email]);
   $responder = $u->fetch();
 
