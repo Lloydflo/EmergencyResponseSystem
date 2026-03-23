@@ -66,6 +66,8 @@ try {
     $mail->Username = trim(getenv("MAIL_USERNAME") ?: "");
     $mail->Password = trim(getenv("MAIL_PASSWORD") ?: "");
 
+    $mail->SMTPDebug = 2; // magpi-print ng detailed error sa browser/log
+
     // ✅ Use 587 + STARTTLS (mas stable sa VPS)
     $mail->SMTPSecure = PHPMailer::ENCRYPTION_STARTTLS;
     $mail->Port = (int)(getenv("MAIL_PORT") ?: 587);
