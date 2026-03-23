@@ -1002,6 +1002,20 @@ $adminName = $_SESSION['user_name'] ?? 'Admin';
             updatePasswordRequirements(false);
         }
 
+        function restoreAddUserForm(payload) {
+            if (!payload) return;
+
+            newUserName.value = payload.name || '';
+            newUserEmail.value = payload.email || '';
+            newUserRole.value = payload.role || 'dispatcher';
+            newUserDepartment.value = payload.department || '';
+            newUserStatus.value = payload.status || 'active';
+            newUserPassword.value = payload.password || '';
+            resetPasswordToggle();
+            syncPasswordFieldForRole();
+            updatePasswordRequirements(Boolean(payload.password));
+        }
+
         async function loadUsers() {
             usersTableBody.innerHTML = '<tr><td colspan="8" class="um-empty">Loading user accounts...</td></tr>';
 
@@ -1139,6 +1153,9 @@ $adminName = $_SESSION['user_name'] ?? 'Admin';
                 addUserSubmitBtn.disabled = true;
             }
 
+            const submittedPayload = { ...payload };
+            closeModal();
+
             try {
                 const response = await fetch(adminUsersApiUrl, {
                     method: 'POST',
@@ -1155,11 +1172,12 @@ $adminName = $_SESSION['user_name'] ?? 'Admin';
                 }
 
                 userRows.unshift(result.user);
-                closeModal();
                 editingId = null;
                 renderRows();
                 showToast(result.message || 'New user account added.');
             } catch (error) {
+                openModal();
+                restoreAddUserForm(submittedPayload);
                 showToast(error.message || 'Unable to save user.');
             } finally {
                 if (addUserSubmitBtn) {

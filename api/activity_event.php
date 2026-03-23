@@ -146,6 +146,12 @@ function ensure_activity_log_auto_increment(PDO $pdo): void {
     }
 }
 
+function activity_log_needs_manual_id_fallback(string $message): bool {
+    return strpos($message, "Duplicate entry '0' for key 'PRIMARY'") !== false
+        || strpos($message, "Field 'id' doesn't have a default value") !== false
+        || strpos($message, "Field 'id' doesn't have a default") !== false;
+}
+
 try {
     ensure_activity_log_auto_increment($pdo);
     $pdo->beginTransaction();
@@ -157,8 +163,7 @@ try {
         $insertedMessageId = (int)$pdo->lastInsertId();
     } catch (Throwable $e) {
         $msg = (string)$e->getMessage();
-        $isDuplicateZeroPrimary = (strpos($msg, "Duplicate entry '0' for key 'PRIMARY'") !== false);
-        if (!$isDuplicateZeroPrimary) {
+        if (!activity_log_needs_manual_id_fallback($msg)) {
             throw $e;
         }
 
