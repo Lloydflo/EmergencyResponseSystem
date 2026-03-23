@@ -1,6 +1,4 @@
 <?php
-echo json_encode(["debug" => "HIT SEND-OTP v2"]);
-exit;
 header("Content-Type: application/json");
 
 require __DIR__ . "/connect.php";
