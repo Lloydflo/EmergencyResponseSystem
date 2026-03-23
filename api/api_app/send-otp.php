@@ -42,9 +42,9 @@ try {
     $stmt->execute([$email]);
     $responder = $stmt->fetch();
 
-    if (!$responder || $responder["status"] !== "active") {
-        echo json_encode(["success" => false, "message" => "Account not found", "otp" => null]);
-        exit;
+    if (!$responder || $responder["is_active"] != 1) {
+    echo json_encode(["success" => false, "message" => "Account not found", "otp" => null]);
+    exit;
     }
 
     // 2) generate OTP & expiry
