@@ -97,6 +97,12 @@ $isDispatcherSidebar = $sidebarRole === 'dispatcher';
                                 <span>System Settings</span>
                             </a>
                         </li>
+                        <li class="sidebar-menu-item">
+                            <a href="admin/audit.php" class="sidebar-link <?php echo basename($_SERVER['PHP_SELF']) == 'audit.php' ? 'active' : ''; ?>" aria-current="<?php echo basename($_SERVER['PHP_SELF']) == 'audit.php' ? 'page' : 'false'; ?>">
+                                <i class="fa-solid fa-sliders"></i>
+                                <span>Audit Log</span>
+                            </a>
+                        </li>
                     </ul>
                 </div>
             <?php endif; ?>

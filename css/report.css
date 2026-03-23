@@ -358,6 +358,10 @@
             box-shadow: 0 2px 8px rgba(0,0,0,0.1);
         }
 
+        .alerts-section-title {
+            color: #333;
+        }
+
         .alert-item {
             display: flex;
             align-items: center;
@@ -365,6 +369,10 @@
             padding: 1rem;
             border-bottom: 1px solid #eee;
             transition: background-color 0.3s ease;
+        }
+
+        .alert-item.info {
+            background-color: #f8fafc;
         }
 
         .alert-item:hover {
@@ -396,9 +404,66 @@
             color: #666;
         }
 
+        .alert-feed-badge {
+            display: inline-block;
+            margin-right: 8px;
+            padding: 2px 8px;
+            border-radius: 999px;
+            color: #fff;
+            font-size: 11px;
+            font-weight: 700;
+        }
+
+        .alert-time {
+            margin-top: 6px;
+            color: #94a3b8;
+            font-size: 12px;
+        }
+
+        .alerts-empty-state {
+            color: #888;
+            padding: 1em;
+        }
+
         .alert-actions {
             display: flex;
             gap: 0.5rem;
+        }
+
+        html[data-theme="dark"] .alerts-section {
+            border: 1px solid #334155;
+            box-shadow: 0 8px 24px rgba(2, 6, 23, 0.28);
+        }
+
+        html[data-theme="dark"] .alerts-section-title,
+        html[data-theme="dark"] .alert-title {
+            color: #f8fafc;
+        }
+
+        html[data-theme="dark"] .alert-item {
+            border-bottom-color: #334155;
+        }
+
+        html[data-theme="dark"] .alert-item.info {
+            background-color: rgba(15, 23, 42, 0.88);
+        }
+
+        html[data-theme="dark"] .alert-item.critical {
+            background-color: rgba(127, 29, 29, 0.3);
+        }
+
+        html[data-theme="dark"] .alert-item.warning {
+            background-color: rgba(120, 53, 15, 0.3);
+        }
+
+        html[data-theme="dark"] .alert-item:hover {
+            background-color: #162033;
+        }
+
+        html[data-theme="dark"] .alert-details,
+        html[data-theme="dark"] .alert-time,
+        html[data-theme="dark"] .alerts-empty-state {
+            color: #cbd5e1;
         }
 
         @media (max-width: 768px) {

@@ -7,6 +7,13 @@ $current_user = get_logged_in_user();
 $current_role = strtolower((string)($current_user['role'] ?? ''));
 
 $pageTitle = 'Dispatcher Dashboard';
+$dashboardUrl = 'dispatcher/dashboard.php';
+$incidentUrl = 'dispatcher/incident.php';
+$dispatchUrl = 'dispatcher/dispatch.php';
+$resourcesUrl = 'dispatcher/resources.php';
+$gpsUrl = 'dispatcher/gps.php';
+$callUrl = 'dispatcher/call.php';
+$reviewUrl = 'dispatcher/review.php';
 $pending_incidents = 0;
 $active_dispatches = 0;
 $available_units = 0;
@@ -169,6 +176,7 @@ $type_total = array_sum($type_counts);
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title><?php echo htmlspecialchars($pageTitle); ?></title>
+    <?php include $rootDir . '/includes/theme-init.php'; ?>
     <base href="../">
     <link rel="icon" type="image/x-icon" href="images/favicon.ico">
     <link rel="stylesheet" href="css/global.css">
@@ -200,7 +208,7 @@ $type_total = array_sum($type_counts);
                         <i class="fas fa-clock"></i>
                         <span id="liveClock"><?php echo date('M d, Y h:i:s A'); ?></span>
                     </div>
-                    <button class="hero-btn" onclick="window.location.reload()">
+                    <button class="hero-btn" type="button" onclick="window.location.href='<?php echo htmlspecialchars($dashboardUrl, ENT_QUOTES); ?>'">
                         <i class="fas fa-rotate"></i>
                         Refresh Panel
                     </button>
@@ -211,32 +219,32 @@ $type_total = array_sum($type_counts);
                 <article class="metric-block pending">
                     <div class="metric-label">Pending Incidents</div>
                     <div class="metric-value"><?php echo (int)$pending_incidents; ?></div>
-                    <a href="incident.php" class="metric-link">Review queue</a>
+                    <a href="<?php echo htmlspecialchars($incidentUrl); ?>" class="metric-link">Review queue</a>
                 </article>
                 <article class="metric-block active">
                     <div class="metric-label">Active Dispatches</div>
                     <div class="metric-value"><?php echo (int)$active_dispatches; ?></div>
-                    <a href="dispatch.php" class="metric-link">Open dispatch center</a>
+                    <a href="<?php echo htmlspecialchars($dispatchUrl); ?>" class="metric-link">Open dispatch center</a>
                 </article>
                 <article class="metric-block available">
                     <div class="metric-label">Available Units</div>
                     <div class="metric-value"><?php echo (int)$available_units; ?></div>
-                    <a href="resources.php" class="metric-link">View resources</a>
+                    <a href="<?php echo htmlspecialchars($resourcesUrl); ?>" class="metric-link">View resources</a>
                 </article>
                 <article class="metric-block field">
                     <div class="metric-label">Units In Field</div>
                     <div class="metric-value"><?php echo (int)$units_in_field; ?></div>
-                    <a href="gps.php" class="metric-link">Track positions</a>
+                    <a href="<?php echo htmlspecialchars($gpsUrl); ?>" class="metric-link">Track positions</a>
                 </article>
                 <article class="metric-block calls">
                     <div class="metric-label">Calls Today</div>
                     <div class="metric-value"><?php echo (int)$today_calls; ?></div>
-                    <a href="call.php" class="metric-link">Open call logs</a>
+                    <a href="<?php echo htmlspecialchars($callUrl); ?>" class="metric-link">Open call logs</a>
                 </article>
                 <article class="metric-block response">
                     <div class="metric-label">Avg Response (7d)</div>
                     <div class="metric-value"><?php echo number_format($avg_response_min, 1); ?>m</div>
-                    <a href="review.php" class="metric-link">View reviews</a>
+                    <a href="<?php echo htmlspecialchars($reviewUrl); ?>" class="metric-link">View reviews</a>
                 </article>
             </section>
 
@@ -260,6 +268,9 @@ $type_total = array_sum($type_counts);
                                 <?php
                                 $priority = strtolower((string)($item['priority'] ?? 'low'));
                                 $status = (string)($item['status'] ?? 'pending');
+                                $incidentId = (int)($item['id'] ?? 0);
+                                $queueDispatchUrl = $dispatchUrl . ($incidentId > 0 ? '?incident_id=' . urlencode((string)$incidentId) : '');
+                                $queueDetailsUrl = $incidentUrl . ($incidentId > 0 ? '?incident_id=' . urlencode((string)$incidentId) : '');
                                 ?>
                                 <article class="queue-item" data-priority="<?php echo htmlspecialchars($priority); ?>">
                                     <div class="queue-item-top">
@@ -282,8 +293,8 @@ $type_total = array_sum($type_counts);
                                             <span><i class="fas fa-phone"></i> <?php echo htmlspecialchars((string)($item['caller_phone'] ?? 'No phone')); ?></span>
                                         </div>
                                         <div class="queue-actions">
-                                            <a href="dispatch.php" class="btn-queue primary">Dispatch</a>
-                                            <a href="incident.php" class="btn-queue">Details</a>
+                                            <a href="<?php echo htmlspecialchars($queueDispatchUrl); ?>" class="btn-queue primary">Dispatch</a>
+                                            <a href="<?php echo htmlspecialchars($queueDetailsUrl); ?>" class="btn-queue">Details</a>
                                         </div>
                                     </div>
                                 </article>
@@ -318,8 +329,8 @@ $type_total = array_sum($type_counts);
                         <?php endif; ?>
                     </div>
                     <div class="unit-actions">
-                        <a href="dispatch.php" class="btn-queue primary">Open Dispatch Board</a>
-                        <a href="gps.php" class="btn-queue">Live GPS</a>
+                        <a href="<?php echo htmlspecialchars($dispatchUrl); ?>" class="btn-queue primary">Open Dispatch Board</a>
+                        <a href="<?php echo htmlspecialchars($gpsUrl); ?>" class="btn-queue">Live GPS</a>
                     </div>
                 </aside>
             </section>
