@@ -25,7 +25,9 @@ try {
             http_response_code(404);
             exit;
         }
-        if ((int)($row['user_id'] ?? 0) !== (int)($_SESSION['user_id'] ?? 0)) {
+        $uploaderId = (int)($row['user_id'] ?? 0);
+        $messageId = (int)($row['message_id'] ?? 0);
+        if ($messageId <= 0 && $uploaderId !== (int)($_SESSION['user_id'] ?? 0)) {
             http_response_code(403);
             exit;
         }

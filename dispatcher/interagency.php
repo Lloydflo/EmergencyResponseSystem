@@ -1163,7 +1163,10 @@ $pageTitle = 'Inter-Agency Coordination';
                     clearPendingFiles();
                     await loadMessages(false, true);
                     await loadThreads();
-                } catch (_) {}
+                } catch (error) {
+                    const reason = (error && error.message) ? String(error.message) : 'Network error while sending message.';
+                    alert(reason);
+                }
             }
 
             async function addUserThread() {

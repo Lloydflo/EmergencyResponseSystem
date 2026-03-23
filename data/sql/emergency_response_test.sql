@@ -996,6 +996,7 @@ CREATE TABLE IF NOT EXISTS `user_profile_images` (
 CREATE TABLE IF NOT EXISTS `interagency_attachment_uploads` (
   `id` BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
   `user_id` INT UNSIGNED NOT NULL,
+  `message_id` INT DEFAULT NULL,
   `file_name` VARCHAR(255) NOT NULL,
   `mime_type` VARCHAR(150) NOT NULL,
   `file_size` BIGINT UNSIGNED NOT NULL DEFAULT 0,
@@ -1005,6 +1006,7 @@ CREATE TABLE IF NOT EXISTS `interagency_attachment_uploads` (
   `expires_at` DATETIME NOT NULL,
   PRIMARY KEY (`id`),
   KEY `idx_interagency_attachment_uploads_user` (`user_id`),
+  KEY `idx_interagency_attachment_uploads_message` (`message_id`),
   KEY `idx_interagency_attachment_uploads_exp` (`expires_at`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 

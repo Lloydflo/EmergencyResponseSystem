@@ -37,9 +37,35 @@ if (!function_exists('media_endpoint_url')) {
 
 if (!function_exists('media_table_has_column')) {
     function media_table_has_column(PDO $pdo, string $table, string $column): bool {
-        $stmt = $pdo->prepare("SHOW COLUMNS FROM `$table` LIKE ?");
-        $stmt->execute([$column]);
+        $safeTable = str_replace('`', '``', $table);
+        $quotedColumn = $pdo->quote($column);
+        if ($quotedColumn === false) {
+            return false;
+        }
+
+        $stmt = $pdo->query("SHOW COLUMNS FROM `{$safeTable}` LIKE {$quotedColumn}");
         return (bool)$stmt->fetch(PDO::FETCH_ASSOC);
+    }
+}
+
+if (!function_exists('media_table_id_is_auto_increment')) {
+    function media_table_id_is_auto_increment(PDO $pdo, string $table): bool {
+        try {
+            $stmt = $pdo->query("SHOW COLUMNS FROM `$table` LIKE 'id'");
+            $row = $stmt ? $stmt->fetch(PDO::FETCH_ASSOC) : null;
+            $extra = strtolower((string)($row['Extra'] ?? $row['extra'] ?? ''));
+            return strpos($extra, 'auto_increment') !== false;
+        } catch (Throwable $e) {
+            return false;
+        }
+    }
+}
+
+if (!function_exists('media_insert_needs_manual_id_fallback')) {
+    function media_insert_needs_manual_id_fallback(string $message): bool {
+        return strpos($message, "Duplicate entry '0' for key 'PRIMARY'") !== false
+            || strpos($message, "Field 'id' doesn't have a default value") !== false
+            || strpos($message, "Field 'id' doesn't have a default") !== false;
     }
 }
 
@@ -162,10 +188,17 @@ if (!function_exists('store_profile_image')) {
 
 if (!function_exists('ensure_interagency_attachment_uploads_table')) {
     function ensure_interagency_attachment_uploads_table(PDO $pdo): void {
+        static $checked = false;
+        if ($checked) {
+            return;
+        }
+        $checked = true;
+
         $pdo->exec(
             "CREATE TABLE IF NOT EXISTS `interagency_attachment_uploads` (
                 `id` BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
                 `user_id` INT UNSIGNED NOT NULL,
+                `message_id` INT DEFAULT NULL,
                 `file_name` VARCHAR(255) NOT NULL,
                 `mime_type` VARCHAR(150) NOT NULL,
                 `file_size` BIGINT UNSIGNED NOT NULL DEFAULT 0,
@@ -175,14 +208,37 @@ if (!function_exists('ensure_interagency_attachment_uploads_table')) {
                 `expires_at` DATETIME NOT NULL,
                 PRIMARY KEY (`id`),
                 KEY `idx_interagency_attachment_uploads_user` (`user_id`),
+                KEY `idx_interagency_attachment_uploads_message` (`message_id`),
                 KEY `idx_interagency_attachment_uploads_exp` (`expires_at`)
             ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci"
         );
+
+        if (!media_table_has_column($pdo, 'interagency_attachment_uploads', 'message_id')) {
+            try {
+                $pdo->exec("ALTER TABLE interagency_attachment_uploads ADD COLUMN message_id INT DEFAULT NULL AFTER user_id");
+            } catch (Throwable $e) {
+                // Ignore when production DB users lack ALTER privileges.
+            }
+        }
+
+        if (!media_table_id_is_auto_increment($pdo, 'interagency_attachment_uploads')) {
+            try {
+                $pdo->exec("ALTER TABLE interagency_attachment_uploads MODIFY id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT");
+            } catch (Throwable $e) {
+                // Inserts below can still fall back to manual IDs.
+            }
+        }
     }
 }
 
 if (!function_exists('ensure_interagency_attachments_table')) {
     function ensure_interagency_attachments_table(PDO $pdo): void {
+        static $checked = false;
+        if ($checked) {
+            return;
+        }
+        $checked = true;
+
         $pdo->exec(
             "CREATE TABLE IF NOT EXISTS `interagency_message_attachments` (
                 `id` BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
@@ -206,6 +262,13 @@ if (!function_exists('ensure_interagency_attachments_table')) {
         }
         if (!media_table_has_column($pdo, 'interagency_message_attachments', 'file_blob')) {
             $pdo->exec("ALTER TABLE interagency_message_attachments ADD COLUMN file_blob LONGBLOB DEFAULT NULL AFTER file_size");
+        }
+        if (!media_table_id_is_auto_increment($pdo, 'interagency_message_attachments')) {
+            try {
+                $pdo->exec("ALTER TABLE interagency_message_attachments MODIFY id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT");
+            } catch (Throwable $e) {
+                // Inserts below can still fall back to manual IDs.
+            }
         }
     }
 }
@@ -249,9 +312,34 @@ if (!function_exists('create_interagency_attachment_upload')) {
         $stmt->bindValue(4, max(0, $fileSize), PDO::PARAM_INT);
         $stmt->bindValue(5, $blob, PDO::PARAM_LOB);
         $stmt->bindValue(6, $isImage ? 1 : 0, PDO::PARAM_INT);
-        $stmt->execute();
+        try {
+            $stmt->execute();
+        } catch (Throwable $e) {
+            $message = (string)$e->getMessage();
+            if (!media_insert_needs_manual_id_fallback($message)) {
+                throw $e;
+            }
+
+            $nextId = (int)$pdo->query("SELECT COALESCE(MAX(id), 0) + 1 FROM interagency_attachment_uploads")->fetchColumn();
+            $fallback = $pdo->prepare(
+                "INSERT INTO interagency_attachment_uploads
+                    (id, user_id, file_name, mime_type, file_size, file_blob, is_image, expires_at)
+                 VALUES (?, ?, ?, ?, ?, ?, ?, DATE_ADD(NOW(), INTERVAL 1 DAY))"
+            );
+            $fallback->bindValue(1, $nextId, PDO::PARAM_INT);
+            $fallback->bindValue(2, $userId, PDO::PARAM_INT);
+            $fallback->bindValue(3, substr($fileName, 0, 255), PDO::PARAM_STR);
+            $fallback->bindValue(4, substr($mimeType, 0, 150), PDO::PARAM_STR);
+            $fallback->bindValue(5, max(0, $fileSize), PDO::PARAM_INT);
+            $fallback->bindValue(6, $blob, PDO::PARAM_LOB);
+            $fallback->bindValue(7, $isImage ? 1 : 0, PDO::PARAM_INT);
+            $fallback->execute();
+        }
 
         $uploadId = (int)$pdo->lastInsertId();
+        if ($uploadId <= 0) {
+            $uploadId = (int)$pdo->query("SELECT COALESCE(MAX(id), 0) FROM interagency_attachment_uploads")->fetchColumn();
+        }
         return [
             'temp_id' => $uploadId,
             'name' => substr($fileName, 0, 255),
@@ -273,7 +361,7 @@ if (!function_exists('get_interagency_attachment_upload')) {
         cleanup_expired_interagency_attachment_uploads($pdo);
 
         $stmt = $pdo->prepare(
-            "SELECT id, user_id, file_name, mime_type, file_size, file_blob, is_image, created_at, expires_at
+            "SELECT id, user_id, message_id, file_name, mime_type, file_size, file_blob, is_image, created_at, expires_at
              FROM interagency_attachment_uploads
              WHERE id = ?
              LIMIT 1"
@@ -307,15 +395,46 @@ if (!function_exists('finalize_interagency_attachment_upload')) {
         $insert->bindValue(4, (int)$upload['file_size'], PDO::PARAM_INT);
         $insert->bindValue(5, (string)$upload['file_blob'], PDO::PARAM_LOB);
         $insert->bindValue(6, ((int)$upload['is_image'] === 1) ? 1 : 0, PDO::PARAM_INT);
-        $insert->execute();
+        try {
+            $insert->execute();
+        } catch (Throwable $e) {
+            $message = (string)$e->getMessage();
+            if (!media_insert_needs_manual_id_fallback($message)) {
+                throw $e;
+            }
+
+            $nextId = (int)$pdo->query("SELECT COALESCE(MAX(id), 0) + 1 FROM interagency_message_attachments")->fetchColumn();
+            $fallback = $pdo->prepare(
+                "INSERT INTO interagency_message_attachments
+                    (id, message_id, file_name, file_url, file_path, mime_type, file_size, file_blob, is_image)
+                 VALUES (?, ?, ?, '', NULL, ?, ?, ?, ?)"
+            );
+            $fallback->bindValue(1, $nextId, PDO::PARAM_INT);
+            $fallback->bindValue(2, $messageId, PDO::PARAM_INT);
+            $fallback->bindValue(3, substr((string)$upload['file_name'], 0, 255), PDO::PARAM_STR);
+            $fallback->bindValue(4, substr((string)$upload['mime_type'], 0, 150), PDO::PARAM_STR);
+            $fallback->bindValue(5, (int)$upload['file_size'], PDO::PARAM_INT);
+            $fallback->bindValue(6, (string)$upload['file_blob'], PDO::PARAM_LOB);
+            $fallback->bindValue(7, ((int)$upload['is_image'] === 1) ? 1 : 0, PDO::PARAM_INT);
+            $fallback->execute();
+        }
 
         $attachmentId = (int)$pdo->lastInsertId();
+        if ($attachmentId <= 0) {
+            $attachmentId = (int)$pdo->query("SELECT COALESCE(MAX(id), 0) FROM interagency_message_attachments")->fetchColumn();
+        }
         $downloadUrl = interagency_attachment_url($attachmentId);
         $update = $pdo->prepare("UPDATE interagency_message_attachments SET file_url = ? WHERE id = ?");
         $update->execute([$downloadUrl, $attachmentId]);
 
-        $delete = $pdo->prepare("DELETE FROM interagency_attachment_uploads WHERE id = ?");
-        $delete->execute([$uploadId]);
+        if (media_table_has_column($pdo, 'interagency_attachment_uploads', 'message_id')) {
+            $keepUpload = $pdo->prepare(
+                "UPDATE interagency_attachment_uploads
+                 SET message_id = ?, expires_at = DATE_ADD(NOW(), INTERVAL 10 YEAR)
+                 WHERE id = ?"
+            );
+            $keepUpload->execute([$messageId, $uploadId]);
+        }
 
         return [
             'id' => $attachmentId,

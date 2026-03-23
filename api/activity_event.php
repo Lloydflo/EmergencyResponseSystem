@@ -98,8 +98,6 @@ function persist_message_attachments(PDO $pdo, int $messageId, string $details):
     if (count($attachments) === 0) {
         return;
     }
-
-    ensure_interagency_attachments_table($pdo);
     foreach ($attachments as $attachment) {
         $tempId = (int)($attachment['temp_id'] ?? 0);
         if ($tempId > 0) {
@@ -124,6 +122,22 @@ function persist_message_attachments(PDO $pdo, int $messageId, string $details):
             (int)$attachment['size'],
             (int)$attachment['is_image'],
         ]);
+    }
+}
+
+function prepare_interagency_attachment_storage(PDO $pdo, string $details): void {
+    $attachments = extract_attachments_from_details($details);
+    if (count($attachments) === 0) {
+        return;
+    }
+
+    ensure_interagency_attachments_table($pdo);
+
+    foreach ($attachments as $attachment) {
+        if ((int)($attachment['temp_id'] ?? 0) > 0) {
+            ensure_interagency_attachment_uploads_table($pdo);
+            break;
+        }
     }
 }
 
@@ -154,6 +168,9 @@ function activity_log_needs_manual_id_fallback(string $message): bool {
 
 try {
     ensure_activity_log_auto_increment($pdo);
+    if (($entity_type === 'agency_chat' || $entity_type === 'agency_user_chat') && $details !== '') {
+        prepare_interagency_attachment_storage($pdo, $details);
+    }
     $pdo->beginTransaction();
 
     $insertedMessageId = 0;
@@ -177,7 +194,9 @@ try {
         persist_message_attachments($pdo, $insertedMessageId, $details);
     }
 
-    $pdo->commit();
+    if ($pdo->inTransaction()) {
+        $pdo->commit();
+    }
     echo json_encode([
         'ok' => true,
         'message_id' => $insertedMessageId
