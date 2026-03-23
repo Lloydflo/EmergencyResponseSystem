@@ -122,6 +122,7 @@ try {
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title><?php echo htmlspecialchars($pageTitle); ?></title>
+    <?php include $rootDir . '/includes/theme-init.php'; ?>
     <base href="../">
     <link rel="icon" type="image/x-icon" href="images/favicon.ico">
     <link rel="stylesheet" href="css/global.css">
@@ -535,7 +536,7 @@ try {
             <!-- System Alerts -->
             <div class="alerts-section">
                 <div style="display:flex; align-items:center; justify-content:space-between; gap:1rem; margin-bottom:1.5rem;">
-                    <h2 style="font-size: 1.25rem; font-weight: 700; color: #333; margin: 0; display: flex; align-items: center;">
+                    <h2 class="alerts-section-title" style="font-size: 1.25rem; font-weight: 700; margin: 0; display: flex; align-items: center;">
                         <i class="fas fa-bell" style="margin-right: 0.5rem; color: #ffc107;"></i>
                         System Alerts & Notifications
                     </h2>
@@ -633,11 +634,11 @@ try {
             <div class="alert-item ${systemFeedEscape(cardClass)}">
                 <div class="alert-info">
                     <div class="alert-title">
-                        <span style="display:inline-block;margin-right:8px;padding:2px 8px;border-radius:999px;background:${badgeColor};color:#fff;font-size:11px;font-weight:700;">${systemFeedEscape(badgeLabel)}</span>
+                        <span class="alert-feed-badge" style="background:${badgeColor};">${systemFeedEscape(badgeLabel)}</span>
                         <i class="fas ${icon}"></i> ${systemFeedEscape(item.title)}
                     </div>
                     <div class="alert-details">${systemFeedEscape(item.details)}</div>
-                    ${time ? `<div style="margin-top:6px;color:#94a3b8;font-size:12px;">${systemFeedEscape(time)}</div>` : ''}
+                    ${time ? `<div class="alert-time">${systemFeedEscape(time)}</div>` : ''}
                 </div>
             </div>
         `;
@@ -660,7 +661,7 @@ try {
         LAST_SYSTEM_FEED = combinedFeed;
 
         if (!combinedFeed.length) {
-            container.innerHTML = '<div style="color:#888;padding:1em;">No system alerts or recent activity at this time.</div>';
+            container.innerHTML = '<div class="alerts-empty-state">No system alerts or recent activity at this time.</div>';
         } else {
             container.innerHTML = combinedFeed.map(systemFeedItemHtml).join('');
         }
