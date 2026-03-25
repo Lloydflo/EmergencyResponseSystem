@@ -259,7 +259,7 @@ try {
                     <div class="metric-header">
                         <div>
                             <h3 class="metric-title">Open Incidents</h3>
-                            <div class="metric-value"><?php echo $openIncidents; ?></div>
+                            <div class="metric-value" id="metricOpenIncidents"><?php echo $openIncidents; ?></div>
                             <div class="metric-change positive">
                                 <i class="fas fa-shield-halved"></i>
                             </div>
@@ -278,7 +278,7 @@ try {
                     <div class="metric-header">
                         <div>
                             <h3 class="metric-title">Active Users</h3>
-                            <div class="metric-value"><?php echo $activeUsers; ?></div>
+                            <div class="metric-value" id="metricActiveUsers"><?php echo $activeUsers; ?></div>
                             <div class="metric-change positive">
                                 <i class="fas fa-user-check"></i>
                             </div>
@@ -297,7 +297,7 @@ try {
                     <div class="metric-header">
                         <div>
                             <h3 class="metric-title">Partner Agencies</h3>
-                            <div class="metric-value"><?php echo $partnerAgencies; ?></div>
+                            <div class="metric-value" id="metricPartnerAgencies"><?php echo $partnerAgencies; ?></div>
                             <div class="metric-change positive">
                                 <i class="fas fa-link"></i>
                             </div>
@@ -316,7 +316,7 @@ try {
                     <div class="metric-header">
                         <div>
                             <h3 class="metric-title">Resource Records</h3>
-                            <div class="metric-value"><?php echo $resourceRecords; ?></div>
+                            <div class="metric-value" id="metricResourceRecords"><?php echo $resourceRecords; ?></div>
                             <div class="metric-change positive">
                                 <i class="fas fa-box-open"></i>
                             </div>
@@ -335,7 +335,7 @@ try {
                     <div class="metric-header">
                         <div>
                             <h3 class="metric-title">Monthly Incidents</h3>
-                            <div class="metric-value"><?php echo $monthlyIncidents; ?></div>
+                            <div class="metric-value" id="metricMonthlyIncidents"><?php echo $monthlyIncidents; ?></div>
                             <div class="metric-change positive">
                                 <i class="fas fa-chart-simple"></i>
                             </div>
@@ -529,14 +529,14 @@ try {
         }
         // Charts data from PHP
         const typesLabels = ['Medical','Fire','Police','Traffic'];
-        const typesValues = <?php echo json_encode([
+        let typesValues = <?php echo json_encode([
             $typesCounts['medical'] ?? 0,
             $typesCounts['fire'] ?? 0,
             $typesCounts['police'] ?? 0,
             $typesCounts['traffic'] ?? 0,
         ]); ?>;
         const priorityLabels = ['High','Medium','Low'];
-        const priorityValues = <?php echo json_encode(array_values($priorityCounts)); ?>;
+        let priorityValues = <?php echo json_encode(array_values($priorityCounts)); ?>;
         const piePercentageLabelsPlugin = {
             id: 'piePercentageLabels',
             afterDatasetsDraw(chart) {
@@ -806,6 +806,47 @@ try {
             renderIncidentsPriorityChart();
         });
 
+        async function refreshDashboardSummary() {
+            try {
+                const r = await fetch('api/admin_dashboard_summary.php', { cache: 'no-store' });
+                const j = await r.json();
+                if (!j || !j.ok) throw new Error('Invalid dashboard payload');
+
+                const metrics = j.metrics || {};
+                const charts = j.charts || {};
+                const setMetric = (id, value) => {
+                    const el = document.getElementById(id);
+                    if (el) el.textContent = String(value);
+                };
+
+                setMetric('metricOpenIncidents', Number(metrics.open_incidents || 0));
+                setMetric('metricActiveUsers', Number(metrics.active_users || 0));
+                setMetric('metricPartnerAgencies', Number(metrics.partner_agencies || 0));
+                setMetric('metricResourceRecords', Number(metrics.resource_records || 0));
+                setMetric('metricMonthlyIncidents', Number(metrics.monthly_incidents || 0));
+
+                const byType = charts.incidents_by_type || {};
+                typesValues = [
+                    Number(byType.medical || 0),
+                    Number(byType.fire || 0),
+                    Number(byType.police || 0),
+                    Number(byType.traffic || 0)
+                ];
+
+                const byPriority = charts.incidents_by_priority || {};
+                priorityValues = [
+                    Number(byPriority.high || 0),
+                    Number(byPriority.medium || 0),
+                    Number(byPriority.low || 0)
+                ];
+
+                renderIncidentsTypeChart();
+                renderIncidentsPriorityChart();
+            } catch (e) {
+                console.error('refreshDashboardSummary failed', e);
+            }
+        }
+
         // Dashboard: Recent Activity and Active Alerts
         function escapeHtml(str){
             return String(str || '')
@@ -1059,11 +1100,10 @@ try {
             }, 600);
         }
         // Chart functions
-        function refreshChart() {
+        async function refreshChart() {
             showNotification('Refreshing chart data...', 'info');
-            setTimeout(() => {
-                showNotification('Chart data updated', 'success');
-            }, 1000);
+            await refreshDashboardSummary();
+            showNotification('Chart data updated', 'success');
         }
         function exportChart() {
             // Gather dashboard metrics from DOM
@@ -1272,9 +1312,11 @@ try {
             }
             loadActivityFeed();
             loadAlertsPanel();
+            refreshDashboardSummary();
             // Auto-refresh panels periodically
             setInterval(() => { try { loadActivityFeed(); } catch(e){} }, 15000);
             setInterval(() => { try { loadAlertsPanel(); } catch(e){} }, 15000);
+            setInterval(() => { try { refreshDashboardSummary(); } catch(e){} }, 10000);
         });
         </script>
 </body>

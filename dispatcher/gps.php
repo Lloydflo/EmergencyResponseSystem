@@ -185,7 +185,11 @@ let incidentGeocodeCache = {};
 let searchLocationMarker = null;
 let pendingTrackRequest = null;
 let pendingTrackAttempts = 0;
+let pendingRouteRequest = null;
+let pendingRouteAttempts = 0;
+let activeRouteState = null;
 const MAX_PENDING_TRACK_ATTEMPTS = 20;
+const MAX_PENDING_ROUTE_ATTEMPTS = 20;
 const QC_VIEWBOX = '121.0000,14.7500,121.1000,14.6000';
 const HEATMAP_GRADIENT = {
     0.18: '#2d5be3',
@@ -285,23 +289,27 @@ function loadIncidentMarkers() {
         heatLayer.setOptions({ radius: radius, blur: radius * 0.9 });
     });
 
-    // Plot route if parameters provided
+    // Restore dispatch route immediately when coordinates are already present in the URL.
     try {
         const params = new URLSearchParams(window.location.search);
-        const fromLat = parseFloat(params.get('from_lat'));
-        const fromLng = parseFloat(params.get('from_lng'));
-        const toLat = parseFloat(params.get('to_lat'));
-        const toLng = parseFloat(params.get('to_lng'));
-        if (!isNaN(fromLat) && !isNaN(fromLng) && !isNaN(toLat) && !isNaN(toLng)) {
-            // Remove any existing route before plotting new one
-            if (window.currentRoutingControl && typeof window.currentRoutingControl.remove === 'function') {
-                try { window.currentRoutingControl.remove(); } catch (e) {}
-                window.currentRoutingControl = null;
-            }
-            if (typeof addRouteToIncident === 'function') {
-                addRouteToIncident(fromLat, fromLng, toLat, toLng);
-                showNotification('Route loaded for dispatched unit', 'success');
-            }
+        const fromLat = toNum(params.get('from_lat'));
+        const fromLng = toNum(params.get('from_lng'));
+        const toLat = toNum(params.get('to_lat'));
+        const toLng = toNum(params.get('to_lng'));
+        const unit = params.get('unit') || '';
+        const unitId = params.get('unit_id') || '';
+        const incidentId = params.get('incident_id') || '';
+        const incidentLabel = params.get('incident') || '';
+        if (fromLat !== null && fromLng !== null && toLat !== null && toLng !== null && typeof addRouteToIncident === 'function') {
+            addRouteToIncident(fromLat, fromLng, toLat, toLng, { silent: true });
+            activeRouteState = {
+                unit,
+                unitId,
+                incidentId,
+                incidentLocation: incidentLabel,
+                toLat: String(toLat),
+                toLng: String(toLng)
+            };
         }
     } catch (e) {}
 }
@@ -443,6 +451,9 @@ function refreshMap() {
 function selectRoute(routeId) {
     // Hide all routes first
     Object.values(routes).forEach(r => map.removeLayer(r));
+    activeRouteState = null;
+    pendingRouteRequest = null;
+    pendingRouteAttempts = 0;
     if (routes[routeId]) {
         routes[routeId].addTo(map);
         if (!activeLayers.includes('routes')) activeLayers.push('routes');
@@ -550,6 +561,232 @@ function tryTrackPendingUnit() {
     setTimeout(tryTrackPendingUnit, 400);
 }
 
+function resolveDispatchedUnitEntry(unitRef, explicitUnitId) {
+    const rawUnit = normalizeUnitIdentifier(unitRef || '');
+    if (rawUnit && dispatchedUnitsByIdentifier[rawUnit]) {
+        return { key: rawUnit, unit: dispatchedUnitsByIdentifier[rawUnit] };
+    }
+
+    if (rawUnit) {
+        const upperRaw = rawUnit.toUpperCase();
+        const matchedKey = Object.keys(dispatchedUnitsByIdentifier).find((key) => String(key).toUpperCase() === upperRaw);
+        if (matchedKey) {
+            return { key: matchedKey, unit: dispatchedUnitsByIdentifier[matchedKey] };
+        }
+    }
+
+    const rawUnitId = String(explicitUnitId || '').trim();
+    if (rawUnitId) {
+        const mappedIdentifier = unitIdentifierById[rawUnitId];
+        if (mappedIdentifier && dispatchedUnitsByIdentifier[mappedIdentifier]) {
+            return { key: mappedIdentifier, unit: dispatchedUnitsByIdentifier[mappedIdentifier] };
+        }
+        const matchedKey = Object.keys(dispatchedUnitsByIdentifier).find((key) => {
+            const unit = dispatchedUnitsByIdentifier[key];
+            return String(unit && unit.id !== undefined && unit.id !== null ? unit.id : '') === rawUnitId;
+        });
+        if (matchedKey) {
+            return { key: matchedKey, unit: dispatchedUnitsByIdentifier[matchedKey] };
+        }
+    }
+
+    return { key: rawUnit, unit: null };
+}
+
+function plotKnownDispatchRoute(fromLat, fromLng, toLat, toLng, options) {
+    const opts = options || {};
+    const resolvedFromLat = toNum(fromLat);
+    const resolvedFromLng = toNum(fromLng);
+    const resolvedToLat = toNum(toLat);
+    const resolvedToLng = toNum(toLng);
+    if (resolvedFromLat === null || resolvedFromLng === null || resolvedToLat === null || resolvedToLng === null) {
+        return false;
+    }
+    if (typeof addRouteToIncident !== 'function') {
+        if (!opts.deferIfUnavailable && !opts.suppressErrors) {
+            showNotification('Routing is not ready yet', 'error');
+        }
+        return false;
+    }
+    addRouteToIncident(resolvedFromLat, resolvedFromLng, resolvedToLat, resolvedToLng, { silent: true });
+    if (!opts.silent) {
+        showNotification(opts.successMessage || 'Route loaded for dispatched unit', 'success');
+    }
+    return true;
+}
+
+async function fetchIncidentRouteContext(incidentId) {
+    const normalizedId = String(incidentId || '').trim();
+    if (!normalizedId) return null;
+    try {
+        const response = await fetch('api/incident_details.php?id=' + encodeURIComponent(normalizedId));
+        const data = await response.json();
+        if (!data || !data.incident) return null;
+        const inc = data.incident;
+        return {
+            label: inc.reference_no || inc.title || inc.location_address || '',
+            location: inc.location_address || '',
+            lat: toNum(inc.latitude),
+            lng: toNum(inc.longitude)
+        };
+    } catch (e) {
+        return null;
+    }
+}
+
+async function tryShowPendingRoute() {
+    if (!pendingRouteRequest) return;
+
+    const routed = await showUnitRoute(pendingRouteRequest.unit || '', {
+        unitId: pendingRouteRequest.unitId || '',
+        incidentId: pendingRouteRequest.incidentId || '',
+        incidentLocation: pendingRouteRequest.incidentLocation || '',
+        fromLat: pendingRouteRequest.fromLat || '',
+        fromLng: pendingRouteRequest.fromLng || '',
+        toLat: pendingRouteRequest.toLat || '',
+        toLng: pendingRouteRequest.toLng || '',
+        silent: true,
+        suppressErrors: true,
+        deferIfUnavailable: true
+    });
+
+    if (routed) {
+        showNotification('Live route ready for dispatched unit', 'success');
+        pendingRouteRequest = null;
+        pendingRouteAttempts = 0;
+        return;
+    }
+
+    pendingRouteAttempts += 1;
+    if (pendingRouteAttempts >= MAX_PENDING_ROUTE_ATTEMPTS) {
+        const fallbackShown = plotKnownDispatchRoute(
+            pendingRouteRequest.fromLat,
+            pendingRouteRequest.fromLng,
+            pendingRouteRequest.toLat,
+            pendingRouteRequest.toLng,
+            { silent: true, suppressErrors: true, deferIfUnavailable: true }
+        );
+        showNotification(
+            fallbackShown ? 'Showing last known dispatch route' : 'Route not available yet',
+            fallbackShown ? 'info' : 'error'
+        );
+        if (fallbackShown) {
+            activeRouteState = {
+                unit: pendingRouteRequest.unit || '',
+                unitId: pendingRouteRequest.unitId || '',
+                incidentId: pendingRouteRequest.incidentId || '',
+                incidentLocation: pendingRouteRequest.incidentLocation || '',
+                toLat: String(pendingRouteRequest.toLat || ''),
+                toLng: String(pendingRouteRequest.toLng || '')
+            };
+        }
+        pendingRouteRequest = null;
+        pendingRouteAttempts = 0;
+        return;
+    }
+
+    setTimeout(tryShowPendingRoute, 500);
+}
+
+function refreshActiveRoute() {
+    if (!activeRouteState) return;
+    showUnitRoute(activeRouteState.unit || '', {
+        unitId: activeRouteState.unitId || '',
+        incidentId: activeRouteState.incidentId || '',
+        incidentLocation: activeRouteState.incidentLocation || '',
+        toLat: activeRouteState.toLat || '',
+        toLng: activeRouteState.toLng || '',
+        silent: true,
+        suppressErrors: true,
+        deferIfUnavailable: true
+    }).catch(() => {});
+}
+
+function getFocusedUnitRequest() {
+    if (activeRouteState && (activeRouteState.unit || activeRouteState.unitId)) {
+        return {
+            unit: String(activeRouteState.unit || ''),
+            unitId: String(activeRouteState.unitId || ''),
+            incidentLocation: String(activeRouteState.incidentLocation || ''),
+            incidentId: String(activeRouteState.incidentId || '')
+        };
+    }
+    if (pendingTrackRequest && (pendingTrackRequest.unit || pendingTrackRequest.unitId)) {
+        return {
+            unit: String(pendingTrackRequest.unit || ''),
+            unitId: String(pendingTrackRequest.unitId || ''),
+            incidentLocation: '',
+            incidentId: ''
+        };
+    }
+    if (pendingRouteRequest && (pendingRouteRequest.unit || pendingRouteRequest.unitId)) {
+        return {
+            unit: String(pendingRouteRequest.unit || ''),
+            unitId: String(pendingRouteRequest.unitId || ''),
+            incidentLocation: String(pendingRouteRequest.incidentLocation || ''),
+            incidentId: String(pendingRouteRequest.incidentId || '')
+        };
+    }
+    return null;
+}
+
+function isUnitFocused(unit) {
+    const request = getFocusedUnitRequest();
+    if (!request || !unit) return false;
+    const unitIdentifier = normalizeUnitIdentifier(unit.identifier || '');
+    const focusedIdentifier = normalizeUnitIdentifier(request.unit || '');
+    const unitId = String(unit.id !== undefined && unit.id !== null ? unit.id : '').trim();
+    const focusedUnitId = String(request.unitId || '').trim();
+
+    if (focusedIdentifier && unitIdentifier && focusedIdentifier.toUpperCase() === unitIdentifier.toUpperCase()) {
+        return true;
+    }
+    if (focusedUnitId && unitId && focusedUnitId === unitId) {
+        return true;
+    }
+    return false;
+}
+
+function buildFocusedUnitPlaceholder() {
+    const request = getFocusedUnitRequest();
+    if (!request || (!request.unit && !request.unitId)) return '';
+    const identifier = escapeHtml(request.unit || `Unit #${request.unitId}`);
+    const incidentLabel = escapeHtml(request.incidentLocation || `Incident #${request.incidentId || '?'}`);
+    return `
+        <div class="unit-card active focused syncing" data-unit="${identifier}">
+            <div class="unit-header">
+                <div>
+                    <h4 class="unit-name">${identifier}</h4>
+                    <span class="unit-status">assigned</span>
+                </div>
+            </div>
+            <div class="unit-details">
+                <div><i class="fas fa-satellite-dish"></i> Syncing dispatched unit to live GPS...</div>
+                <div><i class="fas fa-map-marker-alt"></i> ${incidentLabel}</div>
+            </div>
+            <div class="unit-actions">
+                <button class="btn-unit active" type="button" disabled><i class="fas fa-location-arrow"></i> Tracking</button>
+                <button class="btn-unit active" type="button" disabled><i class="fas fa-route"></i> Routing</button>
+            </div>
+        </div>
+    `;
+}
+
+function revealFocusedUnitCard() {
+    const request = getFocusedUnitRequest();
+    if (!request || !request.unit) return;
+    const normalized = normalizeUnitIdentifier(request.unit);
+    if (!normalized) return;
+    const cards = document.querySelectorAll('#unit-scroll-container .unit-card[data-unit]');
+    for (const card of cards) {
+        const cardUnit = normalizeUnitIdentifier(card.getAttribute('data-unit') || '');
+        if (cardUnit && cardUnit.toUpperCase() === normalized.toUpperCase()) {
+            card.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+            return;
+        }
+    }
+}
+
     // Quezon City bounds
 function toNum(v) {
     const n = parseFloat(v);
@@ -649,34 +886,73 @@ function formatDateTime(value) {
     return d.toLocaleString();
 }
 
-async function showUnitRoute(unitId) {
-    const unit = dispatchedUnitsByIdentifier[unitId];
+async function showUnitRoute(unitId, options) {
+    options = options || {};
+    const resolvedEntry = resolveDispatchedUnitEntry(unitId, options.unitId || '');
+    const unit = resolvedEntry.unit;
+
     if (!unit) {
-        showNotification('Unable to find dispatched unit details', 'error');
-        return;
+        const directRouteShown = plotKnownDispatchRoute(
+            options.fromLat,
+            options.fromLng,
+            options.toLat,
+            options.toLng,
+            options
+        );
+        if (directRouteShown) {
+            activeRouteState = {
+                unit: resolvedEntry.key || normalizeUnitIdentifier(unitId),
+                unitId: String(options.unitId || ''),
+                incidentId: String(options.incidentId || ''),
+                incidentLocation: String(options.incidentLocation || ''),
+                toLat: String(options.toLat || ''),
+                toLng: String(options.toLng || '')
+            };
+            return true;
+        }
+        if (!options.deferIfUnavailable && !options.suppressErrors) {
+            showNotification('Unable to find dispatched unit details', 'error');
+        }
+        return false;
     }
 
-    const fromLat = toNum(unit.latitude);
-    const fromLng = toNum(unit.longitude);
-    let toLat = toNum(unit.incident_latitude);
-    let toLng = toNum(unit.incident_longitude);
+    const fromLat = toNum(unit.latitude) ?? toNum(options.fromLat);
+    const fromLng = toNum(unit.longitude) ?? toNum(options.fromLng);
+    let toLat = toNum(options.toLat) ?? toNum(unit.incident_latitude);
+    let toLng = toNum(options.toLng) ?? toNum(unit.incident_longitude);
+    let incidentLocation = String(options.incidentLocation || unit.incident_location || '').trim();
 
     if (fromLat === null || fromLng === null) {
-        showNotification('Route unavailable: missing unit coordinates', 'error');
-        return;
+        if (!options.deferIfUnavailable && !options.suppressErrors) {
+            showNotification('Route unavailable: missing unit coordinates', 'error');
+        }
+        return false;
     }
 
-    if (toLat === null || toLng === null) {
-        const parsed = parseCoordsFromText(unit.incident_location);
+    if ((toLat === null || toLng === null) && incidentLocation) {
+        const parsed = parseCoordsFromText(incidentLocation);
         if (parsed) {
             toLat = parsed.lat;
             toLng = parsed.lng;
         }
     }
 
-    if ((toLat === null || toLng === null) && unit.incident_location) {
-        showNotification('Locating incident address...', 'info');
-        const geocoded = await geocodeIncidentLocation(unit.incident_location);
+    if (toLat === null || toLng === null) {
+        const incidentContext = await fetchIncidentRouteContext(options.incidentId || unit.current_incident_id || '');
+        if (incidentContext) {
+            incidentLocation = incidentLocation || incidentContext.location || incidentContext.label || '';
+            if (incidentContext.lat !== null && incidentContext.lng !== null) {
+                toLat = incidentContext.lat;
+                toLng = incidentContext.lng;
+            }
+        }
+    }
+
+    if ((toLat === null || toLng === null) && incidentLocation) {
+        if (!options.silent && !options.deferIfUnavailable) {
+            showNotification('Locating incident address...', 'info');
+        }
+        const geocoded = await geocodeIncidentLocation(incidentLocation);
         if (geocoded) {
             toLat = geocoded.lat;
             toLng = geocoded.lng;
@@ -686,15 +962,25 @@ async function showUnitRoute(unitId) {
     }
 
     if (toLat === null || toLng === null) {
-        showNotification('Route unavailable: unable to locate incident address', 'error');
-        return;
-    }
-    if (typeof addRouteToIncident !== 'function') {
-        showNotification('Routing is not ready yet', 'error');
-        return;
+        if (!options.deferIfUnavailable && !options.suppressErrors) {
+            showNotification('Route unavailable: unable to locate incident address', 'error');
+        }
+        return false;
     }
 
-    addRouteToIncident(fromLat, fromLng, toLat, toLng);
+    const routed = plotKnownDispatchRoute(fromLat, fromLng, toLat, toLng, options);
+    if (!routed) return false;
+
+    activeRouteState = {
+        unit: resolvedEntry.key || normalizeUnitIdentifier(unit.identifier || unitId),
+        unitId: String(unit.id !== undefined && unit.id !== null ? unit.id : (options.unitId || '')),
+        incidentId: String(options.incidentId || unit.current_incident_id || ''),
+        incidentLocation: incidentLocation,
+        toLat: String(toLat),
+        toLng: String(toLng)
+    };
+
+    return true;
 }
 
 async function unitHistory(unitId) {
@@ -843,8 +1129,12 @@ document.addEventListener("DOMContentLoaded", () => {
         const params = new URLSearchParams(window.location.search);
         const unit = params.get('unit');
         const unitId = params.get('unit_id');
+        const incidentId = params.get('incident_id');
+        const incidentLabel = params.get('incident');
         const fromLat = params.get('from_lat');
         const fromLng = params.get('from_lng');
+        const toLat = params.get('to_lat');
+        const toLng = params.get('to_lng');
         if (unit || unitId || (fromLat && fromLng)) {
             pendingTrackRequest = {
                 unit: unit || '',
@@ -854,6 +1144,32 @@ document.addEventListener("DOMContentLoaded", () => {
             };
             pendingTrackAttempts = 0;
             setTimeout(tryTrackPendingUnit, 300);
+        }
+        if (unit || unitId || incidentId || ((fromLat && fromLng) && (toLat && toLng))) {
+            activeRouteState = activeRouteState || {
+                unit: unit || '',
+                unitId: unitId || '',
+                incidentId: incidentId || '',
+                incidentLocation: incidentLabel || '',
+                toLat: toLat || '',
+                toLng: toLng || ''
+            };
+        }
+        if ((unit || unitId || incidentId) && !(toLat && toLng)) {
+            pendingRouteRequest = {
+                unit: unit || '',
+                unitId: unitId || '',
+                incidentId: incidentId || '',
+                incidentLocation: incidentLabel || '',
+                fromLat: fromLat || '',
+                fromLng: fromLng || '',
+                toLat: toLat || '',
+                toLng: toLng || ''
+            };
+            pendingRouteAttempts = 0;
+            setTimeout(() => {
+                tryShowPendingRoute().catch(() => {});
+            }, 350);
         }
     } catch (e) {}
 });
@@ -910,23 +1226,39 @@ function indexDispatchedUnits(items) {
         }
     });
     tryTrackPendingUnit();
+    tryShowPendingRoute().catch(() => {});
+    refreshActiveRoute();
 }
 
 function renderUnitCards(items) {
     const container = document.getElementById('unit-scroll-container');
     if (!container) return;
     container.innerHTML = '';
-    if (!items.length) {
-        container.innerHTML = '<div class="unit-card"><div class="unit-header"><div><h4 class="unit-name">No dispatched units</h4><span class="unit-status">—</span></div></div></div>';
+    const focusRequest = getFocusedUnitRequest();
+    const sortedItems = Array.isArray(items) ? items.slice() : [];
+    sortedItems.sort((a, b) => {
+        const aFocused = isUnitFocused(a) ? 1 : 0;
+        const bFocused = isUnitFocused(b) ? 1 : 0;
+        return bFocused - aFocused;
+    });
+
+    const hasFocusedUnit = sortedItems.some((u) => isUnitFocused(u));
+    if (!sortedItems.length) {
+        const placeholder = buildFocusedUnitPlaceholder();
+        container.innerHTML = placeholder || '<div class="unit-card"><div class="unit-header"><div><h4 class="unit-name">No dispatched units</h4><span class="unit-status">—</span></div></div></div>';
         return;
     }
     const statusClass = s => (
         s === 'enroute' ? 'enroute' : s === 'on_scene' ? 'emergency' : 'active'
     );
-    items.forEach(u => {
+    if (!hasFocusedUnit && focusRequest) {
+        container.insertAdjacentHTML('beforeend', buildFocusedUnitPlaceholder());
+    }
+    sortedItems.forEach(u => {
         const cls = statusClass(u.status || 'assigned');
         const title = (u.incident_title || u.incident_type || 'Dispatched Incident');
         const loc = (u.incident_location || 'Unknown location');
+        const focused = isUnitFocused(u);
         let distanceLine = '';
         let speedLine = '';
         if (u.latitude && u.longitude && u.incident_latitude && u.incident_longitude) {
@@ -938,7 +1270,7 @@ function renderUnitCards(items) {
             if (!isNaN(v)) speedLine = `<div><i class=\"fas fa-tachometer-alt\"></i> Speed: ${v.toFixed(1)} km/h</div>`;
         }
         const card = document.createElement('div');
-        card.className = `unit-card ${cls}`;
+        card.className = `unit-card ${cls}${focused ? ' focused' : ''}`;
         card.setAttribute('data-unit', u.identifier);
         card.innerHTML = `
             <div class="unit-header">
@@ -961,6 +1293,9 @@ function renderUnitCards(items) {
         `;
         container.appendChild(card);
     });
+    if (hasFocusedUnit) {
+        revealFocusedUnitCard();
+    }
 }
 
 function syncUnitMarkers(items) {
@@ -989,6 +1324,8 @@ function syncUnitMarkers(items) {
         rememberUnitIdentity(u);
     });
     tryTrackPendingUnit();
+    tryShowPendingRoute().catch(() => {});
+    refreshActiveRoute();
 }
 
 function escapeHtml(s) {
@@ -1034,6 +1371,8 @@ function loadAvailableUnits() {
                 rememberUnitIdentity(u);
             });
             tryTrackPendingUnit();
+            tryShowPendingRoute().catch(() => {});
+            refreshActiveRoute();
         })
         .catch(() => {});
 }

@@ -2,8 +2,10 @@
 // Requires Leaflet and Leaflet Routing Machine
 
 let currentRoutingControl = null;
+window.currentRoutingControl = null;
 
-function addRouteToIncident(fromLat, fromLng, toLat, toLng) {
+function addRouteToIncident(fromLat, fromLng, toLat, toLng, options) {
+  const silent = !!(options && options.silent);
   try {
     if (!window.L || !window.map) {
       console.warn('Leaflet or map not initialized');
@@ -12,6 +14,7 @@ function addRouteToIncident(fromLat, fromLng, toLat, toLng) {
     if (currentRoutingControl) {
       try { currentRoutingControl.remove(); } catch (e) {}
       currentRoutingControl = null;
+      window.currentRoutingControl = null;
     }
     currentRoutingControl = L.Routing.control({
       waypoints: [
@@ -24,10 +27,15 @@ function addRouteToIncident(fromLat, fromLng, toLat, toLng) {
       draggableWaypoints: false,
       fitSelectedRoutes: true
     }).addTo(map);
-    showNotification('Route plotted to incident', 'success');
+    window.currentRoutingControl = currentRoutingControl;
+    if (!silent) {
+      showNotification('Route plotted to incident', 'success');
+    }
   } catch (e) {
     console.error('Routing error', e);
-    showNotification('Unable to plot route', 'error');
+    if (!silent) {
+      showNotification('Unable to plot route', 'error');
+    }
   }
 }
 

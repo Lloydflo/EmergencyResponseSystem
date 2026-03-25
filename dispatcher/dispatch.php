@@ -275,23 +275,23 @@ try {
 
 <!-- Dispatch Modal (moved to end for guaranteed loading) -->
 <div id="dispatch-modal" class="modal" style="display:none; position:fixed; top:0; left:0; width:100vw; height:100vh; background:rgba(0,0,0,0.4); z-index:9999; align-items:center; justify-content:center;">
-    <form class="modal-content" style="background:#fff; padding:2.5rem 2.5rem 2rem 2.5rem; border-radius:16px; max-width:600px; width:98%; position:relative; box-shadow:0 8px 32px rgba(0,0,0,0.18); display:flex; flex-direction:column; gap:1.2rem; min-height:350px;">
-        <span class="close" onclick="closeDispatchModal()" style="position:absolute; top:10px; right:20px; font-size:2rem; cursor:pointer;">&times;</span>
-        <h2 style="margin:0 0 1.2rem 0; text-align:left; font-size:2rem; font-weight:700;">Dispatch Unit</h2>
+    <form class="modal-content" style="background:#fff; color:#0f172a; padding:2.5rem 2.5rem 2rem 2.5rem; border-radius:16px; max-width:600px; width:98%; position:relative; box-shadow:0 8px 32px rgba(0,0,0,0.18); display:flex; flex-direction:column; gap:1.2rem; min-height:350px;">
+        <span class="close" onclick="closeDispatchModal()" style="position:absolute; top:10px; right:20px; font-size:2rem; cursor:pointer; color:#475569;">&times;</span>
+        <h2 style="margin:0 0 1.2rem 0; text-align:left; font-size:2rem; font-weight:700; color:#0f172a;">Dispatch Unit</h2>
         <div style="display:flex; flex-direction:column; gap:1.1rem;">
             <div style="display:flex; flex-direction:column; gap:0.3rem;">
-                <label style="font-weight:600;">Incident Details</label>
-                <div id="modal-incident-details" style="background:#f8f9fa; border-radius:7px; padding:0.75rem 1rem; font-size:1rem;"></div>
+                <label style="font-weight:600; color:#334155;">Incident Details</label>
+                <div id="modal-incident-details" style="background:#f8f9fa; border-radius:7px; padding:0.75rem 1rem; font-size:1rem; color:#334155; line-height:1.6;"></div>
             </div>
             <div style="display:flex; flex-direction:column; gap:0.3rem;">
-                <label for="unit-select" style="font-weight:600;">Available Units <span style="color:red">*</span></label>
-                <select id="unit-select" style="width:100%; padding:0.7rem; border-radius:6px; border:1.5px solid #bbb; font-size:1.08rem; background:#f9f9f9;">
+                <label for="unit-select" style="font-weight:600; color:#334155;">Available Units <span style="color:red">*</span></label>
+                <select id="unit-select" style="width:100%; padding:0.7rem; border-radius:6px; border:1.5px solid #bbb; font-size:1.08rem; background:#f9f9f9; color:#111827;">
                     <option value="">-- Select --</option>
                 </select>
             </div>
             <div style="display:flex; flex-direction:column; gap:0.3rem;">
-                <label style="font-weight:600;">Unit Details</label>
-                <div id="unit-details" style="background:#f1f3f4; border-radius:7px; padding:0.75rem 1rem; min-height:48px; font-size:0.98rem;"></div>
+                <label style="font-weight:600; color:#334155;">Unit Details</label>
+                <div id="unit-details" style="background:#f1f3f4; border-radius:7px; padding:0.75rem 1rem; min-height:48px; font-size:0.98rem; color:#334155; line-height:1.6;"></div>
             </div>
         </div>
         <div style="display:flex; gap:1rem; justify-content:flex-end; margin-top:1.2rem;">
@@ -447,6 +447,23 @@ document.addEventListener('DOMContentLoaded', function() {
         const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
         return R * c;
     }
+    function redirectToGpsContext(route) {
+        const qp = new URLSearchParams();
+        if (route.dispatchId) qp.set('dispatch_id', String(route.dispatchId));
+        if (route.incidentId) qp.set('incident_id', String(route.incidentId));
+        if (route.unitId) qp.set('unit_id', String(route.unitId));
+        if (route.unitIdentifier) qp.set('unit', String(route.unitIdentifier));
+        if (route.incidentLabel) qp.set('incident', String(route.incidentLabel));
+        if (route.fromLat !== null && route.fromLat !== undefined && route.fromLng !== null && route.fromLng !== undefined) {
+            qp.set('from_lat', String(route.fromLat));
+            qp.set('from_lng', String(route.fromLng));
+        }
+        if (route.toLat !== null && route.toLat !== undefined && route.toLng !== null && route.toLng !== undefined) {
+            qp.set('to_lat', String(route.toLat));
+            qp.set('to_lng', String(route.toLng));
+        }
+        window.location.href = 'dispatcher/gps.php?' + qp.toString();
+    }
     document.getElementById('confirm-dispatch-btn').onclick = function() {
         const btn = document.getElementById('confirm-dispatch-btn');
         btn.disabled = true;
@@ -492,7 +509,11 @@ document.addEventListener('DOMContentLoaded', function() {
                         qp.set('to_lat', String(toLat));
                         qp.set('to_lng', String(toLng));
                     }
-                    window.location.href = 'gps.php?' + qp.toString();
+                    qp.set('incident_id', String(currentIncidentId));
+                    if (inc.reference_no || inc.title) {
+                        qp.set('incident', String(inc.reference_no || inc.title));
+                    }
+                    window.location.href = 'dispatcher/gps.php?' + qp.toString();
                 });
             return;
         }
@@ -528,41 +549,42 @@ document.addEventListener('DOMContentLoaded', function() {
                 else if (type === 'fire') { fromLat = 14.6700; fromLng = 121.0450; }
                 else if (type === 'ambulance') { fromLat = 14.6900; fromLng = 121.0600; }
                 else { fromLat = 14.6760; fromLng = 121.0437; }
-                // Optionally update unit location in DB
-                fetch('api/unit_location_update.php', {
+            }
+            const ensureUnitLocation = (fromLat && fromLng)
+                ? fetch('api/unit_location_update.php', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ unit_id: unitId, latitude: fromLat, longitude: fromLng })
+                }).catch(() => null)
+                : Promise.resolve();
+            // Continue with dispatch only after the latest unit coordinates are saved.
+            return ensureUnitLocation.then(() => {
+                return fetch('api/dispatch_unit.php', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ incident_id: currentIncidentId, unit_id: unitId })
+                }).then(r => r.json()).then(data => {
+                    if (data.ok) {
+                        if (typeof addRouteToIncident === 'function' && fromLat && fromLng && toLat && toLng) {
+                            addRouteToIncident(fromLat, fromLng, toLat, toLng, { silent: true });
+                        }
+                        redirectToGpsContext({
+                            dispatchId: data.dispatch_id || '',
+                            incidentId: currentIncidentId,
+                            unitId: unitId,
+                            unitIdentifier: unitIdentifier,
+                            incidentLabel: inc.reference_no || inc.title || '',
+                            fromLat: fromLat,
+                            fromLng: fromLng,
+                            toLat: toLat,
+                            toLng: toLng
+                        });
+                    } else {
+                        alert('Failed to dispatch unit: ' + (data.error || 'Unknown error'));
+                        btn.disabled = false;
+                        btn.textContent = 'Confirm Dispatch';
+                    }
                 });
-            }
-            // Plot locally if possible
-            // Continue with dispatch (only update map/UI if successful)
-            return fetch('api/dispatch_unit.php', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ incident_id: currentIncidentId, unit_id: unitId })
-            }).then(r => r.json()).then(data => {
-                if (data.ok) {
-                    // Plot locally if possible (optional, or just redirect)
-                    if (typeof addRouteToIncident === 'function' && fromLat && fromLng && toLat && toLng) {
-                        addRouteToIncident(fromLat, fromLng, toLat, toLng);
-                    }
-                    // Redirect to GPS with routing params
-                    const qp = new URLSearchParams();
-                    qp.set('unit_id', unitId);
-                    if (unitIdentifier) qp.set('unit', unitIdentifier);
-                    if (fromLat && fromLng && toLat && toLng) {
-                        qp.set('from_lat', String(fromLat));
-                        qp.set('from_lng', String(fromLng));
-                        qp.set('to_lat', String(toLat));
-                        qp.set('to_lng', String(toLng));
-                    }
-                    window.location.href = 'gps.php?' + qp.toString();
-                } else {
-                    alert('Failed to dispatch unit: ' + (data.error || 'Unknown error'));
-                    btn.disabled = false;
-                    btn.textContent = 'Confirm Dispatch';
-                }
             }).catch(() => {
                 alert('Network error.');
                 btn.disabled = false;
@@ -1037,7 +1059,7 @@ function unitLocation(btn) {
     const qp = new URLSearchParams();
     if (unitId) qp.set('unit_id', unitId);
     if (unitName) qp.set('unit', unitName);
-    window.location.href = 'gps.php?' + qp.toString();
+    window.location.href = 'dispatcher/gps.php?' + qp.toString();
 }
 
 function refreshAIRecommendations() {
@@ -1271,7 +1293,7 @@ function unitLocation(btn) {
     const unitId = btn && btn.dataset ? btn.dataset.unitId : '';
     const identifier = btn && btn.dataset ? btn.dataset.identifier : '';
     if (!unitId) { alert('Unit ID missing'); return; }
-    window.location.href = 'gps.php?unit_id=' + encodeURIComponent(unitId) + (identifier ? ('&unit=' + encodeURIComponent(identifier)) : '');
+    window.location.href = 'dispatcher/gps.php?unit_id=' + encodeURIComponent(unitId) + (identifier ? ('&unit=' + encodeURIComponent(identifier)) : '');
 }
 
 function refreshAIRecommendations() {

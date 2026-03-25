@@ -1864,6 +1864,16 @@ try {
             if (cardInc) cardInc.style.cursor='pointer', cardInc.addEventListener('click', () => navigateTo('admin/review.php', { period: currentFilters.period || defaultReportFilters.period, start: currentFilters.start, end: currentFilters.end }));
             if (cardRes) cardRes.style.cursor='pointer', cardRes.addEventListener('click', () => navigateTo('admin/resources.php'));
             if (cardPerf) cardPerf.style.cursor='pointer', cardPerf.addEventListener('click', () => window.open('api/reports_incident_summary.php' + buildQuery(currentFilters), '_blank'));
+            setInterval(function () {
+                if (document.hidden) return;
+                try {
+                    refreshMetrics(currentFilters);
+                    refreshCharts(currentFilters);
+                    loadRecentIncidents(currentFilters);
+                } catch (e) {
+                    console.error('report auto-refresh failed', e);
+                }
+            }, 10000);
         });
 
         document.addEventListener('themeChanged', function() {

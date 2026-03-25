@@ -218,32 +218,32 @@ $type_total = array_sum($type_counts);
             <section class="dispatcher-metrics">
                 <article class="metric-block pending">
                     <div class="metric-label">Pending Incidents</div>
-                    <div class="metric-value"><?php echo (int)$pending_incidents; ?></div>
+                    <div class="metric-value" id="metricPendingIncidents"><?php echo (int)$pending_incidents; ?></div>
                     <a href="<?php echo htmlspecialchars($incidentUrl); ?>" class="metric-link">Review queue</a>
                 </article>
                 <article class="metric-block active">
                     <div class="metric-label">Active Dispatches</div>
-                    <div class="metric-value"><?php echo (int)$active_dispatches; ?></div>
+                    <div class="metric-value" id="metricActiveDispatches"><?php echo (int)$active_dispatches; ?></div>
                     <a href="<?php echo htmlspecialchars($dispatchUrl); ?>" class="metric-link">Open dispatch center</a>
                 </article>
                 <article class="metric-block available">
                     <div class="metric-label">Available Units</div>
-                    <div class="metric-value"><?php echo (int)$available_units; ?></div>
+                    <div class="metric-value" id="metricAvailableUnits"><?php echo (int)$available_units; ?></div>
                     <a href="<?php echo htmlspecialchars($resourcesUrl); ?>" class="metric-link">View resources</a>
                 </article>
                 <article class="metric-block field">
                     <div class="metric-label">Units In Field</div>
-                    <div class="metric-value"><?php echo (int)$units_in_field; ?></div>
+                    <div class="metric-value" id="metricUnitsInField"><?php echo (int)$units_in_field; ?></div>
                     <a href="<?php echo htmlspecialchars($gpsUrl); ?>" class="metric-link">Track positions</a>
                 </article>
                 <article class="metric-block calls">
                     <div class="metric-label">Calls Today</div>
-                    <div class="metric-value"><?php echo (int)$today_calls; ?></div>
+                    <div class="metric-value" id="metricTodayCalls"><?php echo (int)$today_calls; ?></div>
                     <a href="<?php echo htmlspecialchars($callUrl); ?>" class="metric-link">Open call logs</a>
                 </article>
                 <article class="metric-block response">
                     <div class="metric-label">Avg Response (7d)</div>
-                    <div class="metric-value"><?php echo number_format($avg_response_min, 1); ?>m</div>
+                    <div class="metric-value" id="metricAvgResponse"><?php echo number_format($avg_response_min, 1); ?>m</div>
                     <a href="<?php echo htmlspecialchars($reviewUrl); ?>" class="metric-link">View reviews</a>
                 </article>
             </section>
@@ -307,7 +307,7 @@ $type_total = array_sum($type_counts);
                     <div class="panel-header-row">
                         <h2><i class="fas fa-ambulance"></i> Unit Availability</h2>
                     </div>
-                    <div class="unit-list">
+                    <div class="unit-list" id="unitList">
                         <?php if (empty($unit_items)): ?>
                             <div class="empty-state">No units found.</div>
                         <?php else: ?>
@@ -340,7 +340,7 @@ $type_total = array_sum($type_counts);
                     <div class="panel-header-row">
                         <h2><i class="fas fa-chart-simple"></i> Active Mix By Type</h2>
                     </div>
-                    <div class="mix-list">
+                    <div class="mix-list" id="mixList">
                         <?php foreach ($type_counts as $type => $count): ?>
                             <?php
                             $pct = $type_total > 0 ? (int)round(($count / $type_total) * 100) : 0;
@@ -362,7 +362,7 @@ $type_total = array_sum($type_counts);
                     <div class="panel-header-row">
                         <h2><i class="fas fa-wave-square"></i> Recent Operations Activity</h2>
                     </div>
-                    <div class="activity-list">
+                    <div class="activity-list" id="activityList">
                         <?php if (empty($activity_items)): ?>
                             <div class="empty-state">No recent activity.</div>
                         <?php else: ?>
@@ -394,6 +394,210 @@ $type_total = array_sum($type_counts);
 
     <?php include $rootDir . '/includes/admin-footer.php'; ?>
     <script>
+    function dispatcherEscapeHtml(value) {
+        return String(value == null ? '' : value)
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;')
+            .replace(/'/g, '&#039;');
+    }
+
+    function dispatcherTimeAgo(value) {
+        const raw = String(value || '').trim();
+        if (!raw) return 'Unknown time';
+        const date = new Date(raw.indexOf('T') === -1 ? raw.replace(' ', 'T') : raw);
+        if (Number.isNaN(date.getTime())) return raw;
+        const diff = Math.max(0, Math.floor((Date.now() - date.getTime()) / 1000));
+        if (diff < 60) return 'Just now';
+        if (diff < 3600) return Math.floor(diff / 60) + 'm ago';
+        if (diff < 86400) return Math.floor(diff / 3600) + 'h ago';
+        return date.toLocaleString();
+    }
+
+    function dispatcherPriorityClass(priority) {
+        const p = String(priority || '').trim().toLowerCase();
+        if (p === 'critical') return 'priority-critical';
+        if (p === 'high') return 'priority-high';
+        if (p === 'medium') return 'priority-medium';
+        return 'priority-low';
+    }
+
+    function dispatcherStatusClass(status) {
+        const s = String(status || '').trim().toLowerCase();
+        if (s === 'available') return 'status-available';
+        if (s === 'assigned' || s === 'dispatched') return 'status-assigned';
+        if (s === 'enroute' || s === 'in_progress' || s === 'active' || s === 'on_scene') return 'status-enroute';
+        return 'status-other';
+    }
+
+    function applyQueuePriorityFilter() {
+        const activeFilter = document.querySelector('.queue-filter.active');
+        const wanted = activeFilter ? activeFilter.getAttribute('data-priority') : 'all';
+        document.querySelectorAll('.queue-item').forEach(function (item) {
+            if (wanted === 'all' || item.getAttribute('data-priority') === wanted) {
+                item.style.display = '';
+            } else {
+                item.style.display = 'none';
+            }
+        });
+    }
+
+    function renderDispatcherQueue(items) {
+        const container = document.getElementById('queueList');
+        if (!container) return;
+        if (!Array.isArray(items) || !items.length) {
+            container.innerHTML = '<div class="empty-state">No active queue items right now.</div>';
+            return;
+        }
+        container.innerHTML = items.map(function (item) {
+            const priority = String(item.priority || 'low').toLowerCase();
+            const status = String(item.status || 'pending');
+            const incidentId = Number(item.id || 0);
+            const dispatchUrl = 'dispatcher/dispatch.php' + (incidentId > 0 ? ('?incident_id=' + encodeURIComponent(String(incidentId))) : '');
+            const detailsUrl = 'dispatcher/incident.php' + (incidentId > 0 ? ('?incident_id=' + encodeURIComponent(String(incidentId))) : '');
+            return `
+                <article class="queue-item" data-priority="${dispatcherEscapeHtml(priority)}">
+                    <div class="queue-item-top">
+                        <div class="queue-title-wrap">
+                            <div class="queue-title">${dispatcherEscapeHtml(item.reference_no || 'INC-NA')} - ${dispatcherEscapeHtml(item.title || item.type || 'Untitled incident')}</div>
+                            <div class="queue-sub">
+                                <span><i class="fas fa-location-dot"></i> ${dispatcherEscapeHtml(item.location_address || 'Location unavailable')}</span>
+                                <span><i class="fas fa-user"></i> ${dispatcherEscapeHtml(item.caller_name || 'Unknown caller')}</span>
+                            </div>
+                        </div>
+                        <div class="queue-tags">
+                            <span class="pill ${dispatcherPriorityClass(priority)}">${dispatcherEscapeHtml(priority.charAt(0).toUpperCase() + priority.slice(1))}</span>
+                            <span class="pill status ${dispatcherStatusClass(status)}">${dispatcherEscapeHtml(status.replace(/_/g, ' '))}</span>
+                        </div>
+                    </div>
+                    <div class="queue-item-bottom">
+                        <div class="queue-meta">
+                            <span><i class="fas fa-clock"></i> ${dispatcherEscapeHtml(dispatcherTimeAgo(item.created_at || ''))}</span>
+                            <span><i class="fas fa-truck-medical"></i> ${dispatcherEscapeHtml(item.unit_identifier || 'Unassigned')}</span>
+                            <span><i class="fas fa-phone"></i> ${dispatcherEscapeHtml(item.caller_phone || 'No phone')}</span>
+                        </div>
+                        <div class="queue-actions">
+                            <a href="${dispatcherEscapeHtml(dispatchUrl)}" class="btn-queue primary">Dispatch</a>
+                            <a href="${dispatcherEscapeHtml(detailsUrl)}" class="btn-queue">Details</a>
+                        </div>
+                    </div>
+                </article>
+            `;
+        }).join('');
+        applyQueuePriorityFilter();
+    }
+
+    function renderDispatcherUnits(items) {
+        const container = document.getElementById('unitList');
+        if (!container) return;
+        if (!Array.isArray(items) || !items.length) {
+            container.innerHTML = '<div class="empty-state">No units found.</div>';
+            return;
+        }
+        container.innerHTML = items.map(function (unit) {
+            const status = String(unit.status || 'unknown').toLowerCase();
+            const typeLabel = String(unit.unit_type || 'Responder');
+            return `
+                <article class="unit-item">
+                    <div class="unit-main">
+                        <div class="unit-name">${dispatcherEscapeHtml(unit.identifier || 'Unit')}</div>
+                        <div class="unit-type">${dispatcherEscapeHtml(typeLabel.charAt(0).toUpperCase() + typeLabel.slice(1))}</div>
+                    </div>
+                    <div class="unit-side">
+                        <span class="pill status ${dispatcherStatusClass(status)}">${dispatcherEscapeHtml(status.replace(/_/g, ' '))}</span>
+                        ${unit.incident_code ? `<div class="unit-incident">${dispatcherEscapeHtml(unit.incident_code)}</div>` : ''}
+                    </div>
+                </article>
+            `;
+        }).join('');
+    }
+
+    function renderDispatcherMix(typeCounts) {
+        const container = document.getElementById('mixList');
+        if (!container) return;
+        const counts = typeCounts || {};
+        const entries = [
+            ['medical', Number(counts.medical || 0)],
+            ['fire', Number(counts.fire || 0)],
+            ['police', Number(counts.police || 0)],
+            ['traffic', Number(counts.traffic || 0)]
+        ];
+        const total = entries.reduce(function (sum, entry) { return sum + entry[1]; }, 0);
+        container.innerHTML = entries.map(function (entry) {
+            const type = entry[0];
+            const count = entry[1];
+            const pct = total > 0 ? Math.round((count / total) * 100) : 0;
+            return `
+                <div class="mix-item">
+                    <div class="mix-top">
+                        <span class="mix-type">${dispatcherEscapeHtml(type.charAt(0).toUpperCase() + type.slice(1))}</span>
+                        <span class="mix-value">${count} (${pct}%)</span>
+                    </div>
+                    <div class="mix-bar">
+                        <span style="width: ${pct}%"></span>
+                    </div>
+                </div>
+            `;
+        }).join('');
+    }
+
+    function renderDispatcherActivity(items) {
+        const container = document.getElementById('activityList');
+        if (!container) return;
+        if (!Array.isArray(items) || !items.length) {
+            container.innerHTML = '<div class="empty-state">No recent activity.</div>';
+            return;
+        }
+        container.innerHTML = items.map(function (log) {
+            return `
+                <article class="activity-item">
+                    <div class="activity-main">
+                        <div class="activity-title">
+                            ${dispatcherEscapeHtml(log.action || 'action')}
+                            ${log.entity_type ? ` on ${dispatcherEscapeHtml(log.entity_type)}` : ''}
+                        </div>
+                        <div class="activity-sub">${dispatcherEscapeHtml(log.details || 'No details')}</div>
+                    </div>
+                    <div class="activity-side">
+                        <div class="activity-user">${dispatcherEscapeHtml(log.username || 'System')}</div>
+                        <div class="activity-time">${dispatcherEscapeHtml(dispatcherTimeAgo(log.created_at || ''))}</div>
+                    </div>
+                </article>
+            `;
+        }).join('');
+    }
+
+    async function refreshDispatcherDashboard() {
+        try {
+            const response = await fetch('api/dispatcher_dashboard_summary.php', { cache: 'no-store' });
+            const data = await response.json();
+            if (!data || !data.ok) throw new Error('Invalid dispatcher summary');
+
+            const metrics = data.metrics || {};
+            const setMetric = function (id, value, suffix) {
+                const el = document.getElementById(id);
+                if (el) {
+                    el.textContent = suffix ? `${value}${suffix}` : String(value);
+                }
+            };
+
+            setMetric('metricPendingIncidents', Number(metrics.pending_incidents || 0));
+            setMetric('metricActiveDispatches', Number(metrics.active_dispatches || 0));
+            setMetric('metricAvailableUnits', Number(metrics.available_units || 0));
+            setMetric('metricUnitsInField', Number(metrics.units_in_field || 0));
+            setMetric('metricTodayCalls', Number(metrics.today_calls || 0));
+            setMetric('metricAvgResponse', Number(metrics.avg_response_min || 0).toFixed(1), 'm');
+
+            renderDispatcherQueue(data.queue_items || []);
+            renderDispatcherUnits(data.unit_items || []);
+            renderDispatcherMix(data.type_counts || {});
+            renderDispatcherActivity(data.activity_items || []);
+        } catch (e) {
+            console.error('refreshDispatcherDashboard failed', e);
+        }
+    }
+
     document.addEventListener('DOMContentLoaded', function () {
         const clockEl = document.getElementById('liveClock');
         if (clockEl) {
@@ -404,21 +608,18 @@ $type_total = array_sum($type_counts);
         }
 
         const filters = document.querySelectorAll('.queue-filter');
-        const items = document.querySelectorAll('.queue-item');
         filters.forEach(function (btn) {
             btn.addEventListener('click', function () {
-                const wanted = btn.getAttribute('data-priority');
                 filters.forEach(function (b) { b.classList.remove('active'); });
                 btn.classList.add('active');
-                items.forEach(function (item) {
-                    if (wanted === 'all' || item.getAttribute('data-priority') === wanted) {
-                        item.style.display = '';
-                    } else {
-                        item.style.display = 'none';
-                    }
-                });
+                applyQueuePriorityFilter();
             });
         });
+
+        refreshDispatcherDashboard();
+        setInterval(function () {
+            try { refreshDispatcherDashboard(); } catch (e) {}
+        }, 10000);
     });
     </script>
 </body>
