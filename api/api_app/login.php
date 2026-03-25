@@ -33,7 +33,7 @@ if (!$pdo) {
 
 try {
     $stmt = $pdo->prepare("
-        SELECT id, email, password, name, role, status
+        SELECT id, email, password, name, role, status, department
         FROM users
         WHERE email = ?
         ORDER BY id DESC
@@ -71,6 +71,14 @@ try {
         ]);
         exit;
     }
+        if ((string)$user["role"] !== "responder") {
+        echo json_encode([
+            "success" => false,
+            "message" => "Access denied. Only responders can log in.",
+            "user" => null
+        ]);
+        exit;
+    }
 
     $upd = $pdo->prepare("UPDATE users SET last_login = NOW() WHERE id = ?");
     $upd->execute([(int)$user["id"]]);
@@ -82,7 +90,8 @@ try {
             "id" => (int)$user["id"],
             "name" => (string)$user["name"],
             "email" => (string)$user["email"],
-            "role" => (string)$user["role"]
+            "role" => (string)$user["role"],
+            "department" => (string)($user["department"] ?? ""),
         ]
     ]);
 } catch (Throwable $e) {
