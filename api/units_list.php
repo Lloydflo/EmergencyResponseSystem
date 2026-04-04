@@ -5,6 +5,7 @@ declare(strict_types=1);
 header('Content-Type: application/json');
 
 require_once __DIR__ . '/../includes/db.php';
+require_once __DIR__ . '/../includes/vehicle_resource_units.php';
 
 function ers_table_exists(PDO $pdo, string $table): bool
 {
@@ -46,6 +47,11 @@ if (!$pdo) {
     http_response_code(500);
     echo json_encode(['ok' => false, 'error' => 'DB connection unavailable']);
     exit;
+}
+
+$vehicleResourceTable = ers_vehicle_resource_units_table($pdo);
+if ($vehicleResourceTable !== null) {
+    ers_sync_all_vehicle_resource_units($pdo, $vehicleResourceTable);
 }
 
 $status = isset($_GET['status']) ? trim((string) $_GET['status']) : '';
@@ -120,6 +126,13 @@ if ($hasRecordedAt) {
                          LIMIT 1)";
 }
 
+$resourceJoin = '';
+if ($vehicleResourceTable !== null) {
+    $resourceJoin = " INNER JOIN `" . $vehicleResourceTable . "` rr
+                      ON rr.code = u.identifier
+                     AND LOWER(rr.category) = 'vehicles'";
+}
+
 $sql = "SELECT
             u.id,
             u.identifier,
@@ -138,6 +151,7 @@ $sql = "SELECT
             {$headingExpr} AS heading_deg,
             {$lastRecordedExpr} AS last_recorded_at
         FROM units u
+        {$resourceJoin}
         {$incidentJoin}
         {$callJoin}";
 

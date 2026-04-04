@@ -2,6 +2,7 @@
 // Resolve an incident and release any assigned units
 header('Content-Type: application/json');
 require_once __DIR__ . '/../includes/db.php';
+require_once __DIR__ . '/../includes/vehicle_resource_units.php';
 $pdo = get_db_connection();
 if (!$pdo) {
     http_response_code(500);
@@ -52,6 +53,12 @@ try {
 
     $pdo->beginTransaction();
 
+    $unitIdStmt = $pdo->prepare("SELECT id FROM units WHERE current_incident_id = :iid");
+    $unitIdStmt->execute([':iid' => $incidentId]);
+    $unitIds = array_map(static function ($row): int {
+        return (int)($row['id'] ?? 0);
+    }, $unitIdStmt->fetchAll(PDO::FETCH_ASSOC));
+
     // Update all dispatches for this incident to 'cleared' (will trigger unit availability via DB trigger)
     $stmt = $pdo->prepare("UPDATE dispatches SET status='cleared', cleared_at = CURRENT_TIMESTAMP WHERE incident_id = :iid AND status IN ('assigned','acknowledged','enroute','on_scene')");
     $stmt->execute([':iid' => $incidentId]);
@@ -59,6 +66,7 @@ try {
     // Explicitly set units available for any units linked directly (safety net)
     $stmt2 = $pdo->prepare("UPDATE units SET status='available', current_incident_id=NULL, last_status_at=CURRENT_TIMESTAMP WHERE current_incident_id = :iid");
     $stmt2->execute([':iid' => $incidentId]);
+    ers_sync_vehicle_resource_status_by_unit_ids($pdo, $unitIds, 'available');
 
     // Mark incident resolved
     $stmt3 = $pdo->prepare("UPDATE incidents SET status='resolved', resolved_at=CURRENT_TIMESTAMP, updated_at=CURRENT_TIMESTAMP WHERE id = :iid");

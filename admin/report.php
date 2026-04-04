@@ -1685,24 +1685,12 @@ try {
             }
         }
 
-        // Recent Incidents loader
-        function periodToParams(period) {
-            const now = new Date();
-            const yyyy = now.getFullYear();
-            const mm = String(now.getMonth() + 1).padStart(2, '0');
-            const dd = String(now.getDate()).padStart(2, '0');
-            if (period === 'today') return { day: `${yyyy}-${mm}-${dd}` };
-            if (period === 'month') return { month: `${yyyy}-${mm}` };
-            return {};
-        }
-
         async function loadRecentIncidents(filters = {}) {
             try {
                 const tbody = document.getElementById('recentIncidentsBody');
                 if (tbody) tbody.innerHTML = '<tr><td colspan="7" style="color:#6b7280">Loading incidents…</td></tr>';
-                const extra = periodToParams(filters.period || '');
-                const qs = buildQuery(extra);
-                const res = await fetch('api/incidents_list.php' + qs);
+                const qs = buildQuery(filters);
+                const res = await fetch('api/incidents_list.php' + qs, { cache: 'no-store' });
                 const data = await res.json();
                 const items = data.ok ? (data.items || []) : [];
                 renderRecentIncidents(items);

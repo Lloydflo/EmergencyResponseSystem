@@ -47,12 +47,98 @@ function ers_column_exists(PDO $pdo, string $table, string $column): bool
     }
 }
 
+function resolve_incident_range(): array
+{
+    $start = isset($_GET['start']) ? trim((string)$_GET['start']) : '';
+    $end = isset($_GET['end']) ? trim((string)$_GET['end']) : '';
+    if ($start !== '' && $end !== '') {
+        return [$start . ' 00:00:00', $end . ' 23:59:59'];
+    }
+
+    $day = isset($_GET['day']) ? trim((string)$_GET['day']) : '';
+    if ($day !== '') {
+        return [$day . ' 00:00:00', $day . ' 23:59:59'];
+    }
+
+    $month = isset($_GET['month']) ? trim((string)$_GET['month']) : '';
+    if ($month !== '') {
+        try {
+            $monthStart = new DateTime($month . '-01');
+            $monthEnd = (clone $monthStart)->modify('+1 month -1 day');
+            return [$monthStart->format('Y-m-d') . ' 00:00:00', $monthEnd->format('Y-m-d') . ' 23:59:59'];
+        } catch (Throwable $e) {
+            return [null, null];
+        }
+    }
+
+    $period = isset($_GET['period']) ? strtolower(trim((string)$_GET['period'])) : '';
+    if ($period === '') {
+        return [null, null];
+    }
+
+    $today = new DateTime('today');
+    switch ($period) {
+        case 'today':
+            return [$today->format('Y-m-d') . ' 00:00:00', $today->format('Y-m-d') . ' 23:59:59'];
+        case 'week':
+            $rangeStart = (clone $today)->modify('monday this week');
+            $rangeEnd = (clone $rangeStart)->modify('+6 days');
+            break;
+        case 'quarter':
+            $monthNumber = (int)$today->format('n');
+            $quarterStartMonth = [1 => 1, 2 => 4, 3 => 7, 4 => 10][intdiv($monthNumber - 1, 3) + 1];
+            $rangeStart = new DateTime($today->format('Y') . '-' . str_pad((string)$quarterStartMonth, 2, '0', STR_PAD_LEFT) . '-01');
+            $rangeEnd = (clone $rangeStart)->modify('+3 months -1 day');
+            break;
+        case 'year':
+            $rangeStart = new DateTime($today->format('Y-01-01'));
+            $rangeEnd = new DateTime($today->format('Y-12-31'));
+            break;
+        case 'month':
+        default:
+            $rangeStart = new DateTime($today->format('Y-m-01'));
+            $rangeEnd = (clone $rangeStart)->modify('+1 month -1 day');
+            break;
+    }
+
+    return [$rangeStart->format('Y-m-d') . ' 00:00:00', $rangeEnd->format('Y-m-d') . ' 23:59:59'];
+}
+
+function normalized_type_values(string $typeFilter): array
+{
+    $typeFilter = strtolower(trim($typeFilter));
+    if ($typeFilter === '') {
+        return [];
+    }
+    if ($typeFilter === 'traffic' || $typeFilter === 'accident') {
+        return ['traffic', 'accident'];
+    }
+    if ($typeFilter === 'police' || $typeFilter === 'crime') {
+        return ['police', 'crime'];
+    }
+    return [$typeFilter];
+}
+
+function append_type_filter(array &$where, array &$params, string $column, array $typeValues, string $prefix): void
+{
+    if (!$typeValues) {
+        return;
+    }
+    $placeholders = [];
+    foreach ($typeValues as $index => $value) {
+        $placeholder = ':' . $prefix . '_type_' . $index;
+        $placeholders[] = $placeholder;
+        $params[$placeholder] = $value;
+    }
+    $where[] = 'LOWER(' . $column . ') IN (' . implode(', ', $placeholders) . ')';
+}
+
 $priority = isset($_GET['priority']) ? trim((string)$_GET['priority']) : '';
 $status = isset($_GET['status']) ? trim((string)$_GET['status']) : '';
 $type = isset($_GET['type']) ? trim((string)$_GET['type']) : '';
 $search = isset($_GET['search']) ? trim((string)$_GET['search']) : '';
-$day = isset($_GET['day']) ? trim((string)$_GET['day']) : '';
-$month = isset($_GET['month']) ? trim((string)$_GET['month']) : '';
+$typeValues = normalized_type_values($type);
+[$rangeStart, $rangeEnd] = resolve_incident_range();
 
 $resourceRecordsTable = null;
 if (ers_table_exists($pdo, 'resource_records')) {
@@ -155,10 +241,7 @@ if ($status !== '') {
     }
 }
 
-if ($type !== '') {
-    $where[] = 'i.type = :type';
-    $params[':type'] = $type;
-}
+append_type_filter($where, $params, 'i.type', $typeValues, 'incident');
 
 if ($search !== '') {
     $where[] = "(
@@ -172,14 +255,23 @@ if ($search !== '') {
     $params[':search'] = '%' . $search . '%';
 }
 
-if ($day !== '') {
-    $where[] = 'DATE(i.created_at) = :day';
-    $params[':day'] = $day;
-}
-
-if ($month !== '') {
-    $where[] = 'DATE_FORMAT(i.created_at, "%Y-%m") = :month';
-    $params[':month'] = $month;
+if ($rangeStart !== null && $rangeEnd !== null) {
+    $where[] = "(
+        i.created_at BETWEEN :range_start AND :range_end
+        OR (i.updated_at IS NOT NULL AND i.updated_at BETWEEN :range_updated_start AND :range_updated_end)
+        OR EXISTS (
+            SELECT 1
+            FROM dispatches d_window
+            WHERE d_window.incident_id = i.id
+              AND d_window.assigned_at BETWEEN :range_dispatch_start AND :range_dispatch_end
+        )
+    )";
+    $params[':range_start'] = $rangeStart;
+    $params[':range_end'] = $rangeEnd;
+    $params[':range_updated_start'] = $rangeStart;
+    $params[':range_updated_end'] = $rangeEnd;
+    $params[':range_dispatch_start'] = $rangeStart;
+    $params[':range_dispatch_end'] = $rangeEnd;
 }
 
 if ($where) {

@@ -1,5 +1,6 @@
 <?php
 require_once '../includes/db.php';
+require_once '../includes/vehicle_resource_units.php';
 header('Content-Type: application/json');
 
 if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
@@ -119,6 +120,7 @@ try {
     foreach ($unitIds as $unitId) {
         $dispatchInsert->execute([$incidentId, $unitId]);
         $unitUpdate->execute([$incidentId, $unitId]);
+        ers_sync_vehicle_resource_status_by_unit_id($pdo, $unitId, 'in_use');
 
         $unitMeta = $availableUnits[$unitId];
         $dispatchedUnits[] = [

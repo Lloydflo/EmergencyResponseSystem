@@ -44,13 +44,13 @@ $pageTitle = 'GPS Tracking System';
                     <div class="gps-kicker">Dispatcher GPS Console</div>
                     <h1 class="gps-hero-title">Live GPS Tracking System</h1>
                     <p class="gps-hero-text">
-                        Monitor dispatched units, incident markers, and hotspot activity from one real-time operational map.
+                        Monitor dispatched units, incident markers, and route movement from one real-time operational map.
                     </p>
 
                     <div class="gps-hero-chips">
                         <span class="gps-chip gps-chip-live"><span class="gps-chip-dot"></span> Live Tracking Active</span>
                         <span class="gps-chip">Quezon City Coverage</span>
-                        <span class="gps-chip">Routing + Heatmap Ready</span>
+                        <span class="gps-chip">Routing Ready</span>
                     </div>
                 </div>
 
@@ -59,7 +59,7 @@ $pageTitle = 'GPS Tracking System';
                         <div class="gps-status-label">Tracking Scope</div>
                         <div class="gps-status-value">Dispatch units, incidents, and route movement</div>
                         <div class="gps-status-note">
-                            Use the controls below to filter units, inspect hotspots, and search specific locations without changing the current workflow.
+                            Use the controls below to filter units and search specific locations without changing the current workflow.
                         </div>
                     </div>
                 </div>
@@ -88,15 +88,6 @@ $pageTitle = 'GPS Tracking System';
                             <option value="fire">Fire Units</option>
                         </select>
                     </div>
-                    <div class="control-group">
-                        <label for="time-range">Time Range</label>
-                        <select id="time-range">
-                            <option value="live">Live Tracking</option>
-                            <option value="1hour">Last Hour</option>
-                            <option value="24hours">Last 24 Hours</option>
-                            <option value="7days">Last 7 Days</option>
-                        </select>
-                    </div>
                     <div class="control-group control-group-search">
                         <label for="search-location">Search Location</label>
                         <input type="text" id="search-location" placeholder="Enter address or coordinates" autocomplete="off" style="position:relative;z-index:1100;">
@@ -118,9 +109,6 @@ $pageTitle = 'GPS Tracking System';
                             <button class="map-btn" onclick="toggleLayer('incident', this)">
                                 <i class="fas fa-exclamation-triangle"></i> Incidents
                             </button>
-                            <button class="map-btn" onclick="toggleHeatmap(this)">
-                                <i class="fas fa-fire-alt"></i> Heatmap
-                            </button>
                             <button class="map-btn" onclick="centerMap()">
                                 <i class="fas fa-crosshairs"></i> Center
                             </button>
@@ -136,7 +124,7 @@ $pageTitle = 'GPS Tracking System';
                                 GPS Feed Status
                             </div>
                             <div class="tracking-map-overlay-text">
-                                Watch unit movement, incident positions, and heat concentrations in real time.
+                                Watch unit movement and incident positions in real time.
                             </div>
                         </div>
                         <div class="map-viewport" id="map" style="width:100%;"></div>
@@ -175,10 +163,6 @@ let qcBoundaryLayers = { halo: null, line: null };
 let routes = {};
 let QC_BOUNDS_GLOBAL;
 let unitFilter = '';
-let heatLayer = null;
-let heatActive = false;
-let heatHotspotMarker = null;
-let heatLegendControl = null;
 let dispatchedUnitsByIdentifier = {};
 let unitIdentifierById = {};
 let incidentGeocodeCache = {};
@@ -191,15 +175,6 @@ let activeRouteState = null;
 const MAX_PENDING_TRACK_ATTEMPTS = 20;
 const MAX_PENDING_ROUTE_ATTEMPTS = 20;
 const QC_VIEWBOX = '121.0000,14.7500,121.1000,14.6000';
-const HEATMAP_GRADIENT = {
-    0.18: '#2d5be3',
-    0.35: '#18b7ff',
-    0.52: '#4ef542',
-    0.68: '#ddff40',
-    0.82: '#ffbb2f',
-    0.94: '#ff7043',
-    1.0: '#f44336'
-};
 
 // ===============================
 // LEAFLET MAP INITIALIZATION
@@ -282,13 +257,6 @@ function loadIncidentMarkers() {
     updateMapVisibility();
 
     console.log("✅ Leaflet map initialized");
-    map.on('zoomend', () => {
-        if (!heatLayer || !heatActive) return;
-        const z = map.getZoom();
-        const radius = z >= 16 ? 32 : (z >= 14 ? 40 : 52);
-        heatLayer.setOptions({ radius: radius, blur: radius * 0.9 });
-    });
-
     // Restore dispatch route immediately when coordinates are already present in the URL.
     try {
         const params = new URLSearchParams(window.location.search);
@@ -443,9 +411,6 @@ function refreshMap() {
         const newLng = pos.lng + (Math.random() - 0.5) * 0.001;
         item.marker.setLatLng([newLat, newLng]);
     });
-    if (heatActive) {
-        loadHeatmap();
-    }
 }
 
 function selectRoute(routeId) {
@@ -1184,20 +1149,10 @@ document.addEventListener('DOMContentLoaded', () => {
         showNotification(unitFilter ? `Showing ${unitFilter} units` : 'Showing all units', 'info');
     });
 });
-// Auto-reload heatmap when time range changes
-document.addEventListener('DOMContentLoaded', () => {
-    const tr = document.getElementById('time-range');
-    if (tr) {
-        tr.addEventListener('change', () => {
-            if (heatActive) loadHeatmap(true);
-        });
-    }
-});
 </script>
 
 
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-<script src="https://unpkg.com/leaflet.heat/dist/leaflet-heat.js"></script>
 <script src="https://unpkg.com/leaflet-routing-machine@latest/dist/leaflet-routing-machine.js"></script>
 <script src="js/routing.js"></script>
 <script src="js/place-autocomplete.js"></script>
@@ -1375,272 +1330,6 @@ function loadAvailableUnits() {
             refreshActiveRoute();
         })
         .catch(() => {});
-}
-
-// ===============================
-// HEATMAP
-// ===============================
-function toggleHeatmap(el) {
-    heatActive = !heatActive;
-    if (el) {
-        if (heatActive) el.classList.add('active'); else el.classList.remove('active');
-    }
-    if (heatActive) {
-        loadHeatmap(true);
-        showNotification('Heatmap enabled', 'info');
-    } else {
-        if (heatLayer) { map.removeLayer(heatLayer); heatLayer = null; }
-        if (heatHotspotMarker) { map.removeLayer(heatHotspotMarker); heatHotspotMarker = null; }
-        showNotification('Heatmap disabled', 'info');
-    }
-}
-
-function clearHeatmapOverlays() {
-    if (heatLayer) {
-        map.removeLayer(heatLayer);
-        heatLayer = null;
-    }
-    if (heatHotspotMarker) {
-        map.removeLayer(heatHotspotMarker);
-        heatHotspotMarker = null;
-    }
-    if (heatLegendControl) {
-        map.removeControl(heatLegendControl);
-        heatLegendControl = null;
-    }
-}
-
-function findHeatHotspot(points) {
-    const gridSize = 0.003; // ~300m buckets in Metro Manila latitude
-    const buckets = new Map();
-    (points || []).forEach((point) => {
-        const lat = parseFloat(point[0]);
-        const lng = parseFloat(point[1]);
-        if (!Number.isFinite(lat) || !Number.isFinite(lng)) return;
-        const intensity = parseFloat(point[2]);
-        const weight = Number.isFinite(intensity) ? intensity : 1;
-        const bucketLat = Math.round(lat / gridSize) * gridSize;
-        const bucketLng = Math.round(lng / gridSize) * gridSize;
-        const key = `${bucketLat.toFixed(6)},${bucketLng.toFixed(6)}`;
-        if (!buckets.has(key)) {
-            buckets.set(key, { latSum: 0, lngSum: 0, count: 0, weight: 0 });
-        }
-        const bucket = buckets.get(key);
-        bucket.latSum += lat;
-        bucket.lngSum += lng;
-        bucket.count += 1;
-        bucket.weight += weight;
-    });
-
-    let best = null;
-    buckets.forEach((bucket) => {
-        if (!best || bucket.weight > best.weight || (bucket.weight === best.weight && bucket.count > best.count)) {
-            best = bucket;
-        }
-    });
-
-    if (!best || !best.count) return null;
-    return {
-        lat: best.latSum / best.count,
-        lng: best.lngSum / best.count,
-        count: best.count,
-        weight: best.weight
-    };
-}
-
-function loadHeatmap(initial) {
-    const params = new URLSearchParams();
-    const range = String(document.getElementById('time-range')?.value || 'live');
-    if (range === 'live' || range === '1hour') {
-        params.set('hours', '1');
-    } else if (range === '24hours') {
-        params.set('hours', '24');
-    } else if (range === '7days') {
-        params.set('days', '7');
-    } else {
-        params.set('days', '90');
-    }
-    fetchHeatmap(params, initial, true);
-}
-
-function fetchHeatmap(params, initial, allowFallbackToAll) {
-    fetch('api/incidents_heatmap.php?' + params.toString())
-        .then(r => r.json())
-        .then(res => {
-            if (!heatActive) return;
-            if (!res.ok) {
-                if (allowFallbackToAll) {
-                    const allParams = new URLSearchParams();
-                    allParams.set('all', '1');
-                    fetchHeatmap(allParams, initial, false);
-                    return;
-                }
-                if (initial) showNotification('Unable to load incident heatmap', 'error');
-                return;
-            }
-            const points = res.points || [];
-            clearHeatmapOverlays();
-            if (!points.length) {
-                if (allowFallbackToAll) {
-                    const allParams = new URLSearchParams();
-                    allParams.set('all', '1');
-                    fetchHeatmap(allParams, initial, false);
-                    return;
-                }
-                if (initial) showNotification('No hotspot data found for incidents with coordinates', 'info');
-                return;
-            }
-            const zoom = map ? map.getZoom() : 13;
-            const radius = zoom >= 16 ? 34 : (zoom >= 14 ? 44 : 58);
-            const blobPoints = buildHeatBlobPoints(points, res.hotspots);
-            heatLayer = L.heatLayer(blobPoints, {
-                radius: radius,
-                blur: radius * 1.05,
-                maxZoom: 18,
-                minOpacity: 0.32,
-                max: 1.0,
-                gradient: HEATMAP_GRADIENT
-            });
-            heatLayer.addTo(map);
-            addHeatLegendControl();
-            if (initial) {
-                const count = Number.isFinite(Number(res.count)) ? Number(res.count) : points.length;
-                const clusters = Number.isFinite(Number(res.cluster_count)) ? Number(res.cluster_count) : points.length;
-                showNotification(`Heatmap loaded (${count} incidents, ${clusters} hotspot zones)`, 'success');
-            }
-
-            let hotspot = null;
-            if (Array.isArray(res.hotspots) && res.hotspots.length) {
-                const top = res.hotspots[0];
-                const hLat = parseFloat(top.latitude);
-                const hLng = parseFloat(top.longitude);
-                if (Number.isFinite(hLat) && Number.isFinite(hLng)) {
-                    hotspot = {
-                        lat: hLat,
-                        lng: hLng,
-                        count: parseInt(top.incident_count, 10) || 0,
-                        weight: parseFloat(top.score) || 0
-                    };
-                }
-            }
-            if (!hotspot) {
-                hotspot = findHeatHotspot(points);
-            }
-            if (hotspot) {
-                heatHotspotMarker = L.circleMarker([hotspot.lat, hotspot.lng], {
-                    radius: 10,
-                    color: '#ef4444',
-                    weight: 2,
-                    fillColor: '#ef4444',
-                    fillOpacity: 0.35
-                }).addTo(map).bindPopup(
-                    `<strong>Top Incident Hotspot</strong><br>Incidents in area: ${hotspot.count}`
-                );
-                if (initial) {
-                    map.flyTo([hotspot.lat, hotspot.lng], Math.max(map.getZoom(), 14), { duration: 0.6 });
-                    heatHotspotMarker.openPopup();
-                }
-            }
-        })
-        .catch(() => {
-            if (initial) showNotification('Unable to load incident heatmap', 'error');
-        });
-}
-
-function buildHeatBlobPoints(points, hotspots) {
-    const sourcePoints = Array.isArray(points) ? points : [];
-    const sourceHotspots = Array.isArray(hotspots) ? hotspots : [];
-    const expanded = [];
-
-    // Keep base points so exact event locations still contribute.
-    sourcePoints.forEach((p) => {
-        const lat = parseFloat(p[0]);
-        const lng = parseFloat(p[1]);
-        const intensity = parseFloat(p[2]);
-        if (!Number.isFinite(lat) || !Number.isFinite(lng)) return;
-        const w = Number.isFinite(intensity) ? Math.max(0.08, Math.min(1, intensity)) : 0.25;
-        expanded.push([lat, lng, w]);
-    });
-
-    const rings = [
-        { meters: 140, points: 8, weight: 0.92 },
-        { meters: 280, points: 10, weight: 0.76 },
-        { meters: 460, points: 14, weight: 0.56 },
-        { meters: 700, points: 18, weight: 0.36 },
-        { meters: 940, points: 22, weight: 0.2 }
-    ];
-
-    sourceHotspots.slice(0, 50).forEach((h) => {
-        const lat = parseFloat(h.latitude);
-        const lng = parseFloat(h.longitude);
-        if (!Number.isFinite(lat) || !Number.isFinite(lng)) return;
-
-        const baseIntensityRaw = parseFloat(h.intensity);
-        const baseIntensity = Number.isFinite(baseIntensityRaw) ? baseIntensityRaw : 0.5;
-        const count = parseFloat(h.incident_count);
-        const densityBoost = Number.isFinite(count) ? Math.min(1.8, 1 + (Math.log(count + 1) * 0.42)) : 1;
-        const centerWeight = Math.max(0.12, Math.min(1, baseIntensity * densityBoost));
-
-        expanded.push([lat, lng, centerWeight]);
-
-        rings.forEach((ring) => {
-            const meters = ring.meters * densityBoost;
-            const latDelta = meters / 111320;
-            const cosLat = Math.cos((lat * Math.PI) / 180) || 1;
-            const lngDelta = meters / (111320 * cosLat);
-            for (let i = 0; i < ring.points; i += 1) {
-                const angle = (Math.PI * 2 * i) / ring.points;
-                const lat2 = lat + (latDelta * Math.sin(angle));
-                const lng2 = lng + (lngDelta * Math.cos(angle));
-                const weight = Math.max(0.05, Math.min(1, centerWeight * ring.weight));
-                expanded.push([lat2, lng2, weight]);
-            }
-        });
-    });
-
-    return expanded;
-}
-
-function addHeatLegendControl() {
-    if (!map) return;
-    if (heatLegendControl) {
-        map.removeControl(heatLegendControl);
-    }
-    heatLegendControl = L.control({ position: 'topright' });
-    heatLegendControl.onAdd = function () {
-        const div = L.DomUtil.create('div', 'heatmap-legend');
-        div.style.background = 'rgba(255,255,255,0.95)';
-        div.style.border = '1px solid #d1d5db';
-        div.style.borderRadius = '8px';
-        div.style.padding = '8px 10px';
-        div.style.boxShadow = '0 4px 12px rgba(0,0,0,0.12)';
-        div.style.fontSize = '11px';
-        div.style.lineHeight = '1.2';
-        div.innerHTML = `
-            <div style="font-weight:700; margin-bottom:6px; color:#111827;">Heat Intensity</div>
-            <div style="
-                width: 140px;
-                height: 10px;
-                border-radius: 999px;
-                border: 1px solid rgba(0,0,0,0.12);
-                background: linear-gradient(90deg,
-                    #2d5be3 0%,
-                    #00b5ff 20%,
-                    #39ff6a 40%,
-                    #d9ff2f 60%,
-                    #ffb300 78%,
-                    #ff4b3e 92%,
-                    #ff2da1 100%);
-            "></div>
-            <div style="display:flex; justify-content:space-between; margin-top:4px; color:#374151;">
-                <span>Low</span><span>High</span>
-            </div>
-        `;
-        L.DomEvent.disableClickPropagation(div);
-        L.DomEvent.disableScrollPropagation(div);
-        return div;
-    };
-    heatLegendControl.addTo(map);
 }
 
 // Live polling to update unit positions/speeds every 5s

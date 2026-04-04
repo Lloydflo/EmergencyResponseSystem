@@ -346,7 +346,7 @@ try {
                         <select id="status-filter">
                             <option value="">All Status</option>
                             <option value="available">Available</option>
-                            <option value="inuse">In Use</option>
+                            <option value="inuse">Busy</option>
                             <option value="offline">Offline</option>
                         </select>
                     </div>
@@ -595,7 +595,7 @@ try {
                 }
 
                 function formatResourceStatus(status) {
-                    if (status === 'inuse') return 'In Use';
+                    if (status === 'inuse') return 'Busy';
                     if (status === 'offline') return 'Offline';
                     return 'Available';
                 }

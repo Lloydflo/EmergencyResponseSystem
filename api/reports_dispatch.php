@@ -46,23 +46,46 @@ function period_to_range(): array {
     return [$rangeStart->format('Y-m-d') . ' 00:00:00', $rangeEnd->format('Y-m-d') . ' 23:59:59'];
 }
 
+function normalized_type_values(string $typeFilter): array {
+    $typeFilter = strtolower(trim($typeFilter));
+    if ($typeFilter === '') {
+        return [];
+    }
+    if ($typeFilter === 'traffic' || $typeFilter === 'accident') {
+        return ['traffic', 'accident'];
+    }
+    if ($typeFilter === 'police' || $typeFilter === 'crime') {
+        return ['police', 'crime'];
+    }
+    return [$typeFilter];
+}
+
+function append_type_filter(string &$sql, array &$params, string $column, array $typeValues, string $prefix): void {
+    if (!$typeValues) {
+        return;
+    }
+    $placeholders = [];
+    foreach ($typeValues as $index => $value) {
+        $placeholder = ':' . $prefix . '_type_' . $index;
+        $placeholders[] = $placeholder;
+        $params[$placeholder] = $value;
+    }
+    $sql .= ' AND LOWER(' . $column . ') IN (' . implode(', ', $placeholders) . ')';
+}
+
 [$startAt, $endAt] = period_to_range();
 
 try {
     $typeFilter = isset($_GET['type']) ? trim((string)$_GET['type']) : '';
     $priorityFilter = isset($_GET['priority']) ? trim((string)$_GET['priority']) : '';
-    if ($typeFilter === 'accident') { $typeFilter = 'traffic'; }
-    if ($typeFilter === 'crime') { $typeFilter = 'police'; }
+    $typeValues = normalized_type_values($typeFilter);
 
     $dispatchJoin = '';
     $dispatchWhere = 'd.assigned_at BETWEEN :s AND :e';
     $dispatchParams = [':s' => $startAt, ':e' => $endAt];
     if ($typeFilter !== '' || $priorityFilter !== '') {
         $dispatchJoin = ' INNER JOIN incidents i ON i.id = d.incident_id';
-        if ($typeFilter !== '') {
-            $dispatchWhere .= ' AND i.type = :type';
-            $dispatchParams[':type'] = $typeFilter;
-        }
+        append_type_filter($dispatchWhere, $dispatchParams, 'i.type', $typeValues, 'dispatch');
         if ($priorityFilter !== '') {
             $dispatchWhere .= ' AND i.priority = :prio';
             $dispatchParams[':prio'] = $priorityFilter;
@@ -127,10 +150,7 @@ try {
         ':load_s' => $startAt,
         ':load_e' => $endAt,
     ];
-    if ($typeFilter !== '') {
-        $loadWhere .= ' AND i_load.type = :type';
-        $loadParams[':type'] = $typeFilter;
-    }
+    append_type_filter($loadWhere, $loadParams, 'i_load.type', $typeValues, 'load');
     if ($priorityFilter !== '') {
         $loadWhere .= ' AND i_load.priority = :prio';
         $loadParams[':prio'] = $priorityFilter;

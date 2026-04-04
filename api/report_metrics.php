@@ -71,6 +71,33 @@ function previous_range(string $kind, string $startAt, string $endAt): array {
     return [$ps->format('Y-m-d H:i:s'), $pe->format('Y-m-d H:i:s')];
 }
 
+function normalized_type_values(string $typeFilter): array {
+    $typeFilter = strtolower(trim($typeFilter));
+    if ($typeFilter === '') {
+        return [];
+    }
+    if ($typeFilter === 'traffic' || $typeFilter === 'accident') {
+        return ['traffic', 'accident'];
+    }
+    if ($typeFilter === 'police' || $typeFilter === 'crime') {
+        return ['police', 'crime'];
+    }
+    return [$typeFilter];
+}
+
+function append_type_filter(string &$sql, array &$params, string $column, array $typeValues, string $prefix): void {
+    if (!$typeValues) {
+        return;
+    }
+    $placeholders = [];
+    foreach ($typeValues as $index => $value) {
+        $placeholder = ':' . $prefix . '_type_' . $index;
+        $placeholders[] = $placeholder;
+        $params[$placeholder] = $value;
+    }
+    $sql .= ' AND LOWER(' . $column . ') IN (' . implode(', ', $placeholders) . ')';
+}
+
 try {
     [$startAt, $endAt, $kind] = period_to_range();
     [$prevStartAt, $prevEndAt] = previous_range($kind, $startAt, $endAt);
@@ -78,8 +105,7 @@ try {
     // Optional filters
     $typeFilter = isset($_GET['type']) ? trim((string)$_GET['type']) : '';
     $priorityFilter = isset($_GET['priority']) ? trim((string)$_GET['priority']) : '';
-    if ($typeFilter === 'accident') { $typeFilter = 'traffic'; }
-    if ($typeFilter === 'crime') { $typeFilter = 'police'; }
+    $typeValues = normalized_type_values($typeFilter);
 
     // Totals for period and previous period.
     // Treat an incident as part of the selected window if it was created,
@@ -106,7 +132,7 @@ try {
         ':ds' => $startAt,
         ':de' => $endAt,
     ];
-    if ($typeFilter !== '') { $sqlIncBase .= ' AND i.type = :type'; $paramsInc[':type'] = $typeFilter; }
+    append_type_filter($sqlIncBase, $paramsInc, 'i.type', $typeValues, 'inc');
     if ($priorityFilter !== '') { $sqlIncBase .= ' AND i.priority = :prio'; $paramsInc[':prio'] = $priorityFilter; }
 
     $stmt = $pdo->prepare('SELECT COUNT(*) AS c ' . $sqlIncBase);
@@ -134,7 +160,7 @@ try {
         ':de' => $prevEndAt,
     ];
     $sqlPrev = 'FROM incidents i WHERE ' . $incidentActivityWherePrev;
-    if ($typeFilter !== '') { $sqlPrev .= ' AND i.type = :type'; $paramsPrev[':type'] = $typeFilter; }
+    append_type_filter($sqlPrev, $paramsPrev, 'i.type', $typeValues, 'prev');
     if ($priorityFilter !== '') { $sqlPrev .= ' AND i.priority = :prio'; $paramsPrev[':prio'] = $priorityFilter; }
     $stmt = $pdo->prepare('SELECT COUNT(*) AS c ' . $sqlPrev);
     $stmt->execute($paramsPrev);
@@ -169,10 +195,7 @@ try {
           AND COALESCE(d.on_scene_at, d.cleared_at) IS NOT NULL
     ';
     $paramsResp = [':s' => $startAt, ':e' => $endAt];
-    if ($typeFilter !== '') {
-        $sqlResp .= ' AND i.type = :type';
-        $paramsResp[':type'] = $typeFilter;
-    }
+    append_type_filter($sqlResp, $paramsResp, 'i.type', $typeValues, 'resp');
     if ($priorityFilter !== '') {
         $sqlResp .= ' AND i.priority = :prio';
         $paramsResp[':prio'] = $priorityFilter;
@@ -194,9 +217,7 @@ try {
         )
     ';
     $sqlChartBase = 'FROM incidents i WHERE ' . $chartIncidentWhere;
-    if ($typeFilter !== '') {
-        $sqlChartBase .= ' AND i.type = :type';
-    }
+    append_type_filter($sqlChartBase, $paramsInc, 'i.type', $typeValues, 'chart');
     if ($priorityFilter !== '') {
         $sqlChartBase .= ' AND i.priority = :prio';
     }

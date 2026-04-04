@@ -4,35 +4,144 @@ require_once __DIR__ . '/../includes/db.php';
 $pdo = get_db_connection();
 if (!$pdo) { http_response_code(500); echo 'Database connection unavailable'; exit; }
 
-// Last 30 days incidents by day and by type
+function period_to_range(): array {
+    $period = isset($_GET['period']) ? strtolower(trim((string)$_GET['period'])) : '';
+    $start = isset($_GET['start']) ? trim((string)$_GET['start']) : '';
+    $end = isset($_GET['end']) ? trim((string)$_GET['end']) : '';
+    if ($start !== '' && $end !== '') {
+        return [$start . ' 00:00:00', $end . ' 23:59:59', 'Custom'];
+    }
+
+    $today = new DateTime('today');
+    if ($period === '') {
+        $rangeStart = (clone $today)->modify('-29 days');
+        $rangeEnd = $today;
+        return [$rangeStart->format('Y-m-d') . ' 00:00:00', $rangeEnd->format('Y-m-d') . ' 23:59:59', 'Last 30 Days'];
+    }
+
+    switch ($period) {
+        case 'today':
+            return [$today->format('Y-m-d') . ' 00:00:00', $today->format('Y-m-d') . ' 23:59:59', 'Today'];
+        case 'week':
+            $rangeStart = (clone $today)->modify('monday this week');
+            $rangeEnd = (clone $rangeStart)->modify('+6 days');
+            $label = 'This Week';
+            break;
+        case 'quarter':
+            $month = (int)$today->format('n');
+            $quarterStartMonth = [1 => 1, 2 => 4, 3 => 7, 4 => 10][intdiv($month - 1, 3) + 1];
+            $rangeStart = new DateTime($today->format('Y') . '-' . str_pad((string)$quarterStartMonth, 2, '0', STR_PAD_LEFT) . '-01');
+            $rangeEnd = (clone $rangeStart)->modify('+3 months -1 day');
+            $label = 'This Quarter';
+            break;
+        case 'year':
+            $rangeStart = new DateTime($today->format('Y-01-01'));
+            $rangeEnd = new DateTime($today->format('Y-12-31'));
+            $label = 'This Year';
+            break;
+        case 'month':
+        default:
+            $rangeStart = new DateTime($today->format('Y-m-01'));
+            $rangeEnd = (clone $rangeStart)->modify('+1 month -1 day');
+            $label = 'This Month';
+            break;
+    }
+
+    return [$rangeStart->format('Y-m-d') . ' 00:00:00', $rangeEnd->format('Y-m-d') . ' 23:59:59', $label];
+}
+
+function normalized_type_values(string $typeFilter): array {
+    $typeFilter = strtolower(trim($typeFilter));
+    if ($typeFilter === '') {
+        return [];
+    }
+    if ($typeFilter === 'traffic' || $typeFilter === 'accident') {
+        return ['traffic', 'accident'];
+    }
+    if ($typeFilter === 'police' || $typeFilter === 'crime') {
+        return ['police', 'crime'];
+    }
+    return [$typeFilter];
+}
+
+function normalize_type_key(string $type): string {
+    $type = strtolower(trim($type));
+    if ($type === 'crime') {
+        return 'police';
+    }
+    if ($type === 'accident') {
+        return 'traffic';
+    }
+    return in_array($type, ['medical', 'fire', 'police', 'traffic'], true) ? $type : 'other';
+}
+
+function append_type_filter(string &$sql, array &$params, string $column, array $typeValues, string $prefix): void {
+    if (!$typeValues) {
+        return;
+    }
+    $placeholders = [];
+    foreach ($typeValues as $index => $value) {
+        $placeholder = ':' . $prefix . '_type_' . $index;
+        $placeholders[] = $placeholder;
+        $params[$placeholder] = $value;
+    }
+    $sql .= ' AND LOWER(' . $column . ') IN (' . implode(', ', $placeholders) . ')';
+}
+
+[$startAt, $endAt, $periodLabel] = period_to_range();
+$typeFilter = isset($_GET['type']) ? trim((string)$_GET['type']) : '';
+$priorityFilter = isset($_GET['priority']) ? trim((string)$_GET['priority']) : '';
+$typeValues = normalized_type_values($typeFilter);
+
 $labels = [];
 $dataTotal = [];
 $types = ['medical','fire','police','traffic','other'];
-$typeSeries = array_fill_keys($types, array());
+$typeSeries = array_fill_keys($types, []);
 
-$start = (new DateTime('today'))->modify('-29 days');
-$end = new DateTime('today');
-
-// Build label days
-$idxMap = [];
-for ($i=0;$i<30;$i++) {
-    $d = (clone $start)->modify("+$i day")->format('Y-m-d');
-    $labels[] = $d;
-    $idxMap[$d] = $i;
-    $dataTotal[$i] = 0;
-    foreach ($types as $t) { $typeSeries[$t][$i] = 0; }
+$startDate = new DateTime(substr($startAt, 0, 10));
+$endDate = new DateTime(substr($endAt, 0, 10));
+$indexByDay = [];
+$cursor = clone $startDate;
+$index = 0;
+while ($cursor <= $endDate) {
+    $dayKey = $cursor->format('Y-m-d');
+    $labels[] = $dayKey;
+    $indexByDay[$dayKey] = $index;
+    $dataTotal[$index] = 0;
+    foreach ($types as $typeKey) {
+        $typeSeries[$typeKey][$index] = 0;
+    }
+    $cursor->modify('+1 day');
+    $index++;
 }
 
-// Query counts
-$stmt = $pdo->prepare("SELECT DATE(created_at) d, type, COUNT(*) c FROM incidents WHERE created_at >= :s GROUP BY DATE(created_at), type");
-$stmt->execute([':s' => $start->format('Y-m-d') . ' 00:00:00']);
-foreach ($stmt->fetchAll() as $r) {
-    $d = $r['d']; $t = $r['type']; $c = (int)$r['c'];
-    if (!isset($idxMap[$d])) continue;
-    $i = $idxMap[$d];
-    $dataTotal[$i] += $c;
-    if (!isset($typeSeries[$t])) { $t = 'other'; }
-    $typeSeries[$t][$i] += $c;
+$sql = "
+    SELECT DATE(i.created_at) AS incident_day, LOWER(i.type) AS type_name, COUNT(*) AS total_count
+    FROM incidents i
+    WHERE i.created_at BETWEEN :start AND :end
+";
+$params = [
+    ':start' => $startAt,
+    ':end' => $endAt,
+];
+append_type_filter($sql, $params, 'i.type', $typeValues, 'trend');
+if ($priorityFilter !== '') {
+    $sql .= ' AND i.priority = :priority';
+    $params[':priority'] = $priorityFilter;
+}
+$sql .= ' GROUP BY DATE(i.created_at), LOWER(i.type) ORDER BY DATE(i.created_at) ASC';
+$stmt = $pdo->prepare($sql);
+$stmt->execute($params);
+foreach ($stmt->fetchAll() as $row) {
+    $dayKey = (string)($row['incident_day'] ?? '');
+    if (!isset($indexByDay[$dayKey])) {
+        continue;
+    }
+    $slot = $indexByDay[$dayKey];
+    $count = (int)($row['total_count'] ?? 0);
+    $typeKey = normalize_type_key((string)($row['type_name'] ?? 'other'));
+    $dataTotal[$slot] += $count;
+    $typeSeries[$typeKey][$slot] += $count;
 }
 
 ?><!DOCTYPE html>
@@ -60,11 +169,11 @@ foreach ($stmt->fetchAll() as $r) {
 </head>
 <body>
     <h1>Trend Analysis Report</h1>
-    <div class="sub">Incidents across last 30 days</div>
+    <div class="sub"><?php echo htmlspecialchars($periodLabel); ?> trend from <?php echo htmlspecialchars(substr($startAt, 0, 10)); ?> to <?php echo htmlspecialchars(substr($endAt, 0, 10)); ?></div>
     <div class="toolbar"><button class="btn" onclick="window.print()">Print / Save as PDF</button></div>
 
     <div class="card">
-        <div class="muted">Total Incidents (30-day trend)</div>
+        <div class="muted">Total Incidents</div>
         <div class="chart-wrap"><canvas id="trendTotal" class="chart-canvas"></canvas></div>
     </div>
 
@@ -78,7 +187,7 @@ foreach ($stmt->fetchAll() as $r) {
         <table>
             <thead><tr><th>Date</th><th>Total</th><th>Medical</th><th>Fire</th><th>Police</th><th>Traffic</th><th>Other</th></tr></thead>
             <tbody>
-                <?php for ($i=0;$i<count($labels);$i++): ?>
+                <?php for ($i = 0; $i < count($labels); $i++): ?>
                 <tr>
                     <td><?php echo htmlspecialchars($labels[$i]); ?></td>
                     <td><?php echo (int)$dataTotal[$i]; ?></td>

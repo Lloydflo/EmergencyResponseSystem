@@ -321,6 +321,152 @@ function purge_expired_archived_resources(PDO $pdo): void {
     $stmt->execute();
 }
 
+function units_table_available(PDO $pdo): bool {
+    return table_exists($pdo, 'units');
+}
+
+function unit_column_exists(PDO $pdo, string $columnName): bool {
+    return table_column_exists($pdo, 'units', $columnName);
+}
+
+function infer_vehicle_unit_type(array $resource): string {
+    $haystack = strtolower(trim(implode(' ', [
+        (string)($resource['code'] ?? ''),
+        (string)($resource['name'] ?? ''),
+        (string)($resource['assignment'] ?? ''),
+        (string)($resource['notes'] ?? ''),
+        (string)($resource['driverName'] ?? ''),
+        (string)($resource['plateNumber'] ?? ''),
+        (string)($resource['driver_name'] ?? ''),
+        (string)($resource['plate_number'] ?? '')
+    ])));
+
+    if ($haystack !== '') {
+        if (preg_match('/ambulance|medical|emt|medic|clinic|hospital/', $haystack)) {
+            return 'ambulance';
+        }
+        if (preg_match('/fire|truck|blaze|engine/', $haystack)) {
+            return 'fire';
+        }
+        if (preg_match('/police|patrol|crime|law/', $haystack)) {
+            return 'police';
+        }
+        if (preg_match('/rescue|search|retrieval|sar/', $haystack)) {
+            return 'rescue';
+        }
+    }
+
+    return 'other';
+}
+
+function map_vehicle_resource_status_to_unit_status(string $status): string {
+    $status = strtolower(trim($status));
+    if ($status === 'in_use') {
+        return 'assigned';
+    }
+    if ($status === 'maintenance') {
+        return 'maintenance';
+    }
+    if ($status === 'offline') {
+        return 'offline';
+    }
+    return 'available';
+}
+
+function find_unit_by_identifiers(PDO $pdo, array $identifiers): ?array {
+    $identifiers = array_values(array_filter(array_map(
+        static fn($value): string => trim((string)$value),
+        $identifiers
+    )));
+    if ($identifiers === []) {
+        return null;
+    }
+
+    $placeholders = implode(',', array_fill(0, count($identifiers), '?'));
+    $stmt = $pdo->prepare("SELECT * FROM `units` WHERE `identifier` IN ($placeholders) ORDER BY id ASC LIMIT 1");
+    $stmt->execute($identifiers);
+    $row = $stmt->fetch(PDO::FETCH_ASSOC);
+    return $row ?: null;
+}
+
+function sync_vehicle_resource_unit(PDO $pdo, array $resource, ?string $previousCode = null): void {
+    if (!units_table_available($pdo)) {
+        return;
+    }
+    $category = strtolower(trim((string)($resource['category'] ?? '')));
+    if ($category !== 'vehicles') {
+        return;
+    }
+
+    $identifier = strtoupper(trim((string)($resource['code'] ?? '')));
+    if ($identifier === '') {
+        return;
+    }
+
+    $existingUnit = find_unit_by_identifiers($pdo, [$identifier, $previousCode]);
+    $unitType = infer_vehicle_unit_type($resource);
+    $unitStatus = map_vehicle_resource_status_to_unit_status((string)($resource['status'] ?? 'available'));
+    $hasLastStatusAt = unit_column_exists($pdo, 'last_status_at');
+    $hasCurrentIncidentId = unit_column_exists($pdo, 'current_incident_id');
+
+    if ($existingUnit) {
+        $fields = ['identifier = ?', 'unit_type = ?', 'status = ?'];
+        $params = [$identifier, $unitType, $unitStatus];
+        if ($hasLastStatusAt) {
+            $fields[] = 'last_status_at = NOW()';
+        }
+        if ($hasCurrentIncidentId && $unitStatus === 'available') {
+            $fields[] = 'current_incident_id = NULL';
+        }
+        $params[] = (int)$existingUnit['id'];
+        $stmt = $pdo->prepare("UPDATE `units` SET " . implode(', ', $fields) . " WHERE id = ?");
+        $stmt->execute($params);
+        return;
+    }
+
+    $columns = ['identifier', 'unit_type', 'status'];
+    $values = ['?', '?', '?'];
+    $params = [$identifier, $unitType, $unitStatus];
+    if ($hasCurrentIncidentId) {
+        $columns[] = 'current_incident_id';
+        $values[] = 'NULL';
+    }
+    if ($hasLastStatusAt) {
+        $columns[] = 'last_status_at';
+        $values[] = 'NOW()';
+    }
+
+    $stmt = $pdo->prepare(
+        "INSERT INTO `units` (" . implode(', ', $columns) . ")
+         VALUES (" . implode(', ', $values) . ")"
+    );
+    $stmt->execute($params);
+}
+
+function deactivate_vehicle_resource_unit(PDO $pdo, string $identifier): void {
+    if (!units_table_available($pdo)) {
+        return;
+    }
+    $identifier = strtoupper(trim($identifier));
+    if ($identifier === '') {
+        return;
+    }
+
+    $existingUnit = find_unit_by_identifiers($pdo, [$identifier]);
+    if (!$existingUnit) {
+        return;
+    }
+
+    $fields = ['status = ?'];
+    $params = ['offline'];
+    if (unit_column_exists($pdo, 'last_status_at')) {
+        $fields[] = 'last_status_at = NOW()';
+    }
+    $params[] = (int)$existingUnit['id'];
+    $stmt = $pdo->prepare("UPDATE `units` SET " . implode(', ', $fields) . " WHERE id = ?");
+    $stmt->execute($params);
+}
+
 try {
     ensure_resource_records_table($pdo);
     ensure_resource_records_archive_table($pdo);
@@ -418,12 +564,23 @@ try {
                 if ($pdo->inTransaction()) {
                     $pdo->rollBack();
                 }
-                throw $transactionError;
-            }
+                    throw $transactionError;
+                }
 
-            $item = fetch_item($pdo, $restoredId);
-            echo json_encode([
-                'ok' => true,
+                sync_vehicle_resource_unit($pdo, [
+                    'code' => (string)$archivedResource['code'],
+                    'name' => (string)$archivedResource['name'],
+                    'category' => (string)$archivedResource['category'],
+                    'status' => (string)$archivedResource['status'],
+                    'assignment' => (string)($archivedResource['assignment'] ?? ''),
+                    'notes' => (string)($archivedResource['notes'] ?? ''),
+                    'driver_name' => (string)($archivedResource['driver_name'] ?? ''),
+                    'plate_number' => (string)($archivedResource['plate_number'] ?? '')
+                ]);
+
+                $item = fetch_item($pdo, $restoredId);
+                echo json_encode([
+                    'ok' => true,
                 'item' => $item,
                 'restored_archive_id' => $archiveId
             ]);
@@ -448,6 +605,7 @@ try {
             $payload['notes'] !== '' ? $payload['notes'] : null
         ]);
         $id = (int)$pdo->lastInsertId();
+        sync_vehicle_resource_unit($pdo, $payload);
         $item = fetch_item($pdo, $id);
         echo json_encode(['ok' => true, 'item' => $item]);
         exit;
@@ -459,6 +617,13 @@ try {
         if ($id <= 0) {
             http_response_code(400);
             echo json_encode(['ok' => false, 'error' => 'Missing resource id']);
+            exit;
+        }
+
+        $existingItem = fetch_item($pdo, $id);
+        if ($existingItem === null) {
+            http_response_code(404);
+            echo json_encode(['ok' => false, 'error' => 'Resource not found']);
             exit;
         }
 
@@ -481,10 +646,11 @@ try {
             $payload['notes'] !== '' ? $payload['notes'] : null,
             $id
         ]);
-        if ($stmt->rowCount() === 0 && fetch_item($pdo, $id) === null) {
-            http_response_code(404);
-            echo json_encode(['ok' => false, 'error' => 'Resource not found']);
-            exit;
+        $previousCategory = strtolower(trim((string)($existingItem['category'] ?? '')));
+        if ($previousCategory === 'vehicles' && $payload['category'] !== 'vehicles') {
+            deactivate_vehicle_resource_unit($pdo, (string)($existingItem['code'] ?? ''));
+        } else {
+            sync_vehicle_resource_unit($pdo, $payload, (string)($existingItem['code'] ?? ''));
         }
         $item = fetch_item($pdo, $id);
         echo json_encode(['ok' => true, 'item' => $item]);
@@ -542,6 +708,10 @@ try {
                 $pdo->rollBack();
             }
             throw $transactionError;
+        }
+
+        if (strtolower(trim((string)($resource['category'] ?? ''))) === 'vehicles') {
+            deactivate_vehicle_resource_unit($pdo, (string)$resource['code']);
         }
 
         echo json_encode([

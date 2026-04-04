@@ -2,6 +2,7 @@
 header('Content-Type: application/json');
 
 require_once __DIR__ . '/../includes/db.php';
+require_once __DIR__ . '/../includes/vehicle_resource_units.php';
 
 function ers_table_exists(PDO $pdo, string $table): bool
 {
@@ -49,6 +50,11 @@ if (!$pdo) {
     exit;
 }
 
+$resourceRecordsTable = ers_vehicle_resource_units_table($pdo);
+if ($resourceRecordsTable !== null) {
+    ers_sync_all_vehicle_resource_units($pdo, $resourceRecordsTable);
+}
+
 try {
     if ($hasId) {
         $stmt = $pdo->prepare(
@@ -84,12 +90,6 @@ try {
             unset($incident['call_latitude'], $incident['call_longitude']);
 
             $incidentId = (int)$incident['id'];
-            $resourceRecordsTable = null;
-            if (ers_table_exists($pdo, 'resource_records')) {
-                $resourceRecordsTable = 'resource_records';
-            } elseif (ers_table_exists($pdo, 'admin_resources')) {
-                $resourceRecordsTable = 'admin_resources';
-            }
             $hasIncidentNotes = ers_table_exists($pdo, 'incident_notes');
             $hasRatingColumn = $hasIncidentNotes && ers_column_exists($pdo, 'incident_notes', 'rating');
 
@@ -217,13 +217,40 @@ try {
         }
     }
 
+    $unitSelect = '*';
+    $unitFrom = 'units';
+    $unitAlias = '';
+    $unitJoin = '';
+    if ($resourceRecordsTable !== null) {
+        $unitSelect = 'u.*, rr.name AS vehicle_name, rr.driver_name, rr.plate_number';
+        $unitFrom = 'units u';
+        $unitAlias = 'u.';
+        $unitJoin = " INNER JOIN `" . $resourceRecordsTable . "` rr
+                      ON rr.code = u.identifier
+                     AND LOWER(rr.category) = 'vehicles'";
+    }
+
     if (!empty($desiredTypes)) {
+        if (!in_array('other', $desiredTypes, true)) {
+            $desiredTypes[] = 'other';
+        }
         $placeholders = implode(',', array_fill(0, count($desiredTypes), '?'));
-        $unitStmt = $pdo->prepare("SELECT * FROM units WHERE status = 'available' AND unit_type IN ({$placeholders})");
+        $unitStmt = $pdo->prepare(
+            "SELECT {$unitSelect}
+             FROM {$unitFrom}
+             {$unitJoin}
+             WHERE {$unitAlias}status = 'available'
+               AND {$unitAlias}unit_type IN ({$placeholders})"
+        );
         $unitStmt->execute($desiredTypes);
         $units = $unitStmt->fetchAll(PDO::FETCH_ASSOC);
     } else {
-        $units = $pdo->query("SELECT * FROM units WHERE status = 'available'")->fetchAll(PDO::FETCH_ASSOC);
+        $units = $pdo->query(
+            "SELECT {$unitSelect}
+             FROM {$unitFrom}
+             {$unitJoin}
+             WHERE {$unitAlias}status = 'available'"
+        )->fetchAll(PDO::FETCH_ASSOC);
     }
 
     $incidentLat = isset($out['incident']['latitude']) ? (float)$out['incident']['latitude'] : null;

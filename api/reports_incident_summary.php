@@ -46,40 +46,125 @@ function period_to_range(): array {
     }
 }
 
-[$startAt, $endAt, $periodLabel] = period_to_range();
+function normalized_type_values(string $typeFilter): array {
+    $typeFilter = strtolower(trim($typeFilter));
+    if ($typeFilter === '') {
+        return [];
+    }
+    if ($typeFilter === 'traffic' || $typeFilter === 'accident') {
+        return ['traffic', 'accident'];
+    }
+    if ($typeFilter === 'police' || $typeFilter === 'crime') {
+        return ['police', 'crime'];
+    }
+    return [$typeFilter];
+}
 
-// Fetch incidents within range
-$sql = "SELECT id, reference_no, type, priority, status, location_address, created_at, resolved_at
-        FROM incidents WHERE created_at BETWEEN :s AND :e ORDER BY created_at DESC LIMIT 500";
-$stmt = $pdo->prepare($sql);
-$stmt->execute([':s'=>$startAt, ':e'=>$endAt]);
+function append_type_filter(string &$sql, array &$params, string $column, array $typeValues, string $prefix): void {
+    if (!$typeValues) {
+        return;
+    }
+    $placeholders = [];
+    foreach ($typeValues as $index => $value) {
+        $placeholder = ':' . $prefix . '_type_' . $index;
+        $placeholders[] = $placeholder;
+        $params[$placeholder] = $value;
+    }
+    $sql .= ' AND LOWER(' . $column . ') IN (' . implode(', ', $placeholders) . ')';
+}
+
+[$startAt, $endAt, $periodLabel] = period_to_range();
+$typeFilter = isset($_GET['type']) ? trim((string)$_GET['type']) : '';
+$priorityFilter = isset($_GET['priority']) ? trim((string)$_GET['priority']) : '';
+$typeValues = normalized_type_values($typeFilter);
+
+$incidentActivityWhere = "
+    (
+        i.created_at BETWEEN :s AND :e
+        OR (i.updated_at IS NOT NULL AND i.updated_at BETWEEN :us AND :ue)
+        OR EXISTS (
+            SELECT 1
+            FROM dispatches d_window
+            WHERE d_window.incident_id = i.id
+              AND d_window.assigned_at BETWEEN :ds AND :de
+        )
+    )
+";
+$incidentSql = "SELECT i.id, i.reference_no, i.type, i.priority, i.status, i.location_address, i.created_at, i.updated_at, i.resolved_at
+        FROM incidents i
+        WHERE {$incidentActivityWhere}";
+$incidentParams = [
+    ':s' => $startAt,
+    ':e' => $endAt,
+    ':us' => $startAt,
+    ':ue' => $endAt,
+    ':ds' => $startAt,
+    ':de' => $endAt,
+];
+append_type_filter($incidentSql, $incidentParams, 'i.type', $typeValues, 'incident');
+if ($priorityFilter !== '') {
+    $incidentSql .= ' AND i.priority = :priority';
+    $incidentParams[':priority'] = $priorityFilter;
+}
+$incidentSql .= ' ORDER BY COALESCE(i.resolved_at, i.updated_at, i.created_at) DESC LIMIT 500';
+
+$stmt = $pdo->prepare($incidentSql);
+$stmt->execute($incidentParams);
 $incidents = $stmt->fetchAll();
 
-// Counts by type/priority/status
 $types = ['medical'=>0,'fire'=>0,'police'=>0,'traffic'=>0,'other'=>0];
-$priorities = ['high'=>0,'medium'=>0,'low'=>0];
-$statuses = ['pending'=>0,'dispatched'=>0,'resolved'=>0,'cancelled'=>0];
+$priorities = ['critical'=>0,'high'=>0,'medium'=>0,'low'=>0];
+$statuses = ['pending'=>0,'dispatched'=>0,'active'=>0,'in_progress'=>0,'resolved'=>0,'cancelled'=>0];
 $total = 0;
 foreach ($incidents as $r) {
     $total++;
-    $t = $r['type']; $p = $r['priority']; $s = $r['status'];
-    $types[$t] = ($types[$t] ?? 0) + 1;
-    $p = $p === 'critical' ? 'low' : $p;
-    $priorities[$p] = ($priorities[$p] ?? 0) + 1;
-    $statuses[$s] = ($statuses[$s] ?? 0) + 1;
+    $typeName = strtolower((string)($r['type'] ?? 'other'));
+    if ($typeName === 'crime') {
+        $typeName = 'police';
+    } elseif ($typeName === 'accident') {
+        $typeName = 'traffic';
+    }
+    if (!isset($types[$typeName])) {
+        $typeName = 'other';
+    }
+    $types[$typeName]++;
+
+    $priorityName = strtolower((string)($r['priority'] ?? 'low'));
+    if (!isset($priorities[$priorityName])) {
+        $priorityName = 'low';
+    }
+    $priorities[$priorityName]++;
+
+    $statusName = strtolower((string)($r['status'] ?? 'pending'));
+    if (!isset($statuses[$statusName])) {
+        $statuses[$statusName] = 0;
+    }
+    $statuses[$statusName]++;
 }
 
-// Avg response time from dispatches in period
 $avgResponse = 0.0;
-$rt = $pdo->prepare("SELECT AVG(TIMESTAMPDIFF(MINUTE, assigned_at, on_scene_at)) AS avg_min
-                     FROM dispatches WHERE assigned_at BETWEEN :s AND :e AND on_scene_at IS NOT NULL");
-$rt->execute([':s'=>$startAt, ':e'=>$endAt]);
+$responseSql = "
+    SELECT AVG(TIMESTAMPDIFF(MINUTE, d.assigned_at, COALESCE(d.on_scene_at, d.cleared_at))) AS avg_min
+    FROM dispatches d
+    INNER JOIN incidents i ON i.id = d.incident_id
+    WHERE d.assigned_at BETWEEN :s AND :e
+      AND COALESCE(d.on_scene_at, d.cleared_at) IS NOT NULL
+";
+$responseParams = [':s' => $startAt, ':e' => $endAt];
+append_type_filter($responseSql, $responseParams, 'i.type', $typeValues, 'response');
+if ($priorityFilter !== '') {
+    $responseSql .= ' AND i.priority = :priority';
+    $responseParams[':priority'] = $priorityFilter;
+}
+$rt = $pdo->prepare($responseSql);
+$rt->execute($responseParams);
 $row = $rt->fetch();
-if ($row && $row['avg_min'] !== null) { $avgResponse = round((float)$row['avg_min'], 1); }
+if ($row && $row['avg_min'] !== null) {
+    $avgResponse = round((float)$row['avg_min'], 1);
+}
 
-// Resolution rate
-$resolved = (int)$statuses['resolved'];
-$resolutionRate = $total > 0 ? round(($resolved/$total)*100, 1) : 0.0;
+$resolved = (int)($statuses['resolved'] ?? 0);
+$resolutionRate = $total > 0 ? round(($resolved / $total) * 100, 1) : 0.0;
 
 ?><!DOCTYPE html>
 <html lang="en">

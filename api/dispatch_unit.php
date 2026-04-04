@@ -13,6 +13,7 @@ if ($incident_id === null || !$unit_id) {
     exit;
 }
 require_once __DIR__ . '/../includes/db.php';
+require_once __DIR__ . '/../includes/vehicle_resource_units.php';
 $pdo = get_db_connection();
 if (!$pdo) {
     echo json_encode(['ok'=>false,'error'=>'DB error']);
@@ -32,6 +33,8 @@ try {
     // Safety: ensure unit links to incident
     $stmtUnit = $pdo->prepare("UPDATE units SET status='assigned', current_incident_id=?, last_status_at=CURRENT_TIMESTAMP WHERE id=?");
     $stmtUnit->execute([$incident_id, $unit_id]);
+
+    ers_sync_vehicle_resource_status_by_unit_id($pdo, $unit_id, 'in_use');
 
     // Safety: mark incident dispatched
     $stmtInc = $pdo->prepare("UPDATE incidents SET status='dispatched', updated_at=CURRENT_TIMESTAMP WHERE id=?");

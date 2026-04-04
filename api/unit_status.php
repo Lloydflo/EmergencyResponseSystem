@@ -3,6 +3,7 @@
 // Updates the status of a unit (e.g., available, busy, enroute, etc.)
 header('Content-Type: application/json');
 require_once __DIR__ . '/../includes/db.php';
+require_once __DIR__ . '/../includes/vehicle_resource_units.php';
 $pdo = get_db_connection();
 if (!$pdo) {
     http_response_code(500);
@@ -29,6 +30,7 @@ if (!$unit_id || !$status) {
 try {
     $stmt = $pdo->prepare('UPDATE units SET status = :status WHERE id = :id');
     $stmt->execute([':status' => $status, ':id' => $unit_id]);
+    ers_sync_vehicle_resource_status_by_unit_id($pdo, $unit_id);
     echo json_encode(['ok' => true]);
 } catch (Throwable $e) {
     http_response_code(500);
