@@ -194,6 +194,28 @@ $isDispatcherSidebar = $sidebarRole === 'dispatcher';
 <!-- Sidebar Overlay for mobile -->
 <div class="sidebar-overlay" id="sidebarOverlay"></div>
 
+<?php if ($isDispatcherSidebar): ?>
+<div class="floating-call-widget" id="floatingCallWidget" aria-live="polite" hidden>
+    <button type="button" class="floating-call-summary" id="floatingCallSummary" title="Open Dispatch Center">
+        <span class="floating-call-label">Live Call</span>
+        <span class="floating-call-timer" id="floatingCallTimer">00:00</span>
+        <span class="floating-call-name" id="floatingCallName">Caller</span>
+        <span class="floating-call-incident" id="floatingCallIncident">Dispatch standby</span>
+    </button>
+    <div class="floating-call-actions">
+        <button type="button" class="floating-call-action" id="floatingCallSpeaker" title="Toggle speaker" aria-pressed="false">
+            <i class="fas fa-volume-up"></i>
+        </button>
+        <button type="button" class="floating-call-action" id="floatingCallMute" title="Toggle mute" aria-pressed="false">
+            <i class="fas fa-microphone"></i>
+        </button>
+        <button type="button" class="floating-call-action floating-call-action-end" id="floatingCallEnd" title="End call">
+            <i class="fas fa-phone-slash"></i>
+        </button>
+    </div>
+</div>
+<?php endif; ?>
+
 <script>
 document.addEventListener('DOMContentLoaded', function() {
     // Sidebar functionality
@@ -279,3 +301,276 @@ document.addEventListener('DOMContentLoaded', function() {
     });
 });
 </script>
+<?php if ($isDispatcherSidebar): ?>
+<script>
+(function() {
+    const STORAGE_KEY = 'ersActiveCallSessionV1';
+    let memorySession = null;
+    let widgetTimer = null;
+
+    function clone(value) {
+        return value ? JSON.parse(JSON.stringify(value)) : null;
+    }
+
+    function readSession() {
+        try {
+            const raw = window.localStorage.getItem(STORAGE_KEY);
+            if (!raw) {
+                return clone(memorySession);
+            }
+            return JSON.parse(raw);
+        } catch (error) {
+            return clone(memorySession);
+        }
+    }
+
+    function writeSession(session) {
+        memorySession = clone(session);
+        try {
+            if (!session) {
+                window.localStorage.removeItem(STORAGE_KEY);
+            } else {
+                window.localStorage.setItem(STORAGE_KEY, JSON.stringify(session));
+            }
+        } catch (error) {
+            // Storage can be unavailable in private or locked-down browsers.
+        }
+    }
+
+    function normalizeSession(session) {
+        if (!session || session.active !== true) {
+            return null;
+        }
+        const start = Number(session.start);
+        return {
+            active: true,
+            name: String(session.name || 'Unknown Caller'),
+            phone: String(session.phone || ''),
+            start: Number.isFinite(start) && start > 0 ? start : Date.now(),
+            muted: session.muted === true,
+            speaker: session.speaker === true,
+            incidentId: session.incidentId !== null && session.incidentId !== undefined && session.incidentId !== ''
+                ? Number(session.incidentId)
+                : null,
+            incidentReferenceNo: String(session.incidentReferenceNo || ''),
+            incidentStatus: String(session.incidentStatus || ''),
+            incidentType: String(session.incidentType || ''),
+            location: String(session.location || '')
+        };
+    }
+
+    function formatElapsed(start) {
+        const elapsed = Math.max(0, Math.floor((Date.now() - Number(start || Date.now())) / 1000));
+        const hours = Math.floor(elapsed / 3600);
+        const minutes = Math.floor((elapsed % 3600) / 60);
+        const seconds = elapsed % 60;
+        if (hours > 0) {
+            return String(hours).padStart(2, '0') + ':' + String(minutes).padStart(2, '0') + ':' + String(seconds).padStart(2, '0');
+        }
+        return String(minutes).padStart(2, '0') + ':' + String(seconds).padStart(2, '0');
+    }
+
+    function emitChange(session) {
+        document.dispatchEvent(new CustomEvent('ers:call-session-change', {
+            detail: { session: clone(session) }
+        }));
+    }
+
+    function getState() {
+        return normalizeSession(readSession());
+    }
+
+    function setState(session) {
+        const normalized = normalizeSession(session);
+        writeSession(normalized);
+        renderWidget(normalized);
+        emitChange(normalized);
+        return normalized;
+    }
+
+    function updateActionButton(button, active, iconOn, iconOff) {
+        if (!button) {
+            return;
+        }
+        button.classList.toggle('is-active', !!active);
+        button.setAttribute('aria-pressed', active ? 'true' : 'false');
+        const icon = button.querySelector('i');
+        if (!icon) {
+            return;
+        }
+        icon.className = active ? iconOn : iconOff;
+    }
+
+    function renderWidget(session) {
+        const widget = document.getElementById('floatingCallWidget');
+        if (!widget) {
+            return;
+        }
+
+        const summary = document.getElementById('floatingCallSummary');
+        const timer = document.getElementById('floatingCallTimer');
+        const name = document.getElementById('floatingCallName');
+        const incident = document.getElementById('floatingCallIncident');
+        const speaker = document.getElementById('floatingCallSpeaker');
+        const mute = document.getElementById('floatingCallMute');
+
+        if (!session) {
+            widget.hidden = true;
+            widget.classList.remove('is-visible');
+            if (summary) {
+                summary.removeAttribute('data-has-incident');
+            }
+            if (timer) timer.textContent = '00:00';
+            if (name) name.textContent = 'Caller';
+            if (incident) incident.textContent = 'Dispatch standby';
+            updateActionButton(speaker, false, 'fas fa-volume-up', 'fas fa-volume-up');
+            updateActionButton(mute, false, 'fas fa-microphone-slash', 'fas fa-microphone');
+            return;
+        }
+
+        widget.hidden = false;
+        widget.classList.add('is-visible');
+        if (timer) timer.textContent = formatElapsed(session.start);
+        if (name) name.textContent = session.name || 'Unknown Caller';
+        if (incident) {
+            if (session.incidentReferenceNo) {
+                incident.textContent = session.incidentReferenceNo;
+            } else if (session.incidentType) {
+                incident.textContent = session.incidentType;
+            } else {
+                incident.textContent = 'Dispatch standby';
+            }
+        }
+        if (summary) {
+            if (session.incidentReferenceNo) {
+                summary.setAttribute('data-has-incident', 'true');
+            } else {
+                summary.removeAttribute('data-has-incident');
+            }
+        }
+        updateActionButton(speaker, session.speaker === true, 'fas fa-volume-up', 'fas fa-volume-up');
+        updateActionButton(mute, session.muted === true, 'fas fa-microphone-slash', 'fas fa-microphone');
+    }
+
+    function ensureWidgetBindings() {
+        const summary = document.getElementById('floatingCallSummary');
+        const speaker = document.getElementById('floatingCallSpeaker');
+        const mute = document.getElementById('floatingCallMute');
+        const end = document.getElementById('floatingCallEnd');
+
+        if (summary && !summary.dataset.bound) {
+            summary.dataset.bound = 'true';
+            summary.addEventListener('click', function() {
+                const session = getState();
+                const params = new URLSearchParams();
+                if (session && session.incidentId !== null) {
+                    params.set('incident_id', String(session.incidentId));
+                }
+                if (session && session.incidentReferenceNo) {
+                    params.set('code', session.incidentReferenceNo);
+                }
+                if (session) {
+                    params.set('call', 'active');
+                }
+                const target = 'dispatcher/dispatch.php' + (params.toString() ? ('?' + params.toString()) : '');
+                window.location.href = target;
+            });
+        }
+
+        if (speaker && !speaker.dataset.bound) {
+            speaker.dataset.bound = 'true';
+            speaker.addEventListener('click', function() {
+                window.ersCallSession.toggleSpeaker();
+            });
+        }
+
+        if (mute && !mute.dataset.bound) {
+            mute.dataset.bound = 'true';
+            mute.addEventListener('click', function() {
+                window.ersCallSession.toggleMute();
+            });
+        }
+
+        if (end && !end.dataset.bound) {
+            end.dataset.bound = 'true';
+            end.addEventListener('click', function() {
+                window.ersCallSession.end();
+            });
+        }
+    }
+
+    function ensureWidgetTimer() {
+        if (widgetTimer) {
+            window.clearInterval(widgetTimer);
+        }
+        widgetTimer = window.setInterval(function() {
+            renderWidget(getState());
+        }, 1000);
+    }
+
+    window.ersCallSession = {
+        getState: getState,
+        start: function(payload) {
+            const current = getState() || {};
+            return setState({
+                active: true,
+                name: payload && payload.name ? payload.name : current.name,
+                phone: payload && payload.phone ? payload.phone : current.phone,
+                start: payload && payload.start ? payload.start : (current.start || Date.now()),
+                muted: payload && Object.prototype.hasOwnProperty.call(payload, 'muted') ? payload.muted === true : (current.muted === true),
+                speaker: payload && Object.prototype.hasOwnProperty.call(payload, 'speaker') ? payload.speaker === true : (current.speaker === true),
+                incidentId: payload && Object.prototype.hasOwnProperty.call(payload, 'incidentId') ? payload.incidentId : current.incidentId,
+                incidentReferenceNo: payload && Object.prototype.hasOwnProperty.call(payload, 'incidentReferenceNo') ? payload.incidentReferenceNo : current.incidentReferenceNo,
+                incidentStatus: payload && Object.prototype.hasOwnProperty.call(payload, 'incidentStatus') ? payload.incidentStatus : current.incidentStatus,
+                incidentType: payload && Object.prototype.hasOwnProperty.call(payload, 'incidentType') ? payload.incidentType : current.incidentType,
+                location: payload && Object.prototype.hasOwnProperty.call(payload, 'location') ? payload.location : current.location
+            });
+        },
+        update: function(payload) {
+            const current = getState();
+            if (!current) {
+                return null;
+            }
+            return setState(Object.assign({}, current, payload || {}, { active: true }));
+        },
+        end: function() {
+            return setState(null);
+        },
+        toggleMute: function() {
+            const current = getState();
+            if (!current) {
+                return null;
+            }
+            return setState(Object.assign({}, current, { muted: !current.muted }));
+        },
+        toggleSpeaker: function() {
+            const current = getState();
+            if (!current) {
+                return null;
+            }
+            return setState(Object.assign({}, current, { speaker: !current.speaker }));
+        }
+    };
+
+    function initWidget() {
+        ensureWidgetBindings();
+        ensureWidgetTimer();
+        renderWidget(getState());
+    }
+
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', initWidget);
+    } else {
+        initWidget();
+    }
+
+    window.addEventListener('storage', function(event) {
+        if (event.key === STORAGE_KEY) {
+            const session = getState();
+            renderWidget(session);
+            emitChange(session);
+        }
+    });
+})();
+</script>
+<?php endif; ?>

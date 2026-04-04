@@ -290,6 +290,57 @@ $pageTitle = 'Emergency Call Center';
     let filterMonth = '';
     const incidentGeocodeCache = {};
 
+    function getSharedCallSessionApi() {
+        return window.ersCallSession && typeof window.ersCallSession.getState === 'function'
+            ? window.ersCallSession
+            : null;
+    }
+
+    function getSharedCallSession() {
+        const api = getSharedCallSessionApi();
+        return api ? api.getState() : null;
+    }
+
+    function renderActiveCallPanel(session) {
+        const panel = document.getElementById('activeCallPanel');
+        if (!panel) return;
+
+        if (!session || session.active !== true) {
+            panel.classList.remove('active');
+            stopTimer();
+            activeCall = null;
+            updateStats();
+            return;
+        }
+
+        const start = Number(session.start);
+        activeCall = {
+            name: session.name || 'Unknown',
+            phone: session.phone || '',
+            start: Number.isFinite(start) && start > 0 ? start : Date.now()
+        };
+
+        panel.classList.add('active');
+        document.getElementById('activeCallerName').textContent = 'Caller: ' + activeCall.name;
+        document.getElementById('activeCallerPhone').textContent = activeCall.phone;
+        document.getElementById('callerName').value = activeCall.name;
+        document.getElementById('callerPhone').value = activeCall.phone;
+        startTimer();
+        updateStats();
+    }
+
+    function redirectToDispatchCenter(data) {
+        const params = new URLSearchParams();
+        if (data && data.incident_id) {
+            params.set('incident_id', String(data.incident_id));
+        }
+        if (data && (data.incident_reference_no || data.reference_no)) {
+            params.set('code', String(data.incident_reference_no || data.reference_no));
+        }
+        params.set('from_call', '1');
+        window.location.href = 'dispatcher/dispatch.php?' + params.toString();
+    }
+
     document.addEventListener('DOMContentLoaded', () => {
         initPrioritySelect();
         initIncidentSidebarControls();
@@ -320,6 +371,10 @@ $pageTitle = 'Emergency Call Center';
                 updatePrioritySuggestion(currentDescription);
             });
         }
+        renderActiveCallPanel(getSharedCallSession());
+        document.addEventListener('ers:call-session-change', (event) => {
+            renderActiveCallPanel(event.detail ? event.detail.session : getSharedCallSession());
+        });
     });
 
     function simulateIncomingCall() {
@@ -340,15 +395,19 @@ $pageTitle = 'Emergency Call Center';
         const name = document.getElementById('incomingCallerName').textContent || 'Unknown';
         const phone = document.getElementById('incomingCallerPhone').textContent || '';
         alert.classList.remove('active');
-        activeCall = { name, phone, start: Date.now() };
-        document.getElementById('activeCallPanel').classList.add('active');
-        document.getElementById('activeCallerName').textContent = 'Caller: ' + name;
-        document.getElementById('activeCallerPhone').textContent = phone;
-        // Pre-fill form
-        document.getElementById('callerName').value = name;
-        document.getElementById('callerPhone').value = phone;
-        startTimer();
-        updateStats();
+        const sessionApi = getSharedCallSessionApi();
+        if (sessionApi) {
+            sessionApi.start({
+                name: name,
+                phone: phone,
+                start: Date.now(),
+                muted: false,
+                speaker: false
+            });
+        } else {
+            activeCall = { name, phone, start: Date.now() };
+        }
+        renderActiveCallPanel(getSharedCallSession() || activeCall);
     }
 
     function rejectCall() {
@@ -356,15 +415,17 @@ $pageTitle = 'Emergency Call Center';
     }
 
     function endCall() {
-        document.getElementById('activeCallPanel').classList.remove('active');
-        stopTimer();
-        activeCall = null;
-        updateStats();
+        const sessionApi = getSharedCallSessionApi();
+        if (sessionApi) {
+            sessionApi.end();
+        }
+        renderActiveCallPanel(null);
     }
 
     function startTimer() {
         stopTimer();
         callTimerInterval = setInterval(() => {
+            if (!activeCall) return;
             const elapsed = Math.floor((Date.now() - activeCall.start) / 1000);
             const mm = String(Math.floor(elapsed / 60)).padStart(2,'0');
             const ss = String(elapsed % 60).padStart(2,'0');
@@ -684,7 +745,17 @@ $pageTitle = 'Emergency Call Center';
                 }
                 return;
             }
-            showToast('Incident logged successfully');
+            const sessionApi = getSharedCallSessionApi();
+            if (sessionApi && activeCall) {
+                sessionApi.update({
+                    incidentId: data.incident_id || null,
+                    incidentReferenceNo: data.incident_reference_no || data.reference_no || '',
+                    incidentStatus: data.incident_status || payload.status,
+                    incidentType: payload.type,
+                    location: payload.location
+                });
+            }
+            showToast('Incident logged successfully. Redirecting to Dispatch Center...');
             e.target.reset();
             document.querySelectorAll('#prioritySelect .priority-option').forEach(o => o.classList.remove('active'));
             document.getElementById('incidentPriority').value = '';
@@ -712,6 +783,7 @@ $pageTitle = 'Emergency Call Center';
             } catch (e) {
                 console.warn('Activity log failed', e);
             }
+            redirectToDispatchCenter(data);
         } catch (err) {
             console.warn('Submit failed:', err);
             alert('Error while logging incident.');

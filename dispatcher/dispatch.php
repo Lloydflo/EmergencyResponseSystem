@@ -1028,9 +1028,22 @@ document.addEventListener('DOMContentLoaded', () => {
     try {
         const params = new URLSearchParams(window.location.search);
         const code = params.get('code');
+        const incidentId = toIncidentId(params.get('incident_id'));
+        const fromCall = params.get('from_call') === '1';
         const period = params.get('period');
-        if (code) {
-            alert('Viewing incident context: ' + code);
+        if (fromCall) {
+            if (window.ersCallSession && typeof window.ersCallSession.update === 'function') {
+                window.ersCallSession.update({
+                    incidentId: incidentId,
+                    incidentReferenceNo: code || ''
+                });
+            }
+            showNotification(code ? `Incident ${code} logged. Live call is still ongoing.` : 'Incident logged. Live call is still ongoing.', 'info');
+            if (incidentId !== null) {
+                window.setTimeout(() => openDispatchModal(incidentId), 220);
+            }
+        } else if (code) {
+            showNotification('Viewing incident context: ' + code, 'info');
         }
         if (period) {
             console.log('Dispatch period:', period);
