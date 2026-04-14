@@ -93,8 +93,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             <?php endif; ?>
             <form class="login-form" method="POST" action="otp.php">
                 <div class="form-group">
-                    <label for="otp" class="form-label">OTP Code</label>
-                    <input type="text" id="otp" name="otp" class="form-input" maxlength="6" pattern="[0-9]{6}" autocomplete="one-time-code" inputmode="numeric" required autofocus>
+                    <label for="otp-1" class="form-label">OTP Code</label>
+                    <div class="otp-input-group" data-otp-group>
+                        <input type="hidden" id="otp" name="otp" value="">
+                        <input type="text" id="otp-1" class="otp-digit-input" inputmode="numeric" pattern="[0-9]*" maxlength="1" autocomplete="one-time-code" required autofocus>
+                        <input type="text" id="otp-2" class="otp-digit-input" inputmode="numeric" pattern="[0-9]*" maxlength="1" required>
+                        <input type="text" id="otp-3" class="otp-digit-input" inputmode="numeric" pattern="[0-9]*" maxlength="1" required>
+                        <input type="text" id="otp-4" class="otp-digit-input" inputmode="numeric" pattern="[0-9]*" maxlength="1" required>
+                        <input type="text" id="otp-5" class="otp-digit-input" inputmode="numeric" pattern="[0-9]*" maxlength="1" required>
+                        <input type="text" id="otp-6" class="otp-digit-input" inputmode="numeric" pattern="[0-9]*" maxlength="1" required>
+                    </div>
                 </div>
                 <button type="submit" class="btn-signin">Verify</button>
             </form>
@@ -129,6 +137,76 @@ if (expiryTimestamp) {
         }
     }
     updateTimer();
+}
+
+const otpForm = document.querySelector('.login-form');
+const otpHiddenInput = document.getElementById('otp');
+const otpInputs = Array.from(document.querySelectorAll('.otp-digit-input'));
+
+function syncOtpValue() {
+    if (!otpHiddenInput) {
+        return;
+    }
+
+    otpHiddenInput.value = otpInputs.map((input) => input.value).join('');
+}
+
+function handleOtpPaste(event) {
+    event.preventDefault();
+    const pastedText = (event.clipboardData || window.clipboardData).getData('text');
+    const digits = pastedText.replace(/\D/g, '').slice(0, otpInputs.length).split('');
+
+    otpInputs.forEach((input, index) => {
+        input.value = digits[index] || '';
+    });
+
+    syncOtpValue();
+
+    const nextIndex = Math.min(digits.length, otpInputs.length - 1);
+    otpInputs[nextIndex].focus();
+    otpInputs[nextIndex].select();
+}
+
+otpInputs.forEach((input, index) => {
+    input.addEventListener('input', (event) => {
+        const digitsOnly = event.target.value.replace(/\D/g, '');
+        event.target.value = digitsOnly.slice(-1);
+        syncOtpValue();
+
+        if (event.target.value && index < otpInputs.length - 1) {
+            otpInputs[index + 1].focus();
+            otpInputs[index + 1].select();
+        }
+    });
+
+    input.addEventListener('keydown', (event) => {
+        if (event.key === 'Backspace' && !input.value && index > 0) {
+            otpInputs[index - 1].focus();
+            otpInputs[index - 1].select();
+        }
+
+        if (event.key === 'ArrowLeft' && index > 0) {
+            otpInputs[index - 1].focus();
+            otpInputs[index - 1].select();
+        }
+
+        if (event.key === 'ArrowRight' && index < otpInputs.length - 1) {
+            otpInputs[index + 1].focus();
+            otpInputs[index + 1].select();
+        }
+    });
+
+    input.addEventListener('focus', () => {
+        input.select();
+    });
+
+    input.addEventListener('paste', handleOtpPaste);
+});
+
+if (otpForm) {
+    otpForm.addEventListener('submit', () => {
+        syncOtpValue();
+    });
 }
 </script>
 </html>

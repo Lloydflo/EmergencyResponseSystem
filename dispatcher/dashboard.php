@@ -254,7 +254,6 @@ $type_total = array_sum($type_counts);
                         <h2><i class="fas fa-triangle-exclamation"></i> Priority Incident Queue</h2>
                         <div class="queue-filters">
                             <button type="button" class="queue-filter active" data-priority="all">All</button>
-                            <button type="button" class="queue-filter" data-priority="critical">Critical</button>
                             <button type="button" class="queue-filter" data-priority="high">High</button>
                             <button type="button" class="queue-filter" data-priority="medium">Medium</button>
                             <button type="button" class="queue-filter" data-priority="low">Low</button>
