@@ -742,24 +742,32 @@ function syncUnitMarkers(items) {
     });
 }
 
-function loadAvailableUnits() {
-    fetch('api/units_list.php?status=available')
+function fetchAvailableUnitsData() {
+    return fetch('api/units_list.php?status=available', { cache: 'no-store' })
         .then(r => r.json())
-        .then(res => {
-            if (!res.ok) return;
-            const items = res.items || [];
-            items.forEach(u => {
-                const id = u.identifier;
-                const type = u.unit_type || 'other';
-                const lat = parseFloat(u.latitude);
-                const lng = parseFloat(u.longitude);
-                const speed = (u.speed_kph !== undefined && u.speed_kph !== null) ? parseFloat(u.speed_kph) : null;
-                if (!isNaN(lat) && !isNaN(lng)) {
-                    addUnitMarker(id, lat, lng, `${id}`, type, speed);
-                }
-            });
+        .then(res => (res && res.ok && Array.isArray(res.items)) ? res.items : []);
+}
+
+function syncAvailableUnitMarkers(items) {
+    (items || []).forEach(u => {
+        const id = u.identifier;
+        const type = u.unit_type || 'other';
+        const lat = parseFloat(u.latitude);
+        const lng = parseFloat(u.longitude);
+        const speed = (u.speed_kph !== undefined && u.speed_kph !== null) ? parseFloat(u.speed_kph) : null;
+        if (!isNaN(lat) && !isNaN(lng)) {
+            addUnitMarker(id, lat, lng, `${id}`, type, speed);
+        }
+    });
+}
+
+function loadAvailableUnits() {
+    return fetchAvailableUnitsData()
+        .then(items => {
+            syncAvailableUnitMarkers(items);
+            return items;
         })
-        .catch(() => {});
+        .catch(() => []);
 }
 
 function loadIncidentMarkers() {
@@ -785,7 +793,7 @@ function loadIncidentMarkers() {
 function startLivePolling() {
     setInterval(() => {
         loadDispatchedUnits();
-        loadAvailableUnits();
+        refreshAvailableUnits();
         loadIncidentMarkers();
     }, 10000); // 10 seconds
 }
@@ -857,16 +865,18 @@ function renderAvailableUnits(items) {
 
 function refreshAvailableUnits() {
     const container = document.getElementById('available-units-container');
-    if (!container) return Promise.resolve([]);
-    return fetch('api/units_list.php?status=available', { cache: 'no-store' })
-        .then(r => r.json())
-        .then(res => {
-            const items = res && res.ok ? (res.items || []) : [];
-            renderAvailableUnits(items);
+    return fetchAvailableUnitsData()
+        .then(items => {
+            syncAvailableUnitMarkers(items);
+            if (container) {
+                renderAvailableUnits(items);
+            }
             return items;
         })
         .catch(() => {
-            renderAvailableUnits([]);
+            if (container) {
+                renderAvailableUnits([]);
+            }
             return [];
         });
 }

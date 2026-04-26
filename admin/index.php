@@ -1452,23 +1452,23 @@ function loadTrendData() {
 </body>
 </html>
 <!-- Activity Feed Modal -->
-<div id="activityModal" style="display:none;position:fixed;top:0;left:0;width:100vw;height:100vh;background:rgba(0,0,0,0.45);z-index:9999;align-items:center;justify-content:center;">
-  <div style="background:#fff;padding:2rem 2.5rem 1.5rem 2.5rem;border-radius:12px;max-width:700px;width:98vw;max-height:90vh;overflow-y:auto;box-shadow:0 8px 32px rgba(0,0,0,0.18);position:relative;">
-    <button onclick="closeActivityModal()" style="position:absolute;top:12px;right:16px;background:none;border:none;font-size:1.5rem;cursor:pointer;color:#888;">&times;</button>
-    <h2 style="margin-top:0;margin-bottom:1.2rem;font-size:1.3rem;color:#222;text-align:center;">All System Activity</h2>
-    <div id="activityModalList"></div>
-    <div id="activityModalLoading" style="display:none;text-align:center;color:#888;margin-top:1em;">Loading...</div>
-    <div id="activityModalNoData" style="display:none;text-align:center;color:#888;margin-top:1em;">No activity found.</div>
+<div id="activityModal" class="dashboard-modal activity-modal" style="display:none;">
+  <div class="dashboard-modal-card activity-modal-card">
+    <button type="button" class="dashboard-modal-close" aria-label="Close activity modal" onclick="closeActivityModal()">&times;</button>
+    <h2 class="dashboard-modal-title">All System Activity</h2>
+    <div id="activityModalList" class="dashboard-modal-list"></div>
+    <div id="activityModalLoading" class="dashboard-modal-state" style="display:none;">Loading...</div>
+    <div id="activityModalNoData" class="dashboard-modal-state" style="display:none;">No activity found.</div>
   </div>
 </div>
 <!-- Alerts Feed Modal -->
-<div id="alertsModal" style="display:none;position:fixed;top:0;left:0;width:100vw;height:100vh;background:rgba(0,0,0,0.45);z-index:9999;align-items:center;justify-content:center;">
-  <div style="background:#fff;padding:2rem 2.5rem 1.5rem 2.5rem;border-radius:12px;max-width:700px;width:98vw;max-height:90vh;overflow-y:auto;box-shadow:0 8px 32px rgba(0,0,0,0.18);position:relative;">
-    <button onclick="closeAlertsModal()" style="position:absolute;top:12px;right:16px;background:none;border:none;font-size:1.5rem;cursor:pointer;color:#888;">&times;</button>
-    <h2 style="margin-top:0;margin-bottom:1.2rem;font-size:1.3rem;color:#222;text-align:center;">All Active Alerts</h2>
-    <div id="alertsModalList"></div>
-    <div id="alertsModalLoading" style="display:none;text-align:center;color:#888;margin-top:1em;">Loading...</div>
-    <div id="alertsModalNoData" style="display:none;text-align:center;color:#888;margin-top:1em;">No active alerts found.</div>
+<div id="alertsModal" class="dashboard-modal alerts-modal" style="display:none;">
+  <div class="dashboard-modal-card alerts-modal-card">
+    <button type="button" class="dashboard-modal-close" aria-label="Close alerts modal" onclick="closeAlertsModal()">&times;</button>
+    <h2 class="dashboard-modal-title">All Active Alerts</h2>
+    <div id="alertsModalList" class="dashboard-modal-list"></div>
+    <div id="alertsModalLoading" class="dashboard-modal-state" style="display:none;">Loading...</div>
+    <div id="alertsModalNoData" class="dashboard-modal-state" style="display:none;">No active alerts found.</div>
   </div>
 </div>
 <script>

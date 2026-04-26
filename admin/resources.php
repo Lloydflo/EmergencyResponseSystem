@@ -23,6 +23,7 @@ $pageTitle = 'Resources Status';
     <link rel="stylesheet" href="css/sidebar.css">
     <link rel="stylesheet" href="css/admin-header.css">
     <link rel="stylesheet" href="css/sidebar-footer.css">
+    <script src="js/place-autocomplete.js"></script>
     <style>
         :root {
             --rs-bg: #f5f7fb;
@@ -414,6 +415,12 @@ $pageTitle = 'Resources Status';
             gap: 0.35rem;
         }
 
+        .form-hint {
+            color: var(--rs-muted);
+            font-size: 0.78rem;
+            line-height: 1.35;
+        }
+
         .form-group label {
             display: flex;
             align-items: center;
@@ -501,6 +508,27 @@ $pageTitle = 'Resources Status';
         .form-textarea {
             min-height: 88px;
             resize: vertical;
+        }
+
+        .autocomplete-dropdown {
+            width: 100% !important;
+            left: 0 !important;
+            top: calc(100% + 0.35rem) !important;
+            background: #fff !important;
+            border: 1px solid #cbd5e1 !important;
+            border-radius: 10px;
+            box-shadow: 0 18px 38px rgba(15, 23, 42, 0.16) !important;
+            overflow: hidden;
+        }
+
+        .autocomplete-dropdown div {
+            padding: 0.72rem 0.8rem !important;
+            color: var(--rs-text);
+            cursor: pointer;
+        }
+
+        .autocomplete-dropdown div:hover {
+            background: #f8fafc;
         }
 
         .modal-foot {
@@ -842,8 +870,23 @@ $pageTitle = 'Resources Status';
         html[data-theme="dark"] .name-cell span,
         html[data-theme="dark"] .resource-meta-note,
         html[data-theme="dark"] .request-panel-head span,
-        html[data-theme="dark"] .request-foot-note {
+        html[data-theme="dark"] .request-foot-note,
+        html[data-theme="dark"] .form-hint {
             color: #cbd5e1 !important;
+        }
+
+        html[data-theme="dark"] .autocomplete-dropdown {
+            background: #0f172a !important;
+            border-color: #334155 !important;
+            box-shadow: 0 20px 40px rgba(2, 6, 23, 0.45) !important;
+        }
+
+        html[data-theme="dark"] .autocomplete-dropdown div {
+            color: #e5eef9 !important;
+        }
+
+        html[data-theme="dark"] .autocomplete-dropdown div:hover {
+            background: #1e293b !important;
         }
 
         html[data-theme="dark"] .label-inline-btn {
@@ -1242,7 +1285,9 @@ $pageTitle = 'Resources Status';
                         </div>
                         <div class="form-group">
                             <label for="locationInput">Location</label>
-                            <input id="locationInput" class="form-input" required maxlength="70" placeholder="e.g. Station 2">
+                            <input id="locationInput" class="form-input" required maxlength="70" list="resourceLocationSuggestions" placeholder="e.g. Station 2 or Quezon City">
+                            <div class="form-hint">Type a place like Quezon City to see suggested locations.</div>
+                            <datalist id="resourceLocationSuggestions"></datalist>
                         </div>
                         <div class="form-group" id="driverNameGroup">
                             <label for="driverNameInput">Driver Name</label>
@@ -1473,6 +1518,7 @@ $pageTitle = 'Resources Status';
         const categoryInput = document.getElementById('categoryInput');
         const statusInput = document.getElementById('statusInput');
         const locationInput = document.getElementById('locationInput');
+        const resourceLocationSuggestions = document.getElementById('resourceLocationSuggestions');
         const driverNameGroup = document.getElementById('driverNameGroup');
         const driverNameInput = document.getElementById('driverNameInput');
         const plateNumberGroup = document.getElementById('plateNumberGroup');
@@ -1519,6 +1565,23 @@ $pageTitle = 'Resources Status';
         const ovPersonnel = document.getElementById('ovPersonnel');
         const ovEquipment = document.getElementById('ovEquipment');
         const ovAvailable = document.getElementById('ovAvailable');
+        const defaultLocationSuggestions = [
+            'Quezon City',
+            'Diliman, Quezon City',
+            'Cubao, Quezon City',
+            'Novaliches, Quezon City',
+            'Fairview, Quezon City',
+            'Commonwealth, Quezon City',
+            'Batasan Hills, Quezon City',
+            'Tandang Sora, Quezon City',
+            'Kamuning, Quezon City',
+            'Project 6, Quezon City',
+            'East Avenue, Quezon City',
+            'Timog Avenue, Quezon City',
+            'Central Garage',
+            'Command Center',
+            'Equipment Room'
+        ];
 
         function setSaveLoading(isLoading) {
             saveResourceBtn.disabled = !!isLoading;
@@ -1526,6 +1589,82 @@ $pageTitle = 'Resources Status';
             saveResourceBtn.textContent = isLoading
                 ? (selectedId === null ? 'Saving...' : 'Updating...')
                 : (selectedId === null ? 'Save Resource' : 'Update Resource');
+        }
+
+        function normalizeLocationText(value) {
+            return String(value || '').replace(/\s+/g, ' ').trim();
+        }
+
+        function clearLocationMetadata() {
+            delete locationInput.dataset.lat;
+            delete locationInput.dataset.lon;
+        }
+
+        function setLocationSuggestionOptions(extraLocations) {
+            if (!resourceLocationSuggestions) return;
+            const suggestions = [];
+            const seen = new Set();
+            const pushSuggestion = (value) => {
+                const normalized = normalizeLocationText(value);
+                const key = normalized.toLowerCase();
+                if (!normalized || seen.has(key)) return;
+                seen.add(key);
+                suggestions.push(normalized);
+            };
+
+            defaultLocationSuggestions.forEach(pushSuggestion);
+            resources.forEach((item) => pushSuggestion(item.location));
+            archivedResources.forEach((item) => pushSuggestion(item.location));
+            (Array.isArray(extraLocations) ? extraLocations : []).forEach(pushSuggestion);
+
+            resourceLocationSuggestions.innerHTML = suggestions
+                .slice(0, 50)
+                .map((location) => `<option value="${escapeHtml(location)}"></option>`)
+                .join('');
+        }
+
+        function formatSuggestedLocation(place) {
+            const displayName = normalizeLocationText(place && place.display_name);
+            if (!displayName) return '';
+
+            const parts = displayName.split(',').map((part) => part.trim()).filter(Boolean);
+            if (parts.length === 0) return '';
+
+            const primary = parts[0];
+            const qcPart = parts.find((part) => /quezon city/i.test(part));
+            let concise = '';
+
+            if (qcPart) {
+                concise = /quezon city/i.test(primary)
+                    ? 'Quezon City'
+                    : `${primary}, Quezon City`;
+            } else if (parts.length > 1) {
+                concise = `${primary}, ${parts[1]}`;
+            } else {
+                concise = primary;
+            }
+
+            if (concise.length <= 70) return concise;
+            if (primary.length <= 70) return primary;
+            return concise.slice(0, 70).trim();
+        }
+
+        function initializeLocationAutocomplete() {
+            setLocationSuggestionOptions();
+            if (typeof window.attachPlaceAutocomplete !== 'function') return;
+
+            window.attachPlaceAutocomplete('locationInput', (place) => {
+                const concise = formatSuggestedLocation(place);
+                if (concise) {
+                    locationInput.value = concise;
+                    setLocationSuggestionOptions([concise]);
+                }
+            }, {
+                strictViewbox: false,
+                preferViewbox: true,
+                minChars: 2,
+                limit: 6
+            });
         }
 
         function normalizeItem(raw) {
@@ -1572,6 +1711,7 @@ $pageTitle = 'Resources Status';
                 throw new Error((data && data.error) ? String(data.error) : 'Failed to load resources');
             }
             resources = Array.isArray(data.items) ? data.items.map(normalizeItem) : [];
+            setLocationSuggestionOptions();
             renderOverview();
             renderTable();
         }
@@ -1583,6 +1723,7 @@ $pageTitle = 'Resources Status';
                 throw new Error((data && data.error) ? String(data.error) : 'Failed to load archive');
             }
             archivedResources = Array.isArray(data.items) ? data.items.map(normalizeArchiveItem) : [];
+            setLocationSuggestionOptions();
             updateArchiveBadge();
             renderArchiveTable();
         }
@@ -1655,6 +1796,7 @@ $pageTitle = 'Resources Status';
                 status: String(item.status || '').trim()
             })) : [];
 
+            setLocationSuggestionOptions(backupIncidents.map((incident) => incident.location));
             renderBackupIncidentOptions();
             updateBackupIncidentMeta();
         }
@@ -2147,6 +2289,7 @@ $pageTitle = 'Resources Status';
             selectedId = null;
             categoryInput.value = 'vehicles';
             statusInput.value = 'available';
+            clearLocationMetadata();
             setFormCategoryState('vehicles', { clearIrrelevant: true });
         }
 
@@ -2178,6 +2321,7 @@ $pageTitle = 'Resources Status';
                 resourceNameInput.value = target.name;
                 categoryInput.value = target.category;
                 statusInput.value = target.status;
+                clearLocationMetadata();
                 locationInput.value = target.location;
                 driverNameInput.value = target.driverName || '';
                 plateNumberInput.value = target.plateNumber || '';
@@ -2504,6 +2648,10 @@ $pageTitle = 'Resources Status';
             setFormCategoryState(categoryInput.value || 'equipment', { clearIrrelevant: true });
         });
 
+        locationInput.addEventListener('input', () => {
+            clearLocationMetadata();
+        });
+
         resourceModal.addEventListener('click', (event) => {
             if (event.target === resourceModal) closeModal();
         });
@@ -2541,6 +2689,8 @@ $pageTitle = 'Resources Status';
             renderTable();
             showToast('Filters reset.');
         });
+
+        initializeLocationAutocomplete();
 
         (async () => {
             try {

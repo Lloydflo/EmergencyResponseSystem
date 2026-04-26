@@ -56,6 +56,12 @@ $isDispatcherSidebar = $sidebarRole === 'dispatcher';
                     <div class="sidebar-section-title">Insights</div>
                     <ul class="sidebar-menu">
                         <li class="sidebar-menu-item">
+                            <a href="admin/analytics.php" class="sidebar-link <?php echo basename($_SERVER['PHP_SELF']) == 'analytics.php' ? 'active' : ''; ?>" aria-current="<?php echo basename($_SERVER['PHP_SELF']) == 'analytics.php' ? 'page' : 'false'; ?>">
+                                <i class="fa-solid fa-robot"></i>
+                                <span>Predictive Analytics</span>
+                            </a>
+                        </li>
+                        <li class="sidebar-menu-item">
                             <a href="admin/report.php" class="sidebar-link <?php echo basename($_SERVER['PHP_SELF']) == 'report.php' ? 'active' : ''; ?>" aria-current="<?php echo basename($_SERVER['PHP_SELF']) == 'report.php' ? 'page' : 'false'; ?>">
                                 <i class="fa-solid fa-chart-area"></i>
                                 <span>Report Analytics</span>

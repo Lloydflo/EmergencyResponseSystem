@@ -544,7 +544,7 @@ try {
                         <i class="fas fa-print"></i> Export
                     </button>
                 </div>
-                <div id="alerts-dynamic"></div>
+                <div id="alerts-dynamic" class="alerts-feed-scroll"></div>
             </div>
     <script>
     // --- Combined System Alerts & Activity Feed ---
