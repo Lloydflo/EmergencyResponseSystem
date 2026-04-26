@@ -55,7 +55,7 @@ try {
   $upd->execute([$row["id"]]);
 
   // return responder user
-  $u = $pdo->prepare("SELECT id, name, email FROM users WHERE email=? LIMIT 1");
+  $u = $pdo->prepare("SELECT id, name, email, role, department FROM users WHERE email=? LIMIT 1");
   $u->execute([$email]);
   $responder = $u->fetch();
 
@@ -64,11 +64,17 @@ try {
     exit;
   }
 
-  echo json_encode([
-    "success"=>true,
-    "message"=>"OTP verified",
-    "user"=>$responder
-  ]);
+echo json_encode([
+    "success" => true,
+    "message" => "OTP verified",
+    "user"    => [
+        "id"         => (int)$responder["id"],
+        "name"       => (string)$responder["name"],
+        "email"      => (string)$responder["email"],
+        "role"       => (string)($responder["role"] ?? ""),
+        "department" => (string)($responder["department"] ?? ""),
+    ]
+]);
 
 } catch (Throwable $e) {
   echo json_encode([
