@@ -147,7 +147,7 @@ try {
         <div class="main-container">
 
 
-            <div style="height: 3.5rem;"></div>
+            <div style="height: 1rem;"></div>
             <!-- Key Metrics Overview -->
             <div class="analytics-grid">
                 <div class="analytics-card response-time">
@@ -1169,7 +1169,7 @@ try {
             @keyframes spin { to { transform: rotate(360deg); } }
             /* Scrollable Recent Incidents table with fixed header */
             .analytics-table.scrollable thead, .analytics-table.scrollable tbody { display: block; }
-            .analytics-table.scrollable tbody { max-height: 360px; overflow-y: auto; }
+            .analytics-table.scrollable tbody { max-height: 360px; overflow-y: auto; overflow-x: hidden; scrollbar-gutter: stable; }
             .analytics-table.scrollable thead tr, .analytics-table.scrollable tbody tr { display: table; width: 100%; table-layout: fixed; }
         `;
         document.head.appendChild(style);
@@ -1611,6 +1611,88 @@ try {
             }
         }
 
+        function performanceTrend(current, previous, lowerIsBetter, tolerance = 0.1) {
+            if (previous === null || previous === undefined || Number.isNaN(Number(previous))) {
+                return { className: 'trend-neutral', icon: 'fa-minus', label: 'No baseline' };
+            }
+            const delta = Number(current) - Number(previous);
+            if (Math.abs(delta) <= tolerance) {
+                return { className: 'trend-neutral', icon: 'fa-minus', label: 'Stable' };
+            }
+            const improved = lowerIsBetter ? delta < 0 : delta > 0;
+            return improved
+                ? { className: 'trend-up', icon: 'fa-arrow-up', label: 'Improving' }
+                : { className: 'trend-down', icon: 'fa-arrow-down', label: 'Needs attention' };
+        }
+
+        function performanceTargetTrend(value, min, max) {
+            const current = Number(value);
+            if (current >= min && current <= max) {
+                return { className: 'trend-up', icon: 'fa-check', label: 'Within target' };
+            }
+            if (current < min) {
+                return { className: 'trend-neutral', icon: 'fa-arrow-down', label: 'Below target' };
+            }
+            return { className: 'trend-down', icon: 'fa-arrow-up', label: 'Above target' };
+        }
+
+        function performanceStatus(label, tone) {
+            const statusClass = tone === 'good' ? 'status-resolved' : (tone === 'warn' ? 'status-pending' : 'status-critical');
+            return `<span class="status-badge ${statusClass}">${label}</span>`;
+        }
+
+        function performanceTrendHtml(trend) {
+            return `<div class="trend-indicator ${trend.className}"><i class="fas ${trend.icon}"></i> ${trend.label}</div>`;
+        }
+
+        function updatePerformanceRow(row, value, target, trend, statusHtml) {
+            if (!row) return;
+            const cells = row.querySelectorAll('td');
+            if (cells[1]) cells[1].textContent = value;
+            if (cells[2]) cells[2].textContent = target;
+            if (cells[3]) cells[3].innerHTML = performanceTrendHtml(trend);
+            if (cells[4]) cells[4].innerHTML = statusHtml;
+        }
+
+        function renderPerformanceMetrics(m) {
+            const sections = Array.from(document.querySelectorAll('.data-table'));
+            const section = sections.find((item) => item.querySelector('.table-title')?.textContent?.trim() === 'Performance Metrics');
+            const perfTable = section ? section.querySelector('table tbody') : null;
+            if (!perfTable) return;
+
+            const rows = perfTable.querySelectorAll('tr');
+            const avgResponseSamples = Number(m.avg_response_sample_count || 0);
+            const avgResponse = Number(m.avg_response_time_min || 0);
+            const previousAvgResponse = m.previous_avg_response_time_min;
+            const totalIncidents = Number(m.total_incidents_month || 0);
+            const successRate = Number(m.success_rate || 0);
+            const previousSuccessRate = m.previous_success_rate;
+            const utilization = Number(m.resource_utilization || 0);
+
+            if (avgResponseSamples > 0) {
+                const responseTone = avgResponse <= 10 ? 'good' : (avgResponse <= 15 ? 'warn' : 'bad');
+                const responseLabel = avgResponse <= 10 ? 'On Target' : (avgResponse <= 15 ? 'Watch' : 'Delayed');
+                updatePerformanceRow(rows[0], `${avgResponse.toFixed(1)} min`, '< 10 min', performanceTrend(avgResponse, previousAvgResponse, true), performanceStatus(responseLabel, responseTone));
+            } else {
+                updatePerformanceRow(rows[0], 'No completed dispatches', '< 10 min', { className: 'trend-neutral', icon: 'fa-minus', label: 'No data' }, performanceStatus('Unavailable', 'warn'));
+            }
+
+            if (totalIncidents > 0) {
+                const resolutionTone = successRate >= 95 ? 'good' : (successRate >= 80 ? 'warn' : 'bad');
+                const resolutionLabel = successRate >= 95 ? 'Excellent' : (successRate >= 80 ? 'Below Target' : 'Needs Action');
+                updatePerformanceRow(rows[1], `${successRate.toFixed(1)}%`, '>= 95%', performanceTrend(successRate, previousSuccessRate, false), performanceStatus(resolutionLabel, resolutionTone));
+            } else {
+                updatePerformanceRow(rows[1], 'No incidents', '>= 95%', { className: 'trend-neutral', icon: 'fa-minus', label: 'No data' }, performanceStatus('Unavailable', 'warn'));
+            }
+
+            const utilizationTone = utilization >= 70 && utilization <= 85 ? 'good' : (utilization >= 55 && utilization <= 95 ? 'warn' : 'bad');
+            const utilizationLabel = utilization >= 70 && utilization <= 85 ? 'Optimal' : (utilization < 70 ? 'Underused' : 'Overloaded');
+            updatePerformanceRow(rows[2], `${utilization.toFixed(1)}%`, '70-85%', performanceTargetTrend(utilization, 70, 85), performanceStatus(utilizationLabel, utilizationTone));
+
+            updatePerformanceRow(rows[3], 'Not tracked', 'Minimize', { className: 'trend-neutral', icon: 'fa-minus', label: 'No data' }, performanceStatus('Unavailable', 'warn'));
+            updatePerformanceRow(rows[4], 'Not tracked', '<= 10%', { className: 'trend-neutral', icon: 'fa-minus', label: 'No data' }, performanceStatus('Unavailable', 'warn'));
+        }
+
         async function refreshMetrics(filters = {}) {
             try {
             const qs = buildQuery(filters);
@@ -1664,6 +1746,8 @@ try {
                         if (cells[2]) cells[2].textContent = '≤ 10%';
                     }
                 }
+                renderPerformanceMetrics(m);
+
                 // Dispatch metrics
                 const dispRes = await fetch('api/reports_dispatch.php' + qs, { cache: 'no-store' });
                 const disp = await dispRes.json();
@@ -1685,12 +1769,12 @@ try {
             }
         }
 
-        async function loadRecentIncidents(filters = {}) {
+        async function loadRecentIncidents(filters = {}, options = {}) {
             try {
                 const tbody = document.getElementById('recentIncidentsBody');
-                if (tbody) tbody.innerHTML = '<tr><td colspan="7" style="color:#6b7280">Loading incidents…</td></tr>';
-                const qs = buildQuery(filters);
-                const res = await fetch('api/incidents_list.php' + qs, { cache: 'no-store' });
+                const showLoading = options.showLoading !== false;
+                if (tbody && showLoading) tbody.innerHTML = '<tr><td colspan="7" style="color:#6b7280">Loading incidents...</td></tr>';
+                const res = await fetch('api/incidents_list.php', { cache: 'no-store' });
                 const data = await res.json();
                 const items = data.ok ? (data.items || []) : [];
                 renderRecentIncidents(items);
@@ -1714,13 +1798,13 @@ try {
             const tbody = document.getElementById('recentIncidentsBody');
             if (!tbody) return;
             if (!items.length) {
-                tbody.innerHTML = `<tr><td colspan="7" style="color:#6b7280">No incidents found for selected period</td></tr>`;
+                tbody.innerHTML = `<tr><td colspan="7" style="color:#6b7280">No incidents found</td></tr>`;
                 return;
             }
             function unitNameToParam(name){
                 return (name||'').toLowerCase().replace(/\s+/g,'-').replace(/#/g,'').replace(/[^a-z0-9\-]/g,'');
             }
-            tbody.innerHTML = items.slice(0, 10).map(i => {
+            tbody.innerHTML = items.map(i => {
                 const id = i.id;
                 const code = i.incident_code || '';
                 const type = labelForType(i.type);
@@ -1857,11 +1941,11 @@ try {
                 try {
                     refreshMetrics(currentFilters);
                     refreshCharts(currentFilters);
-                    loadRecentIncidents(currentFilters);
+                    loadRecentIncidents(currentFilters, { showLoading: false });
                 } catch (e) {
                     console.error('report auto-refresh failed', e);
                 }
-            }, 10000);
+            }, 60000);
         });
 
         document.addEventListener('themeChanged', function() {

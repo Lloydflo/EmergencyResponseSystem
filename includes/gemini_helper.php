@@ -449,6 +449,53 @@ function predictResourceNeeds($historicalData) {
 
 }
 
+if (!function_exists('generatePredictiveAnalyticsInsights')) {
+    function generatePredictiveAnalyticsInsights($predictiveData) {
+        $forecast = is_array($predictiveData['forecast'] ?? null) ? $predictiveData['forecast'] : [];
+        $resource = is_array($predictiveData['resource'] ?? null) ? $predictiveData['resource'] : [];
+        $current = is_array($predictiveData['current'] ?? null) ? $predictiveData['current'] : [];
+        $peakHour = is_array($predictiveData['peak_hour'] ?? null) ? $predictiveData['peak_hour'] : [];
+        $typeForecast = is_array($predictiveData['type_forecast'] ?? null) ? $predictiveData['type_forecast'] : [];
+        $hotspots = is_array($predictiveData['hotspots'] ?? null) ? $predictiveData['hotspots'] : [];
+
+        $typeSummary = [];
+        foreach (array_slice($typeForecast, 0, 3) as $row) {
+            if (!is_array($row)) {
+                continue;
+            }
+            $typeSummary[] = trim((string)($row['label'] ?? 'Other')) . '=' . (int)($row['forecast'] ?? 0);
+        }
+        $hotspot = $hotspots[0] ?? [];
+
+        $prompt = "You are the ERS predictive analytics assistant.\n";
+        $prompt .= "Use only the forecast snapshot below. No markdown. Keep each line short and operational.\n\n";
+        $prompt .= "Forecast Snapshot:\n";
+        $prompt .= "Next 7 day incidents: " . (int)($forecast['next_7_total'] ?? 0) . "\n";
+        $prompt .= "Forecast average per day: " . ($forecast['avg_daily'] ?? 0) . "\n";
+        $prompt .= "Forecast delta percent: " . ($forecast['delta_percent'] ?? 0) . "\n";
+        $prompt .= "High priority forecast load: " . (int)($forecast['high_priority_load'] ?? 0) . "\n";
+        $prompt .= "Peak window: " . ($peakHour['label'] ?? 'Unavailable') . "\n";
+        $prompt .= "Active incidents now: " . (int)($current['active_incidents'] ?? 0) . "\n";
+        $prompt .= "Resource strain index: " . ($resource['strain_index'] ?? 0) . "%\n";
+        $prompt .= "Available units: " . (int)($resource['available_units'] ?? 0) . "\n";
+        $prompt .= "Busy units: " . (int)($resource['busy_units'] ?? 0) . "\n";
+        $prompt .= "Active responders: " . (int)($resource['active_responders'] ?? 0) . "\n";
+        $prompt .= "Top forecast mix: " . ($typeSummary ? implode(', ', $typeSummary) : 'No type forecast available') . "\n";
+        $prompt .= "Top hotspot: " . trim((string)($hotspot['location'] ?? 'None')) . "\n";
+        $prompt .= "Hotspot risk: " . trim((string)($hotspot['risk'] ?? 'Low')) . "\n";
+        $prompt .= "Hotspot dominant type: " . trim((string)($hotspot['dominant_type'] ?? 'Unknown')) . "\n\n";
+        $prompt .= "Return max 6 short lines:\n";
+        $prompt .= "1) Overall next-7-day demand outlook\n";
+        $prompt .= "2) Peak operating window\n";
+        $prompt .= "3) Most likely pressure area\n";
+        $prompt .= "4) Resource strain warning\n";
+        $prompt .= "5) Pre-positioning recommendation\n";
+        $prompt .= "6) Command note for the next shift";
+
+        return callGeminiAPI($prompt);
+    }
+}
+
 /**
  * Log activity
  * @param PDO $pdo Database connection

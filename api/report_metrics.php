@@ -179,6 +179,13 @@ try {
     $resolved_count = (int)($r['resolved'] ?? 0);
     $success_rate = $total_incidents > 0 ? round(($resolved_count / $total_incidents) * 100, 1) : 0.0;
 
+    $stmt = $pdo->prepare('SELECT COUNT(*) AS total, SUM(CASE WHEN status = "resolved" THEN 1 ELSE 0 END) AS resolved ' . $sqlPrev);
+    $stmt->execute($paramsPrev);
+    $prevSuccessRow = $stmt->fetch();
+    $prev_total_incidents = (int)($prevSuccessRow['total'] ?? 0);
+    $prev_resolved_count = (int)($prevSuccessRow['resolved'] ?? 0);
+    $previous_success_rate = $prev_total_incidents > 0 ? round(($prev_resolved_count / $prev_total_incidents) * 100, 1) : null;
+
     // Resource utilization: current snapshot (units busy / total)
     $total_units = (int)$pdo->query('SELECT COUNT(*) AS c FROM units')->fetch()['c'];
     $busy_units = (int)$pdo->query("SELECT COUNT(*) AS c FROM units WHERE status IN ('assigned','acknowledged','enroute','on_scene')")
@@ -188,7 +195,9 @@ try {
     // Avg response time (minutes): dispatch assigned -> on-scene/cleared.
     $avg_response_time = 0.0;
     $sqlResp = '
-        SELECT AVG(TIMESTAMPDIFF(MINUTE, d.assigned_at, COALESCE(d.on_scene_at, d.cleared_at))) AS avg_min
+        SELECT
+            AVG(TIMESTAMPDIFF(MINUTE, d.assigned_at, COALESCE(d.on_scene_at, d.cleared_at))) AS avg_min,
+            COUNT(*) AS sample_count
         FROM dispatches d
         INNER JOIN incidents i ON i.id = d.incident_id
         WHERE d.assigned_at BETWEEN :s AND :e
@@ -203,8 +212,33 @@ try {
     $stmt = $pdo->prepare($sqlResp);
     $stmt->execute($paramsResp);
     $row = $stmt->fetch();
+    $avg_response_sample_count = (int)($row['sample_count'] ?? 0);
     if ($row && $row['avg_min'] !== null) {
         $avg_response_time = round((float)$row['avg_min'], 1);
+    }
+
+    $previous_avg_response_time = null;
+    $sqlPrevResp = '
+        SELECT
+            AVG(TIMESTAMPDIFF(MINUTE, d.assigned_at, COALESCE(d.on_scene_at, d.cleared_at))) AS avg_min,
+            COUNT(*) AS sample_count
+        FROM dispatches d
+        INNER JOIN incidents i ON i.id = d.incident_id
+        WHERE d.assigned_at BETWEEN :s AND :e
+          AND COALESCE(d.on_scene_at, d.cleared_at) IS NOT NULL
+    ';
+    $paramsPrevResp = [':s' => $prevStartAt, ':e' => $prevEndAt];
+    append_type_filter($sqlPrevResp, $paramsPrevResp, 'i.type', $typeValues, 'prev_resp');
+    if ($priorityFilter !== '') {
+        $sqlPrevResp .= ' AND i.priority = :prio';
+        $paramsPrevResp[':prio'] = $priorityFilter;
+    }
+    $stmt = $pdo->prepare($sqlPrevResp);
+    $stmt->execute($paramsPrevResp);
+    $prevRespRow = $stmt->fetch();
+    $previous_avg_response_sample_count = (int)($prevRespRow['sample_count'] ?? 0);
+    if ($prevRespRow && $prevRespRow['avg_min'] !== null) {
+        $previous_avg_response_time = round((float)$prevRespRow['avg_min'], 1);
     }
 
     // Chart counts should also include incidents that are still open right now,
@@ -255,8 +289,12 @@ try {
             'total_incidents_month' => $total_incidents_month,
             'total_incidents_last_month' => $total_incidents_last_month,
             'success_rate' => $success_rate,
+            'previous_success_rate' => $previous_success_rate,
             'resource_utilization' => $resource_utilization,
             'avg_response_time_min' => $avg_response_time,
+            'previous_avg_response_time_min' => $previous_avg_response_time,
+            'avg_response_sample_count' => $avg_response_sample_count,
+            'previous_avg_response_sample_count' => $previous_avg_response_sample_count,
             'incidents_by_priority' => $priorityCounts,
             'incidents_by_type' => $typeCounts,
         ]
