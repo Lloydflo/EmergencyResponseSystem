@@ -72,8 +72,8 @@ try {
     $mail->Host = $host;
 
     $mail->SMTPAuth   = true;
-    $mail->Username   = trim(getenv("MAIL_USERNAME") ?: "");
-    $mail->Password   = trim(getenv("MAIL_PASSWORD") ?: "");
+    $mail->Username = trim($_ENV["MAIL_USERNAME"] ?? "");
+    $mail->Password = trim($_ENV["MAIL_PASSWORD"] ?? "");
 
     // ✅ FIXED: SMTPDebug = 0 so debug output does NOT leak into response
     $mail->SMTPDebug  = 0;
@@ -96,6 +96,11 @@ try {
         <p>This will expire in 5 minutes.</p>
     ";
     $mail->AltBody = "Your OTP is: $otp (expires in 5 minutes)";
+
+    $mail->SMTPDebug = 2;
+    $mail->Debugoutput = function($str, $level) {
+    file_put_contents('mail_debug.log', "[$level] $str" . PHP_EOL, FILE_APPEND);
+    };
 
     $mail->send();
 
