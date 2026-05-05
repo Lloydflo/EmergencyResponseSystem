@@ -10,6 +10,15 @@ header("Content-Type: application/json");
 
 require __DIR__ . "/connect.php";
 
+$env = parse_ini_file(__DIR__ . '/../.env');
+
+if ($env) {
+    foreach ($env as $key => $value) {
+        $_ENV[$key] = $value;
+        putenv("$key=$value");
+    }
+}
+
 // PHPMailer
 require __DIR__ . '/PHPMailer/src/Exception.php';
 require __DIR__ . '/PHPMailer/src/PHPMailer.php';
