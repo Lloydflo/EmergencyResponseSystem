@@ -114,7 +114,7 @@ try {
 
     $mail->SMTPDebug = 2;
     $mail->Debugoutput = function($str, $level) {
-    file_put_contents('mail_debug.log', "[$level] $str" . PHP_EOL, FILE_APPEND);
+    file_put_contents(__DIR__ . '/mail_debug.log', "[$level] $str" . PHP_EOL, FILE_APPEND);
     };
 
     $mail->send();
