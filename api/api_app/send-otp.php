@@ -17,6 +17,16 @@ if (!file_exists($envPath)) {
 
 $env = parse_ini_file($envPath);
 
+ob_end_clean();
+echo json_encode([
+    "debug" => true,
+    "host"     => $env['MAIL_HOST'] ?? 'NOT FOUND',
+    "username" => $env['MAIL_USERNAME'] ?? 'NOT FOUND',
+    "password" => substr($env['MAIL_PASSWORD'] ?? '', 0, 4) . '****', // partial only
+    "port"     => $env['MAIL_PORT'] ?? 'NOT FOUND',
+]);
+exit;
+
 // PHPMailer Files
 require __DIR__ . '/PHPMailer/src/Exception.php';
 require __DIR__ . '/PHPMailer/src/PHPMailer.php';
