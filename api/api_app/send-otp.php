@@ -77,12 +77,18 @@ try {
     $mail = new PHPMailer(true);
     $mail->isSMTP();
 
-    $host = trim(getenv("MAIL_HOST") ?: "smtp.gmail.com");
-    $mail->Host = $host;
+    $mail = new PHPMailer(true);
+    $mail->isSMTP();
 
     $mail->SMTPAuth   = true;
-    $mail->Username = trim($_ENV["MAIL_USERNAME"] ?? "");
-    $mail->Password = trim($_ENV["MAIL_PASSWORD"] ?? "");
+    // ✅ LOAD .env (same folder ng send-otp.php)
+    $env = parse_ini_file(__DIR__ . '/.env');
+
+    // ✅ APPLY SMTP SETTINGS
+    $mail->Host     = $env['MAIL_HOST'];
+    $mail->Username = $env['MAIL_USERNAME'];
+    $mail->Password = $env['MAIL_PASSWORD'];
+    $mail->Port     = (int)$env['MAIL_PORT'];
 
     // ✅ FIXED: SMTPDebug = 0 so debug output does NOT leak into response
     $mail->SMTPDebug  = 0;
