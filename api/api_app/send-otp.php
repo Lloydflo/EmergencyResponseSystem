@@ -64,7 +64,7 @@ try {
     $mail->Username   = $env['MAIL_USERNAME'];
     $mail->Password   = $env['MAIL_PASSWORD']; // Ito yung 16-character App Password
     $mail->SMTPSecure = PHPMailer::ENCRYPTION_STARTTLS;
-    $mail->Port       = (int)($env['MAIL_PORT'] ?? 465);
+    $mail->Port       = (int)($env['MAIL_PORT'] ?? 587);
 
     // Logging para sa debugging
     $mail->SMTPDebug = 2;
