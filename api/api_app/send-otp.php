@@ -17,15 +17,6 @@ if (!file_exists($envPath)) {
 
 $env = parse_ini_file($envPath);
 
-ob_end_clean();
-echo json_encode([
-    "debug" => true,
-    "host"     => $env['MAIL_HOST'] ?? 'NOT FOUND',
-    "username" => $env['MAIL_USERNAME'] ?? 'NOT FOUND',
-    "password" => substr($env['MAIL_PASSWORD'] ?? '', 0, 4) . '****', // partial only
-    "port"     => $env['MAIL_PORT'] ?? 'NOT FOUND',
-]);
-exit;
 
 // PHPMailer Files
 require __DIR__ . '/PHPMailer/src/Exception.php';
@@ -70,11 +61,11 @@ try {
     $mail->SMTPAuth   = true;
     
     // SMTP SETTINGS
-    $mail->Host       = $env['MAIL_HOST'] ?? 'smtp.gmail.com';
-    $mail->Username   = $env['MAIL_USERNAME'];
-    $mail->Password   = $env['MAIL_PASSWORD']; // Ito yung 16-character App Password
+    $mail->Host = $env['MAIL_HOST'];
+    $mail->Username = $env['MAIL_USERNAME'];
+    $mail->Password = $env['MAIL_PASSWORD'];
     $mail->SMTPSecure = PHPMailer::ENCRYPTION_STARTTLS;
-    $mail->Port       = (int)($env['MAIL_PORT'] ?? 587);
+    $mail->Port = (int)$env['MAIL_PORT'];
 
     // Logging para sa debugging
     $mail->SMTPDebug = 2;
