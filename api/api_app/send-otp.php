@@ -1,117 +1,93 @@
 <?php
-// ✅ Buffer ALL output so nothing leaks before our JSON
 ob_start();
-
-// ✅ Suppress PHP warnings/notices from printing to output
 error_reporting(0);
 ini_set('display_errors', 0);
-
 header("Content-Type: application/json");
 
 require __DIR__ . "/connect.php";
 
-// PHPMailer
+// ✅ 1. TAMA NA ANG PATH: /api/api_app/.env
+$envPath = __DIR__ . '/.env';
+
+if (!file_exists($envPath)) {
+    ob_end_clean();
+    echo json_encode(["success" => false, "message" => ".env file not found at " . $envPath]);
+    exit;
+}
+
+$env = parse_ini_file($envPath);
+
+
+// PHPMailer Files
 require __DIR__ . '/PHPMailer/src/Exception.php';
 require __DIR__ . '/PHPMailer/src/PHPMailer.php';
 require __DIR__ . '/PHPMailer/src/SMTP.php';
 
 use PHPMailer\PHPMailer\PHPMailer;
+use PHPMailer\PHPMailer\Exception;
 
 $raw = file_get_contents("php://input");
-
-// 1) Try JSON
 $input = json_decode($raw, true);
+if (!is_array($input)) { $input = []; parse_str($raw, $input); }
 
-// 2) If not JSON, try x-www-form-urlencoded
-if (!is_array($input)) {
-    $input = [];
-    parse_str($raw, $input);
-}
-
-$email = "";
-if (is_array($input) && isset($input["email"])) {
-    $email = trim((string)$input["email"]);
-} elseif (isset($_POST["email"])) {
-    $email = trim((string)$_POST["email"]);
-}
+$email = trim((string)($input["email"] ?? $_POST["email"] ?? ""));
 
 if ($email === "") {
-    // ✅ Clear buffer before sending JSON
     ob_end_clean();
-    echo json_encode(["success" => false, "message" => "Email is required", "otp" => null]);
+    echo json_encode(["success" => false, "message" => "Email is required"]);
     exit;
 }
 
 try {
     $pdo = db();
-
-    // 1) Check responder exists and is active
-    $stmt = $pdo->prepare("SELECT id, email, name, department, is_active FROM users WHERE email=? LIMIT 1");
+    $stmt = $pdo->prepare("SELECT id, email, name, is_active FROM users WHERE email=? LIMIT 1");
     $stmt->execute([$email]);
     $responder = $stmt->fetch();
 
     if (!$responder || $responder["is_active"] != 1) {
         ob_end_clean();
-        echo json_encode(["success" => false, "message" => "Account not found", "otp" => null]);
+        echo json_encode(["success" => false, "message" => "Account not found or inactive"]);
         exit;
     }
 
-    // 2) Generate OTP & expiry
     $otp = (string)random_int(100000, 999999);
     $expiresAt = (new DateTime("+5 minutes"))->format("Y-m-d H:i:s");
-
-    // 3) Store OTP
     $ins = $pdo->prepare("INSERT INTO responder_otps (responder_email, otp, expires_at) VALUES (?, ?, ?)");
     $ins->execute([$email, $otp, $expiresAt]);
 
-    // 4) Send email via PHPMailer
+    // ✅ 2. PHPMailer CONFIG gamit ang data mula sa .env
     $mail = new PHPMailer(true);
     $mail->isSMTP();
-
-    $host = trim(getenv("MAIL_HOST") ?: "smtp.gmail.com");
-    $mail->Host = $host;
-
     $mail->SMTPAuth   = true;
-    $mail->Username   = trim(getenv("MAIL_USERNAME") ?: "");
-    $mail->Password   = trim(getenv("MAIL_PASSWORD") ?: "");
-
-    // ✅ FIXED: SMTPDebug = 0 so debug output does NOT leak into response
-    $mail->SMTPDebug  = 0;
-
+    
+    // SMTP SETTINGS
+    $mail->Host = $env['MAIL_HOST'];
+    $mail->Username = $env['MAIL_USERNAME'];
+    $mail->Password = $env['MAIL_PASSWORD'];
     $mail->SMTPSecure = PHPMailer::ENCRYPTION_STARTTLS;
-    $mail->Port       = (int)(getenv("MAIL_PORT") ?: 587);
+    $mail->Port = (int)$env['MAIL_PORT'];
 
-    $fromAddr = trim(getenv("MAIL_FROM_ADDRESS") ?: "alertaraqc@gmail.com");
-    $fromName = trim(getenv("MAIL_FROM_NAME") ?: "AlerTara QC");
-    $mail->setFrom($fromAddr, $fromName);
+    // Logging para sa debugging
+    $mail->SMTPDebug = 2;
+    $mail->Debugoutput = function($str, $level) {
+        file_put_contents(__DIR__ . '/mail_debug.log', "[$level] $str" . PHP_EOL, FILE_APPEND);
+    };
 
+    $mail->setFrom($env['MAIL_FROM_ADDRESS'] ?? 'alertaraqc@gmail.com', $env['MAIL_FROM_NAME'] ?? 'AlerTara QC');
     $mail->addAddress($email);
-
     $mail->isHTML(true);
     $mail->Subject = "Your OTP Code - AlerTara QC";
-    $mail->Body    = "
-        <h3>Hello " . htmlspecialchars($responder['name'] ?? 'Responder') . "</h3>
-        <p>Your OTP code is:</p>
-        <h2 style='color:blue;'>$otp</h2>
-        <p>This will expire in 5 minutes.</p>
-    ";
-    $mail->AltBody = "Your OTP is: $otp (expires in 5 minutes)";
+    $mail->Body    = "<h3>Hello " . htmlspecialchars($responder['name']) . "</h3><p>Your OTP code is: <b style='font-size:24px; color:blue;'>$otp</b></p>";
 
     $mail->send();
 
-    // ✅ Clear any buffered SMTP debug output before sending JSON
     ob_end_clean();
-    echo json_encode([
-        "success" => true,
-        "message" => "OTP sent to email",
-        "otp"     => null
-    ]);
+    echo json_encode(["success" => true, "message" => "OTP sent successfully"]);
 
+} catch (Exception $e) {
+    ob_end_clean();
+    echo json_encode(["success" => false, "message" => "SMTP Error: " . $mail->ErrorInfo]);
 } catch (Throwable $e) {
     ob_end_clean();
-    echo json_encode([
-        "success" => false,
-        "message" => "Server error: " . $e->getMessage(),
-        "otp"     => null
-    ]);
+    echo json_encode(["success" => false, "message" => "Server error: " . $e->getMessage()]);
 }
