@@ -692,7 +692,7 @@ $adminName = $_SESSION['user_name'] ?? 'Admin';
                     <table class="um-table">
                         <thead>
                             <tr>
-                                <th>ID</th>
+                                <th>No.</th>
                                 <th>Name</th>
                                 <th>Email</th>
                                 <th>Role</th>
@@ -916,11 +916,11 @@ $adminName = $_SESSION['user_name'] ?? 'Admin';
                 return;
             }
 
-            usersTableBody.innerHTML = rows.map((row) => {
+            usersTableBody.innerHTML = rows.map((row, index) => {
                 const isEditing = row.id === editingId;
                 return `
                     <tr data-row-id="${row.id}">
-                        <td class="um-code">USR-${String(row.id).padStart(4, '0')}</td>
+                        <td class="um-code">${index + 1}</td>
                         <td>
                             ${isEditing
                                 ? `<input class="um-input" data-field="name" value="${escapeHtml(row.name)}">`

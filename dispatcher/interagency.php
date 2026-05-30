@@ -162,7 +162,7 @@ $pageTitle = 'Inter-Agency Coordination';
 
         .ia-tabs {
             display: grid;
-            grid-template-columns: repeat(3, 1fr);
+            grid-template-columns: repeat(4, 1fr);
             gap: 0.45rem;
         }
         
@@ -350,7 +350,8 @@ $pageTitle = 'Inter-Agency Coordination';
             flex-shrink: 0;
         }
 
-        .ia-dot.online {
+        .ia-dot.online,
+        .ia-dot.active {
             background: #22c55e;
         }
 
@@ -358,7 +359,8 @@ $pageTitle = 'Inter-Agency Coordination';
             background: #f59e0b;
         }
 
-        .ia-dot.offline {
+        .ia-dot.offline,
+        .ia-dot.inactive {
             background: #94a3b8;
         }
 
@@ -402,6 +404,18 @@ $pageTitle = 'Inter-Agency Coordination';
             background: #f8fbff;
         }
 
+        .ia-chat-head-main {
+            min-width: 0;
+        }
+
+        .ia-chat-actions {
+            position: relative;
+            display: flex;
+            align-items: center;
+            gap: 0.55rem;
+            flex-shrink: 0;
+        }
+
         .ia-chat-title {
             margin: 0;
             color: var(--ia-text);
@@ -413,6 +427,92 @@ $pageTitle = 'Inter-Agency Coordination';
             margin: 0.2rem 0 0;
             color: #56708a;
             font-size: 0.79rem;
+        }
+
+        .ia-chat-info-btn {
+            width: 32px;
+            height: 32px;
+            border: 1px solid #cfe0ed;
+            border-radius: 999px;
+            background: #ffffff;
+            color: #0f766e;
+            cursor: pointer;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 0.92rem;
+            font-weight: 900;
+            line-height: 1;
+            transition: 0.2s ease;
+        }
+
+        .ia-chat-info-btn:hover,
+        .ia-chat-info-btn[aria-expanded="true"] {
+            background: #ecfdf5;
+            border-color: #99e6b8;
+            color: #0f766e;
+        }
+
+        .ia-chat-settings {
+            position: absolute;
+            top: calc(100% + 0.55rem);
+            right: 0;
+            z-index: 20;
+            width: min(280px, calc(100vw - 2rem));
+            border: 1px solid #d7e2ee;
+            border-radius: 14px;
+            background: #ffffff;
+            box-shadow: 0 18px 42px rgba(15, 23, 42, 0.16);
+            overflow: hidden;
+            text-align: left;
+        }
+
+        .ia-chat-settings-head {
+            padding: 0.85rem 0.95rem;
+            border-bottom: 1px solid #e6edf5;
+        }
+
+        .ia-chat-settings-title {
+            margin: 0;
+            color: #102a43;
+            font-size: 0.9rem;
+            font-weight: 800;
+        }
+
+        .ia-chat-settings-sub {
+            margin: 0.25rem 0 0;
+            color: #64748b;
+            font-size: 0.76rem;
+        }
+
+        .ia-chat-settings-list {
+            display: grid;
+            padding: 0.35rem;
+        }
+
+        .ia-chat-settings-item {
+            border: 0;
+            border-radius: 10px;
+            background: transparent;
+            color: #1f3852;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            gap: 0.65rem;
+            padding: 0.72rem 0.7rem;
+            text-align: left;
+            font-size: 0.84rem;
+            font-weight: 700;
+        }
+
+        .ia-chat-settings-item i {
+            width: 16px;
+            color: #0f766e;
+            text-align: center;
+        }
+
+        .ia-chat-settings-item:hover {
+            background: #f1f6fb;
         }
 
         .ia-chat-badge {
@@ -609,11 +709,12 @@ $pageTitle = 'Inter-Agency Coordination';
             display: inline-flex;
             align-items: center;
             gap: 0.4rem;
-            color: inherit;
+            color: #0f172a;
             text-decoration: none;
             font-size: 0.82rem;
-            background: rgba(255, 255, 255, 0.25);
-            border: 1px solid rgba(255, 255, 255, 0.45);
+            font-weight: 700;
+            background: #ffffff;
+            border: 1px solid rgba(15, 23, 42, 0.14);
             border-radius: 8px;
             padding: 0.4rem 0.55rem;
             width: fit-content;
@@ -623,10 +724,27 @@ $pageTitle = 'Inter-Agency Coordination';
             white-space: nowrap;
         }
 
+        .ia-attachment-link i {
+            color: #0f766e;
+            flex-shrink: 0;
+        }
+
+        .ia-attachment-link span {
+            min-width: 0;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
         .ia-message.incoming .ia-attachment-link {
             background: #f8fbff;
             border-color: #dce6f1;
             color: #1f3852;
+        }
+
+        .ia-message.outgoing .ia-attachment-link {
+            background: #ffffff;
+            border-color: rgba(255, 255, 255, 0.78);
+            color: #0f172a;
         }
 
         .ia-attachment-image {
@@ -746,6 +864,10 @@ $pageTitle = 'Inter-Agency Coordination';
             background: linear-gradient(135deg, #f7fbff 0%, #edf6fb 100%);
         }
 
+        .ia-reply-preview[hidden] {
+            display: none;
+        }
+
         .ia-reply-preview-main {
             min-width: 0;
         }
@@ -788,12 +910,13 @@ $pageTitle = 'Inter-Agency Coordination';
             display: inline-flex;
             align-items: center;
             gap: 0.4rem;
-            background: #f1f6fb;
-            border: 1px solid #d4dde8;
-            color: #24425a;
+            background: #ffffff;
+            border: 1px solid #cbd5e1;
+            color: #0f172a;
             border-radius: 999px;
             padding: 0.24rem 0.5rem;
             font-size: 0.74rem;
+            font-weight: 700;
             max-width: 100%;
         }
 
@@ -818,6 +941,159 @@ $pageTitle = 'Inter-Agency Coordination';
             margin-top: 0.55rem;
             font-size: 0.75rem;
             color: #64748b;
+        }
+
+        .ia-modal-shell {
+            position: fixed;
+            inset: 0;
+            display: none;
+            align-items: center;
+            justify-content: center;
+            padding: 1rem;
+            z-index: 1100;
+        }
+
+        .ia-modal-shell.show {
+            display: flex;
+        }
+
+        .ia-modal-backdrop {
+            position: absolute;
+            inset: 0;
+            background: rgba(15, 23, 42, 0.45);
+            backdrop-filter: blur(2px);
+        }
+
+        .ia-modal {
+            position: relative;
+            width: min(560px, calc(100vw - 2rem));
+            max-height: calc(100vh - 2rem);
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+            border: 1px solid #dbe6f1;
+            border-radius: 16px;
+            background: #fff;
+            box-shadow: 0 24px 60px rgba(15, 23, 42, 0.18);
+        }
+
+        .ia-modal-head {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 1rem;
+            padding: 1rem 1.1rem;
+            border-bottom: 1px solid #e7edf4;
+        }
+
+        .ia-modal-title {
+            margin: 0;
+            font-size: 1rem;
+            font-weight: 800;
+            color: #102a43;
+        }
+
+        .ia-modal-subtitle {
+            margin: 0.25rem 0 0;
+            font-size: 0.82rem;
+            color: #64748b;
+        }
+
+        .ia-modal-close {
+            width: 34px;
+            height: 34px;
+            border: 1px solid #d7e1ea;
+            border-radius: 999px;
+            background: #fff;
+            color: #35516d;
+            cursor: pointer;
+        }
+
+        .ia-modal-body {
+            padding: 1rem 1.1rem;
+            overflow: auto;
+        }
+
+        .ia-media-modal {
+            width: min(760px, calc(100vw - 2rem));
+        }
+
+        .ia-media-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+            gap: 0.75rem;
+        }
+
+        .ia-media-card {
+            border: 1px solid #dce6ef;
+            border-radius: 12px;
+            background: #ffffff;
+            color: #102a43;
+            overflow: hidden;
+            text-decoration: none;
+            min-width: 0;
+        }
+
+        .ia-media-thumb {
+            width: 100%;
+            aspect-ratio: 4 / 3;
+            object-fit: cover;
+            display: block;
+            background: #eef5fb;
+        }
+
+        .ia-media-file {
+            display: flex;
+            align-items: center;
+            gap: 0.7rem;
+            padding: 0.85rem;
+        }
+
+        .ia-media-file i {
+            width: 34px;
+            height: 34px;
+            border-radius: 10px;
+            background: #e0f2fe;
+            color: #0369a1;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            flex-shrink: 0;
+        }
+
+        .ia-media-info {
+            min-width: 0;
+            padding: 0.65rem 0.75rem 0.75rem;
+        }
+
+        .ia-media-file .ia-media-info {
+            padding: 0;
+        }
+
+        .ia-media-name {
+            margin: 0;
+            color: inherit;
+            font-size: 0.82rem;
+            font-weight: 800;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+
+        .ia-media-meta {
+            margin: 0.25rem 0 0;
+            color: #64748b;
+            font-size: 0.72rem;
+        }
+
+        .ia-media-empty {
+            border: 1px dashed #d7e1ea;
+            border-radius: 14px;
+            background: #f8fbff;
+            color: #64748b;
+            padding: 1.25rem;
+            text-align: center;
+            font-size: 0.88rem;
         }
 
         @media (max-width: 1080px) {
@@ -872,7 +1148,7 @@ $pageTitle = 'Inter-Agency Coordination';
 
             <section class="ia-overview">
                 <article class="ia-stat">
-                    <div class="ia-stat-label">Total Threads</div>
+                    <div class="ia-stat-label">Total Chats</div>
                     <div class="ia-stat-value" id="iaTotalThreads">0</div>
                 </article>
                 <article class="ia-stat">
@@ -890,13 +1166,14 @@ $pageTitle = 'Inter-Agency Coordination';
                     <div class="ia-list-top">
                         <div class="ia-search">
                             <i class="fas fa-search"></i>
-                            <input type="text" id="threadSearchInput" placeholder="Search department or responder...">
+                            <input type="text" id="threadSearchInput" placeholder="Search department, responder, or group...">
                         </div>
                         <div class="ia-list-actions">
                             <div class="ia-tabs">
                                 <button type="button" class="ia-tab active" data-filter="all">All</button>
                                 <button type="button" class="ia-tab" data-filter="department">Departments</button>
                                 <button type="button" class="ia-tab" data-filter="responder">Responders</button>
+                                <button type="button" class="ia-tab" data-filter="group">Groups</button>
                             </div>
                             <button type="button" class="ia-add-thread-btn" id="addThreadBtn" title="Add user conversation" aria-label="Add user conversation">
                                 <i class="fas fa-plus"></i>
@@ -917,7 +1194,7 @@ $pageTitle = 'Inter-Agency Coordination';
                                     <option value="Urgent">Urgent</option>
                                     <option value="Critical">Critical</option>
                                 </select>
-                                <input type="text" id="messageInput" class="ia-input" maxlength="260" placeholder="Type update for selected thread...">
+                                <input type="text" id="messageInput" class="ia-input" maxlength="260" placeholder="Type a message">
                                 <button type="button" class="ia-attach" id="attachFileBtn" title="Attach files/images">
                                     <i class="fas fa-paperclip"></i>
                                 </button>
@@ -938,6 +1215,22 @@ $pageTitle = 'Inter-Agency Coordination';
 
     <?php include $rootDir . '/includes/admin-footer.php'; ?>
 
+    <div class="ia-modal-shell" id="conversationMediaModal" hidden aria-hidden="true">
+        <div class="ia-modal-backdrop" data-close-conversation-media></div>
+        <div class="ia-modal ia-media-modal" role="dialog" aria-modal="true" aria-labelledby="conversationMediaModalTitle">
+            <div class="ia-modal-head">
+                <div>
+                    <p class="ia-modal-title" id="conversationMediaModalTitle">Conversation Media</p>
+                    <p class="ia-modal-subtitle" id="conversationMediaModalSubtitle">Images and files from this conversation.</p>
+                </div>
+                <button type="button" class="ia-modal-close" id="conversationMediaModalCloseBtn" aria-label="Close media modal">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+            <div class="ia-modal-body" id="conversationMediaModalBody"></div>
+        </div>
+    </div>
+
     <script>
         (function () {
             const state = {
@@ -951,6 +1244,7 @@ $pageTitle = 'Inter-Agency Coordination';
                 messageItems: {},
                 pinnedMessages: {},
                 replyTo: null,
+                chatSettingsOpen: false,
                 poller: null
             };
 
@@ -966,6 +1260,11 @@ $pageTitle = 'Inter-Agency Coordination';
             const replyPreviewEl = document.getElementById('replyPreview');
             const filePreviewEl = document.getElementById('filePreview');
             const addThreadBtn = document.getElementById('addThreadBtn');
+            const conversationMediaModal = document.getElementById('conversationMediaModal');
+            const conversationMediaModalTitle = document.getElementById('conversationMediaModalTitle');
+            const conversationMediaModalSubtitle = document.getElementById('conversationMediaModalSubtitle');
+            const conversationMediaModalBody = document.getElementById('conversationMediaModalBody');
+            const conversationMediaModalCloseBtn = document.getElementById('conversationMediaModalCloseBtn');
             const totalThreadsEl = document.getElementById('iaTotalThreads');
             const activeRespondersEl = document.getElementById('iaActiveResponders');
             const unreadCountEl = document.getElementById('iaUnreadCount');
@@ -1002,10 +1301,32 @@ $pageTitle = 'Inter-Agency Coordination';
             }
 
             function threadChannelLabel(item) {
+                if (String(item.thread_kind || '') === 'group') {
+                    const count = Number(item.member_count || 0);
+                    return count > 0 ? `Group Chat · ${count} member(s)` : 'Group Chat';
+                }
                 if (String(item.kind || '') === 'department') {
                     return 'Department Channel';
                 }
                 return `${formatRole(item.role || 'responder')} Channel`;
+            }
+
+            function statusDotClass(value) {
+                const status = String(value || '').toLowerCase();
+                if (status === 'active') return 'active';
+                if (status === 'inactive') return 'inactive';
+                if (status === 'busy') return 'busy';
+                if (status === 'online') return 'online';
+                return 'offline';
+            }
+
+            function statusText(value) {
+                const status = String(value || '').toLowerCase();
+                if (status === 'active') return 'Active';
+                if (status === 'inactive') return 'Inactive';
+                if (status === 'online') return 'Online';
+                if (status === 'busy') return 'Busy';
+                return 'Offline';
             }
 
             function syncFileInput() {
@@ -1043,6 +1364,109 @@ $pageTitle = 'Inter-Agency Coordination';
                 filePreviewEl.querySelectorAll('button[data-remove-file]').forEach((btn) => {
                     btn.addEventListener('click', () => removePendingFile(Number(btn.getAttribute('data-remove-file')) || 0));
                 });
+            }
+
+            function isConversationMediaModalOpen() {
+                return !!(conversationMediaModal && conversationMediaModal.classList.contains('show'));
+            }
+
+            function closeConversationMediaModal() {
+                if (!conversationMediaModal) return;
+                conversationMediaModal.classList.remove('show');
+                conversationMediaModal.setAttribute('aria-hidden', 'true');
+                conversationMediaModal.hidden = true;
+                document.body.style.overflow = '';
+                if (conversationMediaModalBody) {
+                    conversationMediaModalBody.innerHTML = '';
+                }
+            }
+
+            function attachmentIsImage(attachment) {
+                const mime = String(attachment && attachment.mime_type ? attachment.mime_type : '').toLowerCase();
+                const url = String(attachment && attachment.url ? attachment.url : '').toLowerCase();
+                return !!(attachment && attachment.is_image) || mime.startsWith('image/') || /\.(png|jpe?g|gif|webp|bmp|svg)(?:\?|#|$)/i.test(url);
+            }
+
+            function currentConversationAttachments(type) {
+                const wantedImages = type === 'images';
+                const seen = new Set();
+                const items = [];
+                Object.values(state.messageItems || {}).forEach((message) => {
+                    const attachments = Array.isArray(message.attachments) ? message.attachments : [];
+                    attachments.forEach((attachment) => {
+                        const url = String(attachment.url || '').trim();
+                        if (!url) return;
+                        const isImage = attachmentIsImage(attachment);
+                        if (wantedImages !== isImage) return;
+                        const key = `${url}|${String(attachment.name || '')}`;
+                        if (seen.has(key)) return;
+                        seen.add(key);
+                        items.push({
+                            name: String(attachment.name || (isImage ? 'Image' : 'File')),
+                            url,
+                            size: Number(attachment.size || 0),
+                            mime_type: String(attachment.mime_type || ''),
+                            is_image: isImage,
+                            sender_name: String(message.sender_name || 'Unknown'),
+                            created_at: String(message.created_at || '')
+                        });
+                    });
+                });
+                return items;
+            }
+
+            function renderConversationMedia(type) {
+                if (!conversationMediaModalBody) return;
+                const items = currentConversationAttachments(type);
+                const isImages = type === 'images';
+                if (conversationMediaModalTitle) {
+                    conversationMediaModalTitle.textContent = isImages ? 'Show Images' : 'Show Files';
+                }
+                if (conversationMediaModalSubtitle) {
+                    conversationMediaModalSubtitle.textContent = `${items.length} ${isImages ? 'image' : 'file'}${items.length === 1 ? '' : 's'} in this conversation.`;
+                }
+                if (!items.length) {
+                    conversationMediaModalBody.innerHTML = `<div class="ia-media-empty">No ${isImages ? 'images' : 'files'} found in this conversation.</div>`;
+                    return;
+                }
+
+                conversationMediaModalBody.innerHTML = `
+                    <div class="ia-media-grid">
+                        ${items.map((item) => {
+                            const meta = `${item.sender_name}${item.size > 0 ? ' · ' + formatBytes(item.size) : ''}`;
+                            if (isImages) {
+                                return `
+                                    <a class="ia-media-card" href="${escapeAttr(item.url)}" target="_blank" rel="noopener">
+                                        <img class="ia-media-thumb" src="${escapeAttr(item.url)}" alt="${escapeAttr(item.name)}">
+                                        <div class="ia-media-info">
+                                            <p class="ia-media-name" title="${escapeAttr(item.name)}">${escapeHtml(item.name)}</p>
+                                            <p class="ia-media-meta">${escapeHtml(meta)}</p>
+                                        </div>
+                                    </a>
+                                `;
+                            }
+                            return `
+                                <a class="ia-media-card ia-media-file" href="${escapeAttr(item.url)}" target="_blank" rel="noopener">
+                                    <i class="fas fa-file"></i>
+                                    <div class="ia-media-info">
+                                        <p class="ia-media-name" title="${escapeAttr(item.name)}">${escapeHtml(item.name)}</p>
+                                        <p class="ia-media-meta">${escapeHtml(meta)}</p>
+                                    </div>
+                                </a>
+                            `;
+                        }).join('')}
+                    </div>
+                `;
+            }
+
+            async function openConversationMediaModal(type) {
+                if (!conversationMediaModal) return;
+                await loadMessages(true, false);
+                renderConversationMedia(type);
+                conversationMediaModal.hidden = false;
+                conversationMediaModal.setAttribute('aria-hidden', 'false');
+                conversationMediaModal.classList.add('show');
+                document.body.style.overflow = 'hidden';
             }
 
             async function uploadPendingFiles() {
@@ -1351,6 +1775,9 @@ $pageTitle = 'Inter-Agency Coordination';
 
             function threadKey(thread) {
                 if (!thread) return '';
+                if (String(thread.thread_kind || '') === 'group') {
+                    return `group:${thread.group_id || thread.entity_id || 0}`;
+                }
                 if (String(thread.thread_kind || '') === 'user') {
                     return `user:${thread.user_id || thread.entity_id || 0}`;
                 }
@@ -1394,8 +1821,9 @@ $pageTitle = 'Inter-Agency Coordination';
                     const activeClass = item.id === state.activeId ? 'active' : '';
                     const unread = item.unread > 0 ? `<span class="ia-unread">${item.unread}</span>` : '';
                     const avatarType = item.kind === 'department' ? 'department' : 'responder';
-                    const stat = item.status === 'busy' ? 'busy' : (item.status === 'offline' ? 'offline' : 'online');
+                    const stat = statusDotClass(item.status);
                     const channelLabel = threadChannelLabel(item);
+                    const statusLabel = statusText(item.status);
                     return `
                         <button type="button" class="ia-thread ${activeClass}" data-id="${escapeHtml(item.id)}">
                             <div class="ia-avatar ${avatarType}">
@@ -1413,7 +1841,7 @@ $pageTitle = 'Inter-Agency Coordination';
                                 </div>
                                 <p class="ia-thread-sub">
                                     <span class="ia-dot ${escapeHtml(stat)}"></span>
-                                    ${escapeHtml(channelLabel)}
+                                    ${escapeHtml(channelLabel)} &middot; ${escapeHtml(statusLabel)}
                                 </p>
                                 <div class="ia-thread-row">
                                     <p class="ia-thread-preview">${escapeHtml(previewText(item))}</p>
@@ -1428,17 +1856,52 @@ $pageTitle = 'Inter-Agency Coordination';
             function renderChatHeader() {
                 const active = activeThread();
                 if (!active) {
+                    state.chatSettingsOpen = false;
                     chatHeaderEl.innerHTML = '<p class="ia-chat-title">No thread selected</p>';
                     return;
                 }
-                const statusLabel = active.status === 'online' ? 'Online' : (active.status === 'busy' ? 'Busy' : 'Offline');
+                const statusLabel = statusText(active.status);
                 const channelLabel = threadChannelLabel(active);
+                const settingsPanel = state.chatSettingsOpen ? `
+                    <div class="ia-chat-settings" role="menu" aria-label="Conversation settings">
+                        <div class="ia-chat-settings-head">
+                            <p class="ia-chat-settings-title">Message settings</p>
+                            <p class="ia-chat-settings-sub">${escapeHtml(active.title || active.id)}</p>
+                        </div>
+                        <div class="ia-chat-settings-list">
+                            <button type="button" class="ia-chat-settings-item" data-chat-setting-action="rename" role="menuitem">
+                                <i class="fas fa-pen"></i>
+                                <span>Edit conversation name</span>
+                            </button>
+                            <button type="button" class="ia-chat-settings-item" data-chat-setting-action="mark-read" role="menuitem">
+                                <i class="fas fa-check-double"></i>
+                                <span>Mark as read</span>
+                            </button>
+                            <button type="button" class="ia-chat-settings-item" data-chat-setting-action="show-images" role="menuitem">
+                                <i class="fas fa-image"></i>
+                                <span>Show Images</span>
+                            </button>
+                            <button type="button" class="ia-chat-settings-item" data-chat-setting-action="show-files" role="menuitem">
+                                <i class="fas fa-folder-open"></i>
+                                <span>Show Files</span>
+                            </button>
+                            <button type="button" class="ia-chat-settings-item" data-chat-setting-action="refresh" role="menuitem">
+                                <i class="fas fa-rotate-right"></i>
+                                <span>Refresh messages</span>
+                            </button>
+                        </div>
+                    </div>
+                ` : '';
                 chatHeaderEl.innerHTML = `
-                    <div>
+                    <div class="ia-chat-head-main">
                         <p class="ia-chat-title">${escapeHtml(active.title || active.id)}</p>
                         <p class="ia-chat-meta">${escapeHtml(channelLabel)} · Status: ${escapeHtml(statusLabel)}</p>
                     </div>
-                    <div class="ia-chat-badge">Last activity ${escapeHtml(rel(active.last_at))}</div>
+                    <div class="ia-chat-actions">
+                        <div class="ia-chat-badge">Last activity ${escapeHtml(rel(active.last_at))}</div>
+                        <button type="button" class="ia-chat-info-btn" data-chat-settings-toggle aria-label="Open message settings" aria-expanded="${state.chatSettingsOpen ? 'true' : 'false'}">!</button>
+                        ${settingsPanel}
+                    </div>
                 `;
             }
 
@@ -1491,7 +1954,10 @@ $pageTitle = 'Inter-Agency Coordination';
 
                 const params = new URLSearchParams();
                 const kind = String(active.thread_kind || 'department');
-                if (kind === 'user') {
+                if (kind === 'group') {
+                    params.set('thread_kind', 'group');
+                    params.set('group_id', String(active.group_id || active.entity_id || 0));
+                } else if (kind === 'user') {
                     params.set('thread_kind', 'user');
                     params.set('user_id', String(active.user_id || active.entity_id || 0));
                 } else {
@@ -1503,6 +1969,7 @@ $pageTitle = 'Inter-Agency Coordination';
                 const sinceId = initial ? 0 : previousLastId;
                 if (sinceId > 0) params.set('since_id', String(sinceId));
                 if (markRead) params.set('mark_read', '1');
+                if (initial) params.set('limit', '100');
 
                 const res = await fetch('api/interagency_chat_feed.php?' + params.toString(), { cache: 'no-store' });
                 const data = await res.json();
@@ -1549,6 +2016,7 @@ $pageTitle = 'Inter-Agency Coordination';
                 const target = state.threads.find((item) => item.id === threadId);
                 if (!target) return;
                 state.activeId = target.id;
+                state.chatSettingsOpen = false;
                 state.lastIdByDept[threadKey(target)] = 0;
                 clearPendingFiles();
                 clearReplyTarget();
@@ -1563,6 +2031,40 @@ $pageTitle = 'Inter-Agency Coordination';
                 } catch (err) {
                     const msg = (err && err.message) ? String(err.message) : 'Network error while sending message.';
                     alert(msg);
+                }
+            }
+
+            async function handleChatSettingAction(action) {
+                const active = activeThread();
+                if (!active) return;
+
+                state.chatSettingsOpen = false;
+                renderChatHeader();
+
+                if (action === 'rename') {
+                    await renameThread(active.id);
+                    return;
+                }
+
+                if (action === 'mark-read') {
+                    await loadMessages(false, true);
+                    await loadThreads();
+                    return;
+                }
+
+                if (action === 'show-images') {
+                    await openConversationMediaModal('images');
+                    return;
+                }
+
+                if (action === 'show-files') {
+                    await openConversationMediaModal('files');
+                    return;
+                }
+
+                if (action === 'refresh') {
+                    await loadMessages(true, true);
+                    await loadThreads();
                 }
             }
 
@@ -1581,11 +2083,15 @@ $pageTitle = 'Inter-Agency Coordination';
                     text: String(state.replyTo.text || ''),
                     attachment_count: Number(state.replyTo.attachment_count || 0)
                 } : null;
-                const isUserThread = String(active.thread_kind || '') === 'user';
-                const entityType = isUserThread ? 'agency_user_chat' : 'agency_chat';
-                const entityId = isUserThread
-                    ? Number(active.user_id || active.entity_id || 0)
-                    : Number(active.entity_id || 0);
+                const threadKind = String(active.thread_kind || '');
+                const isUserThread = threadKind === 'user';
+                const isGroupThread = threadKind === 'group';
+                const entityType = isGroupThread ? 'agency_group_chat' : (isUserThread ? 'agency_user_chat' : 'agency_chat');
+                const entityId = isGroupThread
+                    ? Number(active.group_id || active.entity_id || 0)
+                    : (isUserThread
+                        ? Number(active.user_id || active.entity_id || 0)
+                        : Number(active.entity_id || 0));
                 if (!Number.isInteger(entityId) || entityId <= 0) {
                     alert('Invalid thread target. Please re-open the thread.');
                     return;
@@ -1698,7 +2204,14 @@ $pageTitle = 'Inter-Agency Coordination';
                     thread_kind: String(target.thread_kind || 'department')
                 };
 
-                if (payload.thread_kind === 'user') {
+                if (payload.thread_kind === 'group') {
+                    const groupId = Number(target.group_id || target.entity_id || 0);
+                    if (!Number.isInteger(groupId) || groupId <= 0) {
+                        alert('Invalid group thread target.');
+                        return;
+                    }
+                    payload.group_id = groupId;
+                } else if (payload.thread_kind === 'user') {
                     const userId = Number(target.user_id || target.entity_id || 0);
                     if (!Number.isInteger(userId) || userId <= 0) {
                         alert('Invalid user thread target.');
@@ -1776,6 +2289,23 @@ $pageTitle = 'Inter-Agency Coordination';
                     }
                 });
 
+                chatHeaderEl.addEventListener('click', async (event) => {
+                    const toggle = event.target.closest('[data-chat-settings-toggle]');
+                    if (toggle) {
+                        event.preventDefault();
+                        event.stopPropagation();
+                        state.chatSettingsOpen = !state.chatSettingsOpen;
+                        renderChatHeader();
+                        return;
+                    }
+
+                    const actionBtn = event.target.closest('[data-chat-setting-action]');
+                    if (!actionBtn) return;
+                    event.preventDefault();
+                    event.stopPropagation();
+                    await handleChatSettingAction(String(actionBtn.getAttribute('data-chat-setting-action') || ''));
+                });
+
                 chatTimelineEl.addEventListener('click', async (event) => {
                     const toggle = event.target.closest('[data-message-menu-toggle]');
                     if (toggle) {
@@ -1814,6 +2344,16 @@ $pageTitle = 'Inter-Agency Coordination';
                 if (addThreadBtn) {
                     addThreadBtn.addEventListener('click', addUserThread);
                 }
+                if (conversationMediaModalCloseBtn) {
+                    conversationMediaModalCloseBtn.addEventListener('click', closeConversationMediaModal);
+                }
+                if (conversationMediaModal) {
+                    conversationMediaModal.addEventListener('click', (event) => {
+                        if (event.target.matches('[data-close-conversation-media]')) {
+                            closeConversationMediaModal();
+                        }
+                    });
+                }
                 document.addEventListener('click', (event) => {
                     if (event.target.closest('[data-clear-reply]')) {
                         clearReplyTarget();
@@ -1822,10 +2362,21 @@ $pageTitle = 'Inter-Agency Coordination';
                     if (!event.target.closest('[data-message-actions]')) {
                         closeMessageMenus();
                     }
+                    if (state.chatSettingsOpen && !event.target.closest('.ia-chat-actions')) {
+                        state.chatSettingsOpen = false;
+                        renderChatHeader();
+                    }
                 });
                 document.addEventListener('keydown', (event) => {
                     if (event.key === 'Escape') {
                         closeMessageMenus();
+                        if (state.chatSettingsOpen) {
+                            state.chatSettingsOpen = false;
+                            renderChatHeader();
+                        }
+                        if (isConversationMediaModalOpen()) {
+                            closeConversationMediaModal();
+                        }
                     }
                 });
             }

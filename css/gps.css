@@ -1,3 +1,15 @@
+/* Map Legend Styles */
+.map-legend {
+    color: #222;
+    background: #fff;
+}
+
+[data-theme="dark"] .map-legend {
+    color: #f8fafc !important;
+    background: #1e293b !important;
+    border-color: #334155 !important;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.5) !important;
+}
 .main-content,
 .main-container {
     background:

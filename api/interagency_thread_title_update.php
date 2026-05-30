@@ -39,6 +39,39 @@ function ensure_interagency_thread_titles_table(PDO $pdo): void {
     );
 }
 
+function ensure_interagency_group_tables(PDO $pdo): void {
+    $pdo->exec(
+        "CREATE TABLE IF NOT EXISTS `interagency_group_threads` (
+            `id` BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+            `name` VARCHAR(120) NOT NULL,
+            `created_by` INT UNSIGNED NOT NULL,
+            `is_active` TINYINT(1) NOT NULL DEFAULT 1,
+            `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            `updated_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+            PRIMARY KEY (`id`),
+            KEY `idx_interagency_group_threads_active` (`is_active`),
+            KEY `idx_interagency_group_threads_creator` (`created_by`)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci"
+    );
+
+    $pdo->exec(
+        "CREATE TABLE IF NOT EXISTS `interagency_group_members` (
+            `id` BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+            `group_id` BIGINT UNSIGNED NOT NULL,
+            `user_id` INT UNSIGNED NOT NULL,
+            `added_by` INT UNSIGNED DEFAULT NULL,
+            `is_active` TINYINT(1) NOT NULL DEFAULT 1,
+            `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            `updated_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+            PRIMARY KEY (`id`),
+            UNIQUE KEY `uk_interagency_group_member` (`group_id`, `user_id`),
+            KEY `idx_interagency_group_members_user` (`user_id`),
+            KEY `idx_interagency_group_members_group` (`group_id`),
+            KEY `idx_interagency_group_members_active` (`is_active`)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci"
+    );
+}
+
 function normalize_title(string $title): string {
     return trim(preg_replace('/\s+/', ' ', $title));
 }
@@ -79,10 +112,12 @@ if ($ownerUserId <= 0) {
 
 try {
     ensure_interagency_thread_titles_table($pdo);
+    ensure_interagency_group_tables($pdo);
 
     $threadKey = '';
     $department = '';
     $targetUserId = 0;
+    $groupId = 0;
 
     if ($threadKind === 'department') {
         $department = strtolower(trim((string)($payload['department'] ?? '')));
@@ -111,6 +146,34 @@ try {
         }
 
         $threadKey = 'user:' . $targetUserId;
+    } elseif ($threadKind === 'group') {
+        $groupId = isset($payload['group_id']) ? (int)$payload['group_id'] : 0;
+        if ($groupId <= 0) {
+            http_response_code(400);
+            echo json_encode(['ok' => false, 'error' => 'Invalid group thread']);
+            exit;
+        }
+
+        $memberCheck = $pdo->prepare(
+            "SELECT 1
+             FROM interagency_group_threads g
+             INNER JOIN interagency_group_members gm ON gm.group_id = g.id
+             WHERE g.id = ?
+               AND g.is_active = 1
+               AND gm.user_id = ?
+               AND gm.is_active = 1
+             LIMIT 1"
+        );
+        $memberCheck->execute([$groupId, $ownerUserId]);
+        if (!$memberCheck->fetchColumn()) {
+            http_response_code(403);
+            echo json_encode(['ok' => false, 'error' => 'Group not found']);
+            exit;
+        }
+
+        $updateGroup = $pdo->prepare("UPDATE interagency_group_threads SET name = ?, updated_at = NOW() WHERE id = ?");
+        $updateGroup->execute([$title, $groupId]);
+        $threadKey = 'group:' . $groupId;
     } else {
         http_response_code(400);
         echo json_encode(['ok' => false, 'error' => 'Invalid thread kind']);
@@ -132,6 +195,7 @@ try {
         'thread_key' => $threadKey,
         'department' => $threadKind === 'department' ? $department : null,
         'user_id' => $threadKind === 'user' ? $targetUserId : null,
+        'group_id' => $threadKind === 'group' ? $groupId : null,
         'title' => $title
     ]);
 } catch (Throwable $e) {

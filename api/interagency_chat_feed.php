@@ -69,6 +69,74 @@ function ensure_interagency_user_reads_table(PDO $pdo): void {
     );
 }
 
+function ensure_interagency_group_tables(PDO $pdo): void {
+    $pdo->exec(
+        "CREATE TABLE IF NOT EXISTS `interagency_group_threads` (
+            `id` BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+            `name` VARCHAR(120) NOT NULL,
+            `created_by` INT UNSIGNED NOT NULL,
+            `is_active` TINYINT(1) NOT NULL DEFAULT 1,
+            `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            `updated_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+            PRIMARY KEY (`id`),
+            KEY `idx_interagency_group_threads_active` (`is_active`),
+            KEY `idx_interagency_group_threads_creator` (`created_by`)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci"
+    );
+
+    $pdo->exec(
+        "CREATE TABLE IF NOT EXISTS `interagency_group_members` (
+            `id` BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+            `group_id` BIGINT UNSIGNED NOT NULL,
+            `user_id` INT UNSIGNED NOT NULL,
+            `added_by` INT UNSIGNED DEFAULT NULL,
+            `is_active` TINYINT(1) NOT NULL DEFAULT 1,
+            `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            `updated_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+            PRIMARY KEY (`id`),
+            UNIQUE KEY `uk_interagency_group_member` (`group_id`, `user_id`),
+            KEY `idx_interagency_group_members_user` (`user_id`),
+            KEY `idx_interagency_group_members_group` (`group_id`),
+            KEY `idx_interagency_group_members_active` (`is_active`)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci"
+    );
+}
+
+function ensure_interagency_group_reads_table(PDO $pdo): void {
+    $pdo->exec(
+        "CREATE TABLE IF NOT EXISTS `interagency_group_thread_reads` (
+            `id` BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+            `user_id` INT UNSIGNED NOT NULL,
+            `group_id` BIGINT UNSIGNED NOT NULL,
+            `last_read_id` INT NOT NULL DEFAULT 0,
+            `updated_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+            PRIMARY KEY (`id`),
+            UNIQUE KEY `uk_interagency_group_reads_pair` (`user_id`, `group_id`),
+            KEY `idx_interagency_group_reads_user` (`user_id`),
+            KEY `idx_interagency_group_reads_group` (`group_id`)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci"
+    );
+}
+
+function current_user_can_access_group(PDO $pdo, int $groupId, int $userId): bool {
+    if ($groupId <= 0 || $userId <= 0) {
+        return false;
+    }
+    ensure_interagency_group_tables($pdo);
+    $stmt = $pdo->prepare(
+        "SELECT 1
+         FROM interagency_group_threads g
+         INNER JOIN interagency_group_members gm ON gm.group_id = g.id
+         WHERE g.id = ?
+           AND g.is_active = 1
+           AND gm.user_id = ?
+           AND gm.is_active = 1
+         LIMIT 1"
+    );
+    $stmt->execute([$groupId, $userId]);
+    return (bool)$stmt->fetchColumn();
+}
+
 function parse_message_details(string $raw): array {
     $text = trim($raw);
     $attachments = [];
@@ -176,6 +244,7 @@ $currentUserId = (int)($user['id'] ?? 0);
 $dept = isset($_GET['department']) ? trim((string)$_GET['department']) : '';
 $threadKind = isset($_GET['thread_kind']) ? strtolower(trim((string)$_GET['thread_kind'])) : 'department';
 $targetUserId = isset($_GET['user_id']) ? (int)$_GET['user_id'] : 0;
+$groupId = isset($_GET['group_id']) ? (int)$_GET['group_id'] : 0;
 $sinceId = isset($_GET['since_id']) ? (int)$_GET['since_id'] : 0;
 $limit = isset($_GET['limit']) ? max(1, min(100, (int)$_GET['limit'])) : 50;
 $markRead = isset($_GET['mark_read']) && (string)$_GET['mark_read'] === '1';
@@ -190,6 +259,12 @@ try {
             exit;
         }
         $entityType = 'agency_user_chat';
+    } elseif ($threadKind === 'group') {
+        if (!current_user_can_access_group($pdo, $groupId, $currentUserId)) {
+            echo json_encode(['ok' => true, 'items' => [], 'current_user_id' => $currentUserId]);
+            exit;
+        }
+        $entityType = 'agency_group_chat';
     }
 
     $sqlBase = "SELECT a.id, a.entity_id, a.details, a.created_at, a.user_id,
@@ -207,6 +282,9 @@ try {
         $params[] = $targetUserId;
         $params[] = $targetUserId;
         $params[] = $currentUserId;
+    } elseif ($threadKind === 'group') {
+        $sqlBase .= " AND a.entity_id = ?";
+        $params[] = $groupId;
     } elseif ($dept !== '' && strtolower($dept) !== 'all') {
         $eid = dept_to_entity_id($dept);
         if ($eid === null) {
@@ -240,7 +318,7 @@ try {
     }
     $attachmentsByMessage = load_attachments_by_message($pdo, $ids);
 
-    $items = array_map(function ($row) use ($currentUserId, $threadKind, $targetUserId, $attachmentsByMessage) {
+    $items = array_map(function ($row) use ($currentUserId, $threadKind, $targetUserId, $groupId, $attachmentsByMessage) {
         $entityId = (int)$row['entity_id'];
         $messageId = (int)$row['id'];
         $senderUserId = isset($row['user_id']) ? (int)$row['user_id'] : 0;
@@ -249,9 +327,10 @@ try {
         $attachments = count($dbAttachments) > 0 ? $dbAttachments : $parsed['attachments'];
         return [
             'id' => $messageId,
-            'department' => $threadKind === 'user' ? 'user' : entity_id_to_dept($entityId),
+            'department' => $threadKind === 'user' ? 'user' : ($threadKind === 'group' ? 'group' : entity_id_to_dept($entityId)),
             'thread_kind' => $threadKind,
             'user_id' => $threadKind === 'user' ? $targetUserId : null,
+            'group_id' => $threadKind === 'group' ? $groupId : null,
             'text' => (string)$parsed['text'],
             'attachments' => $attachments,
             'reply_to' => $parsed['reply_to'],
@@ -263,7 +342,27 @@ try {
         ];
     }, $rows);
 
-    if ($markRead && $currentUserId > 0 && $threadKind === 'user' && $targetUserId > 0) {
+    if ($markRead && $currentUserId > 0 && $threadKind === 'group' && $groupId > 0) {
+        ensure_interagency_group_reads_table($pdo);
+        $maxStmt = $pdo->prepare(
+            "SELECT COALESCE(MAX(id), 0) AS max_id
+             FROM activity_log
+             WHERE entity_type='agency_group_chat'
+               AND entity_id=?"
+        );
+        $maxStmt->execute([$groupId]);
+        $maxId = (int)($maxStmt->fetchColumn() ?: 0);
+        if ($maxId > 0) {
+            $upsert = $pdo->prepare(
+                "INSERT INTO interagency_group_thread_reads (user_id, group_id, last_read_id, updated_at)
+                 VALUES (?, ?, ?, NOW())
+                 ON DUPLICATE KEY UPDATE
+                    last_read_id = GREATEST(last_read_id, VALUES(last_read_id)),
+                    updated_at = NOW()"
+            );
+            $upsert->execute([$currentUserId, $groupId, $maxId]);
+        }
+    } elseif ($markRead && $currentUserId > 0 && $threadKind === 'user' && $targetUserId > 0) {
         ensure_interagency_user_reads_table($pdo);
         $maxStmt = $pdo->prepare(
             "SELECT COALESCE(MAX(id), 0) AS max_id

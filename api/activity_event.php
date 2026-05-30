@@ -168,7 +168,7 @@ function activity_log_needs_manual_id_fallback(string $message): bool {
 
 try {
     ensure_activity_log_auto_increment($pdo);
-    if (($entity_type === 'agency_chat' || $entity_type === 'agency_user_chat') && $details !== '') {
+    if (in_array($entity_type, ['agency_chat', 'agency_user_chat', 'agency_group_chat'], true) && $details !== '') {
         prepare_interagency_attachment_storage($pdo, $details);
     }
     $pdo->beginTransaction();
@@ -190,7 +190,7 @@ try {
         $insertedMessageId = $nextId;
     }
 
-    if (($entity_type === 'agency_chat' || $entity_type === 'agency_user_chat') && $details !== '') {
+    if (in_array($entity_type, ['agency_chat', 'agency_user_chat', 'agency_group_chat'], true) && $details !== '') {
         persist_message_attachments($pdo, $insertedMessageId, $details);
     }
 

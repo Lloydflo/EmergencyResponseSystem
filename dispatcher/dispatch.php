@@ -856,7 +856,7 @@ function renderAvailableUnits(items) {
                 </div>
             </div>
             <div class="unit-actions">
-                <button class="btn-action-small" onclick="unitLocation(this)" data-unit-id="${u.id}" data-identifier="${escapeAttr(u.identifier)}"><i class="fas fa-location-arrow"></i> Track</button>
+                <button class="btn-action-small" onclick="focusUnitOnMap('${escapeJs(u.identifier)}')" data-unit-id="${u.id}" data-identifier="${escapeAttr(u.identifier)}"><i class="fas fa-location-arrow"></i> Track</button>
             </div>
         `;
         container.appendChild(card);
@@ -976,13 +976,17 @@ function contactCaller(btn) {
     window.location.href = 'tel:' + encodeURIComponent(phone);
 }
 
-function unitLocation(btn) {
-    const unitId = btn.getAttribute('data-unit-id');
-    const unitName = btn.getAttribute('data-identifier');
-    const qp = new URLSearchParams();
-    if (unitId) qp.set('unit_id', unitId);
-    if (unitName) qp.set('unit', unitName);
-    window.location.href = 'dispatcher/gps.php?' + qp.toString();
+
+// Focus the map on the selected unit marker
+function focusUnitOnMap(unitIdentifier) {
+    if (!unitIdentifier || !window.markers) return;
+    const markerObj = window.markers[unitIdentifier];
+    if (markerObj && markerObj.marker && window.map) {
+        window.map.setView(markerObj.marker.getLatLng(), 17, { animate: true });
+        markerObj.marker.openPopup();
+    } else {
+        alert('Unit location not available on map.');
+    }
 }
 
 function refreshAIRecommendations() {

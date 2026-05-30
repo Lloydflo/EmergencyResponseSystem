@@ -162,18 +162,21 @@ $pageTitle = 'Inter-Agency Conversations';
 
         .ia-tabs {
             display: grid;
-            grid-template-columns: repeat(3, 1fr);
+            grid-template-columns: repeat(4, minmax(0, 1fr));
             gap: 0.45rem;
+            min-width: 0;
         }
         
         .ia-list-actions {
-            display: flex;
+            display: grid;
+            grid-template-columns: minmax(0, 1fr) 34px 34px;
             align-items: center;
             gap: 0.5rem;
+            width: 100%;
         }
 
         .ia-list-actions .ia-tabs {
-            flex: 1;
+            min-width: 0;
         }
 
         .ia-add-thread-btn {
@@ -196,6 +199,17 @@ $pageTitle = 'Inter-Agency Conversations';
         .ia-add-thread-btn:hover {
             background: #ecfdf5;
             border-color: #99e6b8;
+        }
+
+        .ia-group-thread-btn {
+            background: #eef6ff;
+            border-color: #bfdbfe;
+            color: #1d4ed8;
+        }
+
+        .ia-group-thread-btn:hover {
+            background: #dbeafe;
+            border-color: #93c5fd;
         }
 
         .ia-tab {
@@ -402,6 +416,18 @@ $pageTitle = 'Inter-Agency Conversations';
             background: #f8fbff;
         }
 
+        .ia-chat-head-main {
+            min-width: 0;
+        }
+
+        .ia-chat-actions {
+            position: relative;
+            display: flex;
+            align-items: center;
+            gap: 0.55rem;
+            flex-shrink: 0;
+        }
+
         .ia-chat-title {
             margin: 0;
             color: var(--ia-text);
@@ -413,6 +439,92 @@ $pageTitle = 'Inter-Agency Conversations';
             margin: 0.2rem 0 0;
             color: #56708a;
             font-size: 0.79rem;
+        }
+
+        .ia-chat-info-btn {
+            width: 32px;
+            height: 32px;
+            border: 1px solid #cfe0ed;
+            border-radius: 999px;
+            background: #ffffff;
+            color: #0f766e;
+            cursor: pointer;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 0.92rem;
+            font-weight: 900;
+            line-height: 1;
+            transition: 0.2s ease;
+        }
+
+        .ia-chat-info-btn:hover,
+        .ia-chat-info-btn[aria-expanded="true"] {
+            background: #ecfdf5;
+            border-color: #99e6b8;
+            color: #0f766e;
+        }
+
+        .ia-chat-settings {
+            position: absolute;
+            top: calc(100% + 0.55rem);
+            right: 0;
+            z-index: 20;
+            width: min(280px, calc(100vw - 2rem));
+            border: 1px solid #d7e2ee;
+            border-radius: 14px;
+            background: #ffffff;
+            box-shadow: 0 18px 42px rgba(15, 23, 42, 0.16);
+            overflow: hidden;
+            text-align: left;
+        }
+
+        .ia-chat-settings-head {
+            padding: 0.85rem 0.95rem;
+            border-bottom: 1px solid #e6edf5;
+        }
+
+        .ia-chat-settings-title {
+            margin: 0;
+            color: #102a43;
+            font-size: 0.9rem;
+            font-weight: 800;
+        }
+
+        .ia-chat-settings-sub {
+            margin: 0.25rem 0 0;
+            color: #64748b;
+            font-size: 0.76rem;
+        }
+
+        .ia-chat-settings-list {
+            display: grid;
+            padding: 0.35rem;
+        }
+
+        .ia-chat-settings-item {
+            border: 0;
+            border-radius: 10px;
+            background: transparent;
+            color: #1f3852;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            gap: 0.65rem;
+            padding: 0.72rem 0.7rem;
+            text-align: left;
+            font-size: 0.84rem;
+            font-weight: 700;
+        }
+
+        .ia-chat-settings-item i {
+            width: 16px;
+            color: #0f766e;
+            text-align: center;
+        }
+
+        .ia-chat-settings-item:hover {
+            background: #f1f6fb;
         }
 
         .ia-chat-badge {
@@ -609,11 +721,12 @@ $pageTitle = 'Inter-Agency Conversations';
             display: inline-flex;
             align-items: center;
             gap: 0.4rem;
-            color: inherit;
+            color: #0f172a;
             text-decoration: none;
             font-size: 0.82rem;
-            background: rgba(255, 255, 255, 0.25);
-            border: 1px solid rgba(255, 255, 255, 0.45);
+            font-weight: 700;
+            background: #ffffff;
+            border: 1px solid rgba(15, 23, 42, 0.14);
             border-radius: 8px;
             padding: 0.4rem 0.55rem;
             width: fit-content;
@@ -623,10 +736,27 @@ $pageTitle = 'Inter-Agency Conversations';
             white-space: nowrap;
         }
 
+        .ia-attachment-link i {
+            color: #0f766e;
+            flex-shrink: 0;
+        }
+
+        .ia-attachment-link span {
+            min-width: 0;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
         .ia-message.incoming .ia-attachment-link {
             background: #f8fbff;
             border-color: #dce6f1;
             color: #1f3852;
+        }
+
+        .ia-message.outgoing .ia-attachment-link {
+            background: #ffffff;
+            border-color: rgba(255, 255, 255, 0.78);
+            color: #0f172a;
         }
 
         .ia-attachment-image {
@@ -746,6 +876,10 @@ $pageTitle = 'Inter-Agency Conversations';
             background: linear-gradient(135deg, #f7fbff 0%, #edf6fb 100%);
         }
 
+        .ia-reply-preview[hidden] {
+            display: none;
+        }
+
         .ia-reply-preview-main {
             min-width: 0;
         }
@@ -788,12 +922,13 @@ $pageTitle = 'Inter-Agency Conversations';
             display: inline-flex;
             align-items: center;
             gap: 0.4rem;
-            background: #f1f6fb;
-            border: 1px solid #d4dde8;
-            color: #24425a;
+            background: #ffffff;
+            border: 1px solid #cbd5e1;
+            color: #0f172a;
             border-radius: 999px;
             padding: 0.24rem 0.5rem;
             font-size: 0.74rem;
+            font-weight: 700;
             max-width: 100%;
         }
 
@@ -896,6 +1031,34 @@ $pageTitle = 'Inter-Agency Conversations';
         .ia-modal-body {
             padding: 1rem 1.1rem;
             overflow: auto;
+        }
+
+        .ia-modal-field {
+            margin-bottom: 0.9rem;
+        }
+
+        .ia-modal-field label {
+            display: block;
+            margin-bottom: 0.35rem;
+            color: #334155;
+            font-size: 0.78rem;
+            font-weight: 800;
+            text-transform: uppercase;
+            letter-spacing: 0.04em;
+        }
+
+        .ia-modal-field input {
+            width: 100%;
+            border: 1px solid #d7e1ea;
+            border-radius: 12px;
+            padding: 0.8rem 0.95rem;
+            font-size: 0.9rem;
+            outline: none;
+        }
+
+        .ia-modal-field input:focus {
+            border-color: #0f766e;
+            box-shadow: 0 0 0 3px rgba(15, 118, 110, 0.12);
         }
 
         .ia-modal-search {
@@ -1001,6 +1164,191 @@ $pageTitle = 'Inter-Agency Conversations';
             background: #f8fbff;
         }
 
+        .ia-media-modal {
+            width: min(760px, calc(100vw - 2rem));
+        }
+
+        .ia-media-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+            gap: 0.75rem;
+        }
+
+        .ia-media-card {
+            border: 1px solid #dce6ef;
+            border-radius: 12px;
+            background: #ffffff;
+            color: #102a43;
+            overflow: hidden;
+            text-decoration: none;
+            min-width: 0;
+        }
+
+        .ia-media-thumb {
+            width: 100%;
+            aspect-ratio: 4 / 3;
+            object-fit: cover;
+            display: block;
+            background: #eef5fb;
+        }
+
+        .ia-media-file {
+            display: flex;
+            align-items: center;
+            gap: 0.7rem;
+            padding: 0.85rem;
+        }
+
+        .ia-media-file i {
+            width: 34px;
+            height: 34px;
+            border-radius: 10px;
+            background: #e0f2fe;
+            color: #0369a1;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            flex-shrink: 0;
+        }
+
+        .ia-media-info {
+            min-width: 0;
+            padding: 0.65rem 0.75rem 0.75rem;
+        }
+
+        .ia-media-file .ia-media-info {
+            padding: 0;
+        }
+
+        .ia-media-name {
+            margin: 0;
+            color: inherit;
+            font-size: 0.82rem;
+            font-weight: 800;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+
+        .ia-media-meta {
+            margin: 0.25rem 0 0;
+            color: #64748b;
+            font-size: 0.72rem;
+        }
+
+        .ia-media-empty {
+            border: 1px dashed #d7e1ea;
+            border-radius: 14px;
+            background: #f8fbff;
+            color: #64748b;
+            padding: 1.25rem;
+            text-align: center;
+            font-size: 0.88rem;
+        }
+
+        .ia-member-list {
+            display: grid;
+            gap: 0.7rem;
+        }
+
+        .ia-member-card {
+            display: flex;
+            align-items: center;
+            gap: 0.8rem;
+            border: 1px solid #dce6ef;
+            border-radius: 14px;
+            background: #ffffff;
+            padding: 0.8rem 0.9rem;
+            min-width: 0;
+        }
+
+        .ia-member-avatar {
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            background: linear-gradient(135deg, #2563eb 0%, #0f766e 100%);
+            color: #ffffff;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 0.9rem;
+            font-weight: 900;
+            flex-shrink: 0;
+            text-transform: uppercase;
+        }
+
+        .ia-member-main {
+            min-width: 0;
+            flex: 1;
+        }
+
+        .ia-member-name {
+            margin: 0;
+            color: #102a43;
+            font-size: 0.9rem;
+            font-weight: 800;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+
+        .ia-member-meta {
+            margin: 0.22rem 0 0;
+            color: #64748b;
+            font-size: 0.76rem;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+
+        .ia-member-side {
+            display: grid;
+            gap: 0.3rem;
+            justify-items: end;
+            flex-shrink: 0;
+        }
+
+        .ia-member-badge,
+        .ia-member-status {
+            border-radius: 999px;
+            padding: 0.24rem 0.55rem;
+            font-size: 0.72rem;
+            font-weight: 800;
+            white-space: nowrap;
+        }
+
+        .ia-member-badge {
+            background: #eef2ff;
+            color: #3730a3;
+        }
+
+        .ia-member-status {
+            background: #ecfdf5;
+            color: #047857;
+        }
+
+        .ia-member-status.inactive {
+            background: #f1f5f9;
+            color: #64748b;
+        }
+
+        .ia-member-remove {
+            border: 1px solid #fecaca;
+            border-radius: 999px;
+            background: #fff5f5;
+            color: #b91c1c;
+            cursor: pointer;
+            font-size: 0.72rem;
+            font-weight: 800;
+            padding: 0.28rem 0.6rem;
+            white-space: nowrap;
+        }
+
+        .ia-member-remove:hover {
+            background: #fee2e2;
+            border-color: #fca5a5;
+        }
+
         .ia-modal-btn {
             border: 1px solid #d7e1ea;
             border-radius: 10px;
@@ -1059,6 +1407,10 @@ $pageTitle = 'Inter-Agency Conversations';
                 height: 390px;
             }
 
+            .ia-tabs {
+                grid-template-columns: repeat(2, minmax(0, 1fr));
+            }
+
             .ia-modal-head,
             .ia-modal-actions,
             .ia-user-option-top,
@@ -1105,16 +1457,20 @@ $pageTitle = 'Inter-Agency Conversations';
                     <div class="ia-list-top">
                         <div class="ia-search">
                             <i class="fas fa-search"></i>
-                            <input type="text" id="threadSearchInput" placeholder="Search department or responder...">
+                            <input type="text" id="threadSearchInput" placeholder="Search department, responder, or group...">
                         </div>
                         <div class="ia-list-actions">
                             <div class="ia-tabs">
                                 <button type="button" class="ia-tab active" data-filter="all">All</button>
                                 <button type="button" class="ia-tab" data-filter="department">Departments</button>
                                 <button type="button" class="ia-tab" data-filter="responder">Responders</button>
+                                <button type="button" class="ia-tab" data-filter="group">Groups</button>
                             </div>
                             <button type="button" class="ia-add-thread-btn" id="addThreadBtn" title="Add user conversation" aria-label="Add user conversation">
                                 <i class="fas fa-plus"></i>
+                            </button>
+                            <button type="button" class="ia-add-thread-btn ia-group-thread-btn" id="createGroupBtn" title="Create group chat" aria-label="Create group chat">
+                                <i class="fas fa-users"></i>
                             </button>
                         </div>
                     </div>
@@ -1132,7 +1488,7 @@ $pageTitle = 'Inter-Agency Conversations';
                                     <option value="Urgent">Urgent</option>
                                     <option value="Critical">Critical</option>
                                 </select>
-                                <input type="text" id="messageInput" class="ia-input" maxlength="260" placeholder="Type update for selected thread...">
+                                <input type="text" id="messageInput" class="ia-input" maxlength="260" placeholder="Type a message">
                                 <button type="button" class="ia-attach" id="attachFileBtn" title="Attach files/images">
                                     <i class="fas fa-paperclip"></i>
                                 </button>
@@ -1158,7 +1514,7 @@ $pageTitle = 'Inter-Agency Conversations';
         <div class="ia-modal" role="dialog" aria-modal="true" aria-labelledby="addThreadModalTitle">
             <div class="ia-modal-head">
                 <div>
-                    <p class="ia-modal-title" id="addThreadModalTitle">Add Conversation Thread</p>
+                    <p class="ia-modal-title" id="addThreadModalTitle">Add Conversation</p>
                     <p class="ia-modal-subtitle">Choose which active user will be added to the thread list.</p>
                 </div>
                 <button type="button" class="ia-modal-close" id="addThreadModalCloseBtn" aria-label="Close add thread modal">
@@ -1174,8 +1530,70 @@ $pageTitle = 'Inter-Agency Conversations';
             </div>
             <div class="ia-modal-actions">
                 <button type="button" class="ia-modal-btn secondary" id="addThreadCancelBtn">Cancel</button>
-                <button type="button" class="ia-modal-btn primary" id="addThreadConfirmBtn" disabled>Add to Threadlist</button>
+                <button type="button" class="ia-modal-btn primary" id="addThreadConfirmBtn" disabled>Add</button>
             </div>
+        </div>
+    </div>
+
+    <div class="ia-modal-shell" id="groupChatModal" hidden aria-hidden="true">
+        <div class="ia-modal-backdrop" data-close-group-chat></div>
+        <div class="ia-modal" role="dialog" aria-modal="true" aria-labelledby="groupChatModalTitle">
+            <div class="ia-modal-head">
+                <div>
+                    <p class="ia-modal-title" id="groupChatModalTitle">Create Group Chat</p>
+                    <p class="ia-modal-subtitle">Name the group and choose active users to include.</p>
+                </div>
+                <button type="button" class="ia-modal-close" id="groupChatModalCloseBtn" aria-label="Close group chat modal">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+            <div class="ia-modal-body">
+                <div class="ia-modal-field">
+                    <label for="groupChatNameInput">Group name</label>
+                    <input type="text" id="groupChatNameInput" maxlength="120" placeholder="e.g. Night Shift Coordination">
+                </div>
+                <div class="ia-modal-search">
+                    <i class="fas fa-search"></i>
+                    <input type="text" id="groupChatSearchInput" placeholder="Search users to add...">
+                </div>
+                <div class="ia-user-picker-list" id="groupChatUserList"></div>
+            </div>
+            <div class="ia-modal-actions">
+                <button type="button" class="ia-modal-btn secondary" id="groupChatCancelBtn">Cancel</button>
+                <button type="button" class="ia-modal-btn primary" id="groupChatCreateBtn" disabled>Create Group</button>
+            </div>
+        </div>
+    </div>
+
+    <div class="ia-modal-shell" id="conversationMediaModal" hidden aria-hidden="true">
+        <div class="ia-modal-backdrop" data-close-conversation-media></div>
+        <div class="ia-modal ia-media-modal" role="dialog" aria-modal="true" aria-labelledby="conversationMediaModalTitle">
+            <div class="ia-modal-head">
+                <div>
+                    <p class="ia-modal-title" id="conversationMediaModalTitle">Conversation Media</p>
+                    <p class="ia-modal-subtitle" id="conversationMediaModalSubtitle">Images and files from this conversation.</p>
+                </div>
+                <button type="button" class="ia-modal-close" id="conversationMediaModalCloseBtn" aria-label="Close media modal">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+            <div class="ia-modal-body" id="conversationMediaModalBody"></div>
+        </div>
+    </div>
+
+    <div class="ia-modal-shell" id="groupMembersModal" hidden aria-hidden="true">
+        <div class="ia-modal-backdrop" data-close-group-members></div>
+        <div class="ia-modal" role="dialog" aria-modal="true" aria-labelledby="groupMembersModalTitle">
+            <div class="ia-modal-head">
+                <div>
+                    <p class="ia-modal-title" id="groupMembersModalTitle">Members</p>
+                    <p class="ia-modal-subtitle" id="groupMembersModalSubtitle">People included in this group chat.</p>
+                </div>
+                <button type="button" class="ia-modal-close" id="groupMembersModalCloseBtn" aria-label="Close members modal">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+            <div class="ia-modal-body" id="groupMembersModalBody"></div>
         </div>
     </div>
 
@@ -1196,6 +1614,11 @@ $pageTitle = 'Inter-Agency Conversations';
                 addThreadQuery: '',
                 addThreadSelectedId: 0,
                 addThreadLoading: false,
+                groupUsers: [],
+                groupQuery: '',
+                groupSelectedIds: [],
+                groupLoading: false,
+                chatSettingsOpen: false,
                 poller: null
             };
 
@@ -1217,6 +1640,24 @@ $pageTitle = 'Inter-Agency Conversations';
             const addThreadCancelBtn = document.getElementById('addThreadCancelBtn');
             const addThreadConfirmBtn = document.getElementById('addThreadConfirmBtn');
             const addThreadModalCloseBtn = document.getElementById('addThreadModalCloseBtn');
+            const createGroupBtn = document.getElementById('createGroupBtn');
+            const groupChatModal = document.getElementById('groupChatModal');
+            const groupChatNameInput = document.getElementById('groupChatNameInput');
+            const groupChatSearchInput = document.getElementById('groupChatSearchInput');
+            const groupChatUserList = document.getElementById('groupChatUserList');
+            const groupChatCancelBtn = document.getElementById('groupChatCancelBtn');
+            const groupChatCreateBtn = document.getElementById('groupChatCreateBtn');
+            const groupChatModalCloseBtn = document.getElementById('groupChatModalCloseBtn');
+            const conversationMediaModal = document.getElementById('conversationMediaModal');
+            const conversationMediaModalTitle = document.getElementById('conversationMediaModalTitle');
+            const conversationMediaModalSubtitle = document.getElementById('conversationMediaModalSubtitle');
+            const conversationMediaModalBody = document.getElementById('conversationMediaModalBody');
+            const conversationMediaModalCloseBtn = document.getElementById('conversationMediaModalCloseBtn');
+            const groupMembersModal = document.getElementById('groupMembersModal');
+            const groupMembersModalTitle = document.getElementById('groupMembersModalTitle');
+            const groupMembersModalSubtitle = document.getElementById('groupMembersModalSubtitle');
+            const groupMembersModalBody = document.getElementById('groupMembersModalBody');
+            const groupMembersModalCloseBtn = document.getElementById('groupMembersModalCloseBtn');
             const totalThreadsEl = document.getElementById('iaTotalThreads');
             const activeRespondersEl = document.getElementById('iaActiveResponders');
             const unreadCountEl = document.getElementById('iaUnreadCount');
@@ -1252,7 +1693,17 @@ $pageTitle = 'Inter-Agency Conversations';
                     .replace(/\b\w/g, (char) => char.toUpperCase());
             }
 
+            function initialsForName(value) {
+                const words = String(value || 'User').trim().split(/\s+/).filter(Boolean);
+                if (!words.length) return 'U';
+                return words.slice(0, 2).map((word) => word.charAt(0)).join('').toUpperCase();
+            }
+
             function threadChannelLabel(item) {
+                if (String(item.thread_kind || '') === 'group') {
+                    const count = Number(item.member_count || 0);
+                    return count > 0 ? `Group Chat · ${count} member(s)` : 'Group Chat';
+                }
                 if (String(item.kind || '') === 'department') {
                     return 'Department Channel';
                 }
@@ -1263,6 +1714,10 @@ $pageTitle = 'Inter-Agency Conversations';
                 return !!(addThreadModal && addThreadModal.classList.contains('show'));
             }
 
+            function isGroupChatModalOpen() {
+                return !!(groupChatModal && groupChatModal.classList.contains('show'));
+            }
+
             function selectedAddThreadUser() {
                 return state.addThreadUsers.find((item) => Number(item.id) === Number(state.addThreadSelectedId)) || null;
             }
@@ -1270,7 +1725,7 @@ $pageTitle = 'Inter-Agency Conversations';
             function syncAddThreadConfirmState() {
                 if (!addThreadConfirmBtn) return;
                 addThreadConfirmBtn.disabled = state.addThreadLoading || !selectedAddThreadUser();
-                addThreadConfirmBtn.textContent = state.addThreadLoading ? 'Adding...' : 'Add to Threadlist';
+                addThreadConfirmBtn.textContent = state.addThreadLoading ? 'Adding...' : 'Add';
             }
 
             function renderAddThreadUsers() {
@@ -1351,6 +1806,305 @@ $pageTitle = 'Inter-Agency Conversations';
                 if (addThreadSearchInput) addThreadSearchInput.value = '';
                 syncAddThreadConfirmState();
                 if (addThreadBtn) addThreadBtn.focus();
+            }
+
+            function selectedGroupUserIds() {
+                return state.groupSelectedIds.map((id) => Number(id)).filter((id) => id > 0);
+            }
+
+            function syncGroupCreateState() {
+                if (!groupChatCreateBtn) return;
+                const hasName = groupChatNameInput && groupChatNameInput.value.trim().length > 0;
+                groupChatCreateBtn.disabled = state.groupLoading || !hasName || selectedGroupUserIds().length < 2;
+                groupChatCreateBtn.textContent = state.groupLoading ? 'Creating...' : 'Create Group';
+            }
+
+            function renderGroupUsers() {
+                if (!groupChatUserList) return;
+
+                const query = String(state.groupQuery || '').trim().toLowerCase();
+                const items = state.groupUsers.filter((item) => {
+                    if (!query) return true;
+                    const hay = `${item.name || ''} ${item.email || ''} ${item.role || ''}`.toLowerCase();
+                    return hay.includes(query);
+                });
+
+                if (state.groupLoading && !state.groupUsers.length) {
+                    groupChatUserList.innerHTML = '<div class="ia-user-picker-empty">Loading active users...</div>';
+                    syncGroupCreateState();
+                    return;
+                }
+
+                if (!items.length) {
+                    groupChatUserList.innerHTML = '<div class="ia-user-picker-empty">No matching active users found.</div>';
+                    syncGroupCreateState();
+                    return;
+                }
+
+                groupChatUserList.innerHTML = items.map((item) => {
+                    const isSelected = state.groupSelectedIds.some((id) => Number(id) === Number(item.id));
+                    return `
+                        <button type="button" class="ia-user-option ${isSelected ? 'selected' : ''}" data-group-user="${escapeAttr(item.id)}" aria-pressed="${isSelected ? 'true' : 'false'}">
+                            <div class="ia-user-option-top">
+                                <div>
+                                    <p class="ia-user-option-name">${escapeHtml(item.name || ('User #' + item.id))}</p>
+                                    <p class="ia-user-option-meta">${escapeHtml(item.email || 'No email provided')}</p>
+                                </div>
+                                <span class="ia-user-option-badge">${escapeHtml(formatRole(item.role || 'user'))}</span>
+                            </div>
+                            <div class="ia-user-option-bottom">
+                                <span class="ia-user-option-meta">ID ${escapeHtml(item.id)}</span>
+                                <span class="ia-user-option-status">${isSelected ? 'Selected' : 'Active account'}</span>
+                            </div>
+                        </button>
+                    `;
+                }).join('');
+                syncGroupCreateState();
+            }
+
+            function openGroupChatModal() {
+                if (!groupChatModal) return;
+                groupChatModal.hidden = false;
+                groupChatModal.setAttribute('aria-hidden', 'false');
+                groupChatModal.classList.add('show');
+                document.body.style.overflow = 'hidden';
+                syncGroupCreateState();
+                window.setTimeout(() => {
+                    if (groupChatNameInput) groupChatNameInput.focus();
+                }, 0);
+            }
+
+            function closeGroupChatModal() {
+                if (!groupChatModal) return;
+                groupChatModal.classList.remove('show');
+                groupChatModal.setAttribute('aria-hidden', 'true');
+                groupChatModal.hidden = true;
+                document.body.style.overflow = '';
+                state.groupLoading = false;
+                state.groupQuery = '';
+                state.groupSelectedIds = [];
+                if (groupChatNameInput) groupChatNameInput.value = '';
+                if (groupChatSearchInput) groupChatSearchInput.value = '';
+                syncGroupCreateState();
+                if (createGroupBtn) createGroupBtn.focus();
+            }
+
+            function isConversationMediaModalOpen() {
+                return !!(conversationMediaModal && conversationMediaModal.classList.contains('show'));
+            }
+
+            function closeConversationMediaModal() {
+                if (!conversationMediaModal) return;
+                conversationMediaModal.classList.remove('show');
+                conversationMediaModal.setAttribute('aria-hidden', 'true');
+                conversationMediaModal.hidden = true;
+                document.body.style.overflow = '';
+                if (conversationMediaModalBody) {
+                    conversationMediaModalBody.innerHTML = '';
+                }
+            }
+
+            function attachmentIsImage(attachment) {
+                const mime = String(attachment && attachment.mime_type ? attachment.mime_type : '').toLowerCase();
+                const url = String(attachment && attachment.url ? attachment.url : '').toLowerCase();
+                return !!(attachment && attachment.is_image) || mime.startsWith('image/') || /\.(png|jpe?g|gif|webp|bmp|svg)(?:\?|#|$)/i.test(url);
+            }
+
+            function currentConversationAttachments(type) {
+                const wantedImages = type === 'images';
+                const seen = new Set();
+                const items = [];
+                Object.values(state.messageItems || {}).forEach((message) => {
+                    const attachments = Array.isArray(message.attachments) ? message.attachments : [];
+                    attachments.forEach((attachment) => {
+                        const url = String(attachment.url || '').trim();
+                        if (!url) return;
+                        const isImage = attachmentIsImage(attachment);
+                        if (wantedImages !== isImage) return;
+                        const key = `${url}|${String(attachment.name || '')}`;
+                        if (seen.has(key)) return;
+                        seen.add(key);
+                        items.push({
+                            name: String(attachment.name || (isImage ? 'Image' : 'File')),
+                            url,
+                            size: Number(attachment.size || 0),
+                            mime_type: String(attachment.mime_type || ''),
+                            is_image: isImage,
+                            sender_name: String(message.sender_name || 'Unknown'),
+                            created_at: String(message.created_at || '')
+                        });
+                    });
+                });
+                return items;
+            }
+
+            function renderConversationMedia(type) {
+                if (!conversationMediaModalBody) return;
+                const items = currentConversationAttachments(type);
+                const isImages = type === 'images';
+                if (conversationMediaModalTitle) {
+                    conversationMediaModalTitle.textContent = isImages ? 'Show Images' : 'Show Files';
+                }
+                if (conversationMediaModalSubtitle) {
+                    conversationMediaModalSubtitle.textContent = `${items.length} ${isImages ? 'image' : 'file'}${items.length === 1 ? '' : 's'} in this conversation.`;
+                }
+                if (!items.length) {
+                    conversationMediaModalBody.innerHTML = `<div class="ia-media-empty">No ${isImages ? 'images' : 'files'} found in this conversation.</div>`;
+                    return;
+                }
+
+                conversationMediaModalBody.innerHTML = `
+                    <div class="ia-media-grid">
+                        ${items.map((item) => {
+                            const meta = `${item.sender_name}${item.size > 0 ? ' · ' + formatBytes(item.size) : ''}`;
+                            if (isImages) {
+                                return `
+                                    <a class="ia-media-card" href="${escapeAttr(item.url)}" target="_blank" rel="noopener">
+                                        <img class="ia-media-thumb" src="${escapeAttr(item.url)}" alt="${escapeAttr(item.name)}">
+                                        <div class="ia-media-info">
+                                            <p class="ia-media-name" title="${escapeAttr(item.name)}">${escapeHtml(item.name)}</p>
+                                            <p class="ia-media-meta">${escapeHtml(meta)}</p>
+                                        </div>
+                                    </a>
+                                `;
+                            }
+                            return `
+                                <a class="ia-media-card ia-media-file" href="${escapeAttr(item.url)}" target="_blank" rel="noopener">
+                                    <i class="fas fa-file"></i>
+                                    <div class="ia-media-info">
+                                        <p class="ia-media-name" title="${escapeAttr(item.name)}">${escapeHtml(item.name)}</p>
+                                        <p class="ia-media-meta">${escapeHtml(meta)}</p>
+                                    </div>
+                                </a>
+                            `;
+                        }).join('')}
+                    </div>
+                `;
+            }
+
+            async function openConversationMediaModal(type) {
+                if (!conversationMediaModal) return;
+                await loadMessages(true, false);
+                renderConversationMedia(type);
+                conversationMediaModal.hidden = false;
+                conversationMediaModal.setAttribute('aria-hidden', 'false');
+                conversationMediaModal.classList.add('show');
+                document.body.style.overflow = 'hidden';
+            }
+
+            function isGroupMembersModalOpen() {
+                return !!(groupMembersModal && groupMembersModal.classList.contains('show'));
+            }
+
+            function closeGroupMembersModal() {
+                if (!groupMembersModal) return;
+                groupMembersModal.classList.remove('show');
+                groupMembersModal.setAttribute('aria-hidden', 'true');
+                groupMembersModal.hidden = true;
+                document.body.style.overflow = '';
+                if (groupMembersModalBody) {
+                    groupMembersModalBody.innerHTML = '';
+                }
+            }
+
+            function renderGroupMembers(group, members) {
+                if (!groupMembersModalBody) return;
+                const list = Array.isArray(members) ? members : [];
+                const creator = group && group.creator && typeof group.creator === 'object' ? group.creator : null;
+                const creatorName = creator && creator.name ? String(creator.name) : 'Unknown creator';
+                if (groupMembersModalTitle) {
+                    groupMembersModalTitle.textContent = 'Members';
+                }
+                if (groupMembersModalSubtitle) {
+                    const groupName = group && group.name ? String(group.name) : 'Group chat';
+                    groupMembersModalSubtitle.textContent = `${groupName} · ${list.length} member${list.length === 1 ? '' : 's'} · Created by ${creatorName}`;
+                }
+                if (!list.length) {
+                    groupMembersModalBody.innerHTML = '<div class="ia-media-empty">No members found for this group chat.</div>';
+                    return;
+                }
+
+                groupMembersModalBody.innerHTML = `
+                    <div class="ia-member-list">
+                        ${list.map((member) => {
+                            const status = String(member.status || '').toLowerCase() === 'active' ? 'Active' : 'Inactive';
+                            const creatorBadge = member.is_creator ? '<span class="ia-member-badge">Creator</span>' : '';
+                            const removeButton = member.can_remove ? `<button type="button" class="ia-member-remove" data-remove-group-member="${escapeAttr(member.id)}" data-member-name="${escapeAttr(member.name || ('User #' + member.id))}">Remove</button>` : '';
+                            return `
+                                <article class="ia-member-card">
+                                    <div class="ia-member-avatar">${escapeHtml(initialsForName(member.name))}</div>
+                                    <div class="ia-member-main">
+                                        <p class="ia-member-name">${escapeHtml(member.name || ('User #' + member.id))}</p>
+                                        <p class="ia-member-meta">${escapeHtml(member.email || 'No email provided')}</p>
+                                    </div>
+                                    <div class="ia-member-side">
+                                        <span class="ia-member-badge">${escapeHtml(formatRole(member.role || 'user'))}</span>
+                                        ${creatorBadge}
+                                        <span class="ia-member-status ${status === 'Active' ? '' : 'inactive'}">${escapeHtml(status)}</span>
+                                        ${removeButton}
+                                    </div>
+                                </article>
+                            `;
+                        }).join('')}
+                    </div>
+                `;
+            }
+
+            async function openGroupMembersModal() {
+                const active = activeThread();
+                const groupId = active ? Number(active.group_id || active.entity_id || 0) : 0;
+                if (!groupMembersModal || String(active && active.thread_kind || '') !== 'group' || groupId <= 0) {
+                    alert('Members are available for group chats only.');
+                    return;
+                }
+
+                groupMembersModal.hidden = false;
+                groupMembersModal.setAttribute('aria-hidden', 'false');
+                groupMembersModal.classList.add('show');
+                document.body.style.overflow = 'hidden';
+                if (groupMembersModalTitle) groupMembersModalTitle.textContent = 'Members';
+                if (groupMembersModalSubtitle) groupMembersModalSubtitle.textContent = 'Loading group members...';
+                if (groupMembersModalBody) groupMembersModalBody.innerHTML = '<div class="ia-media-empty">Loading members...</div>';
+
+                try {
+                    const res = await fetch('api/interagency_group_members.php?group_id=' + encodeURIComponent(String(groupId)), { cache: 'no-store' });
+                    const data = await res.json();
+                    if (!data || !data.ok) {
+                        throw new Error((data && data.error) ? String(data.error) : 'Unable to load members.');
+                    }
+                    renderGroupMembers(data.group || active, data.members || []);
+                } catch (err) {
+                    if (groupMembersModalSubtitle) groupMembersModalSubtitle.textContent = 'Unable to load members.';
+                    if (groupMembersModalBody) {
+                        groupMembersModalBody.innerHTML = `<div class="ia-media-empty">${escapeHtml((err && err.message) ? err.message : 'Unable to load members.')}</div>`;
+                    }
+                }
+            }
+
+            async function removeGroupMember(userId, memberName) {
+                const active = activeThread();
+                const groupId = active ? Number(active.group_id || active.entity_id || 0) : 0;
+                if (!groupId || !userId) return;
+                const label = memberName ? String(memberName) : 'this member';
+                if (!confirm(`Remove ${label} from this group chat?`)) {
+                    return;
+                }
+
+                try {
+                    const res = await fetch('api/interagency_group_member_remove.php', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ group_id: groupId, user_id: Number(userId) })
+                    });
+                    const data = await res.json();
+                    if (!data || !data.ok) {
+                        throw new Error((data && data.error) ? String(data.error) : 'Unable to remove member.');
+                    }
+                    await openGroupMembersModal();
+                    await loadThreads();
+                } catch (err) {
+                    alert((err && err.message) ? err.message : 'Unable to remove member.');
+                }
             }
 
             function syncFileInput() {
@@ -1696,6 +2450,9 @@ $pageTitle = 'Inter-Agency Conversations';
 
             function threadKey(thread) {
                 if (!thread) return '';
+                if (String(thread.thread_kind || '') === 'group') {
+                    return `group:${thread.group_id || thread.entity_id || 0}`;
+                }
                 if (String(thread.thread_kind || '') === 'user') {
                     return `user:${thread.user_id || thread.entity_id || 0}`;
                 }
@@ -1773,17 +2530,58 @@ $pageTitle = 'Inter-Agency Conversations';
             function renderChatHeader() {
                 const active = activeThread();
                 if (!active) {
+                    state.chatSettingsOpen = false;
                     chatHeaderEl.innerHTML = '<p class="ia-chat-title">No thread selected</p>';
                     return;
                 }
                 const statusLabel = active.status === 'online' ? 'Online' : (active.status === 'busy' ? 'Busy' : 'Offline');
                 const channelLabel = threadChannelLabel(active);
+                const settingsPanel = state.chatSettingsOpen ? `
+                    <div class="ia-chat-settings" role="menu" aria-label="Conversation settings">
+                        <div class="ia-chat-settings-head">
+                            <p class="ia-chat-settings-title">Message settings</p>
+                            <p class="ia-chat-settings-sub">${escapeHtml(active.title || active.id)}</p>
+                        </div>
+                        <div class="ia-chat-settings-list">
+                            <button type="button" class="ia-chat-settings-item" data-chat-setting-action="rename" role="menuitem">
+                                <i class="fas fa-pen"></i>
+                                <span>Edit conversation name</span>
+                            </button>
+                            <button type="button" class="ia-chat-settings-item" data-chat-setting-action="mark-read" role="menuitem">
+                                <i class="fas fa-check-double"></i>
+                                <span>Mark as read</span>
+                            </button>
+                            ${String(active.thread_kind || '') === 'group' ? `
+                                <button type="button" class="ia-chat-settings-item" data-chat-setting-action="members" role="menuitem">
+                                    <i class="fas fa-users"></i>
+                                    <span>Members</span>
+                                </button>
+                            ` : ''}
+                            <button type="button" class="ia-chat-settings-item" data-chat-setting-action="show-images" role="menuitem">
+                                <i class="fas fa-image"></i>
+                                <span>Show Images</span>
+                            </button>
+                            <button type="button" class="ia-chat-settings-item" data-chat-setting-action="show-files" role="menuitem">
+                                <i class="fas fa-folder-open"></i>
+                                <span>Show Files</span>
+                            </button>
+                            <button type="button" class="ia-chat-settings-item" data-chat-setting-action="refresh" role="menuitem">
+                                <i class="fas fa-rotate-right"></i>
+                                <span>Refresh messages</span>
+                            </button>
+                        </div>
+                    </div>
+                ` : '';
                 chatHeaderEl.innerHTML = `
-                    <div>
+                    <div class="ia-chat-head-main">
                         <p class="ia-chat-title">${escapeHtml(active.title || active.id)}</p>
                         <p class="ia-chat-meta">${escapeHtml(channelLabel)} · Status: ${escapeHtml(statusLabel)}</p>
                     </div>
-                    <div class="ia-chat-badge">Last activity ${escapeHtml(rel(active.last_at))}</div>
+                    <div class="ia-chat-actions">
+                        <div class="ia-chat-badge">Last activity ${escapeHtml(rel(active.last_at))}</div>
+                        <button type="button" class="ia-chat-info-btn" data-chat-settings-toggle aria-label="Open message settings" aria-expanded="${state.chatSettingsOpen ? 'true' : 'false'}">!</button>
+                        ${settingsPanel}
+                    </div>
                 `;
             }
 
@@ -1836,7 +2634,10 @@ $pageTitle = 'Inter-Agency Conversations';
 
                 const params = new URLSearchParams();
                 const kind = String(active.thread_kind || 'department');
-                if (kind === 'user') {
+                if (kind === 'group') {
+                    params.set('thread_kind', 'group');
+                    params.set('group_id', String(active.group_id || active.entity_id || 0));
+                } else if (kind === 'user') {
                     params.set('thread_kind', 'user');
                     params.set('user_id', String(active.user_id || active.entity_id || 0));
                 } else {
@@ -1848,6 +2649,7 @@ $pageTitle = 'Inter-Agency Conversations';
                 const sinceId = initial ? 0 : previousLastId;
                 if (sinceId > 0) params.set('since_id', String(sinceId));
                 if (markRead) params.set('mark_read', '1');
+                if (initial) params.set('limit', '100');
 
                 const res = await fetch('api/interagency_chat_feed.php?' + params.toString(), { cache: 'no-store' });
                 const data = await res.json();
@@ -1894,6 +2696,7 @@ $pageTitle = 'Inter-Agency Conversations';
                 const target = state.threads.find((item) => item.id === threadId);
                 if (!target) return;
                 state.activeId = target.id;
+                state.chatSettingsOpen = false;
                 state.lastIdByDept[threadKey(target)] = 0;
                 clearPendingFiles();
                 clearReplyTarget();
@@ -1908,6 +2711,45 @@ $pageTitle = 'Inter-Agency Conversations';
                 } catch (err) {
                     const msg = (err && err.message) ? String(err.message) : 'Network error while sending message.';
                     alert(msg);
+                }
+            }
+
+            async function handleChatSettingAction(action) {
+                const active = activeThread();
+                if (!active) return;
+
+                state.chatSettingsOpen = false;
+                renderChatHeader();
+
+                if (action === 'rename') {
+                    await renameThread(active.id);
+                    return;
+                }
+
+                if (action === 'mark-read') {
+                    await loadMessages(false, true);
+                    await loadThreads();
+                    return;
+                }
+
+                if (action === 'members') {
+                    await openGroupMembersModal();
+                    return;
+                }
+
+                if (action === 'show-images') {
+                    await openConversationMediaModal('images');
+                    return;
+                }
+
+                if (action === 'show-files') {
+                    await openConversationMediaModal('files');
+                    return;
+                }
+
+                if (action === 'refresh') {
+                    await loadMessages(true, true);
+                    await loadThreads();
                 }
             }
 
@@ -1926,11 +2768,15 @@ $pageTitle = 'Inter-Agency Conversations';
                     text: String(state.replyTo.text || ''),
                     attachment_count: Number(state.replyTo.attachment_count || 0)
                 } : null;
-                const isUserThread = String(active.thread_kind || '') === 'user';
-                const entityType = isUserThread ? 'agency_user_chat' : 'agency_chat';
-                const entityId = isUserThread
-                    ? Number(active.user_id || active.entity_id || 0)
-                    : Number(active.entity_id || 0);
+                const threadKind = String(active.thread_kind || '');
+                const isUserThread = threadKind === 'user';
+                const isGroupThread = threadKind === 'group';
+                const entityType = isGroupThread ? 'agency_group_chat' : (isUserThread ? 'agency_user_chat' : 'agency_chat');
+                const entityId = isGroupThread
+                    ? Number(active.group_id || active.entity_id || 0)
+                    : (isUserThread
+                        ? Number(active.user_id || active.entity_id || 0)
+                        : Number(active.entity_id || 0));
                 if (!Number.isInteger(entityId) || entityId <= 0) {
                     alert('Invalid thread target. Please re-open the thread.');
                     return;
@@ -2039,6 +2885,82 @@ $pageTitle = 'Inter-Agency Conversations';
                 }
             }
 
+            async function createGroupChat() {
+                openGroupChatModal();
+                state.groupLoading = true;
+                state.groupUsers = [];
+                state.groupQuery = '';
+                state.groupSelectedIds = [];
+                if (groupChatNameInput) groupChatNameInput.value = '';
+                if (groupChatSearchInput) groupChatSearchInput.value = '';
+                renderGroupUsers();
+
+                try {
+                    const usersRes = await fetch('api/interagency_users.php', { cache: 'no-store' });
+                    const usersData = await usersRes.json();
+                    if (!usersData || !usersData.ok) {
+                        state.groupUsers = [];
+                        state.groupLoading = false;
+                        renderGroupUsers();
+                        alert('Unable to load users.');
+                        return;
+                    }
+
+                    state.groupUsers = Array.isArray(usersData.items) ? usersData.items : [];
+                    state.groupLoading = false;
+                    renderGroupUsers();
+                } catch (_) {
+                    state.groupUsers = [];
+                    state.groupLoading = false;
+                    renderGroupUsers();
+                    alert('Network error while loading users.');
+                }
+            }
+
+            async function confirmCreateGroupChat() {
+                if (state.groupLoading) return;
+
+                const name = groupChatNameInput ? groupChatNameInput.value.trim() : '';
+                const userIds = selectedGroupUserIds();
+                if (!name) {
+                    alert('Enter a group name.');
+                    return;
+                }
+                if (userIds.length < 2) {
+                    alert('Select at least two users.');
+                    return;
+                }
+
+                state.groupLoading = true;
+                syncGroupCreateState();
+
+                try {
+                    const res = await fetch('api/interagency_group_create.php', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ name, user_ids: userIds })
+                    });
+                    const data = await res.json();
+                    if (!data || !data.ok) {
+                        state.groupLoading = false;
+                        syncGroupCreateState();
+                        alert((data && data.error) ? String(data.error) : 'Unable to create group chat.');
+                        return;
+                    }
+
+                    const threadId = data.thread && data.thread.id ? String(data.thread.id) : '';
+                    closeGroupChatModal();
+                    await loadThreads();
+                    if (threadId && state.threads.some((item) => item.id === threadId)) {
+                        await selectThread(threadId);
+                    }
+                } catch (_) {
+                    state.groupLoading = false;
+                    syncGroupCreateState();
+                    alert('Network error while creating group chat.');
+                }
+            }
+
             async function renameThread(threadId) {
                 const target = state.threads.find((item) => item.id === threadId);
                 if (!target) return;
@@ -2065,7 +2987,14 @@ $pageTitle = 'Inter-Agency Conversations';
                     thread_kind: String(target.thread_kind || 'department')
                 };
 
-                if (payload.thread_kind === 'user') {
+                if (payload.thread_kind === 'group') {
+                    const groupId = Number(target.group_id || target.entity_id || 0);
+                    if (!Number.isInteger(groupId) || groupId <= 0) {
+                        alert('Invalid group thread target.');
+                        return;
+                    }
+                    payload.group_id = groupId;
+                } else if (payload.thread_kind === 'user') {
                     const userId = Number(target.user_id || target.entity_id || 0);
                     if (!Number.isInteger(userId) || userId <= 0) {
                         alert('Invalid user thread target.');
@@ -2143,6 +3072,23 @@ $pageTitle = 'Inter-Agency Conversations';
                     }
                 });
 
+                chatHeaderEl.addEventListener('click', async (event) => {
+                    const toggle = event.target.closest('[data-chat-settings-toggle]');
+                    if (toggle) {
+                        event.preventDefault();
+                        event.stopPropagation();
+                        state.chatSettingsOpen = !state.chatSettingsOpen;
+                        renderChatHeader();
+                        return;
+                    }
+
+                    const actionBtn = event.target.closest('[data-chat-setting-action]');
+                    if (!actionBtn) return;
+                    event.preventDefault();
+                    event.stopPropagation();
+                    await handleChatSettingAction(String(actionBtn.getAttribute('data-chat-setting-action') || ''));
+                });
+
                 chatTimelineEl.addEventListener('click', async (event) => {
                     const toggle = event.target.closest('[data-message-menu-toggle]');
                     if (toggle) {
@@ -2181,6 +3127,9 @@ $pageTitle = 'Inter-Agency Conversations';
                 if (addThreadBtn) {
                     addThreadBtn.addEventListener('click', addUserThread);
                 }
+                if (createGroupBtn) {
+                    createGroupBtn.addEventListener('click', createGroupChat);
+                }
                 if (addThreadSearchInput) {
                     addThreadSearchInput.addEventListener('input', () => {
                         state.addThreadQuery = addThreadSearchInput.value || '';
@@ -2213,6 +3162,72 @@ $pageTitle = 'Inter-Agency Conversations';
                         }
                     });
                 }
+                if (groupChatNameInput) {
+                    groupChatNameInput.addEventListener('input', syncGroupCreateState);
+                }
+                if (groupChatSearchInput) {
+                    groupChatSearchInput.addEventListener('input', () => {
+                        state.groupQuery = groupChatSearchInput.value || '';
+                        renderGroupUsers();
+                    });
+                }
+                if (groupChatUserList) {
+                    groupChatUserList.addEventListener('click', (event) => {
+                        const option = event.target.closest('[data-group-user]');
+                        if (!option) return;
+                        const userId = Number(option.getAttribute('data-group-user') || 0);
+                        if (userId <= 0) return;
+                        if (state.groupSelectedIds.some((id) => Number(id) === userId)) {
+                            state.groupSelectedIds = state.groupSelectedIds.filter((id) => Number(id) !== userId);
+                        } else {
+                            state.groupSelectedIds = [...state.groupSelectedIds, userId];
+                        }
+                        renderGroupUsers();
+                    });
+                }
+                if (groupChatCreateBtn) {
+                    groupChatCreateBtn.addEventListener('click', confirmCreateGroupChat);
+                }
+                if (groupChatCancelBtn) {
+                    groupChatCancelBtn.addEventListener('click', closeGroupChatModal);
+                }
+                if (groupChatModalCloseBtn) {
+                    groupChatModalCloseBtn.addEventListener('click', closeGroupChatModal);
+                }
+                if (groupChatModal) {
+                    groupChatModal.addEventListener('click', (event) => {
+                        if (event.target.matches('[data-close-group-chat]')) {
+                            closeGroupChatModal();
+                        }
+                    });
+                }
+                if (conversationMediaModalCloseBtn) {
+                    conversationMediaModalCloseBtn.addEventListener('click', closeConversationMediaModal);
+                }
+                if (conversationMediaModal) {
+                    conversationMediaModal.addEventListener('click', (event) => {
+                        if (event.target.matches('[data-close-conversation-media]')) {
+                            closeConversationMediaModal();
+                        }
+                    });
+                }
+                if (groupMembersModalCloseBtn) {
+                    groupMembersModalCloseBtn.addEventListener('click', closeGroupMembersModal);
+                }
+                if (groupMembersModal) {
+                    groupMembersModal.addEventListener('click', (event) => {
+                        if (event.target.matches('[data-close-group-members]')) {
+                            closeGroupMembersModal();
+                            return;
+                        }
+                        const removeBtn = event.target.closest('[data-remove-group-member]');
+                        if (removeBtn) {
+                            const userId = Number(removeBtn.getAttribute('data-remove-group-member') || 0);
+                            const memberName = removeBtn.getAttribute('data-member-name') || '';
+                            removeGroupMember(userId, memberName);
+                        }
+                    });
+                }
                 document.addEventListener('click', (event) => {
                     if (event.target.closest('[data-clear-reply]')) {
                         clearReplyTarget();
@@ -2221,12 +3236,29 @@ $pageTitle = 'Inter-Agency Conversations';
                     if (!event.target.closest('[data-message-actions]')) {
                         closeMessageMenus();
                     }
+                    if (state.chatSettingsOpen && !event.target.closest('.ia-chat-actions')) {
+                        state.chatSettingsOpen = false;
+                        renderChatHeader();
+                    }
                 });
                 document.addEventListener('keydown', (event) => {
                     if (event.key === 'Escape') {
                         closeMessageMenus();
+                        if (state.chatSettingsOpen) {
+                            state.chatSettingsOpen = false;
+                            renderChatHeader();
+                        }
                         if (isAddThreadModalOpen()) {
                             closeAddThreadModal();
+                        }
+                        if (isGroupChatModalOpen()) {
+                            closeGroupChatModal();
+                        }
+                        if (isConversationMediaModalOpen()) {
+                            closeConversationMediaModal();
+                        }
+                        if (isGroupMembersModalOpen()) {
+                            closeGroupMembersModal();
                         }
                     }
                 });
