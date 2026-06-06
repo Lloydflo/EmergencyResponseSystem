@@ -1285,9 +1285,17 @@ $pageTitle = 'Resources Status';
                         </div>
                         <div class="form-group">
                             <label for="locationInput">Location</label>
-                            <input id="locationInput" class="form-input" required maxlength="70" list="resourceLocationSuggestions" placeholder="e.g. Station 2 or Quezon City">
-                            <div class="form-hint">Type a place like Quezon City to see suggested locations.</div>
+                            <input id="locationInput" class="form-input" required maxlength="120" list="resourceLocationSuggestions" placeholder="e.g. Station 2 or Quezon City">
+                            <div class="form-hint">Select a suggestion or enter exact coordinates below for precise tracking.</div>
                             <datalist id="resourceLocationSuggestions"></datalist>
+                        </div>
+                        <div class="form-group">
+                            <label for="latitudeInput">Latitude</label>
+                            <input id="latitudeInput" class="form-input" inputmode="decimal" maxlength="20" placeholder="e.g. 14.721234">
+                        </div>
+                        <div class="form-group">
+                            <label for="longitudeInput">Longitude</label>
+                            <input id="longitudeInput" class="form-input" inputmode="decimal" maxlength="20" placeholder="e.g. 121.038765">
                         </div>
                         <div class="form-group" id="driverNameGroup">
                             <label for="driverNameInput">Driver Name</label>
@@ -1518,6 +1526,8 @@ $pageTitle = 'Resources Status';
         const categoryInput = document.getElementById('categoryInput');
         const statusInput = document.getElementById('statusInput');
         const locationInput = document.getElementById('locationInput');
+        const latitudeInput = document.getElementById('latitudeInput');
+        const longitudeInput = document.getElementById('longitudeInput');
         const resourceLocationSuggestions = document.getElementById('resourceLocationSuggestions');
         const driverNameGroup = document.getElementById('driverNameGroup');
         const driverNameInput = document.getElementById('driverNameInput');
@@ -1598,6 +1608,26 @@ $pageTitle = 'Resources Status';
         function clearLocationMetadata() {
             delete locationInput.dataset.lat;
             delete locationInput.dataset.lon;
+            if (latitudeInput) latitudeInput.value = '';
+            if (longitudeInput) longitudeInput.value = '';
+        }
+
+        function setLocationCoordinates(lat, lon) {
+            const latitude = Number(lat);
+            const longitude = Number(lon);
+            if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) return;
+            locationInput.dataset.lat = String(latitude);
+            locationInput.dataset.lon = String(longitude);
+            if (latitudeInput) latitudeInput.value = latitude.toFixed(7).replace(/0+$/, '').replace(/\.$/, '');
+            if (longitudeInput) longitudeInput.value = longitude.toFixed(7).replace(/0+$/, '').replace(/\.$/, '');
+        }
+
+        function readCoordinateInput(input, min, max) {
+            const raw = String(input && input.value ? input.value : '').trim();
+            if (!raw) return null;
+            const value = Number(raw);
+            if (!Number.isFinite(value) || value < min || value > max) return null;
+            return value;
         }
 
         function setLocationSuggestionOptions(extraLocations) {
@@ -1659,6 +1689,7 @@ $pageTitle = 'Resources Status';
                     locationInput.value = concise;
                     setLocationSuggestionOptions([concise]);
                 }
+                setLocationCoordinates(place && place.lat, place && place.lon);
             }, {
                 strictViewbox: false,
                 preferViewbox: true,
@@ -1675,6 +1706,8 @@ $pageTitle = 'Resources Status';
                 category: String(raw.category || 'equipment').trim(),
                 status: String(raw.status || 'available').trim(),
                 location: String(raw.location || '').trim(),
+                latitude: raw.latitude !== null && raw.latitude !== undefined && raw.latitude !== '' ? Number(raw.latitude) : null,
+                longitude: raw.longitude !== null && raw.longitude !== undefined && raw.longitude !== '' ? Number(raw.longitude) : null,
                 driverName: String(raw.driverName || '').trim(),
                 plateNumber: String(raw.plateNumber || '').trim(),
                 positionTitle: String(raw.positionTitle || '').trim(),
@@ -1693,6 +1726,8 @@ $pageTitle = 'Resources Status';
                 category: String(raw.category || 'equipment').trim(),
                 status: String(raw.status || 'available').trim(),
                 location: String(raw.location || '').trim(),
+                latitude: raw.latitude !== null && raw.latitude !== undefined && raw.latitude !== '' ? Number(raw.latitude) : null,
+                longitude: raw.longitude !== null && raw.longitude !== undefined && raw.longitude !== '' ? Number(raw.longitude) : null,
                 driverName: String(raw.driverName || '').trim(),
                 plateNumber: String(raw.plateNumber || '').trim(),
                 positionTitle: String(raw.positionTitle || '').trim(),
@@ -2323,6 +2358,9 @@ $pageTitle = 'Resources Status';
                 statusInput.value = target.status;
                 clearLocationMetadata();
                 locationInput.value = target.location;
+                if (Number.isFinite(target.latitude) && Number.isFinite(target.longitude)) {
+                    setLocationCoordinates(target.latitude, target.longitude);
+                }
                 driverNameInput.value = target.driverName || '';
                 plateNumberInput.value = target.plateNumber || '';
                 positionTitleInput.value = target.positionTitle || '';
@@ -2511,6 +2549,10 @@ $pageTitle = 'Resources Status';
 
         resourceForm.addEventListener('submit', async (event) => {
             event.preventDefault();
+            const manualLatitude = readCoordinateInput(latitudeInput, -90, 90);
+            const manualLongitude = readCoordinateInput(longitudeInput, -180, 180);
+            const hasLatitudeText = String(latitudeInput && latitudeInput.value ? latitudeInput.value : '').trim() !== '';
+            const hasLongitudeText = String(longitudeInput && longitudeInput.value ? longitudeInput.value : '').trim() !== '';
 
             const payload = {
                 code: resourceCodeInput.value.trim().toUpperCase(),
@@ -2518,6 +2560,8 @@ $pageTitle = 'Resources Status';
                 category: categoryInput.value,
                 status: statusInput.value,
                 location: locationInput.value.trim(),
+                latitude: manualLatitude !== null ? manualLatitude : (locationInput.dataset.lat || null),
+                longitude: manualLongitude !== null ? manualLongitude : (locationInput.dataset.lon || null),
                 driverName: driverNameInput.value.trim(),
                 plateNumber: plateNumberInput.value.trim().toUpperCase(),
                 positionTitle: positionTitleInput.value.trim(),
@@ -2527,6 +2571,10 @@ $pageTitle = 'Resources Status';
 
             if (!payload.code || !payload.name || !payload.location) {
                 showToast('Please complete required fields.');
+                return;
+            }
+            if ((hasLatitudeText || hasLongitudeText) && (manualLatitude === null || manualLongitude === null)) {
+                showToast('Enter valid latitude and longitude, or leave both blank.');
                 return;
             }
 

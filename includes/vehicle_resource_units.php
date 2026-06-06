@@ -1,6 +1,8 @@
 <?php
 declare(strict_types=1);
 
+require_once __DIR__ . '/geocode_helper.php';
+
 if (!function_exists('ers_vehicle_resource_table_exists')) {
     function ers_vehicle_resource_table_exists(PDO $pdo, string $tableName): bool
     {
@@ -103,10 +105,77 @@ if (!function_exists('ers_map_vehicle_resource_status_to_unit_status')) {
             return 'maintenance';
         }
         if ($status === 'offline') {
-            return 'offline';
+            return 'unavailable';
         }
 
         return 'available';
+    }
+}
+
+if (!function_exists('ers_vehicle_resource_default_coordinates')) {
+    function ers_vehicle_resource_default_coordinates(string $unitType): array
+    {
+        $defaults = [
+            'police' => [14.6500, 121.0300],
+            'fire' => [14.6700, 121.0450],
+            'ambulance' => [14.6900, 121.0600],
+            'rescue' => [14.6760, 121.0437],
+            'other' => [14.6760, 121.0437]
+        ];
+
+        return $defaults[strtolower(trim($unitType))] ?? $defaults['other'];
+    }
+}
+
+if (!function_exists('ers_vehicle_resource_coordinates')) {
+    function ers_vehicle_resource_coordinates(array $resource, string $unitType): array
+    {
+        $storedLat = $resource['latitude'] ?? null;
+        $storedLng = $resource['longitude'] ?? null;
+        if ($storedLat !== null && $storedLng !== null && $storedLat !== '' && $storedLng !== '') {
+            $lat = (float) $storedLat;
+            $lng = (float) $storedLng;
+            if ($lat >= -90 && $lat <= 90 && $lng >= -180 && $lng <= 180) {
+                return [$lat, $lng, 'explicit'];
+            }
+        }
+
+        $location = trim((string) ($resource['location'] ?? ''));
+        if ($location !== '' && preg_match('/(-?\d{1,2}(?:\.\d+)?)\s*,\s*(-?\d{1,3}(?:\.\d+)?)/', $location, $matches)) {
+            $lat = (float) $matches[1];
+            $lng = (float) $matches[2];
+            if ($lat >= -90 && $lat <= 90 && $lng >= -180 && $lng <= 180) {
+                return [$lat, $lng, 'explicit'];
+            }
+        }
+
+        $geocoded = ers_geocode_location_to_coordinates($location);
+        if ($geocoded !== null) {
+            return [$geocoded[0], $geocoded[1], 'geocoded'];
+        }
+
+        [$lat, $lng] = ers_vehicle_resource_default_coordinates($unitType);
+        return [$lat, $lng, 'default'];
+    }
+}
+
+if (!function_exists('ers_vehicle_resource_is_default_coordinate')) {
+    function ers_vehicle_resource_is_default_coordinate($latitude, $longitude): bool
+    {
+        if ($latitude === null || $longitude === null || $latitude === '' || $longitude === '') {
+            return false;
+        }
+
+        $lat = (float) $latitude;
+        $lng = (float) $longitude;
+        foreach (['police', 'fire', 'ambulance', 'rescue', 'other'] as $unitType) {
+            [$defaultLat, $defaultLng] = ers_vehicle_resource_default_coordinates($unitType);
+            if (abs($lat - $defaultLat) < 0.000001 && abs($lng - $defaultLng) < 0.000001) {
+                return true;
+            }
+        }
+
+        return false;
     }
 }
 
@@ -169,8 +238,11 @@ if (!function_exists('ers_sync_vehicle_resource_unit')) {
         $existingUnit = ers_find_unit_by_identifiers($pdo, [$identifier, $previousCode]);
         $unitType = ers_infer_vehicle_unit_type($resource);
         $unitStatus = ers_map_vehicle_resource_status_to_unit_status((string) ($resource['status'] ?? 'available'));
+        [$latitude, $longitude, $coordinateSource] = ers_vehicle_resource_coordinates($resource, $unitType);
         $hasLastStatusAt = ers_vehicle_resource_column_exists($pdo, 'units', 'last_status_at');
         $hasCurrentIncidentId = ers_vehicle_resource_column_exists($pdo, 'units', 'current_incident_id');
+        $hasLatitude = ers_vehicle_resource_column_exists($pdo, 'units', 'latitude');
+        $hasLongitude = ers_vehicle_resource_column_exists($pdo, 'units', 'longitude');
 
         if ($existingUnit) {
             $fields = ['identifier = ?', 'unit_type = ?', 'status = ?'];
@@ -181,6 +253,18 @@ if (!function_exists('ers_sync_vehicle_resource_unit')) {
             }
             if ($hasCurrentIncidentId && $unitStatus === 'available') {
                 $fields[] = 'current_incident_id = NULL';
+            }
+            $hasMissingCoordinates = ($existingUnit['latitude'] ?? null) === null || ($existingUnit['longitude'] ?? null) === null;
+            $hasDefaultCoordinates = ers_vehicle_resource_is_default_coordinate($existingUnit['latitude'] ?? null, $existingUnit['longitude'] ?? null);
+            $shouldUpdateCoordinates = $hasMissingCoordinates
+                || $coordinateSource === 'explicit'
+                || ($unitStatus === 'available' && ($coordinateSource === 'geocoded' || $hasDefaultCoordinates));
+
+            if ($hasLatitude && $hasLongitude && $shouldUpdateCoordinates) {
+                $fields[] = 'latitude = ?';
+                $fields[] = 'longitude = ?';
+                $params[] = $latitude;
+                $params[] = $longitude;
             }
 
             $params[] = (int) $existingUnit['id'];
@@ -200,6 +284,14 @@ if (!function_exists('ers_sync_vehicle_resource_unit')) {
         if ($hasLastStatusAt) {
             $columns[] = 'last_status_at';
             $values[] = 'NOW()';
+        }
+        if (ers_vehicle_resource_column_exists($pdo, 'units', 'latitude') && ers_vehicle_resource_column_exists($pdo, 'units', 'longitude')) {
+            $columns[] = 'latitude';
+            $columns[] = 'longitude';
+            $values[] = '?';
+            $values[] = '?';
+            $params[] = $latitude;
+            $params[] = $longitude;
         }
 
         $stmt = $pdo->prepare(
@@ -292,8 +384,10 @@ if (!function_exists('ers_sync_all_vehicle_resource_units')) {
             return;
         }
 
+        $latitudeSelect = ers_vehicle_resource_column_exists($pdo, $tableName, 'latitude') ? 'latitude' : 'NULL AS latitude';
+        $longitudeSelect = ers_vehicle_resource_column_exists($pdo, $tableName, 'longitude') ? 'longitude' : 'NULL AS longitude';
         $stmt = $pdo->query(
-            "SELECT code, name, category, status, assignment, notes, driver_name, plate_number
+            "SELECT code, name, category, status, location, {$latitudeSelect}, {$longitudeSelect}, assignment, notes, driver_name, plate_number
              FROM `" . $tableName . "`
              WHERE LOWER(category) = 'vehicles'"
         );

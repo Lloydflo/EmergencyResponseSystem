@@ -127,10 +127,20 @@ if ($hasRecordedAt) {
 }
 
 $resourceJoin = '';
+$resourceSelect = 'NULL AS resource_name,
+            NULL AS resource_location,
+            NULL AS driver_name,
+            NULL AS plate_number,
+            NULL AS assignment';
 if ($vehicleResourceTable !== null) {
     $resourceJoin = " INNER JOIN `" . $vehicleResourceTable . "` rr
                       ON rr.code = u.identifier
                      AND LOWER(rr.category) = 'vehicles'";
+    $resourceSelect = 'rr.name AS resource_name,
+            rr.location AS resource_location,
+            rr.driver_name AS driver_name,
+            rr.plate_number AS plate_number,
+            rr.assignment AS assignment';
 }
 
 $sql = "SELECT
@@ -138,6 +148,7 @@ $sql = "SELECT
             u.identifier,
             u.unit_type,
             u.status,
+            {$resourceSelect},
             {$unitLatExpr} AS latitude,
             {$unitLngExpr} AS longitude,
             {$currentIncidentExpr} AS current_incident_id,

@@ -527,17 +527,6 @@ $pageTitle = 'Inter-Agency Conversations';
             background: #f1f6fb;
         }
 
-        .ia-chat-badge {
-            border: 1px solid #bbf7d0;
-            background: #ecfdf5;
-            color: #166534;
-            border-radius: 999px;
-            padding: 0.35rem 0.7rem;
-            font-size: 0.74rem;
-            font-weight: 700;
-            white-space: nowrap;
-        }
-
         .ia-chat-body {
             height: 440px;
             overflow-y: auto;
@@ -2578,7 +2567,6 @@ $pageTitle = 'Inter-Agency Conversations';
                         <p class="ia-chat-meta">${escapeHtml(channelLabel)} · Status: ${escapeHtml(statusLabel)}</p>
                     </div>
                     <div class="ia-chat-actions">
-                        <div class="ia-chat-badge">Last activity ${escapeHtml(rel(active.last_at))}</div>
                         <button type="button" class="ia-chat-info-btn" data-chat-settings-toggle aria-label="Open message settings" aria-expanded="${state.chatSettingsOpen ? 'true' : 'false'}">!</button>
                         ${settingsPanel}
                     </div>

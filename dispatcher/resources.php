@@ -1359,30 +1359,16 @@ try {
             const unitIdentifier = row.getAttribute('data-unit-identifier') || resourceName;
             const resourceId = row.getAttribute('data-resource-id');
             const resourceType = row.getAttribute('data-type');
-            const resourceSource = row.getAttribute('data-resource-source') || '';
             if (!resourceId) { showNotification('Missing resource id', 'error'); return; }
             if (resourceType === 'vehicles') {
-                if (resourceSource && resourceSource !== 'units') {
-                    showNotification('GPS tracking is unavailable for admin-managed vehicle records.', 'info');
-                    return;
-                }
-                fetch('api/get_resource_location.php?id=' + encodeURIComponent(resourceId))
-                    .then(r => r.json())
-                    .then(data => {
-                        const lat = data && data.ok ? Number(data.latitude) : NaN;
-                        const lng = data && data.ok ? Number(data.longitude) : NaN;
-                        if (data && data.ok && Number.isFinite(lat) && Number.isFinite(lng)) {
-                            window.location.href = 'gps.php?unit_id=' + encodeURIComponent(resourceId) + '&unit=' + encodeURIComponent(unitIdentifier) + '&from_lat=' + encodeURIComponent(lat) + '&from_lng=' + encodeURIComponent(lng);
-                        } else {
-                            showNotification('Location data unavailable', 'info');
-                            window.location.href = 'gps.php?unit_id=' + encodeURIComponent(resourceId) + '&unit=' + encodeURIComponent(unitIdentifier);
-                        }
-                    }).catch(() => {
-                        window.location.href = 'gps.php?unit_id=' + encodeURIComponent(resourceId) + '&unit=' + encodeURIComponent(unitIdentifier);
-                    });
+                const params = new URLSearchParams();
+                params.set('track_unit', unitIdentifier);
+                params.set('resource_id', resourceId);
+                params.set('from_resources', '1');
+                window.location.href = 'dispatcher/dispatch.php?' + params.toString();
             } else {
                 showNotification(`Tracking ${resourceName}...`, 'info');
-                window.location.href = 'gps.php';
+                window.location.href = 'dispatcher/dispatch.php';
             }
         }
 

@@ -4,6 +4,7 @@ declare(strict_types=1);
 header('Content-Type: application/json');
 
 require_once __DIR__ . '/../includes/db.php';
+require_once __DIR__ . '/../includes/geocode_helper.php';
 require_once __DIR__ . '/../includes/auth.php';
 
 if (!defined('RESOURCE_RECORDS_TABLE')) {
@@ -81,6 +82,8 @@ function ensure_resource_records_table(PDO $pdo): void {
             `category` ENUM('vehicles','personnel','equipment') NOT NULL,
             `status` ENUM('available','in_use','maintenance','offline') NOT NULL DEFAULT 'available',
             `location` VARCHAR(255) NOT NULL,
+            `latitude` DECIMAL(10,7) DEFAULT NULL,
+            `longitude` DECIMAL(10,7) DEFAULT NULL,
             `driver_name` VARCHAR(150) DEFAULT NULL,
             `plate_number` VARCHAR(50) DEFAULT NULL,
             `position_title` VARCHAR(150) DEFAULT NULL,
@@ -96,6 +99,8 @@ function ensure_resource_records_table(PDO $pdo): void {
     );
 
     add_column_if_missing($pdo, RESOURCE_RECORDS_TABLE, 'driver_name', "VARCHAR(150) DEFAULT NULL AFTER `location`");
+    add_column_if_missing($pdo, RESOURCE_RECORDS_TABLE, 'latitude', "DECIMAL(10,7) DEFAULT NULL AFTER `location`");
+    add_column_if_missing($pdo, RESOURCE_RECORDS_TABLE, 'longitude', "DECIMAL(10,7) DEFAULT NULL AFTER `latitude`");
     add_column_if_missing($pdo, RESOURCE_RECORDS_TABLE, 'plate_number', "VARCHAR(50) DEFAULT NULL AFTER `driver_name`");
     add_column_if_missing($pdo, RESOURCE_RECORDS_TABLE, 'position_title', "VARCHAR(150) DEFAULT NULL AFTER `plate_number`");
 }
@@ -110,6 +115,8 @@ function ensure_resource_records_archive_table(PDO $pdo): void {
             `category` ENUM('vehicles','personnel','equipment') NOT NULL,
             `status` ENUM('available','in_use','maintenance','offline') NOT NULL DEFAULT 'available',
             `location` VARCHAR(255) NOT NULL,
+            `latitude` DECIMAL(10,7) DEFAULT NULL,
+            `longitude` DECIMAL(10,7) DEFAULT NULL,
             `driver_name` VARCHAR(150) DEFAULT NULL,
             `plate_number` VARCHAR(50) DEFAULT NULL,
             `position_title` VARCHAR(150) DEFAULT NULL,
@@ -126,6 +133,8 @@ function ensure_resource_records_archive_table(PDO $pdo): void {
     );
 
     add_column_if_missing($pdo, RESOURCE_RECORDS_ARCHIVE_TABLE, 'driver_name', "VARCHAR(150) DEFAULT NULL AFTER `location`");
+    add_column_if_missing($pdo, RESOURCE_RECORDS_ARCHIVE_TABLE, 'latitude', "DECIMAL(10,7) DEFAULT NULL AFTER `location`");
+    add_column_if_missing($pdo, RESOURCE_RECORDS_ARCHIVE_TABLE, 'longitude', "DECIMAL(10,7) DEFAULT NULL AFTER `latitude`");
     add_column_if_missing($pdo, RESOURCE_RECORDS_ARCHIVE_TABLE, 'plate_number', "VARCHAR(50) DEFAULT NULL AFTER `driver_name`");
     add_column_if_missing($pdo, RESOURCE_RECORDS_ARCHIVE_TABLE, 'position_title', "VARCHAR(150) DEFAULT NULL AFTER `plate_number`");
 }
@@ -185,6 +194,8 @@ function normalize_payload(array $payload): array {
     $code = strtoupper(clean_text($payload['code'] ?? ''));
     $name = clean_text($payload['name'] ?? '');
     $location = clean_text($payload['location'] ?? '');
+    $latitude = normalize_coordinate($payload['latitude'] ?? ($payload['lat'] ?? null), -90, 90);
+    $longitude = normalize_coordinate($payload['longitude'] ?? ($payload['lng'] ?? ($payload['lon'] ?? null)), -180, 180);
     $driverName = clean_text($payload['driverName'] ?? '');
     $plateNumber = strtoupper(clean_text($payload['plateNumber'] ?? ''));
     $positionTitle = clean_text($payload['positionTitle'] ?? '');
@@ -226,18 +237,42 @@ function normalize_payload(array $payload): array {
         throw new InvalidArgumentException('Notes must be 2000 chars or less');
     }
 
+    if (($latitude === null || $longitude === null) && $location !== '') {
+        $geocoded = ers_geocode_location_to_coordinates($location);
+        if ($geocoded !== null) {
+            $latitude = (float)$geocoded[0];
+            $longitude = (float)$geocoded[1];
+        }
+    }
+
     return [
         'code' => $code,
         'name' => $name,
         'category' => $category,
         'status' => $status,
         'location' => $location,
+        'latitude' => $latitude,
+        'longitude' => $longitude,
         'driverName' => $driverName,
         'plateNumber' => $plateNumber,
         'positionTitle' => $positionTitle,
         'assignment' => $assignment,
         'notes' => $notes
     ];
+}
+
+function normalize_coordinate($value, float $min, float $max): ?float {
+    if ($value === null || $value === '') {
+        return null;
+    }
+    if (!is_numeric((string)$value)) {
+        return null;
+    }
+    $number = (float)$value;
+    if ($number < $min || $number > $max) {
+        return null;
+    }
+    return $number;
 }
 
 function row_to_item(array $row): array {
@@ -248,6 +283,8 @@ function row_to_item(array $row): array {
         'category' => (string)($row['category'] ?? ''),
         'status' => (string)($row['status'] ?? ''),
         'location' => (string)($row['location'] ?? ''),
+        'latitude' => isset($row['latitude']) && $row['latitude'] !== null ? (float)$row['latitude'] : null,
+        'longitude' => isset($row['longitude']) && $row['longitude'] !== null ? (float)$row['longitude'] : null,
         'driverName' => (string)($row['driver_name'] ?? ''),
         'plateNumber' => (string)($row['plate_number'] ?? ''),
         'positionTitle' => (string)($row['position_title'] ?? ''),
@@ -266,6 +303,8 @@ function archive_row_to_item(array $row): array {
         'category' => (string)($row['category'] ?? ''),
         'status' => (string)($row['status'] ?? ''),
         'location' => (string)($row['location'] ?? ''),
+        'latitude' => isset($row['latitude']) && $row['latitude'] !== null ? (float)$row['latitude'] : null,
+        'longitude' => isset($row['longitude']) && $row['longitude'] !== null ? (float)$row['longitude'] : null,
         'driverName' => (string)($row['driver_name'] ?? ''),
         'plateNumber' => (string)($row['plate_number'] ?? ''),
         'positionTitle' => (string)($row['position_title'] ?? ''),
@@ -279,7 +318,7 @@ function archive_row_to_item(array $row): array {
 
 function fetch_item(PDO $pdo, int $id): ?array {
     $stmt = $pdo->prepare(
-        "SELECT id, code, name, category, status, location, driver_name, plate_number, position_title, assignment, notes, updated_at
+        "SELECT id, code, name, category, status, location, latitude, longitude, driver_name, plate_number, position_title, assignment, notes, updated_at
          FROM `" . RESOURCE_RECORDS_TABLE . "`
          WHERE id = ?
          LIMIT 1"
@@ -291,7 +330,7 @@ function fetch_item(PDO $pdo, int $id): ?array {
 
 function fetch_active_resource_row(PDO $pdo, int $id): ?array {
     $stmt = $pdo->prepare(
-        "SELECT id, code, name, category, status, location, driver_name, plate_number, position_title, assignment, notes, created_at, updated_at
+        "SELECT id, code, name, category, status, location, latitude, longitude, driver_name, plate_number, position_title, assignment, notes, created_at, updated_at
          FROM `" . RESOURCE_RECORDS_TABLE . "`
          WHERE id = ?
          LIMIT 1"
@@ -303,7 +342,7 @@ function fetch_active_resource_row(PDO $pdo, int $id): ?array {
 
 function fetch_archived_resource_row(PDO $pdo, int $archiveId): ?array {
     $stmt = $pdo->prepare(
-        "SELECT id, resource_id, code, name, category, status, location, driver_name, plate_number, position_title, assignment, notes, created_at, updated_at, deleted_at
+        "SELECT id, resource_id, code, name, category, status, location, latitude, longitude, driver_name, plate_number, position_title, assignment, notes, created_at, updated_at, deleted_at
          FROM `" . RESOURCE_RECORDS_ARCHIVE_TABLE . "`
          WHERE id = ?
          LIMIT 1"
@@ -368,9 +407,67 @@ function map_vehicle_resource_status_to_unit_status(string $status): string {
         return 'maintenance';
     }
     if ($status === 'offline') {
-        return 'offline';
+        return 'unavailable';
     }
     return 'available';
+}
+
+function vehicle_resource_default_coordinates(string $unitType): array {
+    $defaults = [
+        'police' => [14.6500, 121.0300],
+        'fire' => [14.6700, 121.0450],
+        'ambulance' => [14.6900, 121.0600],
+        'rescue' => [14.6760, 121.0437],
+        'other' => [14.6760, 121.0437]
+    ];
+
+    return $defaults[strtolower(trim($unitType))] ?? $defaults['other'];
+}
+
+function vehicle_resource_coordinates(array $resource, string $unitType): array {
+    $storedLat = $resource['latitude'] ?? null;
+    $storedLng = $resource['longitude'] ?? null;
+    if ($storedLat !== null && $storedLng !== null && $storedLat !== '' && $storedLng !== '') {
+        $lat = (float)$storedLat;
+        $lng = (float)$storedLng;
+        if ($lat >= -90 && $lat <= 90 && $lng >= -180 && $lng <= 180) {
+            return [$lat, $lng, 'explicit'];
+        }
+    }
+
+    $location = trim((string)($resource['location'] ?? ''));
+    if ($location !== '' && preg_match('/(-?\d{1,2}(?:\.\d+)?)\s*,\s*(-?\d{1,3}(?:\.\d+)?)/', $location, $matches)) {
+        $lat = (float)$matches[1];
+        $lng = (float)$matches[2];
+        if ($lat >= -90 && $lat <= 90 && $lng >= -180 && $lng <= 180) {
+            return [$lat, $lng, 'explicit'];
+        }
+    }
+
+    $geocoded = ers_geocode_location_to_coordinates($location);
+    if ($geocoded !== null) {
+        return [$geocoded[0], $geocoded[1], 'geocoded'];
+    }
+
+    [$lat, $lng] = vehicle_resource_default_coordinates($unitType);
+    return [$lat, $lng, 'default'];
+}
+
+function vehicle_resource_is_default_coordinate($latitude, $longitude): bool {
+    if ($latitude === null || $longitude === null || $latitude === '' || $longitude === '') {
+        return false;
+    }
+
+    $lat = (float)$latitude;
+    $lng = (float)$longitude;
+    foreach (['police', 'fire', 'ambulance', 'rescue', 'other'] as $unitType) {
+        [$defaultLat, $defaultLng] = vehicle_resource_default_coordinates($unitType);
+        if (abs($lat - $defaultLat) < 0.000001 && abs($lng - $defaultLng) < 0.000001) {
+            return true;
+        }
+    }
+
+    return false;
 }
 
 function find_unit_by_identifiers(PDO $pdo, array $identifiers): ?array {
@@ -406,8 +503,11 @@ function sync_vehicle_resource_unit(PDO $pdo, array $resource, ?string $previous
     $existingUnit = find_unit_by_identifiers($pdo, [$identifier, $previousCode]);
     $unitType = infer_vehicle_unit_type($resource);
     $unitStatus = map_vehicle_resource_status_to_unit_status((string)($resource['status'] ?? 'available'));
+    [$latitude, $longitude, $coordinateSource] = vehicle_resource_coordinates($resource, $unitType);
     $hasLastStatusAt = unit_column_exists($pdo, 'last_status_at');
     $hasCurrentIncidentId = unit_column_exists($pdo, 'current_incident_id');
+    $hasLatitude = unit_column_exists($pdo, 'latitude');
+    $hasLongitude = unit_column_exists($pdo, 'longitude');
 
     if ($existingUnit) {
         $fields = ['identifier = ?', 'unit_type = ?', 'status = ?'];
@@ -417,6 +517,18 @@ function sync_vehicle_resource_unit(PDO $pdo, array $resource, ?string $previous
         }
         if ($hasCurrentIncidentId && $unitStatus === 'available') {
             $fields[] = 'current_incident_id = NULL';
+        }
+        $hasMissingCoordinates = ($existingUnit['latitude'] ?? null) === null || ($existingUnit['longitude'] ?? null) === null;
+        $hasDefaultCoordinates = vehicle_resource_is_default_coordinate($existingUnit['latitude'] ?? null, $existingUnit['longitude'] ?? null);
+        $shouldUpdateCoordinates = $hasMissingCoordinates
+            || $coordinateSource === 'explicit'
+            || ($unitStatus === 'available' && ($coordinateSource === 'geocoded' || $hasDefaultCoordinates));
+
+        if ($hasLatitude && $hasLongitude && $shouldUpdateCoordinates) {
+            $fields[] = 'latitude = ?';
+            $fields[] = 'longitude = ?';
+            $params[] = $latitude;
+            $params[] = $longitude;
         }
         $params[] = (int)$existingUnit['id'];
         $stmt = $pdo->prepare("UPDATE `units` SET " . implode(', ', $fields) . " WHERE id = ?");
@@ -434,6 +546,14 @@ function sync_vehicle_resource_unit(PDO $pdo, array $resource, ?string $previous
     if ($hasLastStatusAt) {
         $columns[] = 'last_status_at';
         $values[] = 'NOW()';
+    }
+    if (unit_column_exists($pdo, 'latitude') && unit_column_exists($pdo, 'longitude')) {
+        $columns[] = 'latitude';
+        $columns[] = 'longitude';
+        $values[] = '?';
+        $values[] = '?';
+        $params[] = $latitude;
+        $params[] = $longitude;
     }
 
     $stmt = $pdo->prepare(
@@ -478,7 +598,7 @@ try {
         $archived = isset($_GET['archived']) && (string)$_GET['archived'] === '1';
         if ($archived) {
             $stmt = $pdo->query(
-                "SELECT id, resource_id, code, name, category, status, location, assignment, notes, updated_at, deleted_at,
+                "SELECT id, resource_id, code, name, category, status, location, latitude, longitude, assignment, notes, updated_at, deleted_at,
                         driver_name, plate_number, position_title,
                         DATE_ADD(deleted_at, INTERVAL 60 DAY) AS purge_at
                  FROM `" . RESOURCE_RECORDS_ARCHIVE_TABLE . "`
@@ -488,7 +608,7 @@ try {
             $items = array_map('archive_row_to_item', $rows);
         } else {
             $stmt = $pdo->query(
-                "SELECT id, code, name, category, status, location, assignment, notes, updated_at
+                "SELECT id, code, name, category, status, location, latitude, longitude, assignment, notes, updated_at
                  , driver_name, plate_number, position_title
                  FROM `" . RESOURCE_RECORDS_TABLE . "`
                  ORDER BY updated_at DESC, id DESC"
@@ -535,8 +655,8 @@ try {
             $pdo->beginTransaction();
             try {
                 $restoreStmt = $pdo->prepare(
-                    "INSERT INTO `" . RESOURCE_RECORDS_TABLE . "` (code, name, category, status, location, driver_name, plate_number, position_title, assignment, notes, created_at, updated_at)
-                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())"
+                    "INSERT INTO `" . RESOURCE_RECORDS_TABLE . "` (code, name, category, status, location, latitude, longitude, driver_name, plate_number, position_title, assignment, notes, created_at, updated_at)
+                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())"
                 );
                 $restoreStmt->execute([
                     (string)$archivedResource['code'],
@@ -544,6 +664,8 @@ try {
                     (string)$archivedResource['category'],
                     (string)$archivedResource['status'],
                     (string)$archivedResource['location'],
+                    $archivedResource['latitude'] !== null && $archivedResource['latitude'] !== '' ? (float)$archivedResource['latitude'] : null,
+                    $archivedResource['longitude'] !== null && $archivedResource['longitude'] !== '' ? (float)$archivedResource['longitude'] : null,
                     $archivedResource['driver_name'] !== null && $archivedResource['driver_name'] !== '' ? (string)$archivedResource['driver_name'] : null,
                     $archivedResource['plate_number'] !== null && $archivedResource['plate_number'] !== '' ? (string)$archivedResource['plate_number'] : null,
                     $archivedResource['position_title'] !== null && $archivedResource['position_title'] !== '' ? (string)$archivedResource['position_title'] : null,
@@ -572,6 +694,9 @@ try {
                     'name' => (string)$archivedResource['name'],
                     'category' => (string)$archivedResource['category'],
                     'status' => (string)$archivedResource['status'],
+                    'location' => (string)($archivedResource['location'] ?? ''),
+                    'latitude' => $archivedResource['latitude'] ?? null,
+                    'longitude' => $archivedResource['longitude'] ?? null,
                     'assignment' => (string)($archivedResource['assignment'] ?? ''),
                     'notes' => (string)($archivedResource['notes'] ?? ''),
                     'driver_name' => (string)($archivedResource['driver_name'] ?? ''),
@@ -589,8 +714,8 @@ try {
 
         $payload = normalize_payload($rawPayload);
         $stmt = $pdo->prepare(
-            "INSERT INTO `" . RESOURCE_RECORDS_TABLE . "` (code, name, category, status, location, driver_name, plate_number, position_title, assignment, notes, created_at, updated_at)
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW())"
+            "INSERT INTO `" . RESOURCE_RECORDS_TABLE . "` (code, name, category, status, location, latitude, longitude, driver_name, plate_number, position_title, assignment, notes, created_at, updated_at)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW())"
         );
         $stmt->execute([
             $payload['code'],
@@ -598,6 +723,8 @@ try {
             $payload['category'],
             $payload['status'],
             $payload['location'],
+            $payload['latitude'],
+            $payload['longitude'],
             $payload['driverName'] !== '' ? $payload['driverName'] : null,
             $payload['plateNumber'] !== '' ? $payload['plateNumber'] : null,
             $payload['positionTitle'] !== '' ? $payload['positionTitle'] : null,
@@ -630,7 +757,7 @@ try {
         $payload = normalize_payload($rawPayload);
         $stmt = $pdo->prepare(
             "UPDATE `" . RESOURCE_RECORDS_TABLE . "`
-             SET code = ?, name = ?, category = ?, status = ?, location = ?, driver_name = ?, plate_number = ?, position_title = ?, assignment = ?, notes = ?, updated_at = NOW()
+             SET code = ?, name = ?, category = ?, status = ?, location = ?, latitude = ?, longitude = ?, driver_name = ?, plate_number = ?, position_title = ?, assignment = ?, notes = ?, updated_at = NOW()
              WHERE id = ?"
         );
         $stmt->execute([
@@ -639,6 +766,8 @@ try {
             $payload['category'],
             $payload['status'],
             $payload['location'],
+            $payload['latitude'],
+            $payload['longitude'],
             $payload['driverName'] !== '' ? $payload['driverName'] : null,
             $payload['plateNumber'] !== '' ? $payload['plateNumber'] : null,
             $payload['positionTitle'] !== '' ? $payload['positionTitle'] : null,
@@ -677,8 +806,8 @@ try {
         try {
             $archiveStmt = $pdo->prepare(
                 "INSERT INTO `" . RESOURCE_RECORDS_ARCHIVE_TABLE . "` (
-                    resource_id, code, name, category, status, location, driver_name, plate_number, position_title, assignment, notes, created_at, updated_at, deleted_at
-                 ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())"
+                    resource_id, code, name, category, status, location, latitude, longitude, driver_name, plate_number, position_title, assignment, notes, created_at, updated_at, deleted_at
+                 ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())"
             );
             $archiveStmt->execute([
                 (int)$resource['id'],
@@ -687,6 +816,8 @@ try {
                 (string)$resource['category'],
                 (string)$resource['status'],
                 (string)$resource['location'],
+                $resource['latitude'] !== null && $resource['latitude'] !== '' ? (float)$resource['latitude'] : null,
+                $resource['longitude'] !== null && $resource['longitude'] !== '' ? (float)$resource['longitude'] : null,
                 $resource['driver_name'] !== null && $resource['driver_name'] !== '' ? (string)$resource['driver_name'] : null,
                 $resource['plate_number'] !== null && $resource['plate_number'] !== '' ? (string)$resource['plate_number'] : null,
                 $resource['position_title'] !== null && $resource['position_title'] !== '' ? (string)$resource['position_title'] : null,

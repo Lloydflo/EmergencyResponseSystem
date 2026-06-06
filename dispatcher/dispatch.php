@@ -568,6 +568,9 @@ let map;
 let markers = {};
 let incidentMarkers = {};
 let QC_BOUNDS_GLOBAL;
+let pendingDispatchTrackUnit = '';
+let pendingDispatchTrackAttempts = 0;
+const MAX_DISPATCH_TRACK_ATTEMPTS = 20;
 
 // ===============================
 // LEAFLET MAP INITIALIZATION
@@ -756,7 +759,17 @@ function syncAvailableUnitMarkers(items) {
         const lng = parseFloat(u.longitude);
         const speed = (u.speed_kph !== undefined && u.speed_kph !== null) ? parseFloat(u.speed_kph) : null;
         if (!isNaN(lat) && !isNaN(lng)) {
-            addUnitMarker(id, lat, lng, `${id}`, type, speed);
+            if (markers[id]) {
+                markers[id].marker.setLatLng([lat, lng]);
+                markers[id].marker.bindPopup(`
+                    <strong>${id}</strong><br>
+                    ${typeof speed === 'number' && isFinite(speed) ? `Speed: ${speed.toFixed(1)} km/h<br>` : ''}
+                    Coords: ${lat.toFixed(5)}, ${lng.toFixed(5)}
+                `);
+                markers[id].speedKph = speed;
+            } else {
+                addUnitMarker(id, lat, lng, `${id}`, type, speed);
+            }
         }
     });
 }
@@ -802,12 +815,13 @@ function startLivePolling() {
 // MAP ACTIONS
 // ===============================
 function refreshMap() {
-  Object.values(markers).forEach(marker => {
-    const pos = marker.getLatLng();
+  Object.values(markers).forEach(item => {
+    if (!item || !item.marker) return;
+    const pos = item.marker.getLatLng();
     const newLat = pos.lat + (Math.random() - 0.5) * 0.001;
     const newLng = pos.lng + (Math.random() - 0.5) * 0.001;
     const clamped = clampToBounds(newLat, newLng);
-    marker.setLatLng(clamped);
+    item.marker.setLatLng(clamped);
   });
   showNotification("Live map refreshed", "info");
 }
@@ -843,15 +857,19 @@ function renderAvailableUnits(items) {
     items.forEach(u => {
         const meta = [];
         if (u.unit_type) meta.push(u.unit_type.charAt(0).toUpperCase() + u.unit_type.slice(1));
+        const displayName = u.resource_name || u.identifier;
+        const locationText = u.resource_location || (u.latitude && u.longitude ? `${u.latitude}, ${u.longitude}` : 'Location pending');
+        const assignmentText = u.assignment || u.plate_number || u.driver_name || '';
         const card = document.createElement('div');
         card.className = 'unit-card available';
         card.innerHTML = `
             <div class="unit-info">
                 <div class="unit-details">
-                    <div class="unit-name">${escapeHtml(u.identifier)}</div>
+                    <div class="unit-name">${escapeHtml(displayName)}</div>
                     <div class="unit-meta">
-                        <span><i class="fas fa-map-marker-alt"></i> ${escapeHtml(u.unit_type || '')}</span>
+                        <span><i class="fas fa-map-marker-alt"></i> ${escapeHtml(locationText)}</span>
                         ${meta.length ? '<span>' + meta.join(' | ') + '</span>' : ''}
+                        ${assignmentText ? '<span>' + escapeHtml(assignmentText) + '</span>' : ''}
                     </div>
                 </div>
             </div>
@@ -887,6 +905,10 @@ function escapeHtml(s) {
 
 function escapeAttr(s) {
     return String(s || '').replace(/['"]/g, '_');
+}
+
+function escapeJs(s) {
+    return String(s || '').replace(/\\/g, '\\\\').replace(/'/g, "\\'").replace(/\r?\n/g, ' ');
 }
 
 document.addEventListener('DOMContentLoaded', () => {
@@ -979,14 +1001,64 @@ function contactCaller(btn) {
 
 // Focus the map on the selected unit marker
 function focusUnitOnMap(unitIdentifier) {
-    if (!unitIdentifier || !window.markers) return;
-    const markerObj = window.markers[unitIdentifier];
-    if (markerObj && markerObj.marker && window.map) {
-        window.map.setView(markerObj.marker.getLatLng(), 17, { animate: true });
+    if (!unitIdentifier) return;
+    let markerObj = markers[unitIdentifier];
+    if (!markerObj) {
+        const upperIdentifier = String(unitIdentifier).toUpperCase();
+        const matchedKey = Object.keys(markers).find((key) => String(key).toUpperCase() === upperIdentifier);
+        markerObj = matchedKey ? markers[matchedKey] : null;
+    }
+    if (markerObj && markerObj.marker && map) {
+        map.setView(markerObj.marker.getLatLng(), 17, { animate: true });
         markerObj.marker.openPopup();
     } else {
         alert('Unit location not available on map.');
     }
+}
+
+function tryFocusPendingDispatchUnit() {
+    if (!pendingDispatchTrackUnit) return;
+    if (!map) {
+        window.setTimeout(tryFocusPendingDispatchUnit, 300);
+        return;
+    }
+
+    let markerObj = markers[pendingDispatchTrackUnit];
+    if (!markerObj) {
+        const target = String(pendingDispatchTrackUnit).toUpperCase();
+        const matchedKey = Object.keys(markers).find((key) => String(key).toUpperCase() === target);
+        markerObj = matchedKey ? markers[matchedKey] : null;
+        if (matchedKey) pendingDispatchTrackUnit = matchedKey;
+    }
+
+    if (markerObj && markerObj.marker) {
+        const label = pendingDispatchTrackUnit;
+        pendingDispatchTrackUnit = '';
+        pendingDispatchTrackAttempts = 0;
+        map.setView(markerObj.marker.getLatLng(), 17, { animate: true });
+        markerObj.marker.openPopup();
+        showNotification('Tracking ' + label, 'success');
+        return;
+    }
+
+    pendingDispatchTrackAttempts += 1;
+    if (pendingDispatchTrackAttempts >= MAX_DISPATCH_TRACK_ATTEMPTS) {
+        showNotification('Vehicle location is not available on the dispatch map.', 'info');
+        pendingDispatchTrackUnit = '';
+        pendingDispatchTrackAttempts = 0;
+        return;
+    }
+
+    window.setTimeout(tryFocusPendingDispatchUnit, 400);
+}
+
+function requestDispatchUnitTracking(unitIdentifier) {
+    pendingDispatchTrackUnit = String(unitIdentifier || '').trim();
+    pendingDispatchTrackAttempts = 0;
+    if (!pendingDispatchTrackUnit) return;
+    refreshAvailableUnits().finally(() => {
+        tryFocusPendingDispatchUnit();
+    });
 }
 
 function refreshAIRecommendations() {
@@ -1043,6 +1115,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const params = new URLSearchParams(window.location.search);
         const code = params.get('code');
         const incidentId = toIncidentId(params.get('incident_id'));
+        const trackUnit = params.get('track_unit') || params.get('unit') || '';
         const fromCall = params.get('from_call') === '1';
         const period = params.get('period');
         if (fromCall) {
@@ -1058,6 +1131,9 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         } else if (code) {
             showNotification('Viewing incident context: ' + code, 'info');
+        }
+        if (trackUnit) {
+            window.setTimeout(() => requestDispatchUnitTracking(trackUnit), 300);
         }
         if (period) {
             console.log('Dispatch period:', period);
