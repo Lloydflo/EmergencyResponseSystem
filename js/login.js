@@ -3,11 +3,17 @@
 
 document.addEventListener('DOMContentLoaded', function() {
     const form = document.querySelector('.login-form');
+    if (!form) return;
+
     const signInBtn = form.querySelector('.btn-signin');
+    if (!signInBtn) return;
+
     const signInText = signInBtn.querySelector('span');
     let loadingSpan = null;
 
-    form.addEventListener('submit', function() {
+    form.addEventListener('submit', function(event) {
+        if (event.defaultPrevented) return;
+
         // Prevent multiple loading states
         if (!signInBtn.classList.contains('loading')) {
             signInBtn.classList.add('loading');
