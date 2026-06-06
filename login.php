@@ -10,7 +10,6 @@ function debug_log($msg) {
 debug_log('--- LOGIN.PHP START ---');
 
 require_once __DIR__ . '/includes/auth.php';
-require_once __DIR__ . '/includes/turnstile.php';
 debug_log('auth.php loaded');
 
 $pageTitle = 'Role-Based Login';
@@ -21,8 +20,6 @@ $allowed_roles = [
     'dispatcher' => 'Dispatcher'
 ];
 $selected_role = 'admin';
-$turnstileSiteKey = ers_turnstile_site_key();
-$turnstileConfigured = ers_turnstile_is_configured();
 
 // If already logged in, redirect to index
 if (is_logged_in()) {
@@ -50,7 +47,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $selected_role = strtolower(trim($_POST['role'] ?? ''));
     $email = trim($_POST['email'] ?? '');
     $password = $_POST['password'] ?? '';
-    $turnstileToken = (string)($_POST['cf-turnstile-response'] ?? '');
     debug_log('Email: ' . $email);
     debug_log('Role: ' . $selected_role);
     if (!array_key_exists($selected_role, $allowed_roles)) {
@@ -59,46 +55,36 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     } elseif (empty($email) || empty($password)) {
         $error_message = 'Please enter both email and password.';
         debug_log('Missing email or password');
-    } elseif (!$turnstileConfigured) {
-        $error_message = 'Cloudflare Turnstile is not configured. Please contact the administrator.';
-        debug_log('Cloudflare Turnstile is not configured');
     } else {
-        $turnstileError = null;
-        if (!ers_verify_turnstile_response($turnstileToken, $turnstileError)) {
-            $error_message = $turnstileError ?: 'Please complete the Cloudflare verification.';
-            debug_log('Cloudflare Turnstile failed: ' . $error_message);
-        } else {
-            debug_log('Cloudflare Turnstile verified');
-            $result = login_user($email, $password, $selected_role);
-            debug_log('login_user result: ' . json_encode($result));
-            if ($result['success']) {
-                require_once __DIR__ . '/includes/mail_helper.php';
-                $otp = rand(100000, 999999);
-                $_SESSION['otp'] = $otp;
-                $_SESSION['otp_email'] = $email;
-                $_SESSION['otp_expiry'] = time() + 180; // 3 minutes
-                $otpSaved = saveOtpToDatabase($email, $otp, 3);
-                if (!$otpSaved) {
-                    debug_log('OTP save failed');
-                    $error_message = 'Unable to save OTP. Please contact support.';
+        $result = login_user($email, $password, $selected_role);
+        debug_log('login_user result: ' . json_encode($result));
+        if ($result['success']) {
+            require_once __DIR__ . '/includes/mail_helper.php';
+            $otp = rand(100000, 999999);
+            $_SESSION['otp'] = $otp;
+            $_SESSION['otp_email'] = $email;
+            $_SESSION['otp_expiry'] = time() + 180; // 3 minutes
+            $otpSaved = saveOtpToDatabase($email, $otp, 3);
+            if (!$otpSaved) {
+                debug_log('OTP save failed');
+                $error_message = 'Unable to save OTP. Please contact support.';
+                unset($_SESSION['otp'], $_SESSION['otp_email'], $_SESSION['otp_expiry']);
+            } else {
+                debug_log('OTP generated and saved');
+                $emailSent = sendOtpEmail($email, $otp);
+                debug_log($emailSent ? 'OTP email sent' : 'OTP email failed');
+                if (!$emailSent) {
+                    $error_message = 'OTP email sending failed. Please try again later.';
                     unset($_SESSION['otp'], $_SESSION['otp_email'], $_SESSION['otp_expiry']);
                 } else {
-                    debug_log('OTP generated and saved');
-                    $emailSent = sendOtpEmail($email, $otp);
-                    debug_log($emailSent ? 'OTP email sent' : 'OTP email failed');
-                    if (!$emailSent) {
-                        $error_message = 'OTP email sending failed. Please try again later.';
-                        unset($_SESSION['otp'], $_SESSION['otp_email'], $_SESSION['otp_expiry']);
-                    } else {
-                        header('Location: otp.php');
-                        debug_log('Redirecting to otp.php');
-                        exit;
-                    }
+                    header('Location: otp.php');
+                    debug_log('Redirecting to otp.php');
+                    exit;
                 }
-            } else {
-                $error_message = $result['message'];
-                debug_log('Login failed: ' . $error_message);
             }
+        } else {
+            $error_message = $result['message'];
+            debug_log('Login failed: ' . $error_message);
         }
     }
 }
@@ -113,44 +99,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     <link rel="stylesheet" href="css/global.css">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
     <link rel="stylesheet" href="css/login.css">
-    <?php if ($turnstileConfigured): ?>
-        <script>
-            window.ersTurnstileReady = false;
-            window.onTurnstileSuccess = function() {
-                window.ersTurnstileReady = true;
-                window.dispatchEvent(new CustomEvent('ers-turnstile-status', {
-                    detail: { ready: true, message: 'Cloudflare verification complete.' }
-                }));
-            };
-            window.onTurnstileExpired = function() {
-                window.ersTurnstileReady = false;
-                window.dispatchEvent(new CustomEvent('ers-turnstile-status', {
-                    detail: { ready: false, message: 'Cloudflare verification expired. Please wait for it to refresh.' }
-                }));
-            };
-            window.onTurnstileError = function(errorCode) {
-                window.ersTurnstileReady = false;
-                var code = errorCode ? String(errorCode) : 'unknown';
-                var message = 'Cloudflare verification could not load. Error code: ' + code + '.';
-
-                if (code === '110100' || code === '400020') {
-                    message = 'Cloudflare verification site key is invalid. Error code: ' + code + '.';
-                } else if (code === '110110') {
-                    message = 'Cloudflare verification site key was not found. Error code: ' + code + '.';
-                } else if (code === '110200') {
-                    message = 'Cloudflare verification hostname is not authorized. Error code: ' + code + '.';
-                } else if (code === '200500') {
-                    message = 'Cloudflare verification iframe could not load. Check browser extensions or network blocking. Error code: ' + code + '.';
-                }
-
-                window.dispatchEvent(new CustomEvent('ers-turnstile-status', {
-                    detail: { ready: false, message: message }
-                }));
-                return true;
-            };
-        </script>
-        <script src="https://challenges.cloudflare.com/turnstile/v0/api.js" async defer></script>
-    <?php endif; ?>
 </head>
 <body class="login-page">
     <div class="login-container">
@@ -277,28 +225,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     <a href="forgot_password.php" class="forgot-password">Forgot Password?</a>
                 </div>
 
-                <div class="form-group turnstile-group">
-                    <?php if ($turnstileConfigured): ?>
-                        <div
-                            class="cf-turnstile"
-                            data-sitekey="<?php echo htmlspecialchars($turnstileSiteKey, ENT_QUOTES); ?>"
-                            data-theme="light"
-                            data-size="normal"
-                            data-appearance="always"
-                            data-callback="onTurnstileSuccess"
-                            data-expired-callback="onTurnstileExpired"
-                            data-error-callback="onTurnstileError"></div>
-                        <p class="turnstile-status" id="turnstileStatus">Cloudflare verification is loading...</p>
-                    <?php else: ?>
-                        <div class="info-box info-box-warning turnstile-warning">
-                            <i class="fas fa-triangle-exclamation"></i>
-                            <span>Cloudflare Turnstile is not configured. Add TURNSTILE_SITE_KEY and TURNSTILE_SECRET_KEY in the .env file.</span>
-                        </div>
-                    <?php endif; ?>
-                </div>
 
                 <!-- Sign In Button -->
-                <button type="submit" class="btn-signin" <?php echo $turnstileConfigured ? 'disabled' : ''; ?>>
+                <button type="submit" class="btn-signin">
                     <i class="fas fa-arrow-right-to-bracket"></i>
                     <span>Sign In</span>
                 </button>
@@ -317,26 +246,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         document.addEventListener('DOMContentLoaded', function() {
             const passwordToggle = document.getElementById('passwordToggle');
             const passwordInput = document.getElementById('password');
-            const loginForm = document.querySelector('.login-form');
-            const signInBtn = loginForm ? loginForm.querySelector('.btn-signin') : null;
-            const turnstileStatus = document.getElementById('turnstileStatus');
-            const turnstileConfigured = <?php echo $turnstileConfigured ? 'true' : 'false'; ?>;
-
-            function setTurnstileStatus(message, ready) {
-                if (turnstileStatus) {
-                    turnstileStatus.textContent = message;
-                    turnstileStatus.classList.toggle('ready', Boolean(ready));
-                    turnstileStatus.classList.toggle('error', !ready && message.toLowerCase().includes('could not'));
-                }
-                if (signInBtn) {
-                    signInBtn.disabled = turnstileConfigured && !ready;
-                }
-            }
-
-            window.addEventListener('ers-turnstile-status', function(event) {
-                const detail = event.detail || {};
-                setTurnstileStatus(detail.message || 'Cloudflare verification is running...', Boolean(detail.ready));
-            });
 
             if (passwordToggle && passwordInput) {
                 passwordToggle.addEventListener('click', function() {
@@ -351,22 +260,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         icon.classList.add('fa-eye-slash');
                     }
                 });
-            }
-
-            if (loginForm) {
-                loginForm.addEventListener('submit', function(event) {
-                    if (!turnstileConfigured) {
-                        event.preventDefault();
-                        alert('Cloudflare Turnstile is not configured. Please contact the administrator.');
-                        return;
-                    }
-
-                    const turnstileResponse = loginForm.querySelector('input[name="cf-turnstile-response"]');
-                    if (!turnstileResponse || turnstileResponse.value.length === 0) {
-                        event.preventDefault();
-                        setTurnstileStatus('Cloudflare verification is still running. Please wait a moment.', false);
-                    }
-                }, true);
             }
         });
     </script>
