@@ -60,6 +60,44 @@ if (!function_exists('ers_env')) {
     }
 }
 
+if (!function_exists('ers_load_config_values')) {
+    function ers_load_config_values($values) {
+        if (!is_array($values)) {
+            return;
+        }
+
+        foreach ($values as $name => $value) {
+            $name = trim((string)$name);
+            if ($name === '' || is_array($value) || is_object($value)) {
+                continue;
+            }
+
+            $value = trim((string)$value);
+            if ($value === '') {
+                continue;
+            }
+
+            if (!array_key_exists($name, $_ENV) || trim((string)$_ENV[$name]) === '') {
+                $_ENV[$name] = $value;
+            }
+            if (!array_key_exists($name, $_SERVER) || trim((string)$_SERVER[$name]) === '') {
+                $_SERVER[$name] = $value;
+            }
+        }
+    }
+}
+
+if (!function_exists('ers_load_private_config_file')) {
+    function ers_load_private_config_file($path) {
+        if (!is_string($path) || $path === '' || !file_exists($path)) {
+            return;
+        }
+
+        $values = require $path;
+        ers_load_config_values($values);
+    }
+}
+
 // Try multiple .env locations because some deployments place env files in different paths
 $ersEnvPaths = [
     dirname(__DIR__) . '/.env',
@@ -69,6 +107,15 @@ $ersEnvPaths = [
 ];
 foreach ($ersEnvPaths as $ersEnvPath) {
     ers_load_env_file($ersEnvPath);
+}
+
+// Optional non-public fallback for hosts where hidden .env files are hard to create.
+$ersPrivateConfigPaths = [
+    __DIR__ . '/private.config.php',
+    dirname(__DIR__) . '/private.config.php',
+];
+foreach ($ersPrivateConfigPaths as $ersPrivateConfigPath) {
+    ers_load_private_config_file($ersPrivateConfigPath);
 }
 
 if (!defined('GEMINI_API_KEY')) {

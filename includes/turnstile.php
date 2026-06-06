@@ -11,6 +11,9 @@ function ers_turnstile_is_truthy($value): bool
 function ers_turnstile_current_hostname(): string
 {
     $host = strtolower(trim((string)($_SERVER['HTTP_HOST'] ?? $_SERVER['SERVER_NAME'] ?? '')));
+    if ($host === '[::1]') {
+        return '::1';
+    }
     if (strpos($host, ':') !== false) {
         $host = explode(':', $host, 2)[0];
     }
@@ -19,7 +22,15 @@ function ers_turnstile_current_hostname(): string
 
 function ers_turnstile_is_local_hostname(string $host): bool
 {
-    return in_array($host, ['localhost', '127.0.0.1', '::1'], true);
+    if (in_array($host, ['localhost', '127.0.0.1', '::1'], true)) {
+        return true;
+    }
+
+    if (filter_var($host, FILTER_VALIDATE_IP, FILTER_FLAG_IPV4)) {
+        return preg_match('/^(10\.|127\.|192\.168\.|172\.(1[6-9]|2[0-9]|3[0-1])\.)/', $host) === 1;
+    }
+
+    return false;
 }
 
 function ers_turnstile_use_local_test_keys(): bool
