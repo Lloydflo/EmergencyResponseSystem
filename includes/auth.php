@@ -161,6 +161,7 @@ function require_role(string $requiredRole, string $redirect_url = ''): void {
  */
 function login_user(string $email, string $password, ?string $requiredRole = null): array {
     require_once __DIR__ . '/db.php';
+    require_once __DIR__ . '/user_account_cleanup.php';
     
     $pdo = get_db_connection();
     if (!$pdo) {
@@ -172,6 +173,12 @@ function login_user(string $email, string $password, ?string $requiredRole = nul
     }
     
     try {
+        try {
+            ers_purge_inactive_user_accounts($pdo);
+        } catch (Throwable $cleanupError) {
+            error_log('Inactive user cleanup error: ' . $cleanupError->getMessage());
+        }
+
         // Get user by email
         $stmt = $pdo->prepare("SELECT id, email, password, name, role, status FROM users WHERE email = ?");
         $stmt->execute([$email]);

@@ -3,6 +3,7 @@ header('Content-Type: application/json');
 
 require_once __DIR__ . '/../includes/auth.php';
 require_once __DIR__ . '/../includes/db.php';
+require_once __DIR__ . '/../includes/user_account_cleanup.php';
 
 function admin_users_respond(int $statusCode, array $payload): void
 {
@@ -106,6 +107,9 @@ function admin_users_ensure_schema(PDO $pdo): void
         $pdo->exec("ALTER TABLE `users` ADD COLUMN `department` VARCHAR(150) DEFAULT NULL AFTER `name`");
     }
 
+    ers_ensure_user_inactive_cleanup_schema($pdo);
+    ers_backfill_inactive_user_dates($pdo);
+
     $roleColumnType = admin_users_get_role_column_type($pdo);
     if ($roleColumnType === null) {
         return;
@@ -182,6 +186,39 @@ function admin_users_fetch_rows(PDO $pdo): array
     }, $rows);
 }
 
+function admin_users_row_to_payload(array $row): array
+{
+    $created = (string)($row['created_at'] ?? '');
+    if ($created !== '' && strlen($created) >= 10) {
+        $created = substr($created, 0, 10);
+    }
+
+    return [
+        'id' => (int)($row['id'] ?? 0),
+        'name' => (string)($row['name'] ?? ''),
+        'email' => (string)($row['email'] ?? ''),
+        'role' => admin_users_normalize_role((string)($row['role'] ?? '')),
+        'department' => (string)($row['department'] ?? ''),
+        'status' => (string)($row['status'] ?? 'inactive'),
+        'created' => $created,
+    ];
+}
+
+function admin_users_fetch_row(PDO $pdo, int $id): ?array
+{
+    $stmt = $pdo->prepare(
+        "SELECT `id`, `name`, `email`, `role`, `status`, COALESCE(`department`, '') AS `department`, `created_at`
+         FROM `users`
+         WHERE `id` = ?
+           AND LOWER(`role`) IN ('dispatcher', 'responder', 'operator')
+         LIMIT 1"
+    );
+    $stmt->execute([$id]);
+    $row = $stmt->fetch(PDO::FETCH_ASSOC);
+
+    return is_array($row) ? $row : null;
+}
+
 if (!is_logged_in()) {
     admin_users_respond(401, [
         'success' => false,
@@ -206,6 +243,7 @@ if (!$pdo) {
 
 try {
     admin_users_ensure_schema($pdo);
+    ers_purge_inactive_user_accounts($pdo);
 } catch (Throwable $e) {
     error_log('admin_users schema error: ' . $e->getMessage());
     admin_users_respond(500, [
@@ -232,6 +270,138 @@ if ($method === 'GET') {
 }
 
 if ($method !== 'POST') {
+    $input = json_decode(file_get_contents('php://input'), true);
+    if (!is_array($input)) {
+        $input = $_POST;
+    }
+
+    if ($method === 'PUT' || $method === 'PATCH') {
+        $id = (int)($input['id'] ?? ($_GET['id'] ?? 0));
+        $name = trim((string)($input['name'] ?? ''));
+        $email = trim((string)($input['email'] ?? ''));
+        $role = admin_users_normalize_role((string)($input['role'] ?? ''));
+        $department = trim((string)($input['department'] ?? ''));
+        $status = strtolower(trim((string)($input['status'] ?? 'active')));
+
+        if ($id <= 0 || $name === '' || $email === '' || $department === '') {
+            admin_users_respond(422, [
+                'success' => false,
+                'message' => 'Please complete all required fields.',
+            ]);
+        }
+
+        if (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
+            admin_users_respond(422, [
+                'success' => false,
+                'message' => 'Please enter a valid email address.',
+            ]);
+        }
+
+        if (!in_array($role, ['dispatcher', 'responder'], true)) {
+            admin_users_respond(422, [
+                'success' => false,
+                'message' => 'Invalid user role.',
+            ]);
+        }
+
+        if (!in_array($status, ['active', 'inactive'], true)) {
+            admin_users_respond(422, [
+                'success' => false,
+                'message' => 'Invalid account status.',
+            ]);
+        }
+
+        try {
+            $existing = admin_users_fetch_row($pdo, $id);
+            if ($existing === null) {
+                admin_users_respond(404, [
+                    'success' => false,
+                    'message' => 'User account not found.',
+                ]);
+            }
+
+            $emailStmt = $pdo->prepare('SELECT `id` FROM `users` WHERE LOWER(`email`) = LOWER(?) AND `id` <> ? LIMIT 1');
+            $emailStmt->execute([$email, $id]);
+            if ($emailStmt->fetchColumn()) {
+                admin_users_respond(409, [
+                    'success' => false,
+                    'message' => 'Email is already in use.',
+                ]);
+            }
+
+            $inactiveSql = $status === 'inactive'
+                ? "`inactive_at` = COALESCE(`inactive_at`, NOW())"
+                : "`inactive_at` = NULL";
+
+            $updateStmt = $pdo->prepare(
+                "UPDATE `users`
+                 SET `name` = ?,
+                     `email` = ?,
+                     `department` = ?,
+                     `role` = ?,
+                     `status` = ?,
+                     {$inactiveSql}
+                 WHERE `id` = ?
+                   AND LOWER(`role`) IN ('dispatcher', 'responder', 'operator')"
+            );
+            $updateStmt->execute([$name, $email, $department, $role, $status, $id]);
+
+            $row = admin_users_fetch_row($pdo, $id);
+            if ($row === null) {
+                throw new RuntimeException('Updated user could not be reloaded.');
+            }
+
+            admin_users_respond(200, [
+                'success' => true,
+                'message' => 'User account updated.',
+                'user' => admin_users_row_to_payload($row),
+            ]);
+        } catch (Throwable $e) {
+            error_log('admin_users update error: ' . $e->getMessage());
+            admin_users_respond(500, [
+                'success' => false,
+                'message' => 'Unable to update user.',
+            ]);
+        }
+    }
+
+    if ($method === 'DELETE') {
+        $id = (int)($input['id'] ?? ($_GET['id'] ?? 0));
+        if ($id <= 0) {
+            admin_users_respond(422, [
+                'success' => false,
+                'message' => 'Missing user id.',
+            ]);
+        }
+
+        try {
+            $deleteStmt = $pdo->prepare(
+                "DELETE FROM `users`
+                 WHERE `id` = ?
+                   AND LOWER(`role`) IN ('dispatcher', 'responder', 'operator')"
+            );
+            $deleteStmt->execute([$id]);
+
+            if ($deleteStmt->rowCount() === 0) {
+                admin_users_respond(404, [
+                    'success' => false,
+                    'message' => 'User account not found.',
+                ]);
+            }
+
+            admin_users_respond(200, [
+                'success' => true,
+                'message' => 'User account permanently deleted.',
+            ]);
+        } catch (Throwable $e) {
+            error_log('admin_users delete error: ' . $e->getMessage());
+            admin_users_respond(500, [
+                'success' => false,
+                'message' => 'Unable to delete user.',
+            ]);
+        }
+    }
+
     admin_users_respond(405, [
         'success' => false,
         'message' => 'Method not allowed.',
@@ -302,8 +472,8 @@ try {
         : password_hash(bin2hex(random_bytes(16)), PASSWORD_DEFAULT);
 
     $insertStmt = $pdo->prepare(
-        'INSERT INTO `users` (`email`, `password`, `name`, `department`, `role`, `status`)
-         VALUES (?, ?, ?, ?, ?, ?)'
+        'INSERT INTO `users` (`email`, `password`, `name`, `department`, `role`, `status`, `inactive_at`)
+         VALUES (?, ?, ?, ?, ?, ?, ?)'
     );
     $insertStmt->execute([
         $email,
@@ -312,6 +482,7 @@ try {
         $department,
         $role,
         $status,
+        $status === 'inactive' ? date('Y-m-d H:i:s') : null,
     ]);
 
     $userId = (int)$pdo->lastInsertId();
@@ -331,15 +502,7 @@ try {
     admin_users_respond(201, [
         'success' => true,
         'message' => 'New user account added.',
-        'user' => [
-            'id' => (int)$row['id'],
-            'name' => (string)$row['name'],
-            'email' => (string)$row['email'],
-            'role' => admin_users_normalize_role((string)$row['role']),
-            'department' => (string)$row['department'],
-            'status' => (string)$row['status'],
-            'created' => substr((string)$row['created_at'], 0, 10),
-        ],
+        'user' => admin_users_row_to_payload($row),
     ]);
 } catch (Throwable $e) {
     error_log('admin_users create error: ' . $e->getMessage());

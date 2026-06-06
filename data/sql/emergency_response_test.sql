@@ -736,6 +736,7 @@ CREATE TABLE `users` (
   `department` varchar(150) DEFAULT NULL,
   `role` enum('admin','operator','viewer','dispatcher','responder') NOT NULL DEFAULT 'viewer',
   `status` enum('active','inactive') NOT NULL DEFAULT 'active',
+  `inactive_at` timestamp NULL DEFAULT NULL,
   `created_at` timestamp NOT NULL DEFAULT current_timestamp(),
   `updated_at` timestamp NULL DEFAULT NULL ON UPDATE current_timestamp(),
   `last_login` timestamp NULL DEFAULT NULL
@@ -745,12 +746,12 @@ CREATE TABLE `users` (
 -- Dumping data for table `users`
 --
 
-INSERT INTO `users` (`id`, `email`, `password`, `name`, `department`, `role`, `status`, `created_at`, `updated_at`, `last_login`) VALUES
-(1, 'aldrinisidro6@gmail.com', '$2y$10$XaD//IFx/8UDuAraZmWPG.O9T8TI3dC3U8HzyrNookjpMUXumSu8G', 'Aldrin', 'Administration', 'admin', 'active', '2026-02-10 16:33:47', '2026-02-11 22:40:57', '2026-02-11 22:40:57'),
-(1, 'aldrinisidro6@gmail.com', '$2y$10$uijKapQWHxkPLPRxIHW34OoTWNaXnJlaxWVQeboSSdM1Kat33Sk6q', 'Aldrin', 'Administration', 'admin', 'active', '2026-02-02 14:05:18', '2026-02-11 22:40:57', '2026-02-11 22:40:57'),
-(2, 'admin@example.com', '$2y$10$/KMzrUa6seIiuUY2tDCALOwnudXUgXu02z9OYL33tvmjUUWx3jCT6', 'Administrator', 'Administration', 'admin', 'active', '2026-02-09 16:25:22', NULL, NULL),
-(1, 'aldrinisidro6@gmail.com', '$2y$10$uijKapQWHxkPLPRxIHW34OoTWNaXnJlaxWVQeboSSdM1Kat33Sk6q', 'Aldrin', 'Administration', 'admin', 'active', '2026-02-02 14:05:18', '2026-02-11 13:46:25', '2026-02-11 13:46:25'),
-(2, 'admin@example.com', '$2y$10$/KMzrUa6seIiuUY2tDCALOwnudXUgXu02z9OYL33tvmjUUWx3jCT6', 'Administrator', 'Administration', 'admin', 'active', '2026-02-09 16:25:22', NULL, NULL);
+INSERT INTO `users` (`id`, `email`, `password`, `name`, `department`, `role`, `status`, `inactive_at`, `created_at`, `updated_at`, `last_login`) VALUES
+(1, 'aldrinisidro6@gmail.com', '$2y$10$XaD//IFx/8UDuAraZmWPG.O9T8TI3dC3U8HzyrNookjpMUXumSu8G', 'Aldrin', 'Administration', 'admin', 'active', NULL, '2026-02-10 16:33:47', '2026-02-11 22:40:57', '2026-02-11 22:40:57'),
+(1, 'aldrinisidro6@gmail.com', '$2y$10$uijKapQWHxkPLPRxIHW34OoTWNaXnJlaxWVQeboSSdM1Kat33Sk6q', 'Aldrin', 'Administration', 'admin', 'active', NULL, '2026-02-02 14:05:18', '2026-02-11 22:40:57', '2026-02-11 22:40:57'),
+(2, 'admin@example.com', '$2y$10$/KMzrUa6seIiuUY2tDCALOwnudXUgXu02z9OYL33tvmjUUWx3jCT6', 'Administrator', 'Administration', 'admin', 'active', NULL, '2026-02-09 16:25:22', NULL, NULL),
+(1, 'aldrinisidro6@gmail.com', '$2y$10$uijKapQWHxkPLPRxIHW34OoTWNaXnJlaxWVQeboSSdM1Kat33Sk6q', 'Aldrin', 'Administration', 'admin', 'active', NULL, '2026-02-02 14:05:18', '2026-02-11 13:46:25', '2026-02-11 13:46:25'),
+(2, 'admin@example.com', '$2y$10$/KMzrUa6seIiuUY2tDCALOwnudXUgXu02z9OYL33tvmjUUWx3jCT6', 'Administrator', 'Administration', 'admin', 'active', NULL, '2026-02-09 16:25:22', NULL, NULL);
 
 --
 -- Indexes for dumped tables
@@ -903,7 +904,8 @@ ALTER TABLE `users`
   ADD PRIMARY KEY (`id`),
   ADD UNIQUE KEY `uk_users_email` (`email`),
   ADD KEY `idx_users_role` (`role`),
-  ADD KEY `idx_users_status` (`status`);
+  ADD KEY `idx_users_status` (`status`),
+  ADD KEY `idx_users_inactive_at` (`inactive_at`);
 
 --
 -- Indexes for table `staff`

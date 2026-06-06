@@ -1040,7 +1040,7 @@ $adminName = $_SESSION['user_name'] ?? 'Admin';
             }
         }
 
-        function saveRow(id) {
+        async function saveRow(id) {
             const rowEl = usersTableBody.querySelector('tr[data-row-id="' + id + '"]');
             if (!rowEl) return;
             const target = userRows.find((row) => row.id === id);
@@ -1064,18 +1064,44 @@ $adminName = $_SESSION['user_name'] ?? 'Admin';
                 return;
             }
 
-            target.name = nextName;
-            target.email = nextEmail;
-            target.role = nextRole;
-            target.department = nextDept;
-            target.status = nextStatus;
+            const emailExists = userRows.some((row) => row.id !== id && row.email.toLowerCase() === nextEmail.toLowerCase());
+            if (emailExists) {
+                showToast('Email is already in use.');
+                return;
+            }
 
-            editingId = null;
-            renderRows();
-            showToast('User account updated.');
+            try {
+                const response = await fetch(adminUsersApiUrl, {
+                    method: 'PATCH',
+                    headers: {
+                        'Accept': 'application/json',
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        id,
+                        name: nextName,
+                        email: nextEmail,
+                        role: nextRole,
+                        department: nextDept,
+                        status: nextStatus
+                    })
+                });
+                const result = await response.json();
+
+                if (!response.ok || !result.success || !result.user) {
+                    throw new Error(result.message || 'Unable to update user.');
+                }
+
+                Object.assign(target, result.user);
+                editingId = null;
+                renderRows();
+                showToast(result.message || 'User account updated.');
+            } catch (error) {
+                showToast(error.message || 'Unable to update user.');
+            }
         }
 
-        usersTableBody.addEventListener('click', (event) => {
+        usersTableBody.addEventListener('click', async (event) => {
             const button = event.target.closest('.um-action');
             if (!button) return;
 
@@ -1091,18 +1117,37 @@ $adminName = $_SESSION['user_name'] ?? 'Admin';
             }
 
             if (action === 'delete') {
-                const ok = window.confirm('Delete account for ' + target.name + '?');
+                const ok = window.confirm('Permanently delete account for ' + target.name + '?');
                 if (!ok) return;
-                const index = userRows.findIndex((row) => row.id === id);
-                if (index >= 0) userRows.splice(index, 1);
-                if (editingId === id) editingId = null;
-                renderRows();
-                showToast('User account deleted.');
+
+                try {
+                    const response = await fetch(adminUsersApiUrl, {
+                        method: 'DELETE',
+                        headers: {
+                            'Accept': 'application/json',
+                            'Content-Type': 'application/json'
+                        },
+                        body: JSON.stringify({ id })
+                    });
+                    const result = await response.json();
+
+                    if (!response.ok || !result.success) {
+                        throw new Error(result.message || 'Unable to delete user.');
+                    }
+
+                    const index = userRows.findIndex((row) => row.id === id);
+                    if (index >= 0) userRows.splice(index, 1);
+                    if (editingId === id) editingId = null;
+                    renderRows();
+                    showToast(result.message || 'User account permanently deleted.');
+                } catch (error) {
+                    showToast(error.message || 'Unable to delete user.');
+                }
                 return;
             }
 
             if (action === 'save') {
-                saveRow(id);
+                await saveRow(id);
             }
         });
 
