@@ -20,14 +20,27 @@ $file = $_FILES["file"];
 $originalName = basename($file["name"]);
 $extension = strtolower(pathinfo($originalName, PATHINFO_EXTENSION));
 
-$allowed = ["jpg", "jpeg", "png", "webp", "pdf", "doc", "docx"];
+$mime = mime_content_type($file["tmp_name"]);
 
-if (!in_array($extension, $allowed)) {
-    echo json_encode([
-        "success" => false,
-        "message" => "File type not allowed"
-    ]);
-    exit;
+$mimeMap = [
+    "image/jpeg" => "jpg",
+    "image/png"  => "png",
+    "image/webp" => "webp",
+    "application/pdf" => "pdf",
+    "application/msword" => "doc",
+    "application/vnd.openxmlformats-officedocument.wordprocessingml.document" => "docx"
+];
+
+if (empty($extension) || !in_array($extension, ["jpg", "jpeg", "png", "webp", "pdf", "doc", "docx"])) {
+    if (isset($mimeMap[$mime])) {
+        $extension = $mimeMap[$mime];
+    } else {
+        echo json_encode([
+            "success" => false,
+            "message" => "File type not allowed: " . $mime
+        ]);
+        exit;
+    }
 }
 
 $newName = "chat_" . time() . "_" . uniqid() . "." . $extension;
