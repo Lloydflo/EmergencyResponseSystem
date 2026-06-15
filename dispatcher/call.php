@@ -147,6 +147,33 @@ $pageTitle = 'Emergency Call Center';
                             </div>
                         </div>
 
+                        <div class="voice-call-console" id="voiceCallConsole">
+                            <div class="voice-call-main">
+                                <div class="voice-meter" id="voiceMeter" aria-hidden="true">
+                                    <span></span><span></span><span></span><span></span>
+                                </div>
+                                <div>
+                                    <div class="voice-title">Voice Call Simulation</div>
+                                    <div class="voice-state" id="voiceCallState">Connected. Ready for caller audio and dictation.</div>
+                                </div>
+                            </div>
+                            <div class="voice-actions">
+                                <button type="button" class="voice-btn" id="playCallerVoiceBtn" onclick="playCallerVoice()">
+                                    <i class="fas fa-volume-up"></i> Caller Voice
+                                </button>
+                                <button type="button" class="voice-btn" id="speechToTextBtn" onclick="toggleSpeechToText()">
+                                    <i class="fas fa-microphone"></i> Speak to Text
+                                </button>
+                                <button type="button" class="voice-btn" id="stopVoiceBtn" onclick="stopVoiceTools()">
+                                    <i class="fas fa-stop"></i> Stop
+                                </button>
+                            </div>
+                            <div class="transcript-panel">
+                                <div class="transcript-label">Live Transcript</div>
+                                <div class="transcript-output" id="speechTranscript">No transcript yet.</div>
+                            </div>
+                        </div>
+
                         <form class="incident-form" id="incidentForm" onsubmit="submitIncident(event)">
                             <div class="form-section">
                                 <div class="section-title">
@@ -289,6 +316,14 @@ $pageTitle = 'Emergency Call Center';
     let filterDay = '';
     let filterMonth = '';
     const incidentGeocodeCache = {};
+    let callAudioContext = null;
+    let ringingOscillator = null;
+    let ringingGain = null;
+    let speechRecognition = null;
+    let speechListening = false;
+    let finalTranscriptText = '';
+    let activeCallerScript = '';
+    const SpeechRecognitionApi = window.SpeechRecognition || window.webkitSpeechRecognition || null;
 
     function getSharedCallSessionApi() {
         return window.ersCallSession && typeof window.ersCallSession.getState === 'function'
@@ -308,6 +343,7 @@ $pageTitle = 'Emergency Call Center';
         if (!session || session.active !== true) {
             panel.classList.remove('active');
             stopTimer();
+            stopVoiceTools();
             activeCall = null;
             updateStats();
             return;
@@ -325,6 +361,7 @@ $pageTitle = 'Emergency Call Center';
         document.getElementById('activeCallerPhone').textContent = activeCall.phone;
         document.getElementById('callerName').value = activeCall.name;
         document.getElementById('callerPhone').value = activeCall.phone;
+        setVoiceState('Connected. Ready for caller audio and dictation.');
         startTimer();
         updateStats();
     }
@@ -388,6 +425,8 @@ $pageTitle = 'Emergency Call Center';
         document.getElementById('incomingCallerName').textContent = name;
         document.getElementById('incomingCallerPhone').textContent = phone;
         document.getElementById('incomingCallAlert').classList.add('active');
+        activeCallerScript = buildCallerScript(name);
+        startIncomingRingtone();
     }
 
     function acceptCall() {
@@ -395,6 +434,10 @@ $pageTitle = 'Emergency Call Center';
         const name = document.getElementById('incomingCallerName').textContent || 'Unknown';
         const phone = document.getElementById('incomingCallerPhone').textContent || '';
         alert.classList.remove('active');
+        stopIncomingRingtone();
+        if (!activeCallerScript) {
+            activeCallerScript = buildCallerScript(name);
+        }
         const sessionApi = getSharedCallSessionApi();
         if (sessionApi) {
             sessionApi.start({
@@ -408,13 +451,17 @@ $pageTitle = 'Emergency Call Center';
             activeCall = { name, phone, start: Date.now() };
         }
         renderActiveCallPanel(getSharedCallSession() || activeCall);
+        setTimeout(() => playCallerVoice(), 350);
     }
 
     function rejectCall() {
         document.getElementById('incomingCallAlert').classList.remove('active');
+        stopIncomingRingtone();
     }
 
     function endCall() {
+        stopIncomingRingtone();
+        stopVoiceTools();
         const sessionApi = getSharedCallSessionApi();
         if (sessionApi) {
             sessionApi.end();
@@ -439,6 +486,208 @@ $pageTitle = 'Emergency Call Center';
             callTimerInterval = null;
             document.getElementById('callTimer').textContent = '00:00';
         }
+    }
+
+    function getCallAudioContext() {
+        const Ctx = window.AudioContext || window.webkitAudioContext;
+        if (!Ctx) return null;
+        if (!callAudioContext) {
+            callAudioContext = new Ctx();
+        }
+        if (callAudioContext.state === 'suspended') {
+            callAudioContext.resume().catch(() => {});
+        }
+        return callAudioContext;
+    }
+
+    function startIncomingRingtone() {
+        stopIncomingRingtone();
+        const ctx = getCallAudioContext();
+        if (!ctx) return;
+        ringingOscillator = ctx.createOscillator();
+        ringingGain = ctx.createGain();
+        ringingOscillator.type = 'sine';
+        ringingOscillator.frequency.setValueAtTime(880, ctx.currentTime);
+        ringingGain.gain.setValueAtTime(0.0001, ctx.currentTime);
+        ringingOscillator.connect(ringingGain);
+        ringingGain.connect(ctx.destination);
+        ringingOscillator.start();
+        const pulse = () => {
+            if (!ringingGain || !callAudioContext) return;
+            const now = callAudioContext.currentTime;
+            ringingGain.gain.cancelScheduledValues(now);
+            ringingGain.gain.setValueAtTime(0.0001, now);
+            ringingGain.gain.linearRampToValueAtTime(0.08, now + 0.04);
+            ringingGain.gain.linearRampToValueAtTime(0.0001, now + 0.45);
+        };
+        pulse();
+        ringingOscillator._ringInterval = setInterval(pulse, 900);
+    }
+
+    function stopIncomingRingtone() {
+        if (ringingOscillator) {
+            if (ringingOscillator._ringInterval) clearInterval(ringingOscillator._ringInterval);
+            try { ringingOscillator.stop(); } catch (e) {}
+            try { ringingOscillator.disconnect(); } catch (e) {}
+            ringingOscillator = null;
+        }
+        if (ringingGain) {
+            try { ringingGain.disconnect(); } catch (e) {}
+            ringingGain = null;
+        }
+    }
+
+    function buildCallerScript(name) {
+        const scripts = [
+            'Hello, this is an emergency. There is a person having difficulty breathing near Commonwealth Avenue. Please send medical help.',
+            'I need help. There was a traffic accident near Quezon Avenue and one person is injured.',
+            'There is smoke and fire coming from a house nearby. We need firefighters immediately.',
+            'Someone is unconscious and not responding. We are at the roadside and need an ambulance now.',
+            'There is a robbery in progress and people are panicking. Please send police assistance.'
+        ];
+        const selected = scripts[Math.floor(Math.random() * scripts.length)];
+        return `${name || 'Caller'} says: ${selected}`;
+    }
+
+    function setVoiceState(text) {
+        const el = document.getElementById('voiceCallState');
+        if (el) el.textContent = text;
+    }
+
+    function setTranscript(text) {
+        const el = document.getElementById('speechTranscript');
+        if (el) el.textContent = text || 'No transcript yet.';
+    }
+
+    function playCallerVoice() {
+        if (!activeCall) {
+            alert('Accept a call first.');
+            return;
+        }
+        if (!('speechSynthesis' in window)) {
+            setVoiceState('Caller voice is not supported in this browser.');
+            return;
+        }
+        window.speechSynthesis.cancel();
+        const text = activeCallerScript || buildCallerScript(activeCall.name);
+        const utterance = new SpeechSynthesisUtterance(text);
+        utterance.lang = 'en-US';
+        utterance.rate = 0.95;
+        utterance.pitch = 1;
+        utterance.onstart = () => {
+            setVoiceState('Playing simulated caller voice...');
+            document.getElementById('voiceMeter')?.classList.add('active');
+        };
+        utterance.onend = () => {
+            setVoiceState('Caller voice finished. Use Speak to Text for dispatcher notes.');
+            document.getElementById('voiceMeter')?.classList.remove('active');
+        };
+        utterance.onerror = () => {
+            setVoiceState('Caller voice playback failed.');
+            document.getElementById('voiceMeter')?.classList.remove('active');
+        };
+        window.speechSynthesis.speak(utterance);
+    }
+
+    function getSpeechRecognition() {
+        if (!SpeechRecognitionApi) return null;
+        if (speechRecognition) return speechRecognition;
+        speechRecognition = new SpeechRecognitionApi();
+        speechRecognition.lang = 'en-PH';
+        speechRecognition.continuous = true;
+        speechRecognition.interimResults = true;
+        speechRecognition.onresult = (event) => {
+            let interim = '';
+            for (let i = event.resultIndex; i < event.results.length; i += 1) {
+                const transcript = event.results[i][0]?.transcript || '';
+                if (event.results[i].isFinal) {
+                    finalTranscriptText = `${finalTranscriptText} ${transcript}`.trim();
+                } else {
+                    interim = `${interim} ${transcript}`.trim();
+                }
+            }
+            const combined = [finalTranscriptText, interim].filter(Boolean).join(' ');
+            setTranscript(combined);
+            applyTranscriptToForm(finalTranscriptText || combined);
+        };
+        speechRecognition.onerror = (event) => {
+            speechListening = false;
+            updateSpeechButton();
+            setVoiceState(event.error === 'not-allowed' ? 'Microphone permission was blocked.' : 'Speech-to-text stopped.');
+            document.getElementById('voiceMeter')?.classList.remove('active');
+        };
+        speechRecognition.onend = () => {
+            speechListening = false;
+            updateSpeechButton();
+            document.getElementById('voiceMeter')?.classList.remove('active');
+        };
+        return speechRecognition;
+    }
+
+    function applyTranscriptToForm(text) {
+        const clean = String(text || '').trim();
+        if (!clean) return;
+        const desc = document.getElementById('incidentDescription');
+        if (desc) {
+            desc.value = clean;
+            desc.dispatchEvent(new Event('input', { bubbles: true }));
+        }
+        const notes = document.getElementById('callNotes');
+        if (notes) {
+            notes.value = `Speech transcript: ${clean}`;
+        }
+    }
+
+    function updateSpeechButton() {
+        const btn = document.getElementById('speechToTextBtn');
+        if (!btn) return;
+        btn.classList.toggle('active', speechListening);
+        btn.innerHTML = speechListening
+            ? '<i class="fas fa-microphone-slash"></i> Stop Dictation'
+            : '<i class="fas fa-microphone"></i> Speak to Text';
+    }
+
+    function toggleSpeechToText() {
+        if (!activeCall) {
+            alert('Accept a call first.');
+            return;
+        }
+        const recognizer = getSpeechRecognition();
+        if (!recognizer) {
+            setVoiceState('Speech-to-text is not supported in this browser.');
+            return;
+        }
+        if (speechListening) {
+            recognizer.stop();
+            speechListening = false;
+            updateSpeechButton();
+            setVoiceState('Speech-to-text stopped.');
+            return;
+        }
+        finalTranscriptText = '';
+        setTranscript('');
+        try {
+            recognizer.start();
+            speechListening = true;
+            updateSpeechButton();
+            setVoiceState('Listening... Speak clearly into the microphone.');
+            document.getElementById('voiceMeter')?.classList.add('active');
+        } catch (e) {
+            setVoiceState('Speech-to-text could not start.');
+        }
+    }
+
+    function stopVoiceTools() {
+        stopIncomingRingtone();
+        if ('speechSynthesis' in window) {
+            window.speechSynthesis.cancel();
+        }
+        if (speechRecognition && speechListening) {
+            try { speechRecognition.stop(); } catch (e) {}
+        }
+        speechListening = false;
+        updateSpeechButton();
+        document.getElementById('voiceMeter')?.classList.remove('active');
     }
 
     function setPrioritySelection(value) {
