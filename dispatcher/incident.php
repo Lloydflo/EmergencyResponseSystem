@@ -244,6 +244,8 @@ try {
         let INCIDENTS = [];
         let REFRESH_TIMER = null;
         const API_LIST_URL = 'api/incidents_list.php';
+        const API_UPDATE_URL = 'api/incident_update.php';
+        const API_RESOLVE_URL = 'api/incident_resolve.php';
 
         // Priority change functionality
         document.querySelectorAll('.btn-priority').forEach(button => {
@@ -290,8 +292,10 @@ try {
                 || INCIDENTS.find(i => String(i.incident_code || i.reference_no || '') === rowRef);
             if (!incident) return;
 
+            const action = btn.getAttribute('data-action') || '';
+
             // Priority button
-            if (btn.classList.contains('btn-priority')) {
+            if (action === 'priority' || btn.classList.contains('btn-priority')) {
                 // Cycle through priorities: high -> medium -> low -> high
                 let current = (incident.priority || 'low').toLowerCase();
                 let newPriority = current === 'high' ? 'medium' : (current === 'medium' ? 'low' : 'high');
@@ -306,7 +310,7 @@ try {
                     const body = { priority: newPriority };
                     if (incidentId > 0) body.id = incidentId;
                     if (incidentCode) body.incident_code = incidentCode;
-                    fetch('api/incident_update.php', {
+                    fetch(API_UPDATE_URL, {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify(body)
@@ -334,13 +338,13 @@ try {
             }
 
             // Update button
-            if (btn.querySelector('.fa-edit')) {
+            if (action === 'edit' || btn.querySelector('.fa-edit')) {
                 showUpdateModal(incident);
                 return;
             }
 
             // Contact button
-            if (btn.querySelector('.fa-phone')) {
+            if (action === 'call' || btn.querySelector('.fa-phone')) {
                 const phone = getIncidentPhone(incident);
                 if (phone) {
                     if (confirm(`Call ${phone}?`)) {
@@ -354,43 +358,69 @@ try {
             }
 
             // Resolve button
-            if (btn.querySelector('.fa-check')) {
-                if (confirm('Are you sure you want to resolve this incident?')) {
-                    const incidentId = Number(incident.id || 0);
-                    const incidentCode = String(incident.incident_code || incident.reference_no || '').trim();
-                    const note = `Resolved via UI at ${new Date().toLocaleString()}`;
-                    if (incidentId > 0 || incidentCode) {
-                        const body = { note };
-                        if (incidentId > 0) body.incident_id = incidentId;
-                        if (incidentCode) body.incident_code = incidentCode;
-                        fetch('api/incident_resolve.php', {
-                            method: 'POST',
-                            headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify(body)
-                        })
-                        .then(r => r.json())
-                        .then(res => {
-                            if (res && res.ok) {
-                                incident.status = 'resolved';
-                                renderDynamicIncidents();
-                                showNotification('Incident resolved. Units released to available.', 'success');
-                                try { localStorage.setItem('ers_incidents_changed', String(Date.now())); } catch (e) {}
-                                try { fetchIncidents(); } catch (e) {}
-                            } else {
-                                showNotification('Failed to resolve incident', 'error');
-                            }
-                        })
-                        .catch(() => showNotification('Network error', 'error'));
-                    } else {
-                        // Fallback: update UI only
-                        incident.status = 'resolved';
-                        renderDynamicIncidents();
-                        showNotification('Incident marked as resolved (local)', 'info');
-                    }
-                }
+            if (action === 'resolve') {
+                resolveIncident(incident, btn);
                 return;
             }
         });
+
+        async function resolveIncident(incident, button) {
+            if (!incident) return;
+            if (normalizeIncidentStatus(incident.status) === 'resolved') {
+                showNotification('Incident is already resolved.', 'info');
+                return;
+            }
+            if (!confirm('Are you sure you want to resolve this incident?')) {
+                return;
+            }
+
+            const incidentId = Number(incident.id || 0);
+            const incidentCode = String(incident.incident_code || incident.reference_no || '').trim();
+            if (incidentId <= 0 && !incidentCode) {
+                showNotification('Unable to resolve: missing incident identifier. Please refresh the page.', 'error');
+                return;
+            }
+
+            const body = {
+                note: `Resolved via Incident page at ${new Date().toLocaleString()}`
+            };
+            if (incidentId > 0) body.incident_id = incidentId;
+            if (incidentCode) body.incident_code = incidentCode;
+
+            const previousDisabled = button ? button.disabled : false;
+            if (button) {
+                button.disabled = true;
+                button.setAttribute('aria-busy', 'true');
+            }
+
+            try {
+                const response = await fetch(API_RESOLVE_URL, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(body)
+                });
+                const result = await response.json().catch(() => ({}));
+                if (!response.ok || !(result && result.ok)) {
+                    throw new Error((result && result.error) ? String(result.error) : 'Failed to resolve incident');
+                }
+
+                const now = new Date().toISOString();
+                incident.status = 'resolved';
+                incident.resolved_at = now;
+                incident.updated_at = now;
+                renderDynamicIncidents();
+                showNotification('Incident resolved. Units released to available.', 'success');
+                try { localStorage.setItem('ers_incidents_changed', String(Date.now())); } catch (e) {}
+                try { await fetchIncidents(); } catch (e) {}
+            } catch (err) {
+                const message = err.message || 'Network error';
+                showNotification(message.toLowerCase().startsWith('resolve failed') ? message : `Resolve failed: ${message}`, 'error');
+                if (button) {
+                    button.disabled = previousDisabled;
+                    button.removeAttribute('aria-busy');
+                }
+            }
+        }
 
         // AI refresh for incident analysis
         function refreshAIAnalysis() {
@@ -543,16 +573,16 @@ try {
                     <td class="incident-date-cell">${escapeHtml(created.toLocaleString())}</td>
                     <td>
                         <div class="table-actions">
-                            <button class="btn-table-action btn-priority priority-${escapeHtml(priority)}" type="button" title="Change priority" aria-label="Change priority for ${escapeHtml(ref || type)}">
+                            <button class="btn-table-action btn-priority priority-${escapeHtml(priority)}" type="button" data-action="priority" title="Change priority" aria-label="Change priority for ${escapeHtml(ref || type)}">
                                 <i class="fas fa-flag"></i>
                             </button>
-                            <button class="btn-table-action" type="button" title="Edit incident" aria-label="Edit incident ${escapeHtml(ref || type)}">
+                            <button class="btn-table-action" type="button" data-action="edit" title="Edit incident" aria-label="Edit incident ${escapeHtml(ref || type)}">
                                 <i class="fas fa-edit"></i>
                             </button>
-                            <button class="btn-table-action" type="button" title="Call contact" aria-label="Call contact for incident ${escapeHtml(ref || type)}">
+                            <button class="btn-table-action" type="button" data-action="call" title="Call contact" aria-label="Call contact for incident ${escapeHtml(ref || type)}">
                                 <i class="fas fa-phone"></i>
                             </button>
-                            <button class="btn-table-action" type="button" title="Resolve incident" aria-label="Resolve incident ${escapeHtml(ref || type)}">
+                            <button class="btn-table-action" type="button" data-action="resolve" title="Resolve incident" aria-label="Resolve incident ${escapeHtml(ref || type)}">
                                 <i class="fas fa-check"></i>
                             </button>
                         </div>
@@ -914,7 +944,7 @@ try {
                             location_address: payload.location_address
                         };
                         if (payload.id > 0) updateBody.id = payload.id;
-                        const updateRes = await fetch('api/incident_update.php', {
+                        const updateRes = await fetch(API_UPDATE_URL, {
                             method: 'POST',
                             headers: { 'Content-Type': 'application/json' },
                             body: JSON.stringify(updateBody)
@@ -929,7 +959,7 @@ try {
                             note: `Resolved via Incident modal at ${new Date().toLocaleString()}`
                         };
                         if (payload.id > 0) resolveBody.incident_id = payload.id;
-                        const resolveRes = await fetch('api/incident_resolve.php', {
+                        const resolveRes = await fetch(API_RESOLVE_URL, {
                             method: 'POST',
                             headers: { 'Content-Type': 'application/json' },
                             body: JSON.stringify(resolveBody)
@@ -939,7 +969,7 @@ try {
                             throw new Error((resolveJson && resolveJson.error) ? String(resolveJson.error) : 'Resolve failed');
                         }
                     } else {
-                        const updateRes = await fetch('api/incident_update.php', {
+                        const updateRes = await fetch(API_UPDATE_URL, {
                             method: 'POST',
                             headers: { 'Content-Type': 'application/json' },
                             body: JSON.stringify(payload)

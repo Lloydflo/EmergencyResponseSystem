@@ -228,7 +228,17 @@ if ($priority !== '') {
 }
 
 if ($status !== '') {
-    if ($status === 'active') {
+    if ($status === 'pending') {
+        $where[] = "i.status = 'pending'";
+        if (ers_table_exists($pdo, 'dispatches')) {
+            $where[] = "NOT EXISTS (
+                SELECT 1
+                FROM dispatches d_pending
+                WHERE d_pending.incident_id = i.id
+                  AND d_pending.status IN ('assigned','acknowledged','enroute','on_scene')
+            )";
+        }
+    } elseif ($status === 'active') {
         $where[] = "(i.status = 'pending' OR i.status = 'dispatched')";
     } elseif ($status === 'dispatched') {
         $where[] = "i.status = 'dispatched'";

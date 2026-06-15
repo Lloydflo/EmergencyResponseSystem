@@ -35,8 +35,17 @@ try {
         // Get available units
         $availableUnits = ers_count_available_vehicle_resource_units($pdo, $vehicleResourceTable ?? null);
         
-        // Get pending calls
-        $pendingCalls = (int)$pdo->query("SELECT COUNT(*) AS c FROM incidents WHERE status='pending'")->fetch()['c'];
+        // Get pending calls that do not already have responders assigned.
+        $pendingCallsSql = "SELECT COUNT(*) AS c FROM incidents i WHERE i.status='pending'";
+        if (function_exists('ers_vehicle_resource_table_exists') && ers_vehicle_resource_table_exists($pdo, 'dispatches')) {
+            $pendingCallsSql .= " AND NOT EXISTS (
+                SELECT 1
+                FROM dispatches d_pending
+                WHERE d_pending.incident_id = i.id
+                  AND d_pending.status IN ('assigned','acknowledged','enroute','on_scene')
+            )";
+        }
+        $pendingCalls = (int)$pdo->query($pendingCallsSql)->fetch()['c'];
 
         $topIncident = $pdo->query("SELECT reference_no, type, location_address, priority
                                     FROM incidents
@@ -519,6 +528,7 @@ document.addEventListener('DOMContentLoaded', function() {
                             toLat: toLat,
                             toLng: toLng
                         };
+                        removeIncidentFromActiveCalls(currentIncidentId);
                         Promise.allSettled([
                             refreshActiveCalls(),
                             refreshAvailableUnits()
@@ -1171,6 +1181,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     const phone = it.caller_phone || '';
                     const card = document.createElement('div');
                     card.className = 'call-card ' + prioClass;
+                    card.setAttribute('data-incident-id', String(it.id));
                     card.innerHTML = `
                         <div class="call-info">
                             <div class="call-details">
@@ -1375,6 +1386,7 @@ function refreshActiveCalls() {
             const phone = it.caller_phone || '';
             const card = document.createElement('div');
             card.className = 'call-card ' + prioClass;
+            card.setAttribute('data-incident-id', String(it.id));
             card.innerHTML = `
                 <div class=\"call-info\">
                     <div class=\"call-details\">
@@ -1395,6 +1407,23 @@ function refreshActiveCalls() {
         });
         return items;
       }).catch(() => []);
+}
+
+function removeIncidentFromActiveCalls(incidentId) {
+    const id = toIncidentId(incidentId);
+    if (id === null) return;
+    const container = document.getElementById('active-calls-container');
+    if (!container) return;
+    const card = container.querySelector(`[data-incident-id="${id}"]`);
+    if (card) {
+        card.remove();
+    }
+    const remaining = container.querySelectorAll('.call-card[data-incident-id]').length;
+    const badge = document.getElementById('active-calls-badge');
+    if (badge) badge.textContent = `${remaining} Pending`;
+    if (remaining === 0) {
+        container.innerHTML = '<div class="call-card"><div class="call-info"><div class="call-details"><div class="call-title">No pending emergency calls.</div></div></div></div>';
+    }
 }
 
 
