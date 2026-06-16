@@ -4,6 +4,7 @@ declare(strict_types=1);
 header('Content-Type: application/json');
 
 require_once __DIR__ . '/../includes/db.php';
+require_once __DIR__ . '/../includes/vehicle_resource_units.php';
 
 function ers_table_exists(PDO $pdo, string $tableName): bool
 {
@@ -48,9 +49,14 @@ if (!$pdo) {
 }
 
 try {
+    $vehicleResourceTable = ers_vehicle_resource_units_table($pdo);
+    if ($vehicleResourceTable !== null) {
+        ers_sync_all_vehicle_resource_units($pdo, $vehicleResourceTable);
+    }
+
     $pendingIncidents = (int)($pdo->query("SELECT COUNT(*) AS c FROM incidents WHERE status = 'pending'")->fetch()['c'] ?? 0);
     $activeDispatches = (int)($pdo->query("SELECT COUNT(*) AS c FROM incidents WHERE status IN ('dispatched', 'active', 'in_progress')")->fetch()['c'] ?? 0);
-    $availableUnits = (int)($pdo->query("SELECT COUNT(*) AS c FROM units WHERE status = 'available'")->fetch()['c'] ?? 0);
+    $availableUnits = ers_count_available_vehicle_resource_units($pdo, $vehicleResourceTable ?? null);
     $unitsInField = (int)($pdo->query("SELECT COUNT(*) AS c FROM units WHERE status IN ('assigned', 'enroute', 'on_scene')")->fetch()['c'] ?? 0);
 
     $callDateExpr = 'received_at';
@@ -108,18 +114,33 @@ try {
     ");
     $queueItems = $queueStmt ? $queueStmt->fetchAll(PDO::FETCH_ASSOC) : [];
 
-    $unitStmt = $pdo->query("
-        SELECT
-            u.id,
-            u.identifier,
-            u.unit_type,
-            u.status,
-            i.reference_no AS incident_code
-        FROM units u
-        LEFT JOIN incidents i ON i.id = u.current_incident_id
-        ORDER BY FIELD(u.status, 'available', 'assigned', 'enroute', 'on_scene', 'maintenance', 'offline'), u.identifier ASC
-        LIMIT 12
-    ");
+    if ($vehicleResourceTable !== null) {
+        $unitStmt = $pdo->query("
+            SELECT
+                rr.id,
+                rr.code AS identifier,
+                rr.name AS unit_type,
+                rr.status,
+                i.reference_no AS incident_code
+            FROM `" . $vehicleResourceTable . "` rr
+            LEFT JOIN units u ON u.identifier = rr.code
+            LEFT JOIN incidents i ON i.id = u.current_incident_id
+            WHERE LOWER(rr.category) = 'vehicles'
+            ORDER BY FIELD(LOWER(rr.status), 'available', 'in_use', 'busy', 'assigned', 'enroute', 'on_scene', 'maintenance', 'offline', 'unavailable'), rr.code ASC
+        ");
+    } else {
+        $unitStmt = $pdo->query("
+            SELECT
+                u.id,
+                u.identifier,
+                u.unit_type,
+                u.status,
+                i.reference_no AS incident_code
+            FROM units u
+            LEFT JOIN incidents i ON i.id = u.current_incident_id
+            ORDER BY FIELD(u.status, 'available', 'assigned', 'busy', 'in_use', 'enroute', 'on_scene', 'maintenance', 'offline', 'unavailable'), u.identifier ASC
+        ");
+    }
     $unitItems = $unitStmt ? $unitStmt->fetchAll(PDO::FETCH_ASSOC) : [];
 
     $activityItems = [];
