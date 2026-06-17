@@ -360,7 +360,7 @@ function formatSelectedUnitDetails(unit) {
     const sampleProfile = getSampleUnitProfile(unit.unit_type);
     const lines = [
         `<strong>${escapeHtml(unit.identifier || unit.vehicle_name || 'Selected Unit')}</strong>`,
-        `<strong>Driver:</strong> ${escapeHtml(unit.driver_name || sampleProfile.driver)}`,
+        `<strong>Operator:</strong> ${escapeHtml(unit.driver_name || sampleProfile.driver)}`,
         `<strong>Plate #:</strong> ${escapeHtml(unit.plate_number || sampleProfile.plate)}`,
         `<strong>Type:</strong> ${escapeHtml(unit.unit_type || '')}`,
         `<strong>Status:</strong> ${escapeHtml(unit.status || '')}`
