@@ -199,15 +199,40 @@ $pageTitle = 'Emergency Call Center';
                                 </div>
                                 <div class="form-row">
                                     <div class="form-group">
-                                        <label for="incidentType">Incident Type</label>
-                                        <select id="incidentType" name="incidentType" required>
-                                            <option value="">Select type</option>
-                                            <option value="medical">Medical Emergency</option>
-                                            <option value="fire">Fire</option>
-                                            <option value="police">Police Emergency</option>
-                                            <option value="traffic">Traffic Accident</option>
-                                            <option value="other">Other</option>
-                                        </select>
+                                        <label>Incident Type</label>
+                                        <div class="incident-type-dropdown" id="incidentTypeDropdown">
+                                            <button type="button" class="incident-type-trigger" id="incidentTypeTrigger" aria-expanded="false" aria-controls="incidentTypeMenu">
+                                                <span id="incidentTypeTriggerText">Select type</span>
+                                                <i class="fas fa-chevron-down"></i>
+                                            </button>
+                                            <div class="incident-type-menu" id="incidentTypeMenu" role="group" aria-label="Incident Type">
+                                                <label class="incident-type-option">
+                                                    <input type="checkbox" name="incidentTypes" value="medical">
+                                                    <span><i class="fas fa-notes-medical"></i> Medical Emergency</span>
+                                                </label>
+                                                <label class="incident-type-option">
+                                                    <input type="checkbox" name="incidentTypes" value="fire">
+                                                    <span><i class="fas fa-fire-extinguisher"></i> Fire</span>
+                                                </label>
+                                                <label class="incident-type-option">
+                                                    <input type="checkbox" name="incidentTypes" value="police">
+                                                    <span><i class="fas fa-shield-alt"></i> Police Emergency</span>
+                                                </label>
+                                                <label class="incident-type-option">
+                                                    <input type="checkbox" name="incidentTypes" value="traffic">
+                                                    <span><i class="fas fa-car-crash"></i> Traffic Accident</span>
+                                                </label>
+                                                <label class="incident-type-option">
+                                                    <input type="checkbox" name="incidentTypes" value="rescue">
+                                                    <span><i class="fas fa-life-ring"></i> Rescue</span>
+                                                </label>
+                                                <label class="incident-type-option">
+                                                    <input type="checkbox" name="incidentTypes" value="other">
+                                                    <span><i class="fas fa-ellipsis-h"></i> Other</span>
+                                                </label>
+                                            </div>
+                                        </div>
+                                        <input type="hidden" id="incidentType" name="incidentType">
                                     </div>
                                     <div class="form-group">
                                         <label for="incidentLocation">Location</label>
@@ -380,6 +405,7 @@ $pageTitle = 'Emergency Call Center';
 
     document.addEventListener('DOMContentLoaded', () => {
         initPrioritySelect();
+        initIncidentTypeChecklist();
         initIncidentSidebarControls();
         if (RECENT_INCIDENTS_ENABLED) {
             loadIncidentsFromServer();
@@ -390,7 +416,6 @@ $pageTitle = 'Emergency Call Center';
         }
         // Hook suggestion on description input
         const descEl = document.getElementById('incidentDescription');
-        const typeEl = document.getElementById('incidentType');
         if (descEl) {
             descEl.addEventListener('input', (e) => {
                 const val = e.target.value;
@@ -401,12 +426,6 @@ $pageTitle = 'Emergency Call Center';
             if ((descEl.value || '').trim().length >= 3) {
                 updatePrioritySuggestion(descEl.value);
             }
-        }
-        if (typeEl) {
-            typeEl.addEventListener('change', () => {
-                const currentDescription = descEl ? descEl.value : '';
-                updatePrioritySuggestion(currentDescription);
-            });
         }
         renderActiveCallPanel(getSharedCallSession());
         document.addEventListener('ers:call-session-change', (event) => {
@@ -624,9 +643,37 @@ $pageTitle = 'Emergency Call Center';
         return speechRecognition;
     }
 
+    function inferIncidentTypesFromText(text) {
+        const value = String(text || '').toLowerCase();
+        const types = [];
+        if (/(medical|ambulance|injur|cardiac|stroke|unconscious|not breathing|pregnan|health|nahihirapang huminga|walang malay|sugat|lagnat|buntis)/.test(value)) {
+            types.push('medical');
+        }
+        if (/(fire|smoke|blaze|burn|explosion|sunog|usok|pagsabog)/.test(value)) {
+            types.push('fire');
+        }
+        if (/(police|crime|robbery|assault|theft|armed|weapon|shoot|barilan|binaril|saksak|may armas)/.test(value)) {
+            types.push('police');
+        }
+        if (/(traffic|accident|collision|crash|vehicle|banggaan|aksidente|trapiko)/.test(value)) {
+            types.push('traffic');
+        }
+        if (/(rescue|collapse|trapped|flood|earthquake|landslide|drowning|baha|lindol|gumuho|naipit)/.test(value)) {
+            types.push('rescue');
+        }
+        return Array.from(new Set(types));
+    }
+
     function applyTranscriptToForm(text) {
         const clean = String(text || '').trim();
         if (!clean) return;
+        const inferredTypes = inferIncidentTypesFromText(clean);
+        if (inferredTypes.length) {
+            document.querySelectorAll('input[name="incidentTypes"]').forEach((input) => {
+                input.checked = inferredTypes.includes(input.value);
+            });
+            syncIncidentTypeHiddenInput();
+        }
         const desc = document.getElementById('incidentDescription');
         if (desc) {
             desc.value = clean;
@@ -716,9 +763,88 @@ $pageTitle = 'Emergency Call Center';
         });
     }
 
+    function getSelectedIncidentTypes() {
+        return Array.from(document.querySelectorAll('input[name="incidentTypes"]:checked'))
+            .map((input) => String(input.value || '').trim())
+            .filter(Boolean);
+    }
+
+    function incidentTypeLabel(value) {
+        const labels = {
+            medical: 'Medical',
+            fire: 'Fire',
+            police: 'Police',
+            traffic: 'Traffic',
+            rescue: 'Rescue',
+            other: 'Other'
+        };
+        return labels[value] || value;
+    }
+
+    function syncIncidentTypeHiddenInput() {
+        const selectedTypes = getSelectedIncidentTypes();
+        const hidden = document.getElementById('incidentType');
+        if (hidden) {
+            hidden.value = selectedTypes.join(', ');
+        }
+        const triggerText = document.getElementById('incidentTypeTriggerText');
+        if (triggerText) {
+            if (!selectedTypes.length) {
+                triggerText.textContent = 'Select type';
+            } else if (selectedTypes.length <= 2) {
+                triggerText.textContent = selectedTypes.map(incidentTypeLabel).join(', ');
+            } else {
+                triggerText.textContent = `${selectedTypes.length} types selected`;
+            }
+        }
+    }
+
+    function setIncidentTypeDropdownOpen(open) {
+        const dropdown = document.getElementById('incidentTypeDropdown');
+        const trigger = document.getElementById('incidentTypeTrigger');
+        if (!dropdown || !trigger) return;
+        dropdown.classList.toggle('open', open);
+        trigger.setAttribute('aria-expanded', open ? 'true' : 'false');
+    }
+
+    function initIncidentTypeChecklist() {
+        const dropdown = document.getElementById('incidentTypeDropdown');
+        const trigger = document.getElementById('incidentTypeTrigger');
+        if (trigger) {
+            trigger.addEventListener('click', () => {
+                setIncidentTypeDropdownOpen(!(dropdown && dropdown.classList.contains('open')));
+            });
+        }
+        document.querySelectorAll('input[name="incidentTypes"]').forEach((input) => {
+            input.addEventListener('change', () => {
+                syncIncidentTypeHiddenInput();
+                const descEl = document.getElementById('incidentDescription');
+                updatePrioritySuggestion(descEl ? descEl.value : '');
+            });
+        });
+        document.addEventListener('click', (event) => {
+            if (!dropdown || dropdown.contains(event.target)) return;
+            setIncidentTypeDropdownOpen(false);
+        });
+        document.addEventListener('keydown', (event) => {
+            if (event.key === 'Escape') {
+                setIncidentTypeDropdownOpen(false);
+            }
+        });
+        syncIncidentTypeHiddenInput();
+    }
+
+    function resetIncidentTypeChecklist() {
+        document.querySelectorAll('input[name="incidentTypes"]').forEach((input) => {
+            input.checked = false;
+        });
+        syncIncidentTypeHiddenInput();
+        setIncidentTypeDropdownOpen(false);
+    }
+
     function suggestPriorityFromDescription(desc) {
         const text = ` ${(desc || '').toLowerCase()} `;
-        const incidentType = (document.getElementById('incidentType')?.value || '').toLowerCase();
+        const incidentTypes = getSelectedIncidentTypes();
 
         const high = [
             'unconscious', 'non-responsive', 'not breathing', 'difficulty breathing', 'chest pain', 'severe bleeding',
@@ -760,10 +886,10 @@ $pageTitle = 'Emergency Call Center';
         if (unconsciousPattern.test(text)) score += 3;
         if (majorFirePattern.test(text)) score += 2;
 
-        if (incidentType === 'fire' && (highHits > 0 || mediumHits > 0)) score += 1;
-        if (incidentType === 'medical' && unconsciousPattern.test(text)) score += 2;
-        if (incidentType === 'police' && /(armed|may armas|weapon|barilan|binaril)/.test(text)) score += 2;
-        if (incidentType === 'traffic' && /(multi-vehicle|maramihang sasakyan|multiple|many)/.test(text)) score += 2;
+        if (incidentTypes.includes('fire') && (highHits > 0 || mediumHits > 0)) score += 1;
+        if (incidentTypes.includes('medical') && unconsciousPattern.test(text)) score += 2;
+        if (incidentTypes.includes('police') && /(armed|may armas|weapon|barilan|binaril)/.test(text)) score += 2;
+        if (incidentTypes.includes('traffic') && /(multi-vehicle|maramihang sasakyan|multiple|many)/.test(text)) score += 2;
 
         if (highHits >= 2 || score >= 6) return 'high';
         if (mediumHits >= 1 || score >= 2) return 'medium';
@@ -955,10 +1081,11 @@ $pageTitle = 'Emergency Call Center';
             console.warn('Proceeding without verified coordinates for location:', locationText);
         }
         const finalLocationText = document.getElementById('incidentLocation').value.trim() || locationText;
+        const selectedTypes = getSelectedIncidentTypes();
         const payload = {
             caller_name: document.getElementById('callerName').value.trim(),
             caller_phone: document.getElementById('callerPhone').value.trim(),
-            type: document.getElementById('incidentType').value,
+            type: selectedTypes,
             location: finalLocationText,
             description: document.getElementById('incidentDescription').value.trim(),
             priority: document.getElementById('incidentPriority').value,
@@ -969,6 +1096,10 @@ $pageTitle = 'Emergency Call Center';
             payload.longitude = coords.lng;
         }
 
+        if (!selectedTypes.length) {
+            alert('Please select at least one incident type.');
+            return;
+        }
         if (!payload.priority) {
             alert('Please select a priority.');
             return;
@@ -1000,12 +1131,13 @@ $pageTitle = 'Emergency Call Center';
                     incidentId: data.incident_id || null,
                     incidentReferenceNo: data.incident_reference_no || data.reference_no || '',
                     incidentStatus: data.incident_status || payload.status,
-                    incidentType: payload.type,
+                    incidentType: selectedTypes.join(', '),
                     location: payload.location
                 });
             }
             showToast('Incident logged successfully. Redirecting to Dispatch Center...');
             e.target.reset();
+            resetIncidentTypeChecklist();
             document.querySelectorAll('#prioritySelect .priority-option').forEach(o => o.classList.remove('active'));
             document.getElementById('incidentPriority').value = '';
             const locationInput = document.getElementById('incidentLocation');
@@ -1019,7 +1151,7 @@ $pageTitle = 'Emergency Call Center';
             await loadIncidentsFromServer();
             // Log activity event for dashboard Recent Activity
             try {
-                const details = `Type: ${payload.type} | Location: ${payload.location} | Priority: ${payload.priority}`;
+                const details = `Type: ${selectedTypes.join(', ')} | Location: ${payload.location} | Priority: ${payload.priority}`;
                 await fetch('api/activity_event.php', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
@@ -1092,13 +1224,21 @@ $pageTitle = 'Emergency Call Center';
     }
 
     function labelForType(t) {
-        switch (t) {
-            case 'medical': return 'Medical Emergency';
-            case 'fire': return 'Fire';
-            case 'police': return 'Police Emergency';
-            case 'traffic': return 'Traffic Accident';
-            default: return 'Other';
-        }
+        const labels = {
+            medical: 'Medical Emergency',
+            ambulance: 'Medical Emergency',
+            fire: 'Fire',
+            police: 'Police Emergency',
+            traffic: 'Traffic Accident',
+            rescue: 'Rescue',
+            other: 'Other'
+        };
+        const values = String(t || '')
+            .split(',')
+            .map((part) => part.trim().toLowerCase())
+            .filter(Boolean);
+        if (!values.length) return 'Other';
+        return values.map((value) => labels[value] || value.replace(/\b\w/g, (c) => c.toUpperCase())).join(', ');
     }
 
     function setFilter(btn) {

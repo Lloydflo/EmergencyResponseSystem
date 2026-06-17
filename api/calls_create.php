@@ -25,7 +25,7 @@ if (!is_array($input)) {
 
 $caller_name = trim((string)($input['caller_name'] ?? ''));
 $caller_phone = trim((string)($input['caller_phone'] ?? ''));
-$type = trim((string)($input['type'] ?? ''));
+$type = normalize_incident_type_input($input['type'] ?? '');
 $location = trim((string)($input['location'] ?? ''));
 $description = trim((string)($input['description'] ?? ''));
 $priority = trim((string)($input['priority'] ?? ''));
@@ -169,6 +169,34 @@ function insert_call_row(PDO $pdo, array $params): int {
         return (int)$row['id'];
     }
     throw new RuntimeException('Call insert did not return a valid id');
+}
+
+function normalize_incident_type_input($value): string {
+    $allowed = ['medical', 'fire', 'police', 'traffic', 'rescue', 'other'];
+    $rawItems = [];
+
+    if (is_array($value)) {
+        $rawItems = $value;
+    } else {
+        $rawItems = preg_split('/[,|]+/', (string)$value) ?: [];
+    }
+
+    $items = [];
+    foreach ($rawItems as $item) {
+        $normalized = strtolower(trim((string)$item));
+        if ($normalized === 'ambulance') {
+            $normalized = 'medical';
+        } elseif ($normalized === 'accident') {
+            $normalized = 'traffic';
+        } elseif ($normalized === 'crime') {
+            $normalized = 'police';
+        }
+        if (in_array($normalized, $allowed, true) && !in_array($normalized, $items, true)) {
+            $items[] = $normalized;
+        }
+    }
+
+    return implode(', ', $items);
 }
 
 function insert_call_row_with_id(PDO $pdo, array $params): int {

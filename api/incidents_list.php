@@ -124,13 +124,22 @@ function append_type_filter(array &$where, array &$params, string $column, array
     if (!$typeValues) {
         return;
     }
-    $placeholders = [];
+    $clauses = [];
     foreach ($typeValues as $index => $value) {
-        $placeholder = ':' . $prefix . '_type_' . $index;
-        $placeholders[] = $placeholder;
-        $params[$placeholder] = $value;
+        $exactPlaceholder = ':' . $prefix . '_type_' . $index;
+        $startPlaceholder = ':' . $prefix . '_type_start_' . $index;
+        $endPlaceholder = ':' . $prefix . '_type_end_' . $index;
+        $middlePlaceholder = ':' . $prefix . '_type_middle_' . $index;
+        $params[$exactPlaceholder] = $value;
+        $params[$startPlaceholder] = $value . ',%';
+        $params[$endPlaceholder] = '%, ' . $value;
+        $params[$middlePlaceholder] = '%, ' . $value . ',%';
+        $clauses[] = '(LOWER(' . $column . ') = ' . $exactPlaceholder
+            . ' OR LOWER(' . $column . ') LIKE ' . $startPlaceholder
+            . ' OR LOWER(' . $column . ') LIKE ' . $endPlaceholder
+            . ' OR LOWER(' . $column . ') LIKE ' . $middlePlaceholder . ')';
     }
-    $where[] = 'LOWER(' . $column . ') IN (' . implode(', ', $placeholders) . ')';
+    $where[] = '(' . implode(' OR ', $clauses) . ')';
 }
 
 $priority = isset($_GET['priority']) ? trim((string)$_GET['priority']) : '';
