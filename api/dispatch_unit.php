@@ -30,16 +30,91 @@ if (!$pdo) {
     echo json_encode(['ok'=>false,'error'=>'DB error']);
     exit;
 }
+
+function ensure_dispatch_operator_records_table(PDO $pdo): void
+{
+    $pdo->exec("
+        CREATE TABLE IF NOT EXISTS `dispatch_operator_records` (
+          `id` bigint(20) UNSIGNED NOT NULL AUTO_INCREMENT,
+          `name` varchar(150) NOT NULL,
+          `vehicle` varchar(100) NOT NULL,
+          `location` varchar(255) DEFAULT NULL,
+          `latitude` decimal(10,7) DEFAULT NULL,
+          `longitude` decimal(10,7) DEFAULT NULL,
+          `priority` varchar(20) DEFAULT NULL,
+          `description` text DEFAULT NULL,
+          `created_at` datetime NOT NULL DEFAULT current_timestamp(),
+          PRIMARY KEY (`id`),
+          KEY `idx_dispatch_operator_records_priority` (`priority`),
+          KEY `idx_dispatch_operator_records_created_at` (`created_at`)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+    ");
+}
+
+function dispatch_vehicle_label(string $unitType, string $vehicleName = ''): string
+{
+    $type = strtolower(trim($unitType));
+    if ($type === 'ambulance') {
+        return 'Ambulance';
+    }
+    if ($type === 'fire') {
+        return 'Fire Truck';
+    }
+    if ($type === 'police') {
+        return 'Police Vehicle';
+    }
+    if ($type === 'rescue') {
+        return 'Rescue Vehicle';
+    }
+    if ($type !== '') {
+        return ucwords(str_replace(['_', '-'], ' ', $type));
+    }
+    $vehicleName = trim($vehicleName);
+    return $vehicleName !== '' ? $vehicleName : 'Vehicle';
+}
+
 try {
     $dispatchIds = [];
     $dispatchedUnits = [];
     $notificationPayload = [];
     $notificationLogged = false;
 
+    ensure_dispatch_operator_records_table($pdo);
+
     $pdo->beginTransaction();
 
+    $incidentStmt = $pdo->prepare("
+        SELECT id, priority, description, location_address, latitude, longitude
+        FROM incidents
+        WHERE id = ?
+        LIMIT 1
+    ");
+    $incidentStmt->execute([$incident_id]);
+    $incidentRow = $incidentStmt->fetch(PDO::FETCH_ASSOC);
+    if (!$incidentRow) {
+        $pdo->rollBack();
+        echo json_encode(['ok' => false, 'error' => 'Incident not found']);
+        exit;
+    }
+
     $placeholders = implode(',', array_fill(0, count($unit_ids), '?'));
-    $unitStmt = $pdo->prepare("SELECT id, identifier, unit_type, status FROM units WHERE id IN ($placeholders) FOR UPDATE");
+    $resourceTable = ers_vehicle_resource_units_table($pdo);
+    $resourceJoin = '';
+    $resourceSelect = 'NULL AS operator_name, NULL AS vehicle_name';
+    if ($resourceTable !== null) {
+        $resourceJoin = " LEFT JOIN `" . $resourceTable . "` rr
+                          ON rr.code = u.identifier
+                         AND LOWER(rr.category) = 'vehicles'";
+        $resourceSelect = 'rr.driver_name AS operator_name, rr.name AS vehicle_name';
+    }
+
+    $unitStmt = $pdo->prepare("
+        SELECT u.id, u.identifier, u.unit_type, u.status, {$resourceSelect}
+        FROM units u
+        {$resourceJoin}
+        WHERE u.id IN ($placeholders)
+        FOR UPDATE
+    ");
     $unitStmt->execute($unit_ids);
     $availableUnits = [];
     foreach ($unitStmt->fetchAll(PDO::FETCH_ASSOC) as $unitRow) {
@@ -64,6 +139,11 @@ try {
 
     $stmtIns = $pdo->prepare("INSERT INTO dispatches (incident_id, unit_id, status, assigned_at) VALUES (?, ?, 'assigned', CURRENT_TIMESTAMP)");
     $stmtUnit = $pdo->prepare("UPDATE units SET status='assigned', current_incident_id=?, last_status_at=CURRENT_TIMESTAMP WHERE id=?");
+    $stmtOperatorRecord = $pdo->prepare("
+        INSERT INTO dispatch_operator_records
+            (`name`, `vehicle`, `location`, `latitude`, `longitude`, `priority`, `description`)
+        VALUES (?, ?, ?, ?, ?, ?, ?)
+    ");
     foreach ($unit_ids as $unit_id) {
         $stmtIns->execute([$incident_id, $unit_id]);
         $dispatchId = (int)$pdo->lastInsertId();
@@ -73,6 +153,20 @@ try {
         ers_sync_vehicle_resource_status_by_unit_id($pdo, $unit_id, 'in_use');
 
         $unitMeta = $availableUnits[$unit_id];
+        $operatorName = trim((string)($unitMeta['operator_name'] ?? ''));
+        if ($operatorName === '') {
+            $operatorName = trim((string)($unitMeta['identifier'] ?? 'Operator'));
+        }
+        $stmtOperatorRecord->execute([
+            $operatorName,
+            dispatch_vehicle_label((string)($unitMeta['unit_type'] ?? ''), (string)($unitMeta['vehicle_name'] ?? '')),
+            $incidentRow['location_address'] ?? null,
+            $incidentRow['latitude'] ?? null,
+            $incidentRow['longitude'] ?? null,
+            $incidentRow['priority'] ?? null,
+            $incidentRow['description'] ?? null,
+        ]);
+
         $dispatchedUnits[] = [
             'dispatch_id' => $dispatchId,
             'id' => (int)$unitMeta['id'],

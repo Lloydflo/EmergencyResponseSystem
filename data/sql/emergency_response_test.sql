@@ -294,6 +294,27 @@ CREATE TABLE `dispatches` (
   `notes` text DEFAULT NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
+-- --------------------------------------------------------
+
+--
+-- Table structure for table `dispatch_operator_records`
+--
+
+CREATE TABLE IF NOT EXISTS `dispatch_operator_records` (
+  `id` bigint(20) UNSIGNED NOT NULL AUTO_INCREMENT,
+  `name` varchar(150) NOT NULL,
+  `vehicle` varchar(100) NOT NULL,
+  `location` varchar(255) DEFAULT NULL,
+  `latitude` decimal(10,7) DEFAULT NULL,
+  `longitude` decimal(10,7) DEFAULT NULL,
+  `priority` varchar(20) DEFAULT NULL,
+  `description` text DEFAULT NULL,
+  `created_at` datetime NOT NULL DEFAULT current_timestamp(),
+  PRIMARY KEY (`id`),
+  KEY `idx_dispatch_operator_records_priority` (`priority`),
+  KEY `idx_dispatch_operator_records_created_at` (`created_at`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
 --
 -- Dumping data for table `dispatches`
 --
