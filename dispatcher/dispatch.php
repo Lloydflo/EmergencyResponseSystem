@@ -345,6 +345,9 @@ function getSampleUnitProfile(unitType) {
 function getSelectedUnitOptions(container) {
     return Array.from(container ? container.querySelectorAll('input[name="unit_ids[]"]:checked') : []);
 }
+function getUnitVehicleName(unit) {
+    return String((unit && (unit.vehicle_name || unit.resource_name || unit.identifier)) || '').trim();
+}
 function haversine(lat1, lon1, lat2, lon2) {
     const R = 6371; // km
     const toRad = d => d * Math.PI / 180;
@@ -358,13 +361,16 @@ function haversine(lat1, lon1, lat2, lon2) {
 }
 function formatSelectedUnitDetails(unit) {
     const sampleProfile = getSampleUnitProfile(unit.unit_type);
+    const vehicleName = getUnitVehicleName(unit) || 'Selected Vehicle';
+    const unitCode = String(unit.identifier || '').trim();
     const lines = [
-        `<strong>${escapeHtml(unit.identifier || unit.vehicle_name || 'Selected Unit')}</strong>`,
+        `<strong>${escapeHtml(vehicleName)}</strong>`,
+        unitCode && unitCode !== vehicleName ? `<strong>Unit Code:</strong> ${escapeHtml(unitCode)}` : '',
         `<strong>Operator:</strong> ${escapeHtml(unit.driver_name || sampleProfile.driver)}`,
         `<strong>Plate #:</strong> ${escapeHtml(unit.plate_number || sampleProfile.plate)}`,
         `<strong>Type:</strong> ${escapeHtml(unit.unit_type || '')}`,
         `<strong>Status:</strong> ${escapeHtml(unit.status || '')}`
-    ];
+    ].filter(Boolean);
     if (currentIncidentLat && currentIncidentLng && unit.latitude && unit.longitude) {
         const distKm = haversine(Number(unit.latitude), Number(unit.longitude), currentIncidentLat, currentIncidentLng).toFixed(2);
         lines.push(`<strong>Distance to Incident:</strong> ${distKm} km`);
@@ -389,12 +395,13 @@ function renderSelectedUnitDetails(select) {
     const selectedUnits = selectedOptions.map(option => currentAvailableUnitsById[option.value] || {
         id: option.value,
         identifier: option.getAttribute('data-identifier') || option.textContent,
+        vehicle_name: option.getAttribute('data-vehicle-name') || '',
         unit_type: option.getAttribute('data-type') || '',
         status: 'available'
     });
     if (label) {
         label.textContent = selectedOptions.length === 1
-            ? (selectedUnits[0].identifier || '1 unit selected')
+            ? (getUnitVehicleName(selectedUnits[0]) || '1 unit selected')
             : `${selectedOptions.length} units selected`;
     }
     detailsEl.innerHTML = selectedUnits.map(formatSelectedUnitDetails).join('');
@@ -453,12 +460,18 @@ function openDispatchModal(incidentId) {
                 data.units.forEach(u => {
                     currentAvailableUnitsById[String(u.id)] = u;
                     const dist = (typeof u.distance_km === 'number' && isFinite(u.distance_km)) ? `${u.distance_km.toFixed(1)} km` : '';
-                    const suffix = dist ? `${u.unit_type}, ${dist}` : `${u.unit_type}`;
+                    const vehicleName = getUnitVehicleName(u);
+                    const unitCode = String(u.identifier || '').trim();
+                    const detailParts = [];
+                    if (unitCode && unitCode !== vehicleName) detailParts.push(unitCode);
+                    if (u.unit_type) detailParts.push(u.unit_type);
+                    if (dist) detailParts.push(dist);
+                    const suffix = detailParts.join(', ');
                     select.innerHTML += `
                         <label style="display:flex; align-items:flex-start; gap:0.65rem; padding:0.55rem 0.65rem; border:1px solid #e2e8f0; border-radius:6px; background:#fff; cursor:pointer;">
-                            <input type="checkbox" name="unit_ids[]" value="${escapeAttr(String(u.id))}" data-type="${escapeAttr(u.unit_type || '')}" data-identifier="${escapeAttr(u.identifier || '')}" style="margin-top:0.2rem; width:1rem; height:1rem;">
+                            <input type="checkbox" name="unit_ids[]" value="${escapeAttr(String(u.id))}" data-type="${escapeAttr(u.unit_type || '')}" data-identifier="${escapeAttr(u.identifier || '')}" data-vehicle-name="${escapeAttr(vehicleName)}" style="margin-top:0.2rem; width:1rem; height:1rem;">
                             <span style="display:flex; flex-direction:column; gap:0.12rem;">
-                                <strong style="font-size:0.98rem; color:#0f172a;">${escapeHtml(u.identifier || '')}</strong>
+                                <strong style="font-size:0.98rem; color:#0f172a;">${escapeHtml(vehicleName || unitCode || 'Unnamed vehicle')}</strong>
                                 <small style="font-size:0.82rem; color:#64748b;">${escapeHtml(suffix)}</small>
                             </span>
                         </label>`;

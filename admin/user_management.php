@@ -134,7 +134,7 @@ $adminName = $_SESSION['user_name'] ?? 'Admin';
 
         .um-table {
             width: 100%;
-            min-width: 1220px;
+            min-width: 1580px;
             border-collapse: collapse;
         }
 
@@ -333,6 +333,12 @@ $adminName = $_SESSION['user_name'] ?? 'Admin';
             color: #b91c1c;
         }
 
+        .um-field-note {
+            color: var(--um-muted);
+            font-size: 0.76rem;
+            line-height: 1.35;
+        }
+
         .um-empty {
             text-align: center;
             color: var(--um-muted);
@@ -404,6 +410,10 @@ $adminName = $_SESSION['user_name'] ?? 'Admin';
             display: flex;
             flex-direction: column;
             gap: 0.32rem;
+        }
+
+        .um-field[hidden] {
+            display: none;
         }
 
         .um-field.full {
@@ -596,6 +606,10 @@ $adminName = $_SESSION['user_name'] ?? 'Admin';
             color: #cbd5e1;
         }
 
+        html[data-theme="dark"] .um-field-note {
+            color: #94a3b8;
+        }
+
         html[data-theme="dark"] .um-btn {
             background: #0f172a;
             border-color: #334155;
@@ -699,6 +713,10 @@ $adminName = $_SESSION['user_name'] ?? 'Admin';
                                 <th>Role</th>
                                 <th>Department</th>
                                 <th>Status</th>
+                                <th>Unit Code</th>
+                                <th>Unit Type</th>
+                                <th>Vehicle Plate</th>
+                                <th>Unit Status</th>
                                 <th>Created</th>
                                 <th>Actions</th>
                             </tr>
@@ -761,6 +779,25 @@ $adminName = $_SESSION['user_name'] ?? 'Admin';
                                 <option value="responder">Responder</option>
                             </select>
                         </div>
+                        <div class="um-field full" id="newUserUnitField" hidden>
+                            <label for="newUserAssignedUnit">Available Unit</label>
+                            <select id="newUserAssignedUnit" class="um-select">
+                                <option value="">Select available unit</option>
+                            </select>
+                            <div class="um-field-note" id="newUserUnitHint">Only available units are listed.</div>
+                        </div>
+                        <div class="um-field" id="newUserPlateField" hidden>
+                            <label for="newUserPlateNumber">Plate Number</label>
+                            <input id="newUserPlateNumber" class="um-input" readonly placeholder="Select a unit">
+                        </div>
+                        <div class="um-field" id="newUserUnitTypeField" hidden>
+                            <label for="newUserUnitType">Unit Type</label>
+                            <input id="newUserUnitType" class="um-input" readonly placeholder="Select a unit">
+                        </div>
+                        <div class="um-field" id="newUserUnitStatusField" hidden>
+                            <label for="newUserUnitStatus">Unit Status</label>
+                            <input id="newUserUnitStatus" class="um-input" readonly placeholder="Select a unit">
+                        </div>
                         <div class="um-field">
                             <label for="newUserStatus">Status</label>
                             <select id="newUserStatus" class="um-select" required>
@@ -786,7 +823,11 @@ $adminName = $_SESSION['user_name'] ?? 'Admin';
 
     <script>
         const adminUsersApiUrl = 'api/admin_users.php';
+        const availableUnitsApiUrl = 'api/units_list.php?status=available';
         const userRows = [];
+        let availableUnits = [];
+        let availableUnitsLoaded = false;
+        let availableUnitsLoading = false;
         let editingId = null;
 
         const usersTableBody = document.getElementById('usersTableBody');
@@ -804,6 +845,15 @@ $adminName = $_SESSION['user_name'] ?? 'Admin';
         const newUserPassword = document.getElementById('newUserPassword');
         const toggleNewUserPassword = document.getElementById('toggleNewUserPassword');
         const newUserRole = document.getElementById('newUserRole');
+        const newUserUnitField = document.getElementById('newUserUnitField');
+        const newUserAssignedUnit = document.getElementById('newUserAssignedUnit');
+        const newUserUnitHint = document.getElementById('newUserUnitHint');
+        const newUserPlateField = document.getElementById('newUserPlateField');
+        const newUserPlateNumber = document.getElementById('newUserPlateNumber');
+        const newUserUnitTypeField = document.getElementById('newUserUnitTypeField');
+        const newUserUnitType = document.getElementById('newUserUnitType');
+        const newUserUnitStatusField = document.getElementById('newUserUnitStatusField');
+        const newUserUnitStatus = document.getElementById('newUserUnitStatus');
         const newUserStatus = document.getElementById('newUserStatus');
         const newUserDepartment = document.getElementById('newUserDepartment');
         const passwordRequirements = document.getElementById('passwordRequirements');
@@ -850,6 +900,144 @@ $adminName = $_SESSION['user_name'] ?? 'Admin';
             return role !== 'responder';
         }
 
+        function formatUnitLabel(unit) {
+            const identifier = String(unit.identifier || '').trim() || ('Unit #' + unit.id);
+            const resourceName = String(unit.resource_name || '').trim();
+            const unitType = String(unit.unit_type || '').trim();
+            const labelParts = [identifier];
+            if (resourceName) labelParts.push(resourceName);
+            if (unitType) labelParts.push(unitType.charAt(0).toUpperCase() + unitType.slice(1));
+            return labelParts.join(' - ');
+        }
+
+        function formatUnitValue(value) {
+            const raw = String(value || '').replace(/_/g, ' ').trim();
+            if (!raw) return '';
+            return raw.charAt(0).toUpperCase() + raw.slice(1);
+        }
+
+        function setResponderUnitDetailVisibility(isVisible) {
+            [newUserPlateField, newUserUnitTypeField, newUserUnitStatusField].forEach((field) => {
+                if (field) field.hidden = !isVisible;
+            });
+        }
+
+        function updateResponderUnitDetails() {
+            if (!newUserAssignedUnit) return;
+
+            const selectedId = Number(newUserAssignedUnit.value) || 0;
+            const selectedUnit = availableUnits.find((unit) => unit.id === selectedId) || null;
+
+            if (newUserPlateNumber) {
+                newUserPlateNumber.value = selectedUnit ? (selectedUnit.plate_number || 'N/A') : '';
+            }
+            if (newUserUnitType) {
+                newUserUnitType.value = selectedUnit ? formatUnitValue(selectedUnit.unit_type) : '';
+            }
+            if (newUserUnitStatus) {
+                newUserUnitStatus.value = selectedUnit ? formatUnitValue(selectedUnit.status) : '';
+            }
+        }
+
+        function renderAvailableUnitOptions() {
+            if (!newUserAssignedUnit || !newUserUnitHint) return;
+
+            const pendingValue = newUserAssignedUnit.dataset.pendingValue || newUserAssignedUnit.value || '';
+
+            if (availableUnitsLoading) {
+                newUserAssignedUnit.innerHTML = '<option value="">Loading available units...</option>';
+                newUserAssignedUnit.disabled = true;
+                newUserAssignedUnit.required = false;
+                newUserUnitHint.textContent = 'Loading currently available units.';
+                updateResponderUnitDetails();
+                return;
+            }
+
+            if (!availableUnits.length) {
+                newUserAssignedUnit.innerHTML = '<option value="">No available units</option>';
+                newUserAssignedUnit.disabled = true;
+                newUserAssignedUnit.required = false;
+                newUserUnitHint.textContent = 'No available units are ready right now.';
+                updateResponderUnitDetails();
+                return;
+            }
+
+            const options = availableUnits.map((unit) => (
+                `<option value="${unit.id}">${escapeHtml(formatUnitLabel(unit))}</option>`
+            )).join('');
+
+            newUserAssignedUnit.disabled = false;
+            newUserAssignedUnit.required = newUserRole && newUserRole.value === 'responder';
+            newUserAssignedUnit.innerHTML = '<option value="">Select available unit</option>' + options;
+
+            if (pendingValue && availableUnits.some((unit) => String(unit.id) === String(pendingValue))) {
+                newUserAssignedUnit.value = String(pendingValue);
+            }
+            delete newUserAssignedUnit.dataset.pendingValue;
+            newUserUnitHint.textContent = 'Only units with Available status are listed.';
+            updateResponderUnitDetails();
+        }
+
+        async function loadAvailableUnits() {
+            if (availableUnitsLoading) return;
+            availableUnitsLoading = true;
+            renderAvailableUnitOptions();
+
+            try {
+                const response = await fetch(availableUnitsApiUrl, {
+                    headers: {
+                        'Accept': 'application/json'
+                    },
+                    cache: 'no-store'
+                });
+                const result = await response.json();
+
+                if (!response.ok || !result.ok || !Array.isArray(result.items)) {
+                    throw new Error(result.error || 'Unable to load available units.');
+                }
+
+                availableUnits = result.items.map((item) => ({
+                    id: Number(item.id) || 0,
+                    identifier: String(item.identifier || '').trim(),
+                    unit_type: String(item.unit_type || '').trim(),
+                    plate_number: String(item.plate_number || '').trim(),
+                    resource_name: String(item.resource_name || '').trim(),
+                    status: String(item.status || '').trim()
+                })).filter((item) => item.id > 0);
+                availableUnitsLoaded = true;
+            } catch (error) {
+                availableUnits = [];
+                availableUnitsLoaded = false;
+                if (newUserUnitHint) {
+                    newUserUnitHint.textContent = error.message || 'Unable to load available units.';
+                }
+            } finally {
+                availableUnitsLoading = false;
+                renderAvailableUnitOptions();
+            }
+        }
+
+        function syncResponderUnitField() {
+            if (!newUserRole || !newUserUnitField || !newUserAssignedUnit) return;
+
+            const isResponder = newUserRole.value === 'responder';
+            newUserUnitField.hidden = !isResponder;
+            setResponderUnitDetailVisibility(isResponder);
+
+            if (!isResponder) {
+                newUserAssignedUnit.required = false;
+                newUserAssignedUnit.value = '';
+                delete newUserAssignedUnit.dataset.pendingValue;
+                updateResponderUnitDetails();
+                return;
+            }
+
+            renderAvailableUnitOptions();
+            if (!availableUnitsLoaded && !availableUnitsLoading) {
+                loadAvailableUnits();
+            }
+        }
+
         function syncPasswordFieldForRole() {
             if (!newUserRole || !newUserPassword) return;
 
@@ -872,6 +1060,7 @@ $adminName = $_SESSION['user_name'] ?? 'Admin';
             }
 
             updatePasswordRequirements(false);
+            syncResponderUnitField();
         }
 
         function updatePasswordRequirements(forceVisible = false) {
@@ -904,11 +1093,28 @@ $adminName = $_SESSION['user_name'] ?? 'Admin';
             return '<span class="um-chip ' + safe + '">' + escapeHtml(label) + '</span>';
         }
 
+        function displayUnitValue(value) {
+            const raw = String(value || '').replace(/_/g, ' ').trim();
+            if (!raw) return 'N/A';
+            return raw.charAt(0).toUpperCase() + raw.slice(1);
+        }
+
         function filteredRows() {
             const needle = userSearchInput.value.trim().toLowerCase();
             if (!needle) return userRows.slice();
             return userRows.filter((row) => {
-                const hay = [row.name, row.email, row.contact_number, row.role, row.department, row.status].join(' ').toLowerCase();
+                const hay = [
+                    row.name,
+                    row.email,
+                    row.contact_number,
+                    row.role,
+                    row.department,
+                    row.status,
+                    row.unit_code,
+                    row.unit_type,
+                    row.vehicle_plate,
+                    row.unit_status
+                ].join(' ').toLowerCase();
                 return hay.includes(needle);
             });
         }
@@ -918,7 +1124,7 @@ $adminName = $_SESSION['user_name'] ?? 'Admin';
             userCountBadge.textContent = rows.length + ' account(s)';
 
             if (!rows.length) {
-                usersTableBody.innerHTML = '<tr><td colspan="9" class="um-empty">No user accounts found.</td></tr>';
+                usersTableBody.innerHTML = '<tr><td colspan="13" class="um-empty">No user accounts found.</td></tr>';
                 return;
             }
 
@@ -963,6 +1169,10 @@ $adminName = $_SESSION['user_name'] ?? 'Admin';
                                    </select>`
                                 : statusChip(row.status)}
                         </td>
+                        <td>${escapeHtml(row.unit_code || 'N/A')}</td>
+                        <td>${escapeHtml(displayUnitValue(row.unit_type))}</td>
+                        <td>${escapeHtml(row.vehicle_plate || 'N/A')}</td>
+                        <td>${escapeHtml(displayUnitValue(row.unit_status))}</td>
                         <td>${escapeHtml(row.created)}</td>
                         <td>
                             <div class="um-actions">
@@ -986,6 +1196,7 @@ $adminName = $_SESSION['user_name'] ?? 'Admin';
             addUserModal.classList.add('show');
             addUserModal.setAttribute('aria-hidden', 'false');
             document.body.style.overflow = 'hidden';
+            availableUnitsLoaded = false;
             syncPasswordFieldForRole();
             updatePasswordRequirements(false);
             newUserName.focus();
@@ -1010,6 +1221,7 @@ $adminName = $_SESSION['user_name'] ?? 'Admin';
             addUserForm.reset();
             resetPasswordToggle();
             syncPasswordFieldForRole();
+            syncResponderUnitField();
             updatePasswordRequirements(false);
         }
 
@@ -1023,13 +1235,16 @@ $adminName = $_SESSION['user_name'] ?? 'Admin';
             newUserDepartment.value = payload.department || '';
             newUserStatus.value = payload.status || 'active';
             newUserPassword.value = payload.password || '';
+            if (newUserAssignedUnit) {
+                newUserAssignedUnit.dataset.pendingValue = payload.assigned_unit_id ? String(payload.assigned_unit_id) : '';
+            }
             resetPasswordToggle();
             syncPasswordFieldForRole();
             updatePasswordRequirements(Boolean(payload.password));
         }
 
         async function loadUsers() {
-            usersTableBody.innerHTML = '<tr><td colspan="9" class="um-empty">Loading user accounts...</td></tr>';
+            usersTableBody.innerHTML = '<tr><td colspan="13" class="um-empty">Loading user accounts...</td></tr>';
 
             try {
                 const response = await fetch(adminUsersApiUrl, {
@@ -1047,7 +1262,7 @@ $adminName = $_SESSION['user_name'] ?? 'Admin';
                 editingId = null;
                 renderRows();
             } catch (error) {
-                usersTableBody.innerHTML = '<tr><td colspan="9" class="um-empty">Unable to load user accounts.</td></tr>';
+                usersTableBody.innerHTML = '<tr><td colspan="13" class="um-empty">Unable to load user accounts.</td></tr>';
                 showToast(error.message || 'Unable to load users.');
             }
         }
@@ -1189,6 +1404,9 @@ $adminName = $_SESSION['user_name'] ?? 'Admin';
                 contact_number: newUserContact.value.trim(),
                 password: newUserPassword.value,
                 role: newUserRole.value,
+                assigned_unit_id: newUserRole.value === 'responder' && newUserAssignedUnit && !newUserAssignedUnit.disabled
+                    ? (Number(newUserAssignedUnit.value) || null)
+                    : null,
                 department: newUserDepartment.value.trim(),
                 status: newUserStatus.value
             };
@@ -1196,6 +1414,10 @@ $adminName = $_SESSION['user_name'] ?? 'Admin';
 
             if (!payload.name || !payload.email || !payload.contact_number || !payload.department || (passwordRequired && !payload.password)) {
                 showToast('Please complete required fields.');
+                return;
+            }
+            if (payload.role === 'responder' && newUserAssignedUnit && newUserAssignedUnit.required && !payload.assigned_unit_id) {
+                showToast('Please select an available unit.');
                 return;
             }
             if (payload.password && !passwordMeetsRequirements(payload.password)) {
@@ -1279,6 +1501,10 @@ $adminName = $_SESSION['user_name'] ?? 'Admin';
         if (newUserRole) {
             newUserRole.addEventListener('change', syncPasswordFieldForRole);
             syncPasswordFieldForRole();
+        }
+
+        if (newUserAssignedUnit) {
+            newUserAssignedUnit.addEventListener('change', updateResponderUnitDetails);
         }
 
         userSearchInput.addEventListener('input', renderRows);

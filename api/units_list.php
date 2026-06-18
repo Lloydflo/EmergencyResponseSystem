@@ -126,19 +126,37 @@ if ($hasRecordedAt) {
                          LIMIT 1)";
 }
 
+$responderDriverExpr = 'NULL';
+if (
+    ers_table_exists($pdo, 'users') &&
+    ers_column_exists($pdo, 'users', 'unit_code') &&
+    ers_column_exists($pdo, 'users', 'name') &&
+    ers_column_exists($pdo, 'users', 'role')
+) {
+    $responderDriverExpr = "(SELECT usr.name
+                             FROM users usr
+                             WHERE LOWER(COALESCE(usr.role, '')) = 'responder'
+                               AND UPPER(TRIM(usr.unit_code)) = UPPER(TRIM(u.identifier))
+                               AND TRIM(COALESCE(usr.name, '')) <> ''
+                             ORDER BY usr.id DESC
+                             LIMIT 1)";
+}
+
 $resourceJoin = '';
+$driverNameExpr = $responderDriverExpr;
 $resourceSelect = 'NULL AS resource_name,
             NULL AS resource_location,
-            NULL AS driver_name,
+            ' . $driverNameExpr . ' AS driver_name,
             NULL AS plate_number,
             NULL AS assignment';
 if ($vehicleResourceTable !== null) {
     $resourceJoin = " INNER JOIN `" . $vehicleResourceTable . "` rr
                       ON rr.code = u.identifier
                      AND LOWER(rr.category) = 'vehicles'";
+    $driverNameExpr = 'COALESCE(NULLIF(TRIM(rr.driver_name), \'\'), ' . $responderDriverExpr . ')';
     $resourceSelect = 'rr.name AS resource_name,
             rr.location AS resource_location,
-            rr.driver_name AS driver_name,
+            ' . $driverNameExpr . ' AS driver_name,
             rr.plate_number AS plate_number,
             rr.assignment AS assignment';
 }
@@ -171,6 +189,11 @@ if (!empty($statuses)) {
     $in = implode(',', array_fill(0, count($statuses), '?'));
     $sql .= " WHERE u.status IN ($in)";
     $params = $statuses;
+}
+
+if (in_array('available', $statuses, true)) {
+    $sql .= ($params === [] ? ' WHERE ' : ' AND ')
+        . "TRIM(COALESCE(" . $driverNameExpr . ", '')) <> ''";
 }
 
 $sql .= ' ORDER BY u.unit_type, u.identifier';

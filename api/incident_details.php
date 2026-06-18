@@ -95,9 +95,26 @@ try {
 
             $dispatchSelect = 'NULL AS vehicle_name, NULL AS driver_name, NULL AS plate_number';
             $dispatchJoin = '';
+            $responderDriverExpr = 'NULL';
+            if (
+                ers_table_exists($pdo, 'users') &&
+                ers_column_exists($pdo, 'users', 'unit_code') &&
+                ers_column_exists($pdo, 'users', 'name') &&
+                ers_column_exists($pdo, 'users', 'role')
+            ) {
+                $responderDriverExpr = "(SELECT usr.name
+                                        FROM users usr
+                                        WHERE LOWER(COALESCE(usr.role, '')) = 'responder'
+                                          AND UPPER(TRIM(usr.unit_code)) = UPPER(TRIM(u.identifier))
+                                          AND TRIM(COALESCE(usr.name, '')) <> ''
+                                        ORDER BY usr.id DESC
+                                        LIMIT 1)";
+            }
             if ($resourceRecordsTable !== null) {
-                $dispatchSelect = 'ar.name AS vehicle_name, ar.driver_name AS driver_name, ar.plate_number AS plate_number';
+                $dispatchSelect = 'ar.name AS vehicle_name, COALESCE(NULLIF(TRIM(ar.driver_name), \'\'), ' . $responderDriverExpr . ') AS driver_name, ar.plate_number AS plate_number';
                 $dispatchJoin = ' LEFT JOIN `' . $resourceRecordsTable . '` ar ON ar.code = u.identifier ';
+            } else {
+                $dispatchSelect = 'NULL AS vehicle_name, ' . $responderDriverExpr . ' AS driver_name, NULL AS plate_number';
             }
 
             $dispatchStmt = $pdo->prepare(
@@ -234,18 +251,36 @@ try {
         $desiredTypes = array_values(array_unique($desiredTypes));
     }
 
-    $unitSelect = '*';
-    $unitFrom = 'units';
-    $unitAlias = '';
+    $responderDriverExpr = 'NULL';
+    if (
+        ers_table_exists($pdo, 'users') &&
+        ers_column_exists($pdo, 'users', 'unit_code') &&
+        ers_column_exists($pdo, 'users', 'name') &&
+        ers_column_exists($pdo, 'users', 'role')
+    ) {
+        $responderDriverExpr = "(SELECT usr.name
+                                FROM users usr
+                                WHERE LOWER(COALESCE(usr.role, '')) = 'responder'
+                                  AND UPPER(TRIM(usr.unit_code)) = UPPER(TRIM(u.identifier))
+                                  AND TRIM(COALESCE(usr.name, '')) <> ''
+                                ORDER BY usr.id DESC
+                                LIMIT 1)";
+    }
+    $unitSelect = 'u.*, NULL AS vehicle_name, ' . $responderDriverExpr . ' AS driver_name, NULL AS plate_number';
+    $unitFrom = 'units u';
+    $unitAlias = 'u.';
     $unitJoin = '';
+    $driverNameExpr = $responderDriverExpr;
     if ($resourceRecordsTable !== null) {
-        $unitSelect = 'u.*, rr.name AS vehicle_name, rr.driver_name, rr.plate_number';
+        $driverNameExpr = 'COALESCE(NULLIF(TRIM(rr.driver_name), \'\'), ' . $responderDriverExpr . ')';
+        $unitSelect = 'u.*, rr.name AS vehicle_name, ' . $driverNameExpr . ' AS driver_name, rr.plate_number';
         $unitFrom = 'units u';
         $unitAlias = 'u.';
         $unitJoin = " INNER JOIN `" . $resourceRecordsTable . "` rr
                       ON rr.code = u.identifier
                      AND LOWER(rr.category) = 'vehicles'";
     }
+    $assignedDriverWhere = " AND TRIM(COALESCE(" . $driverNameExpr . ", '')) <> ''";
 
     if (!empty($desiredTypes)) {
         if (!in_array('other', $desiredTypes, true)) {
@@ -257,7 +292,8 @@ try {
              FROM {$unitFrom}
              {$unitJoin}
              WHERE {$unitAlias}status = 'available'
-               AND {$unitAlias}unit_type IN ({$placeholders})"
+               AND {$unitAlias}unit_type IN ({$placeholders})
+               {$assignedDriverWhere}"
         );
         $unitStmt->execute($desiredTypes);
         $units = $unitStmt->fetchAll(PDO::FETCH_ASSOC);
@@ -266,7 +302,8 @@ try {
             "SELECT {$unitSelect}
              FROM {$unitFrom}
              {$unitJoin}
-             WHERE {$unitAlias}status = 'available'"
+             WHERE {$unitAlias}status = 'available'
+             {$assignedDriverWhere}"
         )->fetchAll(PDO::FETCH_ASSOC);
     }
 

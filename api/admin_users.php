@@ -48,6 +48,19 @@ function admin_users_has_column(PDO $pdo, string $table, string $column): bool
     return (bool)$stmt->fetchColumn();
 }
 
+function admin_users_table_exists(PDO $pdo, string $table): bool
+{
+    $stmt = $pdo->prepare(
+        'SELECT 1
+         FROM information_schema.TABLES
+         WHERE TABLE_SCHEMA = DATABASE()
+           AND TABLE_NAME = ?
+         LIMIT 1'
+    );
+    $stmt->execute([$table]);
+    return (bool)$stmt->fetchColumn();
+}
+
 function admin_users_get_role_column_type(PDO $pdo): ?string
 {
     return admin_users_get_column_type($pdo, 'users', 'role');
@@ -112,6 +125,19 @@ function admin_users_ensure_schema(PDO $pdo): void
         $pdo->exec("ALTER TABLE `users` ADD COLUMN `department` VARCHAR(150) DEFAULT NULL AFTER `name`");
     }
 
+    if (!admin_users_has_column($pdo, 'users', 'unit_code')) {
+        $pdo->exec("ALTER TABLE `users` ADD COLUMN `unit_code` VARCHAR(50) DEFAULT NULL AFTER `department`");
+    }
+    if (!admin_users_has_column($pdo, 'users', 'unit_type')) {
+        $pdo->exec("ALTER TABLE `users` ADD COLUMN `unit_type` VARCHAR(50) DEFAULT NULL AFTER `unit_code`");
+    }
+    if (!admin_users_has_column($pdo, 'users', 'vehicle_plate')) {
+        $pdo->exec("ALTER TABLE `users` ADD COLUMN `vehicle_plate` VARCHAR(50) DEFAULT NULL AFTER `unit_type`");
+    }
+    if (!admin_users_has_column($pdo, 'users', 'unit_status')) {
+        $pdo->exec("ALTER TABLE `users` ADD COLUMN `unit_status` VARCHAR(50) DEFAULT NULL AFTER `vehicle_plate`");
+    }
+
     ers_ensure_user_inactive_cleanup_schema($pdo);
     ers_backfill_inactive_user_dates($pdo);
 
@@ -141,6 +167,10 @@ function admin_users_ensure_schema(PDO $pdo): void
         $pdo->exec("ALTER TABLE `responders` ADD COLUMN `contact_number` VARCHAR(50) NOT NULL DEFAULT '' AFTER `email`");
     } elseif (stripos(admin_users_get_column_type($pdo, 'responders', 'contact_number') ?? '', 'varchar(50)') === false) {
         $pdo->exec("ALTER TABLE `responders` MODIFY `contact_number` VARCHAR(50) DEFAULT NULL");
+    }
+
+    if (!admin_users_has_column($pdo, 'responders', 'assigned_unit_id')) {
+        $pdo->exec("ALTER TABLE `responders` ADD COLUMN `assigned_unit_id` BIGINT UNSIGNED DEFAULT NULL AFTER `contact_number`");
     }
 }
 
@@ -183,6 +213,156 @@ function admin_users_responder_status_value(PDO $pdo, string $status): string
     return $status;
 }
 
+function admin_users_normalize_assigned_unit_id($value): ?int
+{
+    $unitId = (int)$value;
+    return $unitId > 0 ? $unitId : null;
+}
+
+function admin_users_available_unit_exists(PDO $pdo, int $unitId): bool
+{
+    if ($unitId <= 0 || !admin_users_table_exists($pdo, 'units')) {
+        return false;
+    }
+
+    $stmt = $pdo->prepare(
+        "SELECT 1
+         FROM `units`
+         WHERE `id` = ?
+           AND LOWER(COALESCE(`status`, '')) = 'available'
+         LIMIT 1"
+    );
+    $stmt->execute([$unitId]);
+    return (bool)$stmt->fetchColumn();
+}
+
+function admin_users_vehicle_resource_table(PDO $pdo): ?string
+{
+    if (admin_users_table_exists($pdo, 'resource_records')) {
+        return 'resource_records';
+    }
+    if (admin_users_table_exists($pdo, 'admin_resources')) {
+        return 'admin_resources';
+    }
+    return null;
+}
+
+function admin_users_empty_unit_assignment(): array
+{
+    return [
+        'unit_code' => null,
+        'unit_type' => null,
+        'vehicle_plate' => null,
+        'unit_status' => null,
+    ];
+}
+
+function admin_users_fetch_unit_assignment(PDO $pdo, ?int $unitId): array
+{
+    if ($unitId === null || $unitId <= 0 || !admin_users_table_exists($pdo, 'units')) {
+        return admin_users_empty_unit_assignment();
+    }
+
+    $resourceTable = admin_users_vehicle_resource_table($pdo);
+    $resourceJoin = '';
+    $plateSelect = 'NULL AS vehicle_plate';
+    if ($resourceTable !== null) {
+        $resourceJoin = " LEFT JOIN `" . $resourceTable . "` rr ON rr.code = u.identifier AND LOWER(rr.category) = 'vehicles'";
+        $plateSelect = 'rr.plate_number AS vehicle_plate';
+    }
+
+    $stmt = $pdo->prepare(
+        "SELECT u.identifier AS unit_code,
+                u.unit_type,
+                u.status AS unit_status,
+                {$plateSelect}
+         FROM `units` u
+         {$resourceJoin}
+         WHERE u.id = ?
+         LIMIT 1"
+    );
+    $stmt->execute([$unitId]);
+    $row = $stmt->fetch(PDO::FETCH_ASSOC);
+    if (!is_array($row)) {
+        return admin_users_empty_unit_assignment();
+    }
+
+    return [
+        'unit_code' => trim((string)($row['unit_code'] ?? '')) ?: null,
+        'unit_type' => trim((string)($row['unit_type'] ?? '')) ?: null,
+        'vehicle_plate' => trim((string)($row['vehicle_plate'] ?? '')) ?: null,
+        'unit_status' => trim((string)($row['unit_status'] ?? '')) ?: null,
+    ];
+}
+
+function admin_users_assign_unit_to_responder(PDO $pdo, ?int $unitId, string $name): void
+{
+    if ($unitId === null || $unitId <= 0 || $name === '' || !admin_users_table_exists($pdo, 'units')) {
+        return;
+    }
+
+    $resourceTable = admin_users_vehicle_resource_table($pdo);
+    if ($resourceTable === null) {
+        return;
+    }
+
+    $sets = [];
+    $params = [];
+    if (admin_users_has_column($pdo, $resourceTable, 'assignment')) {
+        $sets[] = 'rr.assignment = ?';
+        $params[] = 'Assigned to ' . $name;
+    }
+    if (admin_users_has_column($pdo, $resourceTable, 'driver_name')) {
+        $sets[] = 'rr.driver_name = ?';
+        $params[] = $name;
+    }
+    if ($sets === []) {
+        return;
+    }
+    $params[] = $unitId;
+
+    $stmt = $pdo->prepare(
+        "UPDATE `" . $resourceTable . "` rr
+         INNER JOIN `units` u ON u.identifier = rr.code
+         SET " . implode(', ', $sets) . "
+         WHERE u.id = ?
+           AND LOWER(rr.category) = 'vehicles'"
+    );
+    $stmt->execute($params);
+}
+
+function admin_users_clear_unit_responder_assignment(PDO $pdo, ?int $unitId): void
+{
+    if ($unitId === null || $unitId <= 0 || !admin_users_table_exists($pdo, 'units')) {
+        return;
+    }
+
+    $resourceTable = admin_users_vehicle_resource_table($pdo);
+    if ($resourceTable === null) {
+        return;
+    }
+
+    $sets = [];
+    if (admin_users_has_column($pdo, $resourceTable, 'assignment')) {
+        $sets[] = 'rr.assignment = NULL';
+    }
+    if (admin_users_has_column($pdo, $resourceTable, 'driver_name')) {
+        $sets[] = 'rr.driver_name = NULL';
+    }
+    if ($sets === []) {
+        return;
+    }
+
+    $stmt = $pdo->prepare(
+        "UPDATE `" . $resourceTable . "` rr
+         INNER JOIN `units` u ON u.identifier = rr.code
+         SET " . implode(', ', $sets) . "
+         WHERE u.id = ?
+           AND LOWER(rr.category) = 'vehicles'"
+    );
+    $stmt->execute([$unitId]);
+}
+
 function admin_users_sync_responder_record(
     PDO $pdo,
     string $name,
@@ -191,6 +371,7 @@ function admin_users_sync_responder_record(
     string $department,
     string $contactNumber,
     string $status,
+    ?int $assignedUnitId = null,
     ?string $oldEmail = null,
     ?string $passwordHash = null
 ): void {
@@ -218,6 +399,9 @@ function admin_users_sync_responder_record(
     }
     if (admin_users_has_column($pdo, 'responders', 'contact_number')) {
         $values['contact_number'] = $contactNumber;
+    }
+    if (admin_users_has_column($pdo, 'responders', 'assigned_unit_id')) {
+        $values['assigned_unit_id'] = $role === 'responder' ? $assignedUnitId : null;
     }
     if (admin_users_has_column($pdo, 'responders', 'is_active')) {
         $values['is_active'] = $isActive;
@@ -299,6 +483,40 @@ function admin_users_responder_contact_for_email(PDO $pdo, string $email): strin
     return $contacts[strtolower(trim($email))] ?? '';
 }
 
+function admin_users_responder_unit_map(PDO $pdo): array
+{
+    if (
+        !admin_users_has_column($pdo, 'responders', 'email') ||
+        !admin_users_has_column($pdo, 'responders', 'assigned_unit_id')
+    ) {
+        return [];
+    }
+
+    try {
+        $rows = $pdo->query('SELECT `email`, `assigned_unit_id` FROM `responders`')->fetchAll(PDO::FETCH_ASSOC);
+    } catch (Throwable $e) {
+        error_log('admin_users responder unit map skipped: ' . $e->getMessage());
+        return [];
+    }
+
+    $units = [];
+    foreach ($rows as $row) {
+        $email = strtolower(trim((string)($row['email'] ?? '')));
+        if ($email !== '') {
+            $units[$email] = isset($row['assigned_unit_id']) ? (int)$row['assigned_unit_id'] : 0;
+        }
+    }
+
+    return $units;
+}
+
+function admin_users_responder_unit_for_email(PDO $pdo, string $email): ?int
+{
+    $units = admin_users_responder_unit_map($pdo);
+    $value = $units[strtolower(trim($email))] ?? 0;
+    return $value > 0 ? $value : null;
+}
+
 function admin_users_password_errors(string $password): array
 {
     $errors = [];
@@ -334,6 +552,10 @@ function admin_users_fetch_rows(PDO $pdo): array
             `email`,
             `role`,
             `status`,
+            COALESCE(`unit_code`, '') AS `unit_code`,
+            COALESCE(`unit_type`, '') AS `unit_type`,
+            COALESCE(`vehicle_plate`, '') AS `vehicle_plate`,
+            COALESCE(`unit_status`, '') AS `unit_status`,
             {$departmentSelect},
             `created_at`
         FROM `users`
@@ -343,8 +565,9 @@ function admin_users_fetch_rows(PDO $pdo): array
 
     $rows = $pdo->query($sql)->fetchAll(PDO::FETCH_ASSOC);
     $contacts = admin_users_responder_contact_map($pdo);
+    $assignedUnits = admin_users_responder_unit_map($pdo);
 
-    return array_map(static function (array $row) use ($contacts): array {
+    return array_map(static function (array $row) use ($contacts, $assignedUnits): array {
         $created = (string)($row['created_at'] ?? '');
         if ($created !== '' && strlen($created) >= 10) {
             $created = substr($created, 0, 10);
@@ -359,6 +582,11 @@ function admin_users_fetch_rows(PDO $pdo): array
             'role' => admin_users_normalize_role((string)($row['role'] ?? '')),
             'department' => (string)($row['department'] ?? ''),
             'contact_number' => $contacts[strtolower(trim($email))] ?? '',
+            'assigned_unit_id' => ($assignedUnits[strtolower(trim($email))] ?? 0) > 0 ? (int)$assignedUnits[strtolower(trim($email))] : null,
+            'unit_code' => (string)($row['unit_code'] ?? ''),
+            'unit_type' => (string)($row['unit_type'] ?? ''),
+            'vehicle_plate' => (string)($row['vehicle_plate'] ?? ''),
+            'unit_status' => (string)($row['unit_status'] ?? ''),
             'status' => (string)($row['status'] ?? 'inactive'),
             'created' => $created,
         ];
@@ -379,6 +607,11 @@ function admin_users_row_to_payload(array $row): array
         'role' => admin_users_normalize_role((string)($row['role'] ?? '')),
         'department' => (string)($row['department'] ?? ''),
         'contact_number' => (string)($row['contact_number'] ?? ''),
+        'assigned_unit_id' => isset($row['assigned_unit_id']) && (int)$row['assigned_unit_id'] > 0 ? (int)$row['assigned_unit_id'] : null,
+        'unit_code' => (string)($row['unit_code'] ?? ''),
+        'unit_type' => (string)($row['unit_type'] ?? ''),
+        'vehicle_plate' => (string)($row['vehicle_plate'] ?? ''),
+        'unit_status' => (string)($row['unit_status'] ?? ''),
         'status' => (string)($row['status'] ?? 'inactive'),
         'created' => $created,
     ];
@@ -393,6 +626,10 @@ function admin_users_fetch_row(PDO $pdo, int $id): ?array
             `email`,
             `role`,
             `status`,
+            COALESCE(`unit_code`, '') AS `unit_code`,
+            COALESCE(`unit_type`, '') AS `unit_type`,
+            COALESCE(`vehicle_plate`, '') AS `vehicle_plate`,
+            COALESCE(`unit_status`, '') AS `unit_status`,
             COALESCE(`department`, '') AS `department`,
             `created_at`
          FROM `users`
@@ -405,6 +642,7 @@ function admin_users_fetch_row(PDO $pdo, int $id): ?array
 
     if (is_array($row)) {
         $row['contact_number'] = admin_users_responder_contact_for_email($pdo, (string)($row['email'] ?? ''));
+        $row['assigned_unit_id'] = admin_users_responder_unit_for_email($pdo, (string)($row['email'] ?? ''));
     }
 
     return is_array($row) ? $row : null;
@@ -474,6 +712,10 @@ if ($method !== 'POST') {
         $department = trim((string)($input['department'] ?? ''));
         $contactNumber = trim((string)($input['contact_number'] ?? ''));
         $status = strtolower(trim((string)($input['status'] ?? 'active')));
+        $assignedUnitIdProvided = array_key_exists('assigned_unit_id', $input);
+        $assignedUnitId = $role === 'responder' && $assignedUnitIdProvided
+            ? admin_users_normalize_assigned_unit_id($input['assigned_unit_id'] ?? null)
+            : null;
 
         if ($id <= 0 || $name === '' || $email === '' || $department === '' || $contactNumber === '') {
             admin_users_respond(422, [
@@ -521,24 +763,58 @@ if ($method !== 'POST') {
                 ]);
             }
 
+            if ($role === 'responder' && !$assignedUnitIdProvided) {
+                $assignedUnitId = admin_users_normalize_assigned_unit_id($existing['assigned_unit_id'] ?? null);
+            }
+
+            if ($assignedUnitIdProvided && $assignedUnitId !== null && !admin_users_available_unit_exists($pdo, $assignedUnitId)) {
+                admin_users_respond(422, [
+                    'success' => false,
+                    'message' => 'Selected unit is no longer available.',
+                ]);
+            }
+
+            $previousAssignedUnitId = admin_users_normalize_assigned_unit_id($existing['assigned_unit_id'] ?? null);
+            $shouldUpdateUserUnitFields = $role !== 'responder' || $assignedUnitIdProvided;
+            $unitAssignment = $role === 'responder'
+                ? admin_users_fetch_unit_assignment($pdo, $assignedUnitId)
+                : admin_users_empty_unit_assignment();
             $inactiveSql = $status === 'inactive'
                 ? "`inactive_at` = COALESCE(`inactive_at`, NOW())"
                 : "`inactive_at` = NULL";
 
             $pdo->beginTransaction();
 
+            $userSets = [
+                '`name` = ?',
+                '`email` = ?',
+                '`department` = ?',
+                '`role` = ?',
+                '`status` = ?',
+                $inactiveSql,
+            ];
+            $userParams = [$name, $email, $department, $role, $status];
+
+            if ($shouldUpdateUserUnitFields) {
+                $userSets[] = '`unit_code` = ?';
+                $userSets[] = '`unit_type` = ?';
+                $userSets[] = '`vehicle_plate` = ?';
+                $userSets[] = '`unit_status` = ?';
+                $userParams[] = $unitAssignment['unit_code'];
+                $userParams[] = $unitAssignment['unit_type'];
+                $userParams[] = $unitAssignment['vehicle_plate'];
+                $userParams[] = $unitAssignment['unit_status'];
+            }
+
+            $userParams[] = $id;
+
             $updateStmt = $pdo->prepare(
                 "UPDATE `users`
-                 SET `name` = ?,
-                     `email` = ?,
-                     `department` = ?,
-                     `role` = ?,
-                     `status` = ?,
-                     {$inactiveSql}
+                 SET " . implode(",\n                     ", $userSets) . "
                  WHERE `id` = ?
                    AND LOWER(`role`) IN ('dispatcher', 'responder', 'operator')"
             );
-            $updateStmt->execute([$name, $email, $department, $role, $status, $id]);
+            $updateStmt->execute($userParams);
 
             admin_users_sync_responder_record(
                 $pdo,
@@ -548,8 +824,15 @@ if ($method !== 'POST') {
                 $department,
                 $contactNumber,
                 $status,
+                $assignedUnitId,
                 (string)$existing['email']
             );
+            if ($previousAssignedUnitId !== null && $previousAssignedUnitId !== $assignedUnitId) {
+                admin_users_clear_unit_responder_assignment($pdo, $previousAssignedUnitId);
+            }
+            if ($role === 'responder') {
+                admin_users_assign_unit_to_responder($pdo, $assignedUnitId, $name);
+            }
 
             $pdo->commit();
 
@@ -611,6 +894,10 @@ if ($method !== 'POST') {
             }
 
             admin_users_delete_responder_record($pdo, (string)$existing['email']);
+            admin_users_clear_unit_responder_assignment(
+                $pdo,
+                admin_users_normalize_assigned_unit_id($existing['assigned_unit_id'] ?? null)
+            );
             $pdo->commit();
 
             admin_users_respond(200, [
@@ -648,6 +935,9 @@ $department = trim((string)($input['department'] ?? ''));
 $contactNumber = trim((string)($input['contact_number'] ?? ''));
 $status = strtolower(trim((string)($input['status'] ?? 'active')));
 $passwordRequired = $role !== 'responder';
+$assignedUnitId = $role === 'responder'
+    ? admin_users_normalize_assigned_unit_id($input['assigned_unit_id'] ?? null)
+    : null;
 
 if ($name === '' || $email === '' || $department === '' || $contactNumber === '' || ($passwordRequired && $password === '')) {
     admin_users_respond(422, [
@@ -677,6 +967,13 @@ if (!in_array($status, ['active', 'inactive'], true)) {
     ]);
 }
 
+if ($assignedUnitId !== null && !admin_users_available_unit_exists($pdo, $assignedUnitId)) {
+    admin_users_respond(422, [
+        'success' => false,
+        'message' => 'Selected unit is no longer available.',
+    ]);
+}
+
 $passwordErrors = $password !== '' ? admin_users_password_errors($password) : [];
 if ($passwordErrors !== []) {
     admin_users_respond(422, [
@@ -698,18 +995,25 @@ try {
     $passwordHash = $password !== ''
         ? password_hash($password, PASSWORD_DEFAULT)
         : password_hash(bin2hex(random_bytes(16)), PASSWORD_DEFAULT);
+    $unitAssignment = $role === 'responder'
+        ? admin_users_fetch_unit_assignment($pdo, $assignedUnitId)
+        : admin_users_empty_unit_assignment();
 
     $pdo->beginTransaction();
 
     $insertStmt = $pdo->prepare(
-        'INSERT INTO `users` (`email`, `password`, `name`, `department`, `role`, `status`, `inactive_at`)
-         VALUES (?, ?, ?, ?, ?, ?, ?)'
+        'INSERT INTO `users` (`email`, `password`, `name`, `department`, `unit_code`, `unit_type`, `vehicle_plate`, `unit_status`, `role`, `status`, `inactive_at`)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
     );
     $insertStmt->execute([
         $email,
         $passwordHash,
         $name,
         $department,
+        $unitAssignment['unit_code'],
+        $unitAssignment['unit_type'],
+        $unitAssignment['vehicle_plate'],
+        $unitAssignment['unit_status'],
         $role,
         $status,
         $status === 'inactive' ? date('Y-m-d H:i:s') : null,
@@ -717,7 +1021,10 @@ try {
 
     $userId = (int)$pdo->lastInsertId();
 
-    admin_users_sync_responder_record($pdo, $name, $email, $role, $department, $contactNumber, $status, null, $passwordHash);
+    admin_users_sync_responder_record($pdo, $name, $email, $role, $department, $contactNumber, $status, $assignedUnitId, null, $passwordHash);
+    if ($role === 'responder') {
+        admin_users_assign_unit_to_responder($pdo, $assignedUnitId, $name);
+    }
 
     $pdo->commit();
 

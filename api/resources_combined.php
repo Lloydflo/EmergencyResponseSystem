@@ -135,7 +135,42 @@ function build_admin_actions(string $category): array {
     return ['assign', 'check', 'details'];
 }
 
+function load_user_unit_assignment_map(PDO $pdo): array {
+    if (!table_exists($pdo, 'users')) {
+        return [];
+    }
+
+    try {
+        $stmt = $pdo->query(
+            "SELECT unit_code, name
+             FROM users
+             WHERE LOWER(role) = 'responder'
+               AND unit_code IS NOT NULL
+               AND TRIM(unit_code) <> ''
+             ORDER BY id DESC"
+        );
+    } catch (Throwable $e) {
+        error_log('resources_combined user unit assignment map skipped: ' . $e->getMessage());
+        return [];
+    }
+
+    $assignments = [];
+    foreach ($stmt->fetchAll(PDO::FETCH_ASSOC) as $row) {
+        $unitCode = strtoupper(trim((string)($row['unit_code'] ?? '')));
+        $name = trim((string)($row['name'] ?? ''));
+        if ($unitCode !== '' && $name !== '' && !isset($assignments[$unitCode])) {
+            $assignments[$unitCode] = [
+                'assignment' => 'Assigned to ' . $name,
+                'responder_name' => $name,
+            ];
+        }
+    }
+
+    return $assignments;
+}
+
 function load_shared_resource_records(PDO $pdo, string $tableName): array {
+    $userUnitAssignments = load_user_unit_assignment_map($pdo);
     $stmt = $pdo->query(
         "SELECT id, code, name, category, status, location, driver_name, plate_number, position_title, assignment, notes, updated_at
          FROM `" . $tableName . "`
@@ -145,11 +180,19 @@ function load_shared_resource_records(PDO $pdo, string $tableName): array {
     $items = [];
     foreach ($stmt->fetchAll(PDO::FETCH_ASSOC) as $row) {
         $category = strtolower((string)($row['category'] ?? 'equipment'));
+        $code = (string)($row['code'] ?? '');
+        $userAssignment = $category === 'vehicles'
+            ? ($userUnitAssignments[strtoupper(trim($code))] ?? null)
+            : null;
+        if (is_array($userAssignment)) {
+            $row['assignment'] = $userAssignment['assignment'];
+            $row['driver_name'] = $userAssignment['responder_name'];
+        }
         $items[] = [
             'type' => $category,
-            'code' => (string)($row['code'] ?? ''),
+            'code' => $code,
             'name' => (string)($row['name'] ?? ''),
-            'identifier' => $category === 'vehicles' ? (string)($row['code'] ?? '') : '',
+            'identifier' => $category === 'vehicles' ? $code : '',
             'status' => map_admin_resource_status((string)($row['status'] ?? 'available')),
             'location' => (string)($row['location'] ?? ''),
             'details' => build_admin_details($row),

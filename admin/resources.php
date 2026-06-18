@@ -1297,10 +1297,6 @@ $pageTitle = 'Resources Status';
                             <label for="longitudeInput">Longitude</label>
                             <input id="longitudeInput" class="form-input" inputmode="decimal" maxlength="20" placeholder="e.g. 121.038765">
                         </div>
-                        <div class="form-group" id="driverNameGroup">
-                            <label for="driverNameInput">Driver Name</label>
-                            <input id="driverNameInput" class="form-input" maxlength="90" placeholder="e.g. Juan Dela Cruz">
-                        </div>
                         <div class="form-group" id="plateNumberGroup">
                             <label for="plateNumberInput">Plate Number</label>
                             <input id="plateNumberInput" class="form-input" maxlength="30" placeholder="e.g. ABC-1234">
@@ -1529,8 +1525,6 @@ $pageTitle = 'Resources Status';
         const latitudeInput = document.getElementById('latitudeInput');
         const longitudeInput = document.getElementById('longitudeInput');
         const resourceLocationSuggestions = document.getElementById('resourceLocationSuggestions');
-        const driverNameGroup = document.getElementById('driverNameGroup');
-        const driverNameInput = document.getElementById('driverNameInput');
         const plateNumberGroup = document.getElementById('plateNumberGroup');
         const plateNumberInput = document.getElementById('plateNumberInput');
         const positionTitleGroup = document.getElementById('positionTitleGroup');
@@ -1708,7 +1702,6 @@ $pageTitle = 'Resources Status';
                 location: String(raw.location || '').trim(),
                 latitude: raw.latitude !== null && raw.latitude !== undefined && raw.latitude !== '' ? Number(raw.latitude) : null,
                 longitude: raw.longitude !== null && raw.longitude !== undefined && raw.longitude !== '' ? Number(raw.longitude) : null,
-                driverName: String(raw.driverName || '').trim(),
                 plateNumber: String(raw.plateNumber || '').trim(),
                 positionTitle: String(raw.positionTitle || '').trim(),
                 assignment: String(raw.assignment || '').trim(),
@@ -1728,7 +1721,6 @@ $pageTitle = 'Resources Status';
                 location: String(raw.location || '').trim(),
                 latitude: raw.latitude !== null && raw.latitude !== undefined && raw.latitude !== '' ? Number(raw.latitude) : null,
                 longitude: raw.longitude !== null && raw.longitude !== undefined && raw.longitude !== '' ? Number(raw.longitude) : null,
-                driverName: String(raw.driverName || '').trim(),
                 plateNumber: String(raw.plateNumber || '').trim(),
                 positionTitle: String(raw.positionTitle || '').trim(),
                 assignment: String(raw.assignment || '').trim(),
@@ -1871,7 +1863,6 @@ $pageTitle = 'Resources Status';
         function formatResourceMeta(item) {
             if (item.category === 'vehicles') {
                 const meta = [];
-                if (item.driverName) meta.push(`Driver: ${item.driverName}`);
                 if (item.plateNumber) meta.push(`Plate: ${item.plateNumber}`);
                 if (meta.length > 0) return meta.join(' | ');
             }
@@ -1885,7 +1876,6 @@ $pageTitle = 'Resources Status';
             if (item.category === 'vehicles') {
                 const parts = [];
                 if (item.assignment) parts.push(item.assignment);
-                if (item.driverName) parts.push(`Driver: ${item.driverName}`);
                 if (item.plateNumber) parts.push(`Plate: ${item.plateNumber}`);
                 return parts.join(' | ') || 'N/A';
             }
@@ -2128,7 +2118,6 @@ $pageTitle = 'Resources Status';
                 ? 'e.g. Ambulance Unit 5'
                 : (isPersonnel ? 'e.g. Maria Santos' : 'e.g. Portable Defibrillator');
 
-            driverNameGroup.hidden = !isVehicle;
             plateNumberGroup.hidden = !isVehicle;
             positionTitleGroup.hidden = !isPersonnel;
             assignmentGroup.hidden = isPersonnel;
@@ -2138,7 +2127,6 @@ $pageTitle = 'Resources Status';
 
             if (clearIrrelevant) {
                 if (!isVehicle) {
-                    driverNameInput.value = '';
                     plateNumberInput.value = '';
                 }
                 if (!isPersonnel) {
@@ -2160,7 +2148,6 @@ $pageTitle = 'Resources Status';
             if (category === 'vehicles') {
                 if (!resourceNameInput.value.trim()) resourceNameInput.value = 'New Vehicle Unit';
                 if (!locationInput.value.trim()) locationInput.value = 'Central Garage';
-                if (!driverNameInput.value.trim()) driverNameInput.value = 'Assigned Driver';
                 if (!plateNumberInput.value.trim()) plateNumberInput.value = '';
                 if (!assignmentInput.value.trim()) assignmentInput.value = 'Ready for dispatch';
                 if (!notesInput.value.trim()) notesInput.value = 'Vehicle checklist completed.';
@@ -2361,7 +2348,6 @@ $pageTitle = 'Resources Status';
                 if (Number.isFinite(target.latitude) && Number.isFinite(target.longitude)) {
                     setLocationCoordinates(target.latitude, target.longitude);
                 }
-                driverNameInput.value = target.driverName || '';
                 plateNumberInput.value = target.plateNumber || '';
                 positionTitleInput.value = target.positionTitle || '';
                 assignmentInput.value = target.assignment;
@@ -2562,7 +2548,6 @@ $pageTitle = 'Resources Status';
                 location: locationInput.value.trim(),
                 latitude: manualLatitude !== null ? manualLatitude : (locationInput.dataset.lat || null),
                 longitude: manualLongitude !== null ? manualLongitude : (locationInput.dataset.lon || null),
-                driverName: driverNameInput.value.trim(),
                 plateNumber: plateNumberInput.value.trim().toUpperCase(),
                 positionTitle: positionTitleInput.value.trim(),
                 assignment: assignmentInput.value.trim(),

@@ -22,7 +22,7 @@ $pageTitle = 'Emergency Call Center';
     <link rel="stylesheet" href="css/admin-header.css">
     <link rel="stylesheet" href="css/sidebar-footer.css">
     <link rel="stylesheet" href="css/cards.css">
-    <link rel="stylesheet" href="css/call.css">
+    <link rel="stylesheet" href="css/call.css?v=<?php echo filemtime($rootDir . '/css/call.css'); ?>">
     <script src="js/place-autocomplete.js"></script>
 </head>
 <body>
@@ -207,12 +207,12 @@ $pageTitle = 'Emergency Call Center';
                                             </button>
                                             <div class="incident-type-menu" id="incidentTypeMenu" role="group" aria-label="Incident Type">
                                                 <label class="incident-type-option">
-                                                    <input type="checkbox" name="incidentTypes" value="medical">
-                                                    <span><i class="fas fa-notes-medical"></i> Medical Emergency</span>
+                                                    <input type="checkbox" name="incidentTypes" value="ambulance">
+                                                    <span><i class="fas fa-ambulance"></i> Ambulance</span>
                                                 </label>
                                                 <label class="incident-type-option">
                                                     <input type="checkbox" name="incidentTypes" value="fire">
-                                                    <span><i class="fas fa-fire-extinguisher"></i> Fire</span>
+                                                    <span><i class="fas fa-fire-extinguisher"></i> Fire Truck</span>
                                                 </label>
                                                 <label class="incident-type-option">
                                                     <input type="checkbox" name="incidentTypes" value="police">
@@ -221,14 +221,6 @@ $pageTitle = 'Emergency Call Center';
                                                 <label class="incident-type-option">
                                                     <input type="checkbox" name="incidentTypes" value="traffic">
                                                     <span><i class="fas fa-car-crash"></i> Traffic Accident</span>
-                                                </label>
-                                                <label class="incident-type-option">
-                                                    <input type="checkbox" name="incidentTypes" value="rescue">
-                                                    <span><i class="fas fa-life-ring"></i> Rescue</span>
-                                                </label>
-                                                <label class="incident-type-option">
-                                                    <input type="checkbox" name="incidentTypes" value="other">
-                                                    <span><i class="fas fa-ellipsis-h"></i> Other</span>
                                                 </label>
                                             </div>
                                         </div>
@@ -578,6 +570,15 @@ $pageTitle = 'Emergency Call Center';
         if (el) el.textContent = text || 'No transcript yet.';
     }
 
+    function applySimulatedCallerTranscript(reason) {
+        if (!activeCall) return;
+        const text = activeCallerScript || buildCallerScript(activeCall.name);
+        activeCallerScript = text;
+        setTranscript(text);
+        applyTranscriptToForm(text);
+        setVoiceState(reason || 'Using simulated caller transcript.');
+    }
+
     function playCallerVoice() {
         if (!activeCall) {
             alert('Accept a call first.');
@@ -632,7 +633,11 @@ $pageTitle = 'Emergency Call Center';
         speechRecognition.onerror = (event) => {
             speechListening = false;
             updateSpeechButton();
-            setVoiceState(event.error === 'not-allowed' ? 'Microphone permission was blocked.' : 'Speech-to-text stopped.');
+            if (event.error === 'not-allowed' || event.error === 'service-not-allowed') {
+                applySimulatedCallerTranscript('Microphone permission was blocked. Simulated transcript was applied.');
+            } else {
+                setVoiceState('Speech-to-text stopped.');
+            }
             document.getElementById('voiceMeter')?.classList.remove('active');
         };
         speechRecognition.onend = () => {
@@ -647,7 +652,7 @@ $pageTitle = 'Emergency Call Center';
         const value = String(text || '').toLowerCase();
         const types = [];
         if (/(medical|ambulance|injur|cardiac|stroke|unconscious|not breathing|pregnan|health|nahihirapang huminga|walang malay|sugat|lagnat|buntis)/.test(value)) {
-            types.push('medical');
+            types.push('ambulance');
         }
         if (/(fire|smoke|blaze|burn|explosion|sunog|usok|pagsabog)/.test(value)) {
             types.push('fire');
@@ -657,9 +662,6 @@ $pageTitle = 'Emergency Call Center';
         }
         if (/(traffic|accident|collision|crash|vehicle|banggaan|aksidente|trapiko)/.test(value)) {
             types.push('traffic');
-        }
-        if (/(rescue|collapse|trapped|flood|earthquake|landslide|drowning|baha|lindol|gumuho|naipit)/.test(value)) {
-            types.push('rescue');
         }
         return Array.from(new Set(types));
     }
@@ -701,7 +703,7 @@ $pageTitle = 'Emergency Call Center';
         }
         const recognizer = getSpeechRecognition();
         if (!recognizer) {
-            setVoiceState('Speech-to-text is not supported in this browser.');
+            applySimulatedCallerTranscript('Speech-to-text is not supported in this browser. Simulated transcript was applied.');
             return;
         }
         if (speechListening) {
@@ -771,12 +773,11 @@ $pageTitle = 'Emergency Call Center';
 
     function incidentTypeLabel(value) {
         const labels = {
-            medical: 'Medical',
-            fire: 'Fire',
-            police: 'Police',
-            traffic: 'Traffic',
-            rescue: 'Rescue',
-            other: 'Other'
+            medical: 'Ambulance',
+            ambulance: 'Ambulance',
+            fire: 'Fire Truck',
+            police: 'Police Emergency',
+            traffic: 'Traffic Accident'
         };
         return labels[value] || value;
     }
@@ -887,7 +888,7 @@ $pageTitle = 'Emergency Call Center';
         if (majorFirePattern.test(text)) score += 2;
 
         if (incidentTypes.includes('fire') && (highHits > 0 || mediumHits > 0)) score += 1;
-        if (incidentTypes.includes('medical') && unconsciousPattern.test(text)) score += 2;
+        if ((incidentTypes.includes('medical') || incidentTypes.includes('ambulance')) && unconsciousPattern.test(text)) score += 2;
         if (incidentTypes.includes('police') && /(armed|may armas|weapon|barilan|binaril)/.test(text)) score += 2;
         if (incidentTypes.includes('traffic') && /(multi-vehicle|maramihang sasakyan|multiple|many)/.test(text)) score += 2;
 
@@ -1225,19 +1226,17 @@ $pageTitle = 'Emergency Call Center';
 
     function labelForType(t) {
         const labels = {
-            medical: 'Medical Emergency',
-            ambulance: 'Medical Emergency',
-            fire: 'Fire',
+            medical: 'Ambulance',
+            ambulance: 'Ambulance',
+            fire: 'Fire Truck',
             police: 'Police Emergency',
-            traffic: 'Traffic Accident',
-            rescue: 'Rescue',
-            other: 'Other'
+            traffic: 'Traffic Accident'
         };
         const values = String(t || '')
             .split(',')
             .map((part) => part.trim().toLowerCase())
             .filter(Boolean);
-        if (!values.length) return 'Other';
+        if (!values.length) return 'Unspecified';
         return values.map((value) => labels[value] || value.replace(/\b\w/g, (c) => c.toUpperCase())).join(', ');
     }
 
