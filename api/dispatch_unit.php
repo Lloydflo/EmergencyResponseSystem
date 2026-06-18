@@ -73,6 +73,41 @@ function dispatch_vehicle_label(string $unitType, string $vehicleName = ''): str
     return $vehicleName !== '' ? $vehicleName : 'Vehicle';
 }
 
+function dispatch_table_exists(PDO $pdo, string $tableName): bool
+{
+    try {
+        $stmt = $pdo->prepare(
+            "SELECT 1
+             FROM INFORMATION_SCHEMA.TABLES
+             WHERE TABLE_SCHEMA = DATABASE()
+               AND TABLE_NAME = ?
+             LIMIT 1"
+        );
+        $stmt->execute([$tableName]);
+        return (bool)$stmt->fetchColumn();
+    } catch (Throwable $e) {
+        return false;
+    }
+}
+
+function dispatch_column_exists(PDO $pdo, string $tableName, string $columnName): bool
+{
+    try {
+        $stmt = $pdo->prepare(
+            "SELECT 1
+             FROM INFORMATION_SCHEMA.COLUMNS
+             WHERE TABLE_SCHEMA = DATABASE()
+               AND TABLE_NAME = ?
+               AND COLUMN_NAME = ?
+             LIMIT 1"
+        );
+        $stmt->execute([$tableName, $columnName]);
+        return (bool)$stmt->fetchColumn();
+    } catch (Throwable $e) {
+        return false;
+    }
+}
+
 try {
     $dispatchIds = [];
     $dispatchedUnits = [];
@@ -99,13 +134,28 @@ try {
 
     $placeholders = implode(',', array_fill(0, count($unit_ids), '?'));
     $resourceTable = ers_vehicle_resource_units_table($pdo);
+    $responderOperatorExpr = 'NULL';
+    if (
+        dispatch_table_exists($pdo, 'users') &&
+        dispatch_column_exists($pdo, 'users', 'unit_code') &&
+        dispatch_column_exists($pdo, 'users', 'name') &&
+        dispatch_column_exists($pdo, 'users', 'role')
+    ) {
+        $responderOperatorExpr = "(SELECT usr.name
+                                  FROM users usr
+                                  WHERE LOWER(COALESCE(usr.role, '')) = 'responder'
+                                    AND UPPER(TRIM(usr.unit_code)) = UPPER(TRIM(u.identifier))
+                                    AND TRIM(COALESCE(usr.name, '')) <> ''
+                                  ORDER BY usr.id DESC
+                                  LIMIT 1)";
+    }
     $resourceJoin = '';
-    $resourceSelect = 'NULL AS operator_name, NULL AS vehicle_name';
+    $resourceSelect = $responderOperatorExpr . ' AS operator_name, NULL AS vehicle_name';
     if ($resourceTable !== null) {
         $resourceJoin = " LEFT JOIN `" . $resourceTable . "` rr
                           ON rr.code = u.identifier
                          AND LOWER(rr.category) = 'vehicles'";
-        $resourceSelect = 'rr.driver_name AS operator_name, rr.name AS vehicle_name';
+        $resourceSelect = 'COALESCE(NULLIF(TRIM(rr.driver_name), \'\'), ' . $responderOperatorExpr . ') AS operator_name, rr.name AS vehicle_name';
     }
 
     $unitStmt = $pdo->prepare("

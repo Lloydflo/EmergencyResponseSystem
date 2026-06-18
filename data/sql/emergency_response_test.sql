@@ -546,9 +546,11 @@ CREATE TABLE responders (
   department ENUM('fire','police','medical','barangay','other') NOT NULL DEFAULT 'other',
   email VARCHAR(255) NOT NULL,
   contact_number VARCHAR(50) NOT NULL DEFAULT '',
+  assigned_unit_id BIGINT UNSIGNED DEFAULT NULL,
   is_active TINYINT(1) NOT NULL DEFAULT 1,
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   PRIMARY KEY (id),
+  KEY idx_responders_assigned_unit_id (assigned_unit_id),
   UNIQUE KEY uq_responders_email (email)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
@@ -756,6 +758,10 @@ CREATE TABLE `users` (
   `password` varchar(255) NOT NULL,
   `name` varchar(150) NOT NULL,
   `department` varchar(150) DEFAULT NULL,
+  `unit_code` varchar(50) DEFAULT NULL,
+  `unit_type` varchar(50) DEFAULT NULL,
+  `vehicle_plate` varchar(50) DEFAULT NULL,
+  `unit_status` varchar(50) DEFAULT NULL,
   `role` enum('admin','operator','viewer','dispatcher','responder') NOT NULL DEFAULT 'viewer',
   `status` enum('active','inactive') NOT NULL DEFAULT 'active',
   `inactive_at` timestamp NULL DEFAULT NULL,
