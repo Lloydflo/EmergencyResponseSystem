@@ -55,6 +55,8 @@ try {
             "unit_code"     => (string)($r["assigned_unit_code"] ?? ""),
             "unit_type"     => (string)($r["assigned_unit_type"] ?? ""),
             "unit_status"   => (string)($r["unit_status"] ?? "")
+
+            "assigned_at"   => (string)($r["assigned_at"] ?? "")
         ];
     }
 
