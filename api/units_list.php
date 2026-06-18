@@ -55,6 +55,8 @@ if ($vehicleResourceTable !== null) {
 }
 
 $status = isset($_GET['status']) ? trim((string) $_GET['status']) : '';
+$includeUnassigned = isset($_GET['include_unassigned'])
+    && in_array(strtolower(trim((string) $_GET['include_unassigned'])), ['1', 'true', 'yes'], true);
 
 // Map dispatcher-facing filter names to actual unit statuses.
 $statuses = [];
@@ -191,7 +193,7 @@ if (!empty($statuses)) {
     $params = $statuses;
 }
 
-if (in_array('available', $statuses, true)) {
+if (in_array('available', $statuses, true) && !$includeUnassigned) {
     $sql .= ($params === [] ? ' WHERE ' : ' AND ')
         . "TRIM(COALESCE(" . $driverNameExpr . ", '')) <> ''";
 }
