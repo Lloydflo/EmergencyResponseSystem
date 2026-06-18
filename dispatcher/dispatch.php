@@ -35,8 +35,17 @@ try {
         // Get available units
         $availableUnits = ers_count_available_vehicle_resource_units($pdo, $vehicleResourceTable ?? null);
         
-        // Get pending calls
-        $pendingCalls = (int)$pdo->query("SELECT COUNT(*) AS c FROM incidents WHERE status='pending'")->fetch()['c'];
+        // Get pending calls that do not already have responders assigned.
+        $pendingCallsSql = "SELECT COUNT(*) AS c FROM incidents i WHERE i.status='pending'";
+        if (function_exists('ers_vehicle_resource_table_exists') && ers_vehicle_resource_table_exists($pdo, 'dispatches')) {
+            $pendingCallsSql .= " AND NOT EXISTS (
+                SELECT 1
+                FROM dispatches d_pending
+                WHERE d_pending.incident_id = i.id
+                  AND d_pending.status IN ('assigned','acknowledged','enroute','on_scene')
+            )";
+        }
+        $pendingCalls = (int)$pdo->query($pendingCallsSql)->fetch()['c'];
 
         $topIncident = $pdo->query("SELECT reference_no, type, location_address, priority
                                     FROM incidents
@@ -290,10 +299,14 @@ try {
                 <div id="modal-incident-details" style="background:#f8f9fa; border-radius:7px; padding:0.75rem 1rem; font-size:1rem; color:#334155; line-height:1.6;"></div>
             </div>
             <div style="display:flex; flex-direction:column; gap:0.3rem;">
-                <label for="unit-select" style="font-weight:600; color:#334155;">Available Units <span style="color:red">*</span></label>
-                <select id="unit-select" style="width:100%; padding:0.7rem; border-radius:6px; border:1.5px solid #bbb; font-size:1.08rem; background:#f9f9f9; color:#111827;">
-                    <option value="">-- Select --</option>
-                </select>
+                <label style="font-weight:600; color:#334155;">Available Units <span style="color:red">*</span></label>
+                <div style="position:relative;">
+                    <button id="unit-dropdown-toggle" type="button" style="width:100%; padding:0.7rem; border-radius:6px; border:1.5px solid #bbb; font-size:1.08rem; background:#f9f9f9; color:#111827; text-align:left; cursor:pointer; display:flex; justify-content:space-between; align-items:center;">
+                        <span id="unit-dropdown-label">Select available units</span>
+                        <span aria-hidden="true" style="font-size:0.9rem;">v</span>
+                    </button>
+                    <div id="unit-select" style="display:none; position:absolute; top:calc(100% + 4px); left:0; right:0; z-index:10000; max-height:210px; overflow-y:auto; padding:0.55rem; border-radius:6px; border:1.5px solid #bbb; font-size:1rem; background:#fff; color:#111827; flex-direction:column; gap:0.45rem; box-shadow:0 10px 24px rgba(15,23,42,0.18);"></div>
+                </div>
             </div>
             <div style="display:flex; flex-direction:column; gap:0.3rem;">
                 <label style="font-weight:600; color:#334155;">Unit Details</label>
@@ -311,6 +324,7 @@ try {
 let currentIncidentId = null;
 let currentIncidentLat = null;
 let currentIncidentLng = null;
+let currentAvailableUnitsById = {};
 function toIncidentId(value) {
     if (value === null || value === undefined) return null;
     const raw = String(value).trim();
@@ -328,9 +342,88 @@ function getSampleUnitProfile(unitType) {
     const key = String(unitType || '').toLowerCase();
     return sampleUnitProfilesByType[key] || sampleUnitProfilesByType.other;
 }
+function getSelectedUnitOptions(container) {
+    return Array.from(container ? container.querySelectorAll('input[name="unit_ids[]"]:checked') : []);
+}
+function haversine(lat1, lon1, lat2, lon2) {
+    const R = 6371; // km
+    const toRad = d => d * Math.PI / 180;
+    const dLat = toRad(lat2 - lat1);
+    const dLon = toRad(lon2 - lon1);
+    const a = Math.sin(dLat/2) * Math.sin(dLat/2) +
+              Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) *
+              Math.sin(dLon/2) * Math.sin(dLon/2);
+    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+    return R * c;
+}
+function formatSelectedUnitDetails(unit) {
+    const sampleProfile = getSampleUnitProfile(unit.unit_type);
+    const lines = [
+        `<strong>${escapeHtml(unit.identifier || unit.vehicle_name || 'Selected Unit')}</strong>`,
+        `<strong>Operator:</strong> ${escapeHtml(unit.driver_name || sampleProfile.driver)}`,
+        `<strong>Plate #:</strong> ${escapeHtml(unit.plate_number || sampleProfile.plate)}`,
+        `<strong>Type:</strong> ${escapeHtml(unit.unit_type || '')}`,
+        `<strong>Status:</strong> ${escapeHtml(unit.status || '')}`
+    ];
+    if (currentIncidentLat && currentIncidentLng && unit.latitude && unit.longitude) {
+        const distKm = haversine(Number(unit.latitude), Number(unit.longitude), currentIncidentLat, currentIncidentLng).toFixed(2);
+        lines.push(`<strong>Distance to Incident:</strong> ${distKm} km`);
+    } else if (typeof unit.distance_km === 'number' && isFinite(unit.distance_km)) {
+        lines.push(`<strong>Distance to Incident:</strong> ${unit.distance_km.toFixed(2)} km`);
+    }
+    return `<div style="padding:0.55rem 0; border-bottom:1px solid #dbe3ea;">${lines.join('<br>')}</div>`;
+}
+function renderSelectedUnitDetails(select) {
+    const detailsEl = document.getElementById('unit-details');
+    const btn = document.getElementById('confirm-dispatch-btn');
+    const label = document.getElementById('unit-dropdown-label');
+    const selectedOptions = getSelectedUnitOptions(select);
+
+    if (!selectedOptions.length) {
+        if (label) label.textContent = 'Select available units';
+        detailsEl.innerHTML = 'Select one or more available vehicles to confirm dispatch.';
+        if (btn) btn.disabled = true;
+        return;
+    }
+
+    const selectedUnits = selectedOptions.map(option => currentAvailableUnitsById[option.value] || {
+        id: option.value,
+        identifier: option.getAttribute('data-identifier') || option.textContent,
+        unit_type: option.getAttribute('data-type') || '',
+        status: 'available'
+    });
+    if (label) {
+        label.textContent = selectedOptions.length === 1
+            ? (selectedUnits[0].identifier || '1 unit selected')
+            : `${selectedOptions.length} units selected`;
+    }
+    detailsEl.innerHTML = selectedUnits.map(formatSelectedUnitDetails).join('');
+    if (btn) btn.disabled = false;
+}
+function formatIncidentTypeLabel(value) {
+    const labels = {
+        medical: 'Medical Emergency',
+        ambulance: 'Medical Emergency',
+        fire: 'Fire',
+        police: 'Police Emergency',
+        traffic: 'Traffic Accident',
+        rescue: 'Rescue',
+        other: 'Other'
+    };
+    const parts = String(value || '')
+        .split(',')
+        .map((part) => part.trim().toLowerCase())
+        .filter(Boolean);
+    if (!parts.length) return '';
+    return parts.map((part) => labels[part] || part.replace(/\b\w/g, (c) => c.toUpperCase())).join(', ');
+}
 function openDispatchModal(incidentId) {
     currentIncidentId = toIncidentId(incidentId);
     document.getElementById('dispatch-modal').style.display = 'flex';
+    const unitDropdownLabel = document.getElementById('unit-dropdown-label');
+    const unitDropdownMenu = document.getElementById('unit-select');
+    if (unitDropdownLabel) unitDropdownLabel.textContent = 'Select available units';
+    if (unitDropdownMenu) unitDropdownMenu.style.display = 'none';
     if (currentIncidentId === null) {
         document.getElementById('modal-incident-details').innerHTML = '<span style="color:red">Incident not found.</span>';
         return;
@@ -344,7 +437,7 @@ function openDispatchModal(incidentId) {
                 currentIncidentLat = inc && inc.latitude ? Number(inc.latitude) : null;
                 currentIncidentLng = inc && inc.longitude ? Number(inc.longitude) : null;
                 document.getElementById('modal-incident-details').innerHTML =
-                    `<strong>Type:</strong> ${inc.type || ''}<br>` +
+                    `<strong>Type:</strong> ${formatIncidentTypeLabel(inc.type) || inc.type || ''}<br>` +
                     `<strong>Title:</strong> ${inc.title || ''}<br>` +
                     `<strong>Location:</strong> ${inc.location_address || 'N/A'}<br>` +
                     (inc.latitude && inc.longitude ? `<strong>Coordinates:</strong> ${inc.latitude}, ${inc.longitude}<br>` : '') +
@@ -354,17 +447,27 @@ function openDispatchModal(incidentId) {
             }
             // Populate units
             const select = document.getElementById('unit-select');
-            select.innerHTML = '<option value="">-- Select --</option>';
+            select.innerHTML = '';
+            currentAvailableUnitsById = {};
             if (data.units && data.units.length) {
                 data.units.forEach(u => {
+                    currentAvailableUnitsById[String(u.id)] = u;
                     const dist = (typeof u.distance_km === 'number' && isFinite(u.distance_km)) ? `${u.distance_km.toFixed(1)} km` : '';
                     const suffix = dist ? `${u.unit_type}, ${dist}` : `${u.unit_type}`;
-                    select.innerHTML += `<option value="${u.id}" data-type="${u.unit_type}" data-identifier="${u.identifier}">${u.identifier} (${suffix})</option>`;
+                    select.innerHTML += `
+                        <label style="display:flex; align-items:flex-start; gap:0.65rem; padding:0.55rem 0.65rem; border:1px solid #e2e8f0; border-radius:6px; background:#fff; cursor:pointer;">
+                            <input type="checkbox" name="unit_ids[]" value="${escapeAttr(String(u.id))}" data-type="${escapeAttr(u.unit_type || '')}" data-identifier="${escapeAttr(u.identifier || '')}" style="margin-top:0.2rem; width:1rem; height:1rem;">
+                            <span style="display:flex; flex-direction:column; gap:0.12rem;">
+                                <strong style="font-size:0.98rem; color:#0f172a;">${escapeHtml(u.identifier || '')}</strong>
+                                <small style="font-size:0.82rem; color:#64748b;">${escapeHtml(suffix)}</small>
+                            </span>
+                        </label>`;
                 });
-                document.getElementById('unit-details').innerHTML = 'Select an available vehicle to confirm dispatch.';
-                document.getElementById('confirm-dispatch-btn').disabled = false;
+                renderSelectedUnitDetails(select);
             } else {
-                select.innerHTML = '<option value="">No available units</option>';
+                select.innerHTML = '<div style="padding:0.55rem 0.65rem; color:#64748b;">No available units</div>';
+                const label = document.getElementById('unit-dropdown-label');
+                if (label) label.textContent = 'No available units';
                 document.getElementById('unit-details').innerHTML = 'No real available vehicles ready for dispatch.';
                 document.getElementById('confirm-dispatch-btn').disabled = true;
             }
@@ -373,8 +476,14 @@ function openDispatchModal(incidentId) {
 function closeDispatchModal() {
     document.getElementById('dispatch-modal').style.display = 'none';
     document.getElementById('modal-incident-details').innerHTML = '';
-    document.getElementById('unit-select').innerHTML = '<option value="">-- Select --</option>';
+    document.getElementById('unit-select').innerHTML = '';
+    document.getElementById('unit-select').style.display = 'none';
+    const label = document.getElementById('unit-dropdown-label');
+    if (label) label.textContent = 'Select available units';
     document.getElementById('unit-details').innerHTML = '';
+    currentAvailableUnitsById = {};
+    currentIncidentLat = null;
+    currentIncidentLng = null;
     const btn = document.getElementById('confirm-dispatch-btn');
     if (btn) {
         btn.disabled = false;
@@ -382,49 +491,29 @@ function closeDispatchModal() {
     }
 }
 document.addEventListener('DOMContentLoaded', function() {
-    document.getElementById('unit-select').addEventListener('change', function() {
-        const unitId = this.value;
-        const selectedOption = this.options[this.selectedIndex];
-        const selectedType = selectedOption ? selectedOption.getAttribute('data-type') : '';
-        if (!unitId) {
-            document.getElementById('unit-details').innerHTML = '';
+    const unitDropdownToggle = document.getElementById('unit-dropdown-toggle');
+    const unitDropdownMenu = document.getElementById('unit-select');
+    if (unitDropdownToggle && unitDropdownMenu) {
+        unitDropdownToggle.addEventListener('click', function(e) {
+            e.stopPropagation();
+            unitDropdownMenu.style.display = unitDropdownMenu.style.display === 'flex' ? 'none' : 'flex';
+        });
+        unitDropdownMenu.addEventListener('click', function(e) {
+            e.stopPropagation();
+        });
+        document.addEventListener('click', function(e) {
+            const modal = document.getElementById('dispatch-modal');
+            if (modal && modal.style.display !== 'none') {
+                unitDropdownMenu.style.display = 'none';
+            }
+        });
+    }
+    document.getElementById('unit-select').addEventListener('change', function(e) {
+        if (!e.target || !e.target.matches('input[name="unit_ids[]"]')) {
             return;
         }
-        fetch('api/unit_details.php?id=' + encodeURIComponent(unitId))
-            .then(r => r.json())
-            .then(data => {
-                if (data.unit) {
-                    const u = data.unit;
-                    const sampleProfile = getSampleUnitProfile(u.unit_type || selectedType);
-                    let html =
-                        `<strong>Driver:</strong> ${u.driver_name || sampleProfile.driver}<br>` +
-                        `<strong>Plate #:</strong> ${u.plate_number || sampleProfile.plate}<br>` +
-                        `<strong>Type:</strong> ${u.unit_type || ''}<br>` +
-                        `<strong>Status:</strong> ${u.status || ''}`;
-                    if (currentIncidentLat && currentIncidentLng && u.latitude && u.longitude) {
-                        const distKm = haversine(Number(u.latitude), Number(u.longitude), currentIncidentLat, currentIncidentLng).toFixed(2);
-                        html += `<br><strong>Distance to Incident:</strong> ${distKm} km`;
-                    }
-                    document.getElementById('unit-details').innerHTML = html;
-                } else {
-                    document.getElementById('unit-details').innerHTML = '<span style="color:red">Unit not found.</span>';
-                }
-            })
-            .catch(() => {
-                document.getElementById('unit-details').innerHTML = '<span style="color:red">Unable to load unit details.</span>';
-            });
+        renderSelectedUnitDetails(this);
     });
-    function haversine(lat1, lon1, lat2, lon2) {
-        const R = 6371; // km
-        const toRad = d => d * Math.PI / 180;
-        const dLat = toRad(lat2 - lat1);
-        const dLon = toRad(lon2 - lon1);
-        const a = Math.sin(dLat/2) * Math.sin(dLat/2) +
-                  Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) *
-                  Math.sin(dLon/2) * Math.sin(dLon/2);
-        const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-        return R * c;
-    }
     function redirectToGpsContext(route) {
         const qp = new URLSearchParams();
         if (route.dispatchId) qp.set('dispatch_id', String(route.dispatchId));
@@ -442,28 +531,35 @@ document.addEventListener('DOMContentLoaded', function() {
         }
         window.location.href = 'dispatcher/gps.php?' + qp.toString();
     }
+    function getUnitRoutePoint(unit, selectedOption) {
+        if (unit.latitude && unit.longitude) {
+            return { lat: Number(unit.latitude), lng: Number(unit.longitude) };
+        }
+        const type = selectedOption ? selectedOption.getAttribute('data-type') : (unit.unit_type || 'other');
+        if (type === 'police') return { lat: 14.6500, lng: 121.0300 };
+        if (type === 'fire') return { lat: 14.6700, lng: 121.0450 };
+        if (type === 'ambulance') return { lat: 14.6900, lng: 121.0600 };
+        return { lat: 14.6760, lng: 121.0437 };
+    }
     document.getElementById('confirm-dispatch-btn').onclick = function() {
         const btn = document.getElementById('confirm-dispatch-btn');
         btn.disabled = true;
         btn.textContent = 'Dispatching...';
         const unitSelect = document.getElementById('unit-select');
-        const unitId = unitSelect.value;
-        const selectedOption = unitSelect.options[unitSelect.selectedIndex];
-        const unitIdentifier = selectedOption ? selectedOption.getAttribute('data-identifier') : '';
-        if (!unitId || currentIncidentId === null) {
+        const selectedOptions = getSelectedUnitOptions(unitSelect);
+        const unitIds = selectedOptions.map(option => option.value);
+        if (!unitIds.length || currentIncidentId === null) {
             alert('Please select a unit.');
             btn.disabled = false;
             btn.textContent = 'Confirm Dispatch';
             return;
         }
-        // Real unit: do original dispatch logic
+
         Promise.all([
             fetch('api/incident_details.php?id=' + encodeURIComponent(currentIncidentId)).then(r => r.json()),
-            fetch('api/unit_details.php?id=' + encodeURIComponent(unitId)).then(r => r.json())
-        ]).then(([incRes, unitRes]) => {
+            Promise.all(unitIds.map(unitId => fetch('api/unit_details.php?id=' + encodeURIComponent(unitId)).then(r => r.json())))
+        ]).then(([incRes, unitResponses]) => {
             const inc = incRes.incident || {};
-            const u = unitRes.unit || {};
-            // Fallbacks for incident location
             let toLat = null, toLng = null;
             if (inc.latitude && inc.longitude) {
                 toLat = Number(inc.latitude);
@@ -477,48 +573,55 @@ document.addEventListener('DOMContentLoaded', function() {
                 toLat = 14.6760;
                 toLng = 121.0437;
             }
-            // Fallbacks for unit location
-            let fromLat = null, fromLng = null;
-            if (u.latitude && u.longitude) {
-                fromLat = Number(u.latitude);
-                fromLng = Number(u.longitude);
-            } else {
-                const type = selectedOption ? selectedOption.getAttribute('data-type') : (u.unit_type || 'other');
-                if (type === 'police') { fromLat = 14.6500; fromLng = 121.0300; }
-                else if (type === 'fire') { fromLat = 14.6700; fromLng = 121.0450; }
-                else if (type === 'ambulance') { fromLat = 14.6900; fromLng = 121.0600; }
-                else { fromLat = 14.6760; fromLng = 121.0437; }
-            }
-            const ensureUnitLocation = (fromLat && fromLng)
+
+            const routeUnits = unitResponses.map((unitRes, index) => {
+                const selectedOption = selectedOptions[index];
+                const unit = unitRes.unit || currentAvailableUnitsById[unitIds[index]] || {};
+                const point = getUnitRoutePoint(unit, selectedOption);
+                return {
+                    id: unitIds[index],
+                    identifier: selectedOption ? selectedOption.getAttribute('data-identifier') : (unit.identifier || ''),
+                    fromLat: point.lat,
+                    fromLng: point.lng
+                };
+            });
+
+            const ensureUnitLocations = routeUnits.map(routeUnit => (routeUnit.fromLat && routeUnit.fromLng)
                 ? fetch('api/unit_location_update.php', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ unit_id: unitId, latitude: fromLat, longitude: fromLng })
+                    body: JSON.stringify({ unit_id: routeUnit.id, latitude: routeUnit.fromLat, longitude: routeUnit.fromLng })
                 }).catch(() => null)
-                : Promise.resolve();
-            // Continue with dispatch only after the latest unit coordinates are saved.
-            return ensureUnitLocation.then(() => {
+                : Promise.resolve());
+
+            return Promise.allSettled(ensureUnitLocations).then(() => {
                 return fetch('api/dispatch_unit.php', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ incident_id: currentIncidentId, unit_id: unitId })
+                    body: JSON.stringify({ incident_id: currentIncidentId, unit_ids: unitIds })
                 }).then(r => r.json()).then(data => {
                     if (data.ok) {
-                        if (typeof addRouteToIncident === 'function' && fromLat && fromLng && toLat && toLng) {
-                            addRouteToIncident(fromLat, fromLng, toLat, toLng, { silent: true });
+                        if (typeof addRouteToIncident === 'function' && toLat && toLng) {
+                            routeUnits.forEach(routeUnit => {
+                                if (routeUnit.fromLat && routeUnit.fromLng) {
+                                    addRouteToIncident(routeUnit.fromLat, routeUnit.fromLng, toLat, toLng, { silent: true });
+                                }
+                            });
                         }
                         closeDispatchModal();
+                        const firstRouteUnit = routeUnits[0] || {};
                         const routeContext = {
                             dispatchId: data.dispatch_id || '',
                             incidentId: currentIncidentId,
-                            unitId: unitId,
-                            unitIdentifier: unitIdentifier,
+                            unitId: firstRouteUnit.id || '',
+                            unitIdentifier: firstRouteUnit.identifier || '',
                             incidentLabel: inc.reference_no || inc.title || '',
-                            fromLat: fromLat,
-                            fromLng: fromLng,
+                            fromLat: firstRouteUnit.fromLat,
+                            fromLng: firstRouteUnit.fromLng,
                             toLat: toLat,
                             toLng: toLng
                         };
+                        removeIncidentFromActiveCalls(currentIncidentId);
                         Promise.allSettled([
                             refreshActiveCalls(),
                             refreshAvailableUnits()
@@ -536,6 +639,10 @@ document.addEventListener('DOMContentLoaded', function() {
                 btn.disabled = false;
                 btn.textContent = 'Confirm Dispatch';
             });
+        }).catch(() => {
+            alert('Network error.');
+            btn.disabled = false;
+            btn.textContent = 'Confirm Dispatch';
         });
     };
 });
@@ -1171,6 +1278,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     const phone = it.caller_phone || '';
                     const card = document.createElement('div');
                     card.className = 'call-card ' + prioClass;
+                    card.setAttribute('data-incident-id', String(it.id));
                     card.innerHTML = `
                         <div class="call-info">
                             <div class="call-details">
@@ -1375,6 +1483,7 @@ function refreshActiveCalls() {
             const phone = it.caller_phone || '';
             const card = document.createElement('div');
             card.className = 'call-card ' + prioClass;
+            card.setAttribute('data-incident-id', String(it.id));
             card.innerHTML = `
                 <div class=\"call-info\">
                     <div class=\"call-details\">
@@ -1395,6 +1504,23 @@ function refreshActiveCalls() {
         });
         return items;
       }).catch(() => []);
+}
+
+function removeIncidentFromActiveCalls(incidentId) {
+    const id = toIncidentId(incidentId);
+    if (id === null) return;
+    const container = document.getElementById('active-calls-container');
+    if (!container) return;
+    const card = container.querySelector(`[data-incident-id="${id}"]`);
+    if (card) {
+        card.remove();
+    }
+    const remaining = container.querySelectorAll('.call-card[data-incident-id]').length;
+    const badge = document.getElementById('active-calls-badge');
+    if (badge) badge.textContent = `${remaining} Pending`;
+    if (remaining === 0) {
+        container.innerHTML = '<div class="call-card"><div class="call-info"><div class="call-details"><div class="call-title">No pending emergency calls.</div></div></div></div>';
+    }
 }
 
 

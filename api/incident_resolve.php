@@ -38,6 +38,41 @@ if ($incidentId === null && $incidentCode === '') {
     exit;
 }
 
+function incident_resolve_table_exists(PDO $pdo, string $table): bool
+{
+    try {
+        $stmt = $pdo->prepare(
+            "SELECT 1
+             FROM INFORMATION_SCHEMA.TABLES
+             WHERE TABLE_SCHEMA = DATABASE()
+               AND TABLE_NAME = ?
+             LIMIT 1"
+        );
+        $stmt->execute([$table]);
+        return (bool)$stmt->fetchColumn();
+    } catch (Throwable $e) {
+        return false;
+    }
+}
+
+function incident_resolve_column_exists(PDO $pdo, string $table, string $column): bool
+{
+    try {
+        $stmt = $pdo->prepare(
+            "SELECT 1
+             FROM INFORMATION_SCHEMA.COLUMNS
+             WHERE TABLE_SCHEMA = DATABASE()
+               AND TABLE_NAME = ?
+               AND COLUMN_NAME = ?
+             LIMIT 1"
+        );
+        $stmt->execute([$table, $column]);
+        return (bool)$stmt->fetchColumn();
+    } catch (Throwable $e) {
+        return false;
+    }
+}
+
 try {
     if ($incidentId === null && $incidentCode !== '') {
         $lookup = $pdo->prepare('SELECT id FROM incidents WHERE reference_no = :ref LIMIT 1');
@@ -53,35 +88,91 @@ try {
 
     $pdo->beginTransaction();
 
-    $unitIdStmt = $pdo->prepare("SELECT id FROM units WHERE current_incident_id = :iid");
-    $unitIdStmt->execute([':iid' => $incidentId]);
-    $unitIds = array_map(static function ($row): int {
-        return (int)($row['id'] ?? 0);
-    }, $unitIdStmt->fetchAll(PDO::FETCH_ASSOC));
+    $hasUnitsTable = incident_resolve_table_exists($pdo, 'units');
+    $hasUnitCurrentIncidentId = $hasUnitsTable && incident_resolve_column_exists($pdo, 'units', 'current_incident_id');
+    $hasUnitLastStatusAt = $hasUnitsTable && incident_resolve_column_exists($pdo, 'units', 'last_status_at');
+    $unitIds = [];
+
+    if ($hasUnitCurrentIncidentId) {
+        $unitIdStmt = $pdo->prepare("SELECT id FROM units WHERE current_incident_id = :iid");
+        $unitIdStmt->execute([':iid' => $incidentId]);
+        $unitIds = array_map(static function ($row): int {
+            return (int)($row['id'] ?? 0);
+        }, $unitIdStmt->fetchAll(PDO::FETCH_ASSOC));
+    }
 
     // Update all dispatches for this incident to 'cleared' (will trigger unit availability via DB trigger)
-    $stmt = $pdo->prepare("UPDATE dispatches SET status='cleared', cleared_at = CURRENT_TIMESTAMP WHERE incident_id = :iid AND status IN ('assigned','acknowledged','enroute','on_scene')");
-    $stmt->execute([':iid' => $incidentId]);
+    if (incident_resolve_table_exists($pdo, 'dispatches')) {
+        try {
+            $dispatchFields = ["status='cleared'"];
+            if (incident_resolve_column_exists($pdo, 'dispatches', 'cleared_at')) {
+                $dispatchFields[] = 'cleared_at = CURRENT_TIMESTAMP';
+            }
+            $stmt = $pdo->prepare(
+                'UPDATE dispatches SET ' . implode(', ', $dispatchFields) .
+                " WHERE incident_id = :iid AND status IN ('assigned','acknowledged','enroute','on_scene')"
+            );
+            $stmt->execute([':iid' => $incidentId]);
+        } catch (Throwable $dispatchError) {
+            error_log('Incident resolve dispatch clear skipped: ' . $dispatchError->getMessage());
+        }
+    }
 
     // Explicitly set units available for any units linked directly (safety net)
-    $stmt2 = $pdo->prepare("UPDATE units SET status='available', current_incident_id=NULL, last_status_at=CURRENT_TIMESTAMP WHERE current_incident_id = :iid");
-    $stmt2->execute([':iid' => $incidentId]);
-    ers_sync_vehicle_resource_status_by_unit_ids($pdo, $unitIds, 'available');
+    if ($hasUnitCurrentIncidentId) {
+        try {
+            $unitFields = ['current_incident_id=NULL'];
+            if (incident_resolve_column_exists($pdo, 'units', 'status')) {
+                $unitFields[] = "status='available'";
+            }
+            if ($hasUnitLastStatusAt) {
+                $unitFields[] = 'last_status_at=CURRENT_TIMESTAMP';
+            }
+            $stmt2 = $pdo->prepare('UPDATE units SET ' . implode(', ', $unitFields) . ' WHERE current_incident_id = :iid');
+            $stmt2->execute([':iid' => $incidentId]);
+        } catch (Throwable $unitError) {
+            error_log('Incident resolve unit release skipped: ' . $unitError->getMessage());
+        }
+    }
+
+    try {
+        ers_sync_vehicle_resource_status_by_unit_ids($pdo, $unitIds, 'available');
+    } catch (Throwable $syncError) {
+        error_log('Incident resolve resource sync skipped: ' . $syncError->getMessage());
+    }
 
     // Mark incident resolved
-    $stmt3 = $pdo->prepare("UPDATE incidents SET status='resolved', resolved_at=CURRENT_TIMESTAMP, updated_at=CURRENT_TIMESTAMP WHERE id = :iid");
+    $incidentFields = ["status='resolved'"];
+    if (incident_resolve_column_exists($pdo, 'incidents', 'resolved_at')) {
+        $incidentFields[] = 'resolved_at=CURRENT_TIMESTAMP';
+    }
+    if (incident_resolve_column_exists($pdo, 'incidents', 'updated_at')) {
+        $incidentFields[] = 'updated_at=CURRENT_TIMESTAMP';
+    }
+    $stmt3 = $pdo->prepare('UPDATE incidents SET ' . implode(', ', $incidentFields) . ' WHERE id = :iid');
     $stmt3->execute([':iid' => $incidentId]);
 
     // Optional: add note to incident_notes
-    if ($note !== '') {
-        $stmt4 = $pdo->prepare("INSERT INTO incident_notes (incident_id, author_name, note) VALUES (:iid, 'System', :note)");
-        $stmt4->execute([':iid' => $incidentId, ':note' => $note]);
+    if (
+        $note !== ''
+        && incident_resolve_table_exists($pdo, 'incident_notes')
+        && incident_resolve_column_exists($pdo, 'incident_notes', 'incident_id')
+        && incident_resolve_column_exists($pdo, 'incident_notes', 'author_name')
+        && incident_resolve_column_exists($pdo, 'incident_notes', 'note')
+    ) {
+        try {
+            $stmt4 = $pdo->prepare("INSERT INTO incident_notes (incident_id, author_name, note) VALUES (:iid, 'System', :note)");
+            $stmt4->execute([':iid' => $incidentId, ':note' => $note]);
+        } catch (Throwable $noteError) {
+            error_log('Incident resolve note insert skipped: ' . $noteError->getMessage());
+        }
     }
 
     $pdo->commit();
     echo json_encode(['ok' => true]);
 } catch (Throwable $e) {
     try { $pdo->rollBack(); } catch (Throwable $e2) {}
+    error_log('Incident resolve failed: ' . $e->getMessage());
     http_response_code(500);
-    echo json_encode(['ok' => false, 'error' => 'Resolve failed']);
+    echo json_encode(['ok' => false, 'error' => 'Resolve failed: ' . $e->getMessage()]);
 }

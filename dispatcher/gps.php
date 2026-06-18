@@ -24,6 +24,7 @@ $pageTitle = 'GPS Tracking System';
     <link rel="stylesheet" href="css/cards.css">
     <link rel="stylesheet" href="css/gps.css">
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <link rel="stylesheet" href="https://unpkg.com/leaflet-routing-machine@latest/dist/leaflet-routing-machine.css" />
 </head>
 <body>
     <!-- Include Sidebar Component -->
@@ -192,6 +193,7 @@ function initMap() {
         zoom: 13,
         worldCopyJump: true
     });
+    window.map = map;
 
   // OpenStreetMap tiles
   L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
@@ -465,9 +467,11 @@ function resolveTrackTargetFromRequest() {
 }
 
 function trackUnit(unitId, options) {
+    options = options || {};
     const silent = !!(options && options.silent);
     const normalized = normalizeUnitIdentifier(unitId);
-    if (!normalized) {
+    const explicitUnitId = String(options.unitId || '').trim();
+    if (!normalized && !explicitUnitId) {
         if (!silent) showNotification('Unit not found', 'error');
         return false;
     }
@@ -483,11 +487,29 @@ function trackUnit(unitId, options) {
         }
     }
 
+    if (!entry && explicitUnitId) {
+        const markerByDbId = Object.keys(markers).find((key) => String(markers[key]?.unitDbId || '') === explicitUnitId);
+        if (markerByDbId) {
+            resolvedKey = markerByDbId;
+            entry = markers[markerByDbId];
+        }
+    }
+
     if (!entry) {
+        const fallbackLat = toNum(options.fromLat || options.latitude);
+        const fallbackLng = toNum(options.fromLng || options.longitude);
+        if (fallbackLat !== null && fallbackLng !== null) {
+            focusMapToLocation(fallbackLat, fallbackLng);
+            if (!silent) showNotification('Showing last known unit location', 'info');
+            return true;
+        }
         if (!silent) showNotification('Unit not found', 'error');
         return false;
     }
 
+    if (entry.marker && !map.hasLayer(entry.marker)) {
+        entry.marker.addTo(map);
+    }
     const pos = entry.marker.getLatLng();
     map.setView(pos, 15);
     entry.marker.openPopup();
@@ -948,9 +970,19 @@ async function showUnitRoute(unitId, options) {
     return true;
 }
 
-async function unitHistory(unitId) {
+async function unitHistory(unitId, options) {
+    options = options || {};
     try {
-        const r = await fetch('api/unit_history.php?identifier=' + encodeURIComponent(unitId));
+        const params = new URLSearchParams();
+        const unitIdentifier = normalizeUnitIdentifier(unitId);
+        const unitDbId = String(options.unitId || '').trim();
+        if (unitDbId) {
+            params.set('id', unitDbId);
+        }
+        if (unitIdentifier) {
+            params.set('identifier', unitIdentifier);
+        }
+        const r = await fetch('api/unit_history.php?' + params.toString(), { cache: 'no-store' });
         const res = await r.json();
         if (!res.ok || !res.unit) {
             showNotification('Unable to load unit history', 'error');
@@ -1214,6 +1246,13 @@ function renderUnitCards(items) {
         const title = (u.incident_title || u.incident_type || 'Dispatched Incident');
         const loc = (u.incident_location || 'Unknown location');
         const focused = isUnitFocused(u);
+        const unitIdentifier = String(u.identifier || '');
+        const unitId = String(u.id !== undefined && u.id !== null ? u.id : '');
+        const currentIncidentId = String(u.current_incident_id || '');
+        const unitLat = String(u.latitude || '');
+        const unitLng = String(u.longitude || '');
+        const incidentLat = String(u.incident_latitude || '');
+        const incidentLng = String(u.incident_longitude || '');
         let distanceLine = '';
         let speedLine = '';
         if (u.latitude && u.longitude && u.incident_latitude && u.incident_longitude) {
@@ -1226,11 +1265,11 @@ function renderUnitCards(items) {
         }
         const card = document.createElement('div');
         card.className = `unit-card ${cls}${focused ? ' focused' : ''}`;
-        card.setAttribute('data-unit', u.identifier);
+        card.setAttribute('data-unit', unitIdentifier);
         card.innerHTML = `
             <div class="unit-header">
                 <div>
-                    <h4 class="unit-name">${escapeHtml(u.identifier)}</h4>
+                    <h4 class="unit-name">${escapeHtml(unitIdentifier)}</h4>
                     <span class="unit-status">${escapeHtml((u.status || '').replace('_',' '))}</span>
                 </div>
             </div>
@@ -1241,9 +1280,15 @@ function renderUnitCards(items) {
                 ${speedLine}
             </div>
             <div class="unit-actions">
-                <button class="btn-unit" onclick="trackUnit('${escapeAttr(u.identifier)}')"><i class="fas fa-location-arrow"></i> Track</button>
-                <button class="btn-unit" onclick="showUnitRoute('${escapeAttr(u.identifier)}')"><i class="fas fa-route"></i> Route</button>
-                <button class="btn-unit" onclick="unitHistory('${escapeAttr(u.identifier)}')"><i class="fas fa-history"></i> History</button>
+                <button class="btn-unit" type="button" data-gps-action="track" data-unit="${escapeAttr(unitIdentifier)}" data-unit-id="${escapeAttr(unitId)}" data-from-lat="${escapeAttr(unitLat)}" data-from-lng="${escapeAttr(unitLng)}">
+                    <i class="fas fa-location-arrow"></i> Track
+                </button>
+                <button class="btn-unit" type="button" data-gps-action="route" data-unit="${escapeAttr(unitIdentifier)}" data-unit-id="${escapeAttr(unitId)}" data-incident-id="${escapeAttr(currentIncidentId)}" data-incident-location="${escapeAttr(loc)}" data-from-lat="${escapeAttr(unitLat)}" data-from-lng="${escapeAttr(unitLng)}" data-to-lat="${escapeAttr(incidentLat)}" data-to-lng="${escapeAttr(incidentLng)}">
+                    <i class="fas fa-route"></i> Route
+                </button>
+                <button class="btn-unit" type="button" data-gps-action="history" data-unit="${escapeAttr(unitIdentifier)}" data-unit-id="${escapeAttr(unitId)}">
+                    <i class="fas fa-history"></i> History
+                </button>
             </div>
         `;
         container.appendChild(card);
@@ -1287,8 +1332,36 @@ function escapeHtml(s) {
     return String(s || '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'})[c] || c);
 }
 function escapeAttr(s) {
-    return String(s || '').replace(/['"]/g, '_');
+    return String(s || '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'})[c] || c);
 }
+
+document.addEventListener('click', function(e) {
+    const btn = e.target.closest('[data-gps-action]');
+    if (!btn) return;
+    const action = btn.getAttribute('data-gps-action') || '';
+    const unit = btn.getAttribute('data-unit') || '';
+    const options = {
+        unitId: btn.getAttribute('data-unit-id') || '',
+        incidentId: btn.getAttribute('data-incident-id') || '',
+        incidentLocation: btn.getAttribute('data-incident-location') || '',
+        fromLat: btn.getAttribute('data-from-lat') || '',
+        fromLng: btn.getAttribute('data-from-lng') || '',
+        toLat: btn.getAttribute('data-to-lat') || '',
+        toLng: btn.getAttribute('data-to-lng') || ''
+    };
+
+    if (action === 'track') {
+        trackUnit(unit, options);
+        return;
+    }
+    if (action === 'route') {
+        showUnitRoute(unit, options);
+        return;
+    }
+    if (action === 'history') {
+        unitHistory(unit, options);
+    }
+});
 
 // Haversine distance in km
 function haversine(lat1, lon1, lat2, lon2) {

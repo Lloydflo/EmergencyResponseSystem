@@ -289,21 +289,21 @@ try {
                     <div class="overview-icon vehicles">
                         <i class="fas fa-ambulance"></i>
                     </div>
-                    <div class="overview-value"><?php echo $totalVehicles; ?></div>
+                    <div class="overview-value" id="overviewVehiclesCount"><?php echo $totalVehicles; ?></div>
                     <div class="overview-label">Total Vehicles</div>
                 </div>
                 <div class="overview-card">
                     <div class="overview-icon personnel">
                         <i class="fas fa-users"></i>
                     </div>
-                    <div class="overview-value"><?php echo $activePersonnel; ?></div>
+                    <div class="overview-value" id="overviewPersonnelCount"><?php echo $activePersonnel; ?></div>
                     <div class="overview-label">Total Personnel</div>
                 </div>
                 <div class="overview-card">
                     <div class="overview-icon equipment">
                         <i class="fas fa-toolbox"></i>
                     </div>
-                    <div class="overview-value"><?php echo $equipmentItems; ?></div>
+                    <div class="overview-value" id="overviewEquipmentCount"><?php echo $equipmentItems; ?></div>
                     <div class="overview-label">Equipment Items</div>
                 </div>
             </div>
@@ -529,22 +529,99 @@ try {
                 <script>
                 // Resource data loaded from backend
                 let RESOURCES = [];
+                let resourcesRefreshTimer = null;
+                let resourcesLoadedOnce = false;
 
-                async function loadResources() {
+                function normalizeDynamicResource(raw) {
+                    const type = String(raw.type || raw.category || '').toLowerCase();
+                    let status = String(raw.status || 'available').toLowerCase();
+                    if (status === 'in_use') status = 'inuse';
+                    if (status === 'maintenance') status = 'offline';
+                    if (!['available', 'inuse', 'offline'].includes(status)) {
+                        status = 'available';
+                    }
+
+                    return {
+                        ...raw,
+                        id: Number(raw.id) || 0,
+                        type: ['vehicles', 'personnel', 'equipment'].includes(type) ? type : 'equipment',
+                        status,
+                        code: String(raw.code || raw.identifier || ''),
+                        name: String(raw.name || raw.code || raw.identifier || 'Resource'),
+                        location: String(raw.location || ''),
+                        role: String(raw.role || ''),
+                        details: String(raw.details || raw.notes || ''),
+                        notes: String(raw.notes || ''),
+                        assignment: String(raw.assignment || ''),
+                        updatedAt: String(raw.updatedAt || raw.updated_at || ''),
+                        source: String(raw.source || '')
+                    };
+                }
+
+                function updateOverviewCounts() {
+                    const counts = RESOURCES.reduce((acc, item) => {
+                        if (item.type === 'vehicles') acc.vehicles += 1;
+                        if (item.type === 'personnel') acc.personnel += 1;
+                        if (item.type === 'equipment') acc.equipment += 1;
+                        return acc;
+                    }, { vehicles: 0, personnel: 0, equipment: 0 });
+
+                    const vehiclesEl = document.getElementById('overviewVehiclesCount');
+                    const personnelEl = document.getElementById('overviewPersonnelCount');
+                    const equipmentEl = document.getElementById('overviewEquipmentCount');
+                    if (vehiclesEl) vehiclesEl.textContent = String(counts.vehicles);
+                    if (personnelEl) personnelEl.textContent = String(counts.personnel);
+                    if (equipmentEl) equipmentEl.textContent = String(counts.equipment);
+                }
+
+                async function loadResources(showLoading = false) {
                     const container = document.getElementById('resource-list-dynamic');
-                    if (container) container.innerHTML = '<tr><td colspan="6" style="text-align:center;color:#888;">Loading resources…</td></tr>';
+                    if (showLoading && container) {
+                        container.innerHTML = '<tr><td colspan="7" style="text-align:center;color:#888;">Loading resources...</td></tr>';
+                    }
                     try {
-                        const res = await fetch('api/resources_combined.php');
+                        const url = 'api/resources_combined.php?_=' + encodeURIComponent(String(Date.now()));
+                        const res = await fetch(url, {
+                            cache: 'no-store',
+                            credentials: 'same-origin',
+                            headers: { 'Accept': 'application/json' }
+                        });
                         const data = await res.json();
-                        RESOURCES = (data.ok && Array.isArray(data.items)) ? data.items : [];
+                        RESOURCES = (data.ok && Array.isArray(data.items))
+                            ? data.items.map(normalizeDynamicResource)
+                            : [];
+                        resourcesLoadedOnce = true;
                         refreshLocationFilterOptions();
+                        updateOverviewCounts();
                         renderDynamicResources();
                     } catch (e) {
+                        console.error(e);
+                        if (resourcesLoadedOnce) return;
                         RESOURCES = [];
                         refreshLocationFilterOptions();
+                        updateOverviewCounts();
                         renderDynamicResources();
                     }
                 }
+
+                function startResourcesLiveRefresh() {
+                    loadResources(true);
+                    if (resourcesRefreshTimer) {
+                        clearInterval(resourcesRefreshTimer);
+                    }
+                    resourcesRefreshTimer = setInterval(() => {
+                        if (document.visibilityState === 'visible') {
+                            loadResources(false);
+                        }
+                    }, 5000);
+                }
+
+                document.addEventListener('visibilitychange', () => {
+                    if (document.visibilityState === 'visible') {
+                        loadResources(false);
+                    }
+                });
+                window.addEventListener('focus', () => loadResources(false));
 
                 // Filter elements
                 const typeFilter = document.getElementById('resource-type');
@@ -688,9 +765,7 @@ try {
                 searchInput.addEventListener('input', applyTableFilters);
 
                 // Initial render
-                document.addEventListener('DOMContentLoaded', function() {
-                    loadResources();
-                });
+                document.addEventListener('DOMContentLoaded', startResourcesLiveRefresh);
                 </script>
             </div>
 
@@ -2125,6 +2200,11 @@ try {
         document.getElementById('search-resource').addEventListener('input', applyFilters);
 
         function applyFilters() {
+            if (typeof renderDynamicResources === 'function') {
+                renderDynamicResources();
+                return;
+            }
+
             const typeFilter = document.getElementById('resource-type').value;
             const statusFilter = document.getElementById('status-filter').value;
             const locationFilter = document.getElementById('location-filter').value;

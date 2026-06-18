@@ -204,17 +204,34 @@ try {
     $desiredTypes = [];
     if (!empty($out['incident']) && !empty($out['incident']['type'])) {
         $typeValue = strtolower(trim((string)$out['incident']['type']));
-        if (preg_match('/fire|smoke|blaze|burn/i', $typeValue)) {
-            $desiredTypes = ['fire'];
-        } elseif (preg_match('/medical|injur|cardiac|stroke|ambulance|unconscious|pregnan|health/i', $typeValue)) {
-            $desiredTypes = ['ambulance'];
-        } elseif (preg_match('/crime|robbery|assault|police|theft|violence|shoot|armed/i', $typeValue)) {
-            $desiredTypes = ['police'];
-        } elseif (preg_match('/rescue|collapse|trapped|flood|earthquake|landslide|water|drowning/i', $typeValue)) {
-            $desiredTypes = ['rescue'];
-        } elseif (in_array($typeValue, ['fire', 'ambulance', 'police', 'rescue', 'other'], true)) {
-            $desiredTypes = [$typeValue];
+        $typeParts = preg_split('/[,|]+/', $typeValue) ?: [$typeValue];
+        foreach ($typeParts as $typePart) {
+            $typePart = strtolower(trim((string)$typePart));
+            if ($typePart === '') {
+                continue;
+            }
+            if (preg_match('/fire|smoke|blaze|burn/i', $typePart)) {
+                $desiredTypes[] = 'fire';
+            }
+            if (preg_match('/medical|injur|cardiac|stroke|ambulance|unconscious|pregnan|health/i', $typePart)) {
+                $desiredTypes[] = 'ambulance';
+            }
+            if (preg_match('/crime|robbery|assault|police|theft|violence|shoot|armed/i', $typePart)) {
+                $desiredTypes[] = 'police';
+            }
+            if (preg_match('/traffic|accident|collision|crash|vehicle/i', $typePart)) {
+                $desiredTypes[] = 'ambulance';
+                $desiredTypes[] = 'rescue';
+                $desiredTypes[] = 'police';
+            }
+            if (preg_match('/rescue|collapse|trapped|flood|earthquake|landslide|water|drowning/i', $typePart)) {
+                $desiredTypes[] = 'rescue';
+            }
+            if (in_array($typePart, ['fire', 'ambulance', 'police', 'rescue', 'other'], true)) {
+                $desiredTypes[] = $typePart;
+            }
         }
+        $desiredTypes = array_values(array_unique($desiredTypes));
     }
 
     $unitSelect = '*';

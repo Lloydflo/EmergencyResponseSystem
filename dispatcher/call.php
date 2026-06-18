@@ -147,6 +147,33 @@ $pageTitle = 'Emergency Call Center';
                             </div>
                         </div>
 
+                        <div class="voice-call-console" id="voiceCallConsole">
+                            <div class="voice-call-main">
+                                <div class="voice-meter" id="voiceMeter" aria-hidden="true">
+                                    <span></span><span></span><span></span><span></span>
+                                </div>
+                                <div>
+                                    <div class="voice-title">Voice Call Simulation</div>
+                                    <div class="voice-state" id="voiceCallState">Connected. Ready for caller audio and dictation.</div>
+                                </div>
+                            </div>
+                            <div class="voice-actions">
+                                <button type="button" class="voice-btn" id="playCallerVoiceBtn" onclick="playCallerVoice()">
+                                    <i class="fas fa-volume-up"></i> Caller Voice
+                                </button>
+                                <button type="button" class="voice-btn" id="speechToTextBtn" onclick="toggleSpeechToText()">
+                                    <i class="fas fa-microphone"></i> Speak to Text
+                                </button>
+                                <button type="button" class="voice-btn" id="stopVoiceBtn" onclick="stopVoiceTools()">
+                                    <i class="fas fa-stop"></i> Stop
+                                </button>
+                            </div>
+                            <div class="transcript-panel">
+                                <div class="transcript-label">Live Transcript</div>
+                                <div class="transcript-output" id="speechTranscript">No transcript yet.</div>
+                            </div>
+                        </div>
+
                         <form class="incident-form" id="incidentForm" onsubmit="submitIncident(event)">
                             <div class="form-section">
                                 <div class="section-title">
@@ -172,15 +199,40 @@ $pageTitle = 'Emergency Call Center';
                                 </div>
                                 <div class="form-row">
                                     <div class="form-group">
-                                        <label for="incidentType">Incident Type</label>
-                                        <select id="incidentType" name="incidentType" required>
-                                            <option value="">Select type</option>
-                                            <option value="medical">Medical Emergency</option>
-                                            <option value="fire">Fire</option>
-                                            <option value="police">Police Emergency</option>
-                                            <option value="traffic">Traffic Accident</option>
-                                            <option value="other">Other</option>
-                                        </select>
+                                        <label>Incident Type</label>
+                                        <div class="incident-type-dropdown" id="incidentTypeDropdown">
+                                            <button type="button" class="incident-type-trigger" id="incidentTypeTrigger" aria-expanded="false" aria-controls="incidentTypeMenu">
+                                                <span id="incidentTypeTriggerText">Select type</span>
+                                                <i class="fas fa-chevron-down"></i>
+                                            </button>
+                                            <div class="incident-type-menu" id="incidentTypeMenu" role="group" aria-label="Incident Type">
+                                                <label class="incident-type-option">
+                                                    <input type="checkbox" name="incidentTypes" value="medical">
+                                                    <span><i class="fas fa-notes-medical"></i> Medical Emergency</span>
+                                                </label>
+                                                <label class="incident-type-option">
+                                                    <input type="checkbox" name="incidentTypes" value="fire">
+                                                    <span><i class="fas fa-fire-extinguisher"></i> Fire</span>
+                                                </label>
+                                                <label class="incident-type-option">
+                                                    <input type="checkbox" name="incidentTypes" value="police">
+                                                    <span><i class="fas fa-shield-alt"></i> Police Emergency</span>
+                                                </label>
+                                                <label class="incident-type-option">
+                                                    <input type="checkbox" name="incidentTypes" value="traffic">
+                                                    <span><i class="fas fa-car-crash"></i> Traffic Accident</span>
+                                                </label>
+                                                <label class="incident-type-option">
+                                                    <input type="checkbox" name="incidentTypes" value="rescue">
+                                                    <span><i class="fas fa-life-ring"></i> Rescue</span>
+                                                </label>
+                                                <label class="incident-type-option">
+                                                    <input type="checkbox" name="incidentTypes" value="other">
+                                                    <span><i class="fas fa-ellipsis-h"></i> Other</span>
+                                                </label>
+                                            </div>
+                                        </div>
+                                        <input type="hidden" id="incidentType" name="incidentType">
                                     </div>
                                     <div class="form-group">
                                         <label for="incidentLocation">Location</label>
@@ -289,6 +341,14 @@ $pageTitle = 'Emergency Call Center';
     let filterDay = '';
     let filterMonth = '';
     const incidentGeocodeCache = {};
+    let callAudioContext = null;
+    let ringingOscillator = null;
+    let ringingGain = null;
+    let speechRecognition = null;
+    let speechListening = false;
+    let finalTranscriptText = '';
+    let activeCallerScript = '';
+    const SpeechRecognitionApi = window.SpeechRecognition || window.webkitSpeechRecognition || null;
 
     function getSharedCallSessionApi() {
         return window.ersCallSession && typeof window.ersCallSession.getState === 'function'
@@ -308,6 +368,7 @@ $pageTitle = 'Emergency Call Center';
         if (!session || session.active !== true) {
             panel.classList.remove('active');
             stopTimer();
+            stopVoiceTools();
             activeCall = null;
             updateStats();
             return;
@@ -325,6 +386,7 @@ $pageTitle = 'Emergency Call Center';
         document.getElementById('activeCallerPhone').textContent = activeCall.phone;
         document.getElementById('callerName').value = activeCall.name;
         document.getElementById('callerPhone').value = activeCall.phone;
+        setVoiceState('Connected. Ready for caller audio and dictation.');
         startTimer();
         updateStats();
     }
@@ -343,6 +405,7 @@ $pageTitle = 'Emergency Call Center';
 
     document.addEventListener('DOMContentLoaded', () => {
         initPrioritySelect();
+        initIncidentTypeChecklist();
         initIncidentSidebarControls();
         if (RECENT_INCIDENTS_ENABLED) {
             loadIncidentsFromServer();
@@ -353,7 +416,6 @@ $pageTitle = 'Emergency Call Center';
         }
         // Hook suggestion on description input
         const descEl = document.getElementById('incidentDescription');
-        const typeEl = document.getElementById('incidentType');
         if (descEl) {
             descEl.addEventListener('input', (e) => {
                 const val = e.target.value;
@@ -364,12 +426,6 @@ $pageTitle = 'Emergency Call Center';
             if ((descEl.value || '').trim().length >= 3) {
                 updatePrioritySuggestion(descEl.value);
             }
-        }
-        if (typeEl) {
-            typeEl.addEventListener('change', () => {
-                const currentDescription = descEl ? descEl.value : '';
-                updatePrioritySuggestion(currentDescription);
-            });
         }
         renderActiveCallPanel(getSharedCallSession());
         document.addEventListener('ers:call-session-change', (event) => {
@@ -388,6 +444,8 @@ $pageTitle = 'Emergency Call Center';
         document.getElementById('incomingCallerName').textContent = name;
         document.getElementById('incomingCallerPhone').textContent = phone;
         document.getElementById('incomingCallAlert').classList.add('active');
+        activeCallerScript = buildCallerScript(name);
+        startIncomingRingtone();
     }
 
     function acceptCall() {
@@ -395,6 +453,10 @@ $pageTitle = 'Emergency Call Center';
         const name = document.getElementById('incomingCallerName').textContent || 'Unknown';
         const phone = document.getElementById('incomingCallerPhone').textContent || '';
         alert.classList.remove('active');
+        stopIncomingRingtone();
+        if (!activeCallerScript) {
+            activeCallerScript = buildCallerScript(name);
+        }
         const sessionApi = getSharedCallSessionApi();
         if (sessionApi) {
             sessionApi.start({
@@ -408,13 +470,17 @@ $pageTitle = 'Emergency Call Center';
             activeCall = { name, phone, start: Date.now() };
         }
         renderActiveCallPanel(getSharedCallSession() || activeCall);
+        setTimeout(() => playCallerVoice(), 350);
     }
 
     function rejectCall() {
         document.getElementById('incomingCallAlert').classList.remove('active');
+        stopIncomingRingtone();
     }
 
     function endCall() {
+        stopIncomingRingtone();
+        stopVoiceTools();
         const sessionApi = getSharedCallSessionApi();
         if (sessionApi) {
             sessionApi.end();
@@ -439,6 +505,236 @@ $pageTitle = 'Emergency Call Center';
             callTimerInterval = null;
             document.getElementById('callTimer').textContent = '00:00';
         }
+    }
+
+    function getCallAudioContext() {
+        const Ctx = window.AudioContext || window.webkitAudioContext;
+        if (!Ctx) return null;
+        if (!callAudioContext) {
+            callAudioContext = new Ctx();
+        }
+        if (callAudioContext.state === 'suspended') {
+            callAudioContext.resume().catch(() => {});
+        }
+        return callAudioContext;
+    }
+
+    function startIncomingRingtone() {
+        stopIncomingRingtone();
+        const ctx = getCallAudioContext();
+        if (!ctx) return;
+        ringingOscillator = ctx.createOscillator();
+        ringingGain = ctx.createGain();
+        ringingOscillator.type = 'sine';
+        ringingOscillator.frequency.setValueAtTime(880, ctx.currentTime);
+        ringingGain.gain.setValueAtTime(0.0001, ctx.currentTime);
+        ringingOscillator.connect(ringingGain);
+        ringingGain.connect(ctx.destination);
+        ringingOscillator.start();
+        const pulse = () => {
+            if (!ringingGain || !callAudioContext) return;
+            const now = callAudioContext.currentTime;
+            ringingGain.gain.cancelScheduledValues(now);
+            ringingGain.gain.setValueAtTime(0.0001, now);
+            ringingGain.gain.linearRampToValueAtTime(0.08, now + 0.04);
+            ringingGain.gain.linearRampToValueAtTime(0.0001, now + 0.45);
+        };
+        pulse();
+        ringingOscillator._ringInterval = setInterval(pulse, 900);
+    }
+
+    function stopIncomingRingtone() {
+        if (ringingOscillator) {
+            if (ringingOscillator._ringInterval) clearInterval(ringingOscillator._ringInterval);
+            try { ringingOscillator.stop(); } catch (e) {}
+            try { ringingOscillator.disconnect(); } catch (e) {}
+            ringingOscillator = null;
+        }
+        if (ringingGain) {
+            try { ringingGain.disconnect(); } catch (e) {}
+            ringingGain = null;
+        }
+    }
+
+    function buildCallerScript(name) {
+        const scripts = [
+            'Hello, this is an emergency. There is a person having difficulty breathing near Commonwealth Avenue. Please send medical help.',
+            'I need help. There was a traffic accident near Quezon Avenue and one person is injured.',
+            'There is smoke and fire coming from a house nearby. We need firefighters immediately.',
+            'Someone is unconscious and not responding. We are at the roadside and need an ambulance now.',
+            'There is a robbery in progress and people are panicking. Please send police assistance.'
+        ];
+        const selected = scripts[Math.floor(Math.random() * scripts.length)];
+        return `${name || 'Caller'} says: ${selected}`;
+    }
+
+    function setVoiceState(text) {
+        const el = document.getElementById('voiceCallState');
+        if (el) el.textContent = text;
+    }
+
+    function setTranscript(text) {
+        const el = document.getElementById('speechTranscript');
+        if (el) el.textContent = text || 'No transcript yet.';
+    }
+
+    function playCallerVoice() {
+        if (!activeCall) {
+            alert('Accept a call first.');
+            return;
+        }
+        if (!('speechSynthesis' in window)) {
+            setVoiceState('Caller voice is not supported in this browser.');
+            return;
+        }
+        window.speechSynthesis.cancel();
+        const text = activeCallerScript || buildCallerScript(activeCall.name);
+        const utterance = new SpeechSynthesisUtterance(text);
+        utterance.lang = 'en-US';
+        utterance.rate = 0.95;
+        utterance.pitch = 1;
+        utterance.onstart = () => {
+            setVoiceState('Playing simulated caller voice...');
+            document.getElementById('voiceMeter')?.classList.add('active');
+        };
+        utterance.onend = () => {
+            setVoiceState('Caller voice finished. Use Speak to Text for dispatcher notes.');
+            document.getElementById('voiceMeter')?.classList.remove('active');
+        };
+        utterance.onerror = () => {
+            setVoiceState('Caller voice playback failed.');
+            document.getElementById('voiceMeter')?.classList.remove('active');
+        };
+        window.speechSynthesis.speak(utterance);
+    }
+
+    function getSpeechRecognition() {
+        if (!SpeechRecognitionApi) return null;
+        if (speechRecognition) return speechRecognition;
+        speechRecognition = new SpeechRecognitionApi();
+        speechRecognition.lang = 'en-PH';
+        speechRecognition.continuous = true;
+        speechRecognition.interimResults = true;
+        speechRecognition.onresult = (event) => {
+            let interim = '';
+            for (let i = event.resultIndex; i < event.results.length; i += 1) {
+                const transcript = event.results[i][0]?.transcript || '';
+                if (event.results[i].isFinal) {
+                    finalTranscriptText = `${finalTranscriptText} ${transcript}`.trim();
+                } else {
+                    interim = `${interim} ${transcript}`.trim();
+                }
+            }
+            const combined = [finalTranscriptText, interim].filter(Boolean).join(' ');
+            setTranscript(combined);
+            applyTranscriptToForm(finalTranscriptText || combined);
+        };
+        speechRecognition.onerror = (event) => {
+            speechListening = false;
+            updateSpeechButton();
+            setVoiceState(event.error === 'not-allowed' ? 'Microphone permission was blocked.' : 'Speech-to-text stopped.');
+            document.getElementById('voiceMeter')?.classList.remove('active');
+        };
+        speechRecognition.onend = () => {
+            speechListening = false;
+            updateSpeechButton();
+            document.getElementById('voiceMeter')?.classList.remove('active');
+        };
+        return speechRecognition;
+    }
+
+    function inferIncidentTypesFromText(text) {
+        const value = String(text || '').toLowerCase();
+        const types = [];
+        if (/(medical|ambulance|injur|cardiac|stroke|unconscious|not breathing|pregnan|health|nahihirapang huminga|walang malay|sugat|lagnat|buntis)/.test(value)) {
+            types.push('medical');
+        }
+        if (/(fire|smoke|blaze|burn|explosion|sunog|usok|pagsabog)/.test(value)) {
+            types.push('fire');
+        }
+        if (/(police|crime|robbery|assault|theft|armed|weapon|shoot|barilan|binaril|saksak|may armas)/.test(value)) {
+            types.push('police');
+        }
+        if (/(traffic|accident|collision|crash|vehicle|banggaan|aksidente|trapiko)/.test(value)) {
+            types.push('traffic');
+        }
+        if (/(rescue|collapse|trapped|flood|earthquake|landslide|drowning|baha|lindol|gumuho|naipit)/.test(value)) {
+            types.push('rescue');
+        }
+        return Array.from(new Set(types));
+    }
+
+    function applyTranscriptToForm(text) {
+        const clean = String(text || '').trim();
+        if (!clean) return;
+        const inferredTypes = inferIncidentTypesFromText(clean);
+        if (inferredTypes.length) {
+            document.querySelectorAll('input[name="incidentTypes"]').forEach((input) => {
+                input.checked = inferredTypes.includes(input.value);
+            });
+            syncIncidentTypeHiddenInput();
+        }
+        const desc = document.getElementById('incidentDescription');
+        if (desc) {
+            desc.value = clean;
+            desc.dispatchEvent(new Event('input', { bubbles: true }));
+        }
+        const notes = document.getElementById('callNotes');
+        if (notes) {
+            notes.value = `Speech transcript: ${clean}`;
+        }
+    }
+
+    function updateSpeechButton() {
+        const btn = document.getElementById('speechToTextBtn');
+        if (!btn) return;
+        btn.classList.toggle('active', speechListening);
+        btn.innerHTML = speechListening
+            ? '<i class="fas fa-microphone-slash"></i> Stop Dictation'
+            : '<i class="fas fa-microphone"></i> Speak to Text';
+    }
+
+    function toggleSpeechToText() {
+        if (!activeCall) {
+            alert('Accept a call first.');
+            return;
+        }
+        const recognizer = getSpeechRecognition();
+        if (!recognizer) {
+            setVoiceState('Speech-to-text is not supported in this browser.');
+            return;
+        }
+        if (speechListening) {
+            recognizer.stop();
+            speechListening = false;
+            updateSpeechButton();
+            setVoiceState('Speech-to-text stopped.');
+            return;
+        }
+        finalTranscriptText = '';
+        setTranscript('');
+        try {
+            recognizer.start();
+            speechListening = true;
+            updateSpeechButton();
+            setVoiceState('Listening... Speak clearly into the microphone.');
+            document.getElementById('voiceMeter')?.classList.add('active');
+        } catch (e) {
+            setVoiceState('Speech-to-text could not start.');
+        }
+    }
+
+    function stopVoiceTools() {
+        stopIncomingRingtone();
+        if ('speechSynthesis' in window) {
+            window.speechSynthesis.cancel();
+        }
+        if (speechRecognition && speechListening) {
+            try { speechRecognition.stop(); } catch (e) {}
+        }
+        speechListening = false;
+        updateSpeechButton();
+        document.getElementById('voiceMeter')?.classList.remove('active');
     }
 
     function setPrioritySelection(value) {
@@ -467,9 +763,88 @@ $pageTitle = 'Emergency Call Center';
         });
     }
 
+    function getSelectedIncidentTypes() {
+        return Array.from(document.querySelectorAll('input[name="incidentTypes"]:checked'))
+            .map((input) => String(input.value || '').trim())
+            .filter(Boolean);
+    }
+
+    function incidentTypeLabel(value) {
+        const labels = {
+            medical: 'Medical',
+            fire: 'Fire',
+            police: 'Police',
+            traffic: 'Traffic',
+            rescue: 'Rescue',
+            other: 'Other'
+        };
+        return labels[value] || value;
+    }
+
+    function syncIncidentTypeHiddenInput() {
+        const selectedTypes = getSelectedIncidentTypes();
+        const hidden = document.getElementById('incidentType');
+        if (hidden) {
+            hidden.value = selectedTypes.join(', ');
+        }
+        const triggerText = document.getElementById('incidentTypeTriggerText');
+        if (triggerText) {
+            if (!selectedTypes.length) {
+                triggerText.textContent = 'Select type';
+            } else if (selectedTypes.length <= 2) {
+                triggerText.textContent = selectedTypes.map(incidentTypeLabel).join(', ');
+            } else {
+                triggerText.textContent = `${selectedTypes.length} types selected`;
+            }
+        }
+    }
+
+    function setIncidentTypeDropdownOpen(open) {
+        const dropdown = document.getElementById('incidentTypeDropdown');
+        const trigger = document.getElementById('incidentTypeTrigger');
+        if (!dropdown || !trigger) return;
+        dropdown.classList.toggle('open', open);
+        trigger.setAttribute('aria-expanded', open ? 'true' : 'false');
+    }
+
+    function initIncidentTypeChecklist() {
+        const dropdown = document.getElementById('incidentTypeDropdown');
+        const trigger = document.getElementById('incidentTypeTrigger');
+        if (trigger) {
+            trigger.addEventListener('click', () => {
+                setIncidentTypeDropdownOpen(!(dropdown && dropdown.classList.contains('open')));
+            });
+        }
+        document.querySelectorAll('input[name="incidentTypes"]').forEach((input) => {
+            input.addEventListener('change', () => {
+                syncIncidentTypeHiddenInput();
+                const descEl = document.getElementById('incidentDescription');
+                updatePrioritySuggestion(descEl ? descEl.value : '');
+            });
+        });
+        document.addEventListener('click', (event) => {
+            if (!dropdown || dropdown.contains(event.target)) return;
+            setIncidentTypeDropdownOpen(false);
+        });
+        document.addEventListener('keydown', (event) => {
+            if (event.key === 'Escape') {
+                setIncidentTypeDropdownOpen(false);
+            }
+        });
+        syncIncidentTypeHiddenInput();
+    }
+
+    function resetIncidentTypeChecklist() {
+        document.querySelectorAll('input[name="incidentTypes"]').forEach((input) => {
+            input.checked = false;
+        });
+        syncIncidentTypeHiddenInput();
+        setIncidentTypeDropdownOpen(false);
+    }
+
     function suggestPriorityFromDescription(desc) {
         const text = ` ${(desc || '').toLowerCase()} `;
-        const incidentType = (document.getElementById('incidentType')?.value || '').toLowerCase();
+        const incidentTypes = getSelectedIncidentTypes();
 
         const high = [
             'unconscious', 'non-responsive', 'not breathing', 'difficulty breathing', 'chest pain', 'severe bleeding',
@@ -511,10 +886,10 @@ $pageTitle = 'Emergency Call Center';
         if (unconsciousPattern.test(text)) score += 3;
         if (majorFirePattern.test(text)) score += 2;
 
-        if (incidentType === 'fire' && (highHits > 0 || mediumHits > 0)) score += 1;
-        if (incidentType === 'medical' && unconsciousPattern.test(text)) score += 2;
-        if (incidentType === 'police' && /(armed|may armas|weapon|barilan|binaril)/.test(text)) score += 2;
-        if (incidentType === 'traffic' && /(multi-vehicle|maramihang sasakyan|multiple|many)/.test(text)) score += 2;
+        if (incidentTypes.includes('fire') && (highHits > 0 || mediumHits > 0)) score += 1;
+        if (incidentTypes.includes('medical') && unconsciousPattern.test(text)) score += 2;
+        if (incidentTypes.includes('police') && /(armed|may armas|weapon|barilan|binaril)/.test(text)) score += 2;
+        if (incidentTypes.includes('traffic') && /(multi-vehicle|maramihang sasakyan|multiple|many)/.test(text)) score += 2;
 
         if (highHits >= 2 || score >= 6) return 'high';
         if (mediumHits >= 1 || score >= 2) return 'medium';
@@ -706,10 +1081,11 @@ $pageTitle = 'Emergency Call Center';
             console.warn('Proceeding without verified coordinates for location:', locationText);
         }
         const finalLocationText = document.getElementById('incidentLocation').value.trim() || locationText;
+        const selectedTypes = getSelectedIncidentTypes();
         const payload = {
             caller_name: document.getElementById('callerName').value.trim(),
             caller_phone: document.getElementById('callerPhone').value.trim(),
-            type: document.getElementById('incidentType').value,
+            type: selectedTypes,
             location: finalLocationText,
             description: document.getElementById('incidentDescription').value.trim(),
             priority: document.getElementById('incidentPriority').value,
@@ -720,6 +1096,10 @@ $pageTitle = 'Emergency Call Center';
             payload.longitude = coords.lng;
         }
 
+        if (!selectedTypes.length) {
+            alert('Please select at least one incident type.');
+            return;
+        }
         if (!payload.priority) {
             alert('Please select a priority.');
             return;
@@ -751,12 +1131,13 @@ $pageTitle = 'Emergency Call Center';
                     incidentId: data.incident_id || null,
                     incidentReferenceNo: data.incident_reference_no || data.reference_no || '',
                     incidentStatus: data.incident_status || payload.status,
-                    incidentType: payload.type,
+                    incidentType: selectedTypes.join(', '),
                     location: payload.location
                 });
             }
             showToast('Incident logged successfully. Redirecting to Dispatch Center...');
             e.target.reset();
+            resetIncidentTypeChecklist();
             document.querySelectorAll('#prioritySelect .priority-option').forEach(o => o.classList.remove('active'));
             document.getElementById('incidentPriority').value = '';
             const locationInput = document.getElementById('incidentLocation');
@@ -770,7 +1151,7 @@ $pageTitle = 'Emergency Call Center';
             await loadIncidentsFromServer();
             // Log activity event for dashboard Recent Activity
             try {
-                const details = `Type: ${payload.type} | Location: ${payload.location} | Priority: ${payload.priority}`;
+                const details = `Type: ${selectedTypes.join(', ')} | Location: ${payload.location} | Priority: ${payload.priority}`;
                 await fetch('api/activity_event.php', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
@@ -843,13 +1224,21 @@ $pageTitle = 'Emergency Call Center';
     }
 
     function labelForType(t) {
-        switch (t) {
-            case 'medical': return 'Medical Emergency';
-            case 'fire': return 'Fire';
-            case 'police': return 'Police Emergency';
-            case 'traffic': return 'Traffic Accident';
-            default: return 'Other';
-        }
+        const labels = {
+            medical: 'Medical Emergency',
+            ambulance: 'Medical Emergency',
+            fire: 'Fire',
+            police: 'Police Emergency',
+            traffic: 'Traffic Accident',
+            rescue: 'Rescue',
+            other: 'Other'
+        };
+        const values = String(t || '')
+            .split(',')
+            .map((part) => part.trim().toLowerCase())
+            .filter(Boolean);
+        if (!values.length) return 'Other';
+        return values.map((value) => labels[value] || value.replace(/\b\w/g, (c) => c.toUpperCase())).join(', ');
     }
 
     function setFilter(btn) {

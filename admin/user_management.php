@@ -134,7 +134,7 @@ $adminName = $_SESSION['user_name'] ?? 'Admin';
 
         .um-table {
             width: 100%;
-            min-width: 1120px;
+            min-width: 1220px;
             border-collapse: collapse;
         }
 
@@ -684,7 +684,7 @@ $adminName = $_SESSION['user_name'] ?? 'Admin';
                         type="text"
                         id="userSearchInput"
                         class="um-search"
-                        placeholder="Search name, email, role, or department...">
+                        placeholder="Search name, email, contact, role, or department...">
                     <span class="um-summary" id="userCountBadge">0 account(s)</span>
                 </div>
 
@@ -695,6 +695,7 @@ $adminName = $_SESSION['user_name'] ?? 'Admin';
                                 <th>No.</th>
                                 <th>Name</th>
                                 <th>Email</th>
+                                <th>Contact</th>
                                 <th>Role</th>
                                 <th>Department</th>
                                 <th>Status</th>
@@ -729,6 +730,10 @@ $adminName = $_SESSION['user_name'] ?? 'Admin';
                         <div class="um-field">
                             <label for="newUserEmail">Email</label>
                             <input id="newUserEmail" type="email" class="um-input" maxlength="120" required>
+                        </div>
+                        <div class="um-field">
+                            <label for="newUserContact">Contact Number</label>
+                            <input id="newUserContact" class="um-input" maxlength="50" required>
                         </div>
                         <div class="um-field" id="newUserPasswordField">
                             <label for="newUserPassword">Password</label>
@@ -794,6 +799,7 @@ $adminName = $_SESSION['user_name'] ?? 'Admin';
         const addUserForm = document.getElementById('addUserForm');
         const newUserName = document.getElementById('newUserName');
         const newUserEmail = document.getElementById('newUserEmail');
+        const newUserContact = document.getElementById('newUserContact');
         const newUserPasswordField = document.getElementById('newUserPasswordField');
         const newUserPassword = document.getElementById('newUserPassword');
         const toggleNewUserPassword = document.getElementById('toggleNewUserPassword');
@@ -902,7 +908,7 @@ $adminName = $_SESSION['user_name'] ?? 'Admin';
             const needle = userSearchInput.value.trim().toLowerCase();
             if (!needle) return userRows.slice();
             return userRows.filter((row) => {
-                const hay = [row.name, row.email, row.role, row.department, row.status].join(' ').toLowerCase();
+                const hay = [row.name, row.email, row.contact_number, row.role, row.department, row.status].join(' ').toLowerCase();
                 return hay.includes(needle);
             });
         }
@@ -912,7 +918,7 @@ $adminName = $_SESSION['user_name'] ?? 'Admin';
             userCountBadge.textContent = rows.length + ' account(s)';
 
             if (!rows.length) {
-                usersTableBody.innerHTML = '<tr><td colspan="8" class="um-empty">No user accounts found.</td></tr>';
+                usersTableBody.innerHTML = '<tr><td colspan="9" class="um-empty">No user accounts found.</td></tr>';
                 return;
             }
 
@@ -930,6 +936,11 @@ $adminName = $_SESSION['user_name'] ?? 'Admin';
                             ${isEditing
                                 ? `<input class="um-input" type="email" data-field="email" value="${escapeHtml(row.email)}">`
                                 : escapeHtml(row.email)}
+                        </td>
+                        <td>
+                            ${isEditing
+                                ? `<input class="um-input" data-field="contact_number" value="${escapeHtml(row.contact_number || '')}">`
+                                : escapeHtml(row.contact_number || '')}
                         </td>
                         <td>
                             ${isEditing
@@ -1007,6 +1018,7 @@ $adminName = $_SESSION['user_name'] ?? 'Admin';
 
             newUserName.value = payload.name || '';
             newUserEmail.value = payload.email || '';
+            newUserContact.value = payload.contact_number || '';
             newUserRole.value = payload.role || 'dispatcher';
             newUserDepartment.value = payload.department || '';
             newUserStatus.value = payload.status || 'active';
@@ -1017,7 +1029,7 @@ $adminName = $_SESSION['user_name'] ?? 'Admin';
         }
 
         async function loadUsers() {
-            usersTableBody.innerHTML = '<tr><td colspan="8" class="um-empty">Loading user accounts...</td></tr>';
+            usersTableBody.innerHTML = '<tr><td colspan="9" class="um-empty">Loading user accounts...</td></tr>';
 
             try {
                 const response = await fetch(adminUsersApiUrl, {
@@ -1035,7 +1047,7 @@ $adminName = $_SESSION['user_name'] ?? 'Admin';
                 editingId = null;
                 renderRows();
             } catch (error) {
-                usersTableBody.innerHTML = '<tr><td colspan="8" class="um-empty">Unable to load user accounts.</td></tr>';
+                usersTableBody.innerHTML = '<tr><td colspan="9" class="um-empty">Unable to load user accounts.</td></tr>';
                 showToast(error.message || 'Unable to load users.');
             }
         }
@@ -1048,18 +1060,20 @@ $adminName = $_SESSION['user_name'] ?? 'Admin';
 
             const nameEl = rowEl.querySelector('[data-field="name"]');
             const emailEl = rowEl.querySelector('[data-field="email"]');
+            const contactEl = rowEl.querySelector('[data-field="contact_number"]');
             const roleEl = rowEl.querySelector('[data-field="role"]');
             const deptEl = rowEl.querySelector('[data-field="department"]');
             const statusEl = rowEl.querySelector('[data-field="status"]');
-            if (!nameEl || !emailEl || !roleEl || !deptEl || !statusEl) return;
+            if (!nameEl || !emailEl || !contactEl || !roleEl || !deptEl || !statusEl) return;
 
             const nextName = nameEl.value.trim();
             const nextEmail = emailEl.value.trim();
+            const nextContact = contactEl.value.trim();
             const nextRole = roleEl.value;
             const nextDept = deptEl.value.trim();
             const nextStatus = statusEl.value;
 
-            if (!nextName || !nextEmail || !nextDept) {
+            if (!nextName || !nextEmail || !nextContact || !nextDept) {
                 showToast('Complete all required fields before saving.');
                 return;
             }
@@ -1081,6 +1095,7 @@ $adminName = $_SESSION['user_name'] ?? 'Admin';
                         id,
                         name: nextName,
                         email: nextEmail,
+                        contact_number: nextContact,
                         role: nextRole,
                         department: nextDept,
                         status: nextStatus
@@ -1171,6 +1186,7 @@ $adminName = $_SESSION['user_name'] ?? 'Admin';
             const payload = {
                 name: newUserName.value.trim(),
                 email: newUserEmail.value.trim(),
+                contact_number: newUserContact.value.trim(),
                 password: newUserPassword.value,
                 role: newUserRole.value,
                 department: newUserDepartment.value.trim(),
@@ -1178,7 +1194,7 @@ $adminName = $_SESSION['user_name'] ?? 'Admin';
             };
             const passwordRequired = isPasswordRequiredForRole(payload.role);
 
-            if (!payload.name || !payload.email || !payload.department || (passwordRequired && !payload.password)) {
+            if (!payload.name || !payload.email || !payload.contact_number || !payload.department || (passwordRequired && !payload.password)) {
                 showToast('Please complete required fields.');
                 return;
             }
