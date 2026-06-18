@@ -733,7 +733,7 @@ $adminName = $_SESSION['user_name'] ?? 'Admin';
     <div class="um-modal" id="addUserModal" aria-hidden="true">
         <div class="um-modal-card">
             <div class="um-modal-head">
-                <h2>Add New Account</h2>
+                <h2 id="accountModalTitle">Add New Account</h2>
                 <button type="button" class="um-close" id="closeAddUserModal" aria-label="Close">
                     <i class="fas fa-times"></i>
                 </button>
@@ -786,17 +786,21 @@ $adminName = $_SESSION['user_name'] ?? 'Admin';
                             </select>
                             <div class="um-field-note" id="newUserUnitHint">Only available units are listed.</div>
                         </div>
+                        <div class="um-field" id="newUserUnitCodeField" hidden>
+                            <label for="newUserUnitCode">Unit Code</label>
+                            <input id="newUserUnitCode" class="um-input" maxlength="50" placeholder="Select a unit">
+                        </div>
                         <div class="um-field" id="newUserPlateField" hidden>
                             <label for="newUserPlateNumber">Plate Number</label>
-                            <input id="newUserPlateNumber" class="um-input" readonly placeholder="Select a unit">
+                            <input id="newUserPlateNumber" class="um-input" maxlength="50" placeholder="Select a unit">
                         </div>
                         <div class="um-field" id="newUserUnitTypeField" hidden>
                             <label for="newUserUnitType">Unit Type</label>
-                            <input id="newUserUnitType" class="um-input" readonly placeholder="Select a unit">
+                            <input id="newUserUnitType" class="um-input" maxlength="50" placeholder="Select a unit">
                         </div>
                         <div class="um-field" id="newUserUnitStatusField" hidden>
                             <label for="newUserUnitStatus">Unit Status</label>
-                            <input id="newUserUnitStatus" class="um-input" readonly placeholder="Select a unit">
+                            <input id="newUserUnitStatus" class="um-input" maxlength="50" placeholder="Select a unit">
                         </div>
                         <div class="um-field">
                             <label for="newUserStatus">Status</label>
@@ -813,7 +817,7 @@ $adminName = $_SESSION['user_name'] ?? 'Admin';
                 </div>
                 <div class="um-modal-foot">
                     <button type="button" class="um-btn" id="cancelAddUserBtn">Cancel</button>
-                    <button type="submit" class="um-btn primary">Save User</button>
+                    <button type="submit" class="um-btn primary" id="accountModalSubmitBtn">Save User</button>
                 </div>
             </form>
         </div>
@@ -834,6 +838,7 @@ $adminName = $_SESSION['user_name'] ?? 'Admin';
         const userCountBadge = document.getElementById('userCountBadge');
         const userSearchInput = document.getElementById('userSearchInput');
         const addUserModal = document.getElementById('addUserModal');
+        const accountModalTitle = document.getElementById('accountModalTitle');
         const openAddUserBtn = document.getElementById('openAddUserBtn');
         const closeAddUserModal = document.getElementById('closeAddUserModal');
         const cancelAddUserBtn = document.getElementById('cancelAddUserBtn');
@@ -848,6 +853,8 @@ $adminName = $_SESSION['user_name'] ?? 'Admin';
         const newUserUnitField = document.getElementById('newUserUnitField');
         const newUserAssignedUnit = document.getElementById('newUserAssignedUnit');
         const newUserUnitHint = document.getElementById('newUserUnitHint');
+        const newUserUnitCodeField = document.getElementById('newUserUnitCodeField');
+        const newUserUnitCode = document.getElementById('newUserUnitCode');
         const newUserPlateField = document.getElementById('newUserPlateField');
         const newUserPlateNumber = document.getElementById('newUserPlateNumber');
         const newUserUnitTypeField = document.getElementById('newUserUnitTypeField');
@@ -858,7 +865,7 @@ $adminName = $_SESSION['user_name'] ?? 'Admin';
         const newUserDepartment = document.getElementById('newUserDepartment');
         const passwordRequirements = document.getElementById('passwordRequirements');
         const userToast = document.getElementById('userToast');
-        const addUserSubmitBtn = addUserForm.querySelector('button[type="submit"]');
+        const addUserSubmitBtn = document.getElementById('accountModalSubmitBtn');
         const passwordRuleElements = passwordRequirements
             ? Array.from(passwordRequirements.querySelectorAll('[data-rule]'))
             : [];
@@ -897,7 +904,7 @@ $adminName = $_SESSION['user_name'] ?? 'Admin';
         }
 
         function isPasswordRequiredForRole(role) {
-            return role !== 'responder';
+            return editingId === null && role !== 'responder';
         }
 
         function formatUnitLabel(unit) {
@@ -916,8 +923,33 @@ $adminName = $_SESSION['user_name'] ?? 'Admin';
             return raw.charAt(0).toUpperCase() + raw.slice(1);
         }
 
+        function getEditingRow() {
+            return editingId !== null ? (userRows.find((row) => row.id === editingId) || null) : null;
+        }
+
+        function unitFromUserRow(row) {
+            if (!row || !row.assigned_unit_id) return null;
+            return {
+                id: Number(row.assigned_unit_id) || 0,
+                identifier: String(row.unit_code || '').trim(),
+                unit_type: String(row.unit_type || '').trim(),
+                plate_number: String(row.vehicle_plate || '').trim(),
+                resource_name: '',
+                status: String(row.unit_status || '').trim()
+            };
+        }
+
+        function ensureCurrentAssignedUnitOption(pendingValue) {
+            const currentUnit = unitFromUserRow(getEditingRow());
+            if (!currentUnit || currentUnit.id <= 0) return;
+            if (pendingValue && String(currentUnit.id) !== String(pendingValue)) return;
+            if (!availableUnits.some((unit) => unit.id === currentUnit.id)) {
+                availableUnits.unshift(currentUnit);
+            }
+        }
+
         function setResponderUnitDetailVisibility(isVisible) {
-            [newUserPlateField, newUserUnitTypeField, newUserUnitStatusField].forEach((field) => {
+            [newUserUnitCodeField, newUserPlateField, newUserUnitTypeField, newUserUnitStatusField].forEach((field) => {
                 if (field) field.hidden = !isVisible;
             });
         }
@@ -928,6 +960,13 @@ $adminName = $_SESSION['user_name'] ?? 'Admin';
             const selectedId = Number(newUserAssignedUnit.value) || 0;
             const selectedUnit = availableUnits.find((unit) => unit.id === selectedId) || null;
 
+            if (!selectedUnit && editingId !== null) {
+                return;
+            }
+
+            if (newUserUnitCode) {
+                newUserUnitCode.value = selectedUnit ? (selectedUnit.identifier || 'N/A') : '';
+            }
             if (newUserPlateNumber) {
                 newUserPlateNumber.value = selectedUnit ? (selectedUnit.plate_number || 'N/A') : '';
             }
@@ -943,6 +982,7 @@ $adminName = $_SESSION['user_name'] ?? 'Admin';
             if (!newUserAssignedUnit || !newUserUnitHint) return;
 
             const pendingValue = newUserAssignedUnit.dataset.pendingValue || newUserAssignedUnit.value || '';
+            ensureCurrentAssignedUnitOption(pendingValue);
 
             if (availableUnitsLoading) {
                 newUserAssignedUnit.innerHTML = '<option value="">Loading available units...</option>';
@@ -974,7 +1014,9 @@ $adminName = $_SESSION['user_name'] ?? 'Admin';
                 newUserAssignedUnit.value = String(pendingValue);
             }
             delete newUserAssignedUnit.dataset.pendingValue;
-            newUserUnitHint.textContent = 'Only units with Available status are listed.';
+            newUserUnitHint.textContent = editingId === null
+                ? 'Only units with Available status are listed.'
+                : 'Change the available unit to update unit code, plate, type, and status.';
             updateResponderUnitDetails();
         }
 
@@ -1129,46 +1171,15 @@ $adminName = $_SESSION['user_name'] ?? 'Admin';
             }
 
             usersTableBody.innerHTML = rows.map((row, index) => {
-                const isEditing = row.id === editingId;
                 return `
                     <tr data-row-id="${row.id}">
                         <td class="um-code">${index + 1}</td>
-                        <td>
-                            ${isEditing
-                                ? `<input class="um-input" data-field="name" value="${escapeHtml(row.name)}">`
-                                : escapeHtml(row.name)}
-                        </td>
-                        <td>
-                            ${isEditing
-                                ? `<input class="um-input" type="email" data-field="email" value="${escapeHtml(row.email)}">`
-                                : escapeHtml(row.email)}
-                        </td>
-                        <td>
-                            ${isEditing
-                                ? `<input class="um-input" data-field="contact_number" value="${escapeHtml(row.contact_number || '')}">`
-                                : escapeHtml(row.contact_number || '')}
-                        </td>
-                        <td>
-                            ${isEditing
-                                ? `<select class="um-select" data-field="role">
-                                    <option value="dispatcher"${row.role === 'dispatcher' ? ' selected' : ''}>Dispatcher</option>
-                                    <option value="responder"${row.role === 'responder' ? ' selected' : ''}>Responder</option>
-                                   </select>`
-                                : roleChip(row.role)}
-                        </td>
-                        <td>
-                            ${isEditing
-                                ? `<input class="um-input" data-field="department" value="${escapeHtml(row.department)}">`
-                                : escapeHtml(row.department)}
-                        </td>
-                        <td>
-                            ${isEditing
-                                ? `<select class="um-select" data-field="status">
-                                    <option value="active"${row.status === 'active' ? ' selected' : ''}>Active</option>
-                                    <option value="inactive"${row.status === 'inactive' ? ' selected' : ''}>Inactive</option>
-                                   </select>`
-                                : statusChip(row.status)}
-                        </td>
+                        <td>${escapeHtml(row.name)}</td>
+                        <td>${escapeHtml(row.email)}</td>
+                        <td>${escapeHtml(row.contact_number || '')}</td>
+                        <td>${roleChip(row.role)}</td>
+                        <td>${escapeHtml(row.department)}</td>
+                        <td>${statusChip(row.status)}</td>
                         <td>${escapeHtml(row.unit_code || 'N/A')}</td>
                         <td>${escapeHtml(displayUnitValue(row.unit_type))}</td>
                         <td>${escapeHtml(row.vehicle_plate || 'N/A')}</td>
@@ -1182,9 +1193,6 @@ $adminName = $_SESSION['user_name'] ?? 'Admin';
                                 <button type="button" class="um-action delete" data-action="delete" data-id="${row.id}" title="Delete" aria-label="Delete">
                                     <i class="fas fa-trash"></i>
                                 </button>
-                                <button type="button" class="um-action save" data-action="save" data-id="${row.id}" title="Save" aria-label="Save"${isEditing ? '' : ' disabled'}>
-                                    <i class="fas fa-floppy-disk"></i>
-                                </button>
                             </div>
                         </td>
                     </tr>
@@ -1192,10 +1200,22 @@ $adminName = $_SESSION['user_name'] ?? 'Admin';
             }).join('');
         }
 
+        function setAccountModalMode(mode) {
+            const isEdit = mode === 'edit';
+            if (accountModalTitle) {
+                accountModalTitle.textContent = isEdit ? 'Edit Account' : 'Add New Account';
+            }
+            if (addUserSubmitBtn) {
+                addUserSubmitBtn.textContent = isEdit ? 'Save Changes' : 'Save User';
+            }
+        }
+
         function openModal() {
+            setAccountModalMode(editingId === null ? 'create' : 'edit');
             addUserModal.classList.add('show');
             addUserModal.setAttribute('aria-hidden', 'false');
             document.body.style.overflow = 'hidden';
+            availableUnits = [];
             availableUnitsLoaded = false;
             syncPasswordFieldForRole();
             updatePasswordRequirements(false);
@@ -1219,10 +1239,12 @@ $adminName = $_SESSION['user_name'] ?? 'Admin';
             addUserModal.setAttribute('aria-hidden', 'true');
             document.body.style.overflow = '';
             addUserForm.reset();
+            editingId = null;
             resetPasswordToggle();
             syncPasswordFieldForRole();
             syncResponderUnitField();
             updatePasswordRequirements(false);
+            setAccountModalMode('create');
         }
 
         function restoreAddUserForm(payload) {
@@ -1235,6 +1257,18 @@ $adminName = $_SESSION['user_name'] ?? 'Admin';
             newUserDepartment.value = payload.department || '';
             newUserStatus.value = payload.status || 'active';
             newUserPassword.value = payload.password || '';
+            if (newUserUnitCode) {
+                newUserUnitCode.value = payload.unit_code || '';
+            }
+            if (newUserPlateNumber) {
+                newUserPlateNumber.value = payload.vehicle_plate || '';
+            }
+            if (newUserUnitType) {
+                newUserUnitType.value = formatUnitValue(payload.unit_type);
+            }
+            if (newUserUnitStatus) {
+                newUserUnitStatus.value = formatUnitValue(payload.unit_status);
+            }
             if (newUserAssignedUnit) {
                 newUserAssignedUnit.dataset.pendingValue = payload.assigned_unit_id ? String(payload.assigned_unit_id) : '';
             }
@@ -1267,70 +1301,6 @@ $adminName = $_SESSION['user_name'] ?? 'Admin';
             }
         }
 
-        async function saveRow(id) {
-            const rowEl = usersTableBody.querySelector('tr[data-row-id="' + id + '"]');
-            if (!rowEl) return;
-            const target = userRows.find((row) => row.id === id);
-            if (!target) return;
-
-            const nameEl = rowEl.querySelector('[data-field="name"]');
-            const emailEl = rowEl.querySelector('[data-field="email"]');
-            const contactEl = rowEl.querySelector('[data-field="contact_number"]');
-            const roleEl = rowEl.querySelector('[data-field="role"]');
-            const deptEl = rowEl.querySelector('[data-field="department"]');
-            const statusEl = rowEl.querySelector('[data-field="status"]');
-            if (!nameEl || !emailEl || !contactEl || !roleEl || !deptEl || !statusEl) return;
-
-            const nextName = nameEl.value.trim();
-            const nextEmail = emailEl.value.trim();
-            const nextContact = contactEl.value.trim();
-            const nextRole = roleEl.value;
-            const nextDept = deptEl.value.trim();
-            const nextStatus = statusEl.value;
-
-            if (!nextName || !nextEmail || !nextContact || !nextDept) {
-                showToast('Complete all required fields before saving.');
-                return;
-            }
-
-            const emailExists = userRows.some((row) => row.id !== id && row.email.toLowerCase() === nextEmail.toLowerCase());
-            if (emailExists) {
-                showToast('Email is already in use.');
-                return;
-            }
-
-            try {
-                const response = await fetch(adminUsersApiUrl, {
-                    method: 'PATCH',
-                    headers: {
-                        'Accept': 'application/json',
-                        'Content-Type': 'application/json'
-                    },
-                    body: JSON.stringify({
-                        id,
-                        name: nextName,
-                        email: nextEmail,
-                        contact_number: nextContact,
-                        role: nextRole,
-                        department: nextDept,
-                        status: nextStatus
-                    })
-                });
-                const result = await response.json();
-
-                if (!response.ok || !result.success || !result.user) {
-                    throw new Error(result.message || 'Unable to update user.');
-                }
-
-                Object.assign(target, result.user);
-                editingId = null;
-                renderRows();
-                showToast(result.message || 'User account updated.');
-            } catch (error) {
-                showToast(error.message || 'Unable to update user.');
-            }
-        }
-
         usersTableBody.addEventListener('click', async (event) => {
             const button = event.target.closest('.um-action');
             if (!button) return;
@@ -1342,7 +1312,9 @@ $adminName = $_SESSION['user_name'] ?? 'Admin';
 
             if (action === 'edit') {
                 editingId = id;
-                renderRows();
+                addUserForm.reset();
+                restoreAddUserForm(target);
+                openModal();
                 return;
             }
 
@@ -1375,13 +1347,13 @@ $adminName = $_SESSION['user_name'] ?? 'Admin';
                 }
                 return;
             }
-
-            if (action === 'save') {
-                await saveRow(id);
-            }
         });
 
-        openAddUserBtn.addEventListener('click', openModal);
+        openAddUserBtn.addEventListener('click', () => {
+            editingId = null;
+            addUserForm.reset();
+            openModal();
+        });
         closeAddUserModal.addEventListener('click', closeModal);
         cancelAddUserBtn.addEventListener('click', closeModal);
 
@@ -1397,19 +1369,28 @@ $adminName = $_SESSION['user_name'] ?? 'Admin';
 
         addUserForm.addEventListener('submit', async (event) => {
             event.preventDefault();
+            const editId = editingId;
+            const isEdit = editId !== null;
 
             const payload = {
+                ...(isEdit ? { id: editId } : {}),
                 name: newUserName.value.trim(),
                 email: newUserEmail.value.trim(),
                 contact_number: newUserContact.value.trim(),
-                password: newUserPassword.value,
                 role: newUserRole.value,
                 assigned_unit_id: newUserRole.value === 'responder' && newUserAssignedUnit && !newUserAssignedUnit.disabled
                     ? (Number(newUserAssignedUnit.value) || null)
                     : null,
+                unit_code: newUserRole.value === 'responder' && newUserUnitCode ? newUserUnitCode.value.trim() : '',
+                unit_type: newUserRole.value === 'responder' && newUserUnitType ? newUserUnitType.value.trim() : '',
+                vehicle_plate: newUserRole.value === 'responder' && newUserPlateNumber ? newUserPlateNumber.value.trim() : '',
+                unit_status: newUserRole.value === 'responder' && newUserUnitStatus ? newUserUnitStatus.value.trim() : '',
                 department: newUserDepartment.value.trim(),
                 status: newUserStatus.value
             };
+            if (!isEdit) {
+                payload.password = newUserPassword.value;
+            }
             const passwordRequired = isPasswordRequiredForRole(payload.role);
 
             if (!payload.name || !payload.email || !payload.contact_number || !payload.department || (passwordRequired && !payload.password)) {
@@ -1426,7 +1407,7 @@ $adminName = $_SESSION['user_name'] ?? 'Admin';
                 return;
             }
 
-            const emailExists = userRows.some((row) => row.email.toLowerCase() === payload.email.toLowerCase());
+            const emailExists = userRows.some((row) => row.id !== editId && row.email.toLowerCase() === payload.email.toLowerCase());
             if (emailExists) {
                 showToast('Email is already in use.');
                 return;
@@ -1436,12 +1417,9 @@ $adminName = $_SESSION['user_name'] ?? 'Admin';
                 addUserSubmitBtn.disabled = true;
             }
 
-            const submittedPayload = { ...payload };
-            closeModal();
-
             try {
                 const response = await fetch(adminUsersApiUrl, {
-                    method: 'POST',
+                    method: isEdit ? 'PATCH' : 'POST',
                     headers: {
                         'Accept': 'application/json',
                         'Content-Type': 'application/json'
@@ -1454,14 +1432,19 @@ $adminName = $_SESSION['user_name'] ?? 'Admin';
                     throw new Error(result.message || 'Unable to save user.');
                 }
 
-                userRows.unshift(result.user);
-                editingId = null;
+                if (isEdit) {
+                    const targetIndex = userRows.findIndex((row) => row.id === editId);
+                    if (targetIndex >= 0) {
+                        userRows[targetIndex] = result.user;
+                    }
+                } else {
+                    userRows.unshift(result.user);
+                }
+                closeModal();
                 renderRows();
-                showToast(result.message || 'New user account added.');
+                showToast(result.message || (isEdit ? 'User account updated.' : 'New user account added.'));
             } catch (error) {
-                openModal();
-                restoreAddUserForm(submittedPayload);
-                showToast(error.message || 'Unable to save user.');
+                showToast(error.message || (isEdit ? 'Unable to update user.' : 'Unable to save user.'));
             } finally {
                 if (addUserSubmitBtn) {
                     addUserSubmitBtn.disabled = false;
