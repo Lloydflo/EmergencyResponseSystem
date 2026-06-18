@@ -22,7 +22,7 @@ $pageTitle = 'Emergency Call Center';
     <link rel="stylesheet" href="css/admin-header.css">
     <link rel="stylesheet" href="css/sidebar-footer.css">
     <link rel="stylesheet" href="css/cards.css">
-    <link rel="stylesheet" href="css/call.css">
+    <link rel="stylesheet" href="css/call.css?v=<?php echo filemtime($rootDir . '/css/call.css'); ?>">
     <script src="js/place-autocomplete.js"></script>
 </head>
 <body>
@@ -570,6 +570,15 @@ $pageTitle = 'Emergency Call Center';
         if (el) el.textContent = text || 'No transcript yet.';
     }
 
+    function applySimulatedCallerTranscript(reason) {
+        if (!activeCall) return;
+        const text = activeCallerScript || buildCallerScript(activeCall.name);
+        activeCallerScript = text;
+        setTranscript(text);
+        applyTranscriptToForm(text);
+        setVoiceState(reason || 'Using simulated caller transcript.');
+    }
+
     function playCallerVoice() {
         if (!activeCall) {
             alert('Accept a call first.');
@@ -624,7 +633,11 @@ $pageTitle = 'Emergency Call Center';
         speechRecognition.onerror = (event) => {
             speechListening = false;
             updateSpeechButton();
-            setVoiceState(event.error === 'not-allowed' ? 'Microphone permission was blocked.' : 'Speech-to-text stopped.');
+            if (event.error === 'not-allowed' || event.error === 'service-not-allowed') {
+                applySimulatedCallerTranscript('Microphone permission was blocked. Simulated transcript was applied.');
+            } else {
+                setVoiceState('Speech-to-text stopped.');
+            }
             document.getElementById('voiceMeter')?.classList.remove('active');
         };
         speechRecognition.onend = () => {
@@ -690,7 +703,7 @@ $pageTitle = 'Emergency Call Center';
         }
         const recognizer = getSpeechRecognition();
         if (!recognizer) {
-            setVoiceState('Speech-to-text is not supported in this browser.');
+            applySimulatedCallerTranscript('Speech-to-text is not supported in this browser. Simulated transcript was applied.');
             return;
         }
         if (speechListening) {
