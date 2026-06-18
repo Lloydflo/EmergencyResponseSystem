@@ -257,6 +257,26 @@ function admin_users_empty_unit_assignment(): array
     ];
 }
 
+function admin_users_unit_assignment_overrides(array $input): array
+{
+    $overrides = [];
+    foreach (['unit_code', 'unit_type', 'vehicle_plate', 'unit_status'] as $key) {
+        if (array_key_exists($key, $input)) {
+            $value = trim((string)($input[$key] ?? ''));
+            $overrides[$key] = $value !== '' ? $value : null;
+        }
+    }
+    return $overrides;
+}
+
+function admin_users_apply_unit_assignment_overrides(array $assignment, array $input): array
+{
+    foreach (admin_users_unit_assignment_overrides($input) as $key => $value) {
+        $assignment[$key] = $value;
+    }
+    return $assignment;
+}
+
 function admin_users_fetch_unit_assignment(PDO $pdo, ?int $unitId): array
 {
     if ($unitId === null || $unitId <= 0 || !admin_users_table_exists($pdo, 'units')) {
@@ -777,7 +797,10 @@ if ($method !== 'POST') {
             $previousAssignedUnitId = admin_users_normalize_assigned_unit_id($existing['assigned_unit_id'] ?? null);
             $shouldUpdateUserUnitFields = $role !== 'responder' || $assignedUnitIdProvided;
             $unitAssignment = $role === 'responder'
-                ? admin_users_fetch_unit_assignment($pdo, $assignedUnitId)
+                ? admin_users_apply_unit_assignment_overrides(
+                    admin_users_fetch_unit_assignment($pdo, $assignedUnitId),
+                    $input
+                )
                 : admin_users_empty_unit_assignment();
             $inactiveSql = $status === 'inactive'
                 ? "`inactive_at` = COALESCE(`inactive_at`, NOW())"
@@ -996,7 +1019,10 @@ try {
         ? password_hash($password, PASSWORD_DEFAULT)
         : password_hash(bin2hex(random_bytes(16)), PASSWORD_DEFAULT);
     $unitAssignment = $role === 'responder'
-        ? admin_users_fetch_unit_assignment($pdo, $assignedUnitId)
+        ? admin_users_apply_unit_assignment_overrides(
+            admin_users_fetch_unit_assignment($pdo, $assignedUnitId),
+            $input
+        )
         : admin_users_empty_unit_assignment();
 
     $pdo->beginTransaction();
