@@ -545,6 +545,7 @@ CREATE TABLE responders (
   name VARCHAR(150) NOT NULL,
   department ENUM('fire','police','medical','barangay','other') NOT NULL DEFAULT 'other',
   email VARCHAR(255) NOT NULL,
+  contact_number VARCHAR(50) NOT NULL DEFAULT '',
   is_active TINYINT(1) NOT NULL DEFAULT 1,
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   PRIMARY KEY (id),
