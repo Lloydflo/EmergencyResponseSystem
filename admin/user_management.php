@@ -811,7 +811,12 @@ $adminName = $_SESSION['user_name'] ?? 'Admin';
                         </div>
                         <div class="um-field full">
                             <label for="newUserDepartment">Department / Assignment</label>
-                            <input id="newUserDepartment" class="um-input" maxlength="80" placeholder="e.g. EMS - Team Bravo" required>
+                            <select id="newUserDepartment" class="um-select" required>
+                                <option value="">Select department</option>
+                                <option value="medical">Medical</option>
+                                <option value="police">Police</option>
+                                <option value="fire">Fire</option>
+                            </select>
                         </div>
                     </div>
                 </div>
@@ -827,7 +832,7 @@ $adminName = $_SESSION['user_name'] ?? 'Admin';
 
     <script>
         const adminUsersApiUrl = 'api/admin_users.php';
-        const availableUnitsApiUrl = 'api/units_list.php?status=available';
+        const availableUnitsApiUrl = 'api/units_list.php?status=available&include_unassigned=1';
         const userRows = [];
         let availableUnits = [];
         let availableUnitsLoaded = false;
@@ -923,6 +928,47 @@ $adminName = $_SESSION['user_name'] ?? 'Admin';
             return raw.charAt(0).toUpperCase() + raw.slice(1);
         }
 
+        function departmentToUnitType(department) {
+            const key = String(department || '').trim().toLowerCase();
+            if (key === 'medical') return 'ambulance';
+            if (key === 'police') return 'police';
+            if (key === 'fire') return 'fire';
+            return '';
+        }
+
+        function normalizeDepartmentValue(department) {
+            const value = String(department || '').trim().toLowerCase();
+            if (value.includes('fire') || value.includes('bfp')) return 'fire';
+            if (value.includes('police') || value.includes('pnp')) return 'police';
+            if (
+                value.includes('medical') ||
+                value.includes('medic') ||
+                value.includes('ems') ||
+                value.includes('ambulance') ||
+                value.includes('health') ||
+                value.includes('emt')
+            ) {
+                return 'medical';
+            }
+            return ['medical', 'police', 'fire'].includes(value) ? value : '';
+        }
+
+        function displayDepartmentValue(department) {
+            const value = normalizeDepartmentValue(department);
+            const labels = {
+                medical: 'Medical',
+                police: 'Police',
+                fire: 'Fire'
+            };
+            return labels[value] || displayUnitValue(department);
+        }
+
+        function unitMatchesSelectedDepartment(unit) {
+            const expectedType = departmentToUnitType(newUserDepartment ? newUserDepartment.value : '');
+            if (!expectedType) return true;
+            return String(unit.unit_type || '').trim().toLowerCase() === expectedType;
+        }
+
         function getEditingRow() {
             return editingId !== null ? (userRows.find((row) => row.id === editingId) || null) : null;
         }
@@ -978,6 +1024,13 @@ $adminName = $_SESSION['user_name'] ?? 'Admin';
             }
         }
 
+        function clearResponderUnitDetails() {
+            if (newUserUnitCode) newUserUnitCode.value = '';
+            if (newUserPlateNumber) newUserPlateNumber.value = '';
+            if (newUserUnitType) newUserUnitType.value = '';
+            if (newUserUnitStatus) newUserUnitStatus.value = '';
+        }
+
         function renderAvailableUnitOptions() {
             if (!newUserAssignedUnit || !newUserUnitHint) return;
 
@@ -993,6 +1046,16 @@ $adminName = $_SESSION['user_name'] ?? 'Admin';
                 return;
             }
 
+            if (!departmentToUnitType(newUserDepartment ? newUserDepartment.value : '')) {
+                newUserAssignedUnit.innerHTML = '<option value="">Select department first</option>';
+                newUserAssignedUnit.disabled = true;
+                newUserAssignedUnit.required = false;
+                newUserUnitHint.textContent = 'Select Medical, Police, or Fire to show matching units.';
+                clearResponderUnitDetails();
+                updateResponderUnitDetails();
+                return;
+            }
+
             if (!availableUnits.length) {
                 newUserAssignedUnit.innerHTML = '<option value="">No available units</option>';
                 newUserAssignedUnit.disabled = true;
@@ -1002,7 +1065,17 @@ $adminName = $_SESSION['user_name'] ?? 'Admin';
                 return;
             }
 
-            const options = availableUnits.map((unit) => (
+            const filteredUnits = availableUnits.filter(unitMatchesSelectedDepartment);
+            if (!filteredUnits.length) {
+                newUserAssignedUnit.innerHTML = '<option value="">No units for selected department</option>';
+                newUserAssignedUnit.disabled = true;
+                newUserAssignedUnit.required = false;
+                newUserUnitHint.textContent = 'No available units match the selected department.';
+                updateResponderUnitDetails();
+                return;
+            }
+
+            const options = filteredUnits.map((unit) => (
                 `<option value="${unit.id}">${escapeHtml(formatUnitLabel(unit))}</option>`
             )).join('');
 
@@ -1010,13 +1083,13 @@ $adminName = $_SESSION['user_name'] ?? 'Admin';
             newUserAssignedUnit.required = newUserRole && newUserRole.value === 'responder';
             newUserAssignedUnit.innerHTML = '<option value="">Select available unit</option>' + options;
 
-            if (pendingValue && availableUnits.some((unit) => String(unit.id) === String(pendingValue))) {
+            if (pendingValue && filteredUnits.some((unit) => String(unit.id) === String(pendingValue))) {
                 newUserAssignedUnit.value = String(pendingValue);
             }
             delete newUserAssignedUnit.dataset.pendingValue;
             newUserUnitHint.textContent = editingId === null
-                ? 'Only units with Available status are listed.'
-                : 'Change the available unit to update unit code, plate, type, and status.';
+                ? 'Only units matching the selected department are listed.'
+                : 'Change the department or unit to update unit code, plate, type, and status.';
             updateResponderUnitDetails();
         }
 
@@ -1178,7 +1251,7 @@ $adminName = $_SESSION['user_name'] ?? 'Admin';
                         <td>${escapeHtml(row.email)}</td>
                         <td>${escapeHtml(row.contact_number || '')}</td>
                         <td>${roleChip(row.role)}</td>
-                        <td>${escapeHtml(row.department)}</td>
+                        <td>${escapeHtml(displayDepartmentValue(row.department))}</td>
                         <td>${statusChip(row.status)}</td>
                         <td>${escapeHtml(row.unit_code || 'N/A')}</td>
                         <td>${escapeHtml(displayUnitValue(row.unit_type))}</td>
@@ -1254,7 +1327,7 @@ $adminName = $_SESSION['user_name'] ?? 'Admin';
             newUserEmail.value = payload.email || '';
             newUserContact.value = payload.contact_number || '';
             newUserRole.value = payload.role || 'dispatcher';
-            newUserDepartment.value = payload.department || '';
+            newUserDepartment.value = normalizeDepartmentValue(payload.department);
             newUserStatus.value = payload.status || 'active';
             newUserPassword.value = payload.password || '';
             if (newUserUnitCode) {
@@ -1484,6 +1557,17 @@ $adminName = $_SESSION['user_name'] ?? 'Admin';
         if (newUserRole) {
             newUserRole.addEventListener('change', syncPasswordFieldForRole);
             syncPasswordFieldForRole();
+        }
+
+        if (newUserDepartment) {
+            newUserDepartment.addEventListener('change', () => {
+                if (newUserAssignedUnit) {
+                    newUserAssignedUnit.value = '';
+                    delete newUserAssignedUnit.dataset.pendingValue;
+                }
+                clearResponderUnitDetails();
+                renderAvailableUnitOptions();
+            });
         }
 
         if (newUserAssignedUnit) {
