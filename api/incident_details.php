@@ -270,14 +270,17 @@ try {
     $unitFrom = 'units u';
     $unitAlias = 'u.';
     $unitJoin = '';
+    $driverNameExpr = $responderDriverExpr;
     if ($resourceRecordsTable !== null) {
-        $unitSelect = 'u.*, rr.name AS vehicle_name, COALESCE(NULLIF(TRIM(rr.driver_name), \'\'), ' . $responderDriverExpr . ') AS driver_name, rr.plate_number';
+        $driverNameExpr = 'COALESCE(NULLIF(TRIM(rr.driver_name), \'\'), ' . $responderDriverExpr . ')';
+        $unitSelect = 'u.*, rr.name AS vehicle_name, ' . $driverNameExpr . ' AS driver_name, rr.plate_number';
         $unitFrom = 'units u';
         $unitAlias = 'u.';
         $unitJoin = " INNER JOIN `" . $resourceRecordsTable . "` rr
                       ON rr.code = u.identifier
                      AND LOWER(rr.category) = 'vehicles'";
     }
+    $assignedDriverWhere = " AND TRIM(COALESCE(" . $driverNameExpr . ", '')) <> ''";
 
     if (!empty($desiredTypes)) {
         if (!in_array('other', $desiredTypes, true)) {
@@ -289,7 +292,8 @@ try {
              FROM {$unitFrom}
              {$unitJoin}
              WHERE {$unitAlias}status = 'available'
-               AND {$unitAlias}unit_type IN ({$placeholders})"
+               AND {$unitAlias}unit_type IN ({$placeholders})
+               {$assignedDriverWhere}"
         );
         $unitStmt->execute($desiredTypes);
         $units = $unitStmt->fetchAll(PDO::FETCH_ASSOC);
@@ -298,7 +302,8 @@ try {
             "SELECT {$unitSelect}
              FROM {$unitFrom}
              {$unitJoin}
-             WHERE {$unitAlias}status = 'available'"
+             WHERE {$unitAlias}status = 'available'
+             {$assignedDriverWhere}"
         )->fetchAll(PDO::FETCH_ASSOC);
     }
 

@@ -176,6 +176,14 @@ try {
             ]);
             exit;
         }
+        if (trim((string)($unitRow['operator_name'] ?? '')) === '') {
+            $pdo->rollBack();
+            echo json_encode([
+                'ok' => false,
+                'error' => 'Unit ' . (string)($unitRow['identifier'] ?? $unitRow['id']) . ' has no assigned responder'
+            ]);
+            exit;
+        }
         $availableUnits[(int)$unitRow['id']] = $unitRow;
     }
 

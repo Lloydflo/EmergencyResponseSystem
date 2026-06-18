@@ -143,18 +143,20 @@ if (
 }
 
 $resourceJoin = '';
+$driverNameExpr = $responderDriverExpr;
 $resourceSelect = 'NULL AS resource_name,
             NULL AS resource_location,
-            ' . $responderDriverExpr . ' AS driver_name,
+            ' . $driverNameExpr . ' AS driver_name,
             NULL AS plate_number,
             NULL AS assignment';
 if ($vehicleResourceTable !== null) {
     $resourceJoin = " INNER JOIN `" . $vehicleResourceTable . "` rr
                       ON rr.code = u.identifier
                      AND LOWER(rr.category) = 'vehicles'";
+    $driverNameExpr = 'COALESCE(NULLIF(TRIM(rr.driver_name), \'\'), ' . $responderDriverExpr . ')';
     $resourceSelect = 'rr.name AS resource_name,
             rr.location AS resource_location,
-            COALESCE(NULLIF(TRIM(rr.driver_name), \'\'), ' . $responderDriverExpr . ') AS driver_name,
+            ' . $driverNameExpr . ' AS driver_name,
             rr.plate_number AS plate_number,
             rr.assignment AS assignment';
 }
@@ -187,6 +189,11 @@ if (!empty($statuses)) {
     $in = implode(',', array_fill(0, count($statuses), '?'));
     $sql .= " WHERE u.status IN ($in)";
     $params = $statuses;
+}
+
+if (in_array('available', $statuses, true)) {
+    $sql .= ($params === [] ? ' WHERE ' : ' AND ')
+        . "TRIM(COALESCE(" . $driverNameExpr . ", '')) <> ''";
 }
 
 $sql .= ' ORDER BY u.unit_type, u.identifier';
