@@ -13,16 +13,18 @@ try {
     $pdo = db();
 
     $q = $pdo->prepare("
-        SELECT COUNT(*)
+        SELECT status
         FROM dispatch_operator_records
         WHERE assigned_to = ?
         AND status IN ('assigned','received','en_route','on_scene')
+        ORDER BY assigned_at DESC, id DESC
+        LIMIT 1
     ");
     $q->execute([$responder_id]);
 
-    $activeCount = (int)$q->fetchColumn();
+    $latestStatus = $q->fetchColumn();
 
-    $unitStatus = $activeCount > 0 ? "assigned" : "available";
+    $unitStatus = $latestStatus ?: "available";
 
     $u = $pdo->prepare("
         UPDATE users
@@ -33,7 +35,6 @@ try {
 
     echo json_encode([
         "success" => true,
-        "active_assignments" => $activeCount,
         "unit_status" => $unitStatus
     ]);
 
