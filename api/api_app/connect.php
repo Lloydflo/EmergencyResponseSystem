@@ -29,7 +29,8 @@ if (file_exists($envPath) && is_readable($envPath)) {
 }
 
 function db(): PDO {
-    // Gumamit ng $_ENV imbes na getenv para mas sigurado
+    date_default_timezone_set('Asia/Manila');
+
     $host = $_ENV["DB_HOST"] ?? "127.0.0.1";
     $db   = $_ENV["DB_NAME"] ?? "emergency_response_test";
     $user = $_ENV["DB_USER"] ?? "root";
@@ -37,8 +38,13 @@ function db(): PDO {
     $port = $_ENV["DB_PORT"] ?? "3306";
 
     $dsn = "mysql:host=$host;port=$port;dbname=$db;charset=utf8mb4";
-    return new PDO($dsn, $user, $pass, [
+
+    $pdo = new PDO($dsn, $user, $pass, [
         PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
         PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC
     ]);
+
+    $pdo->exec("SET time_zone = '+08:00'");
+
+    return $pdo;
 }
