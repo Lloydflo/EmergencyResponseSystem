@@ -79,6 +79,7 @@ function backup_dispatch_ensure_operator_records_table(PDO $pdo): void
     $pdo->exec("
         CREATE TABLE IF NOT EXISTS `dispatch_operator_records` (
           `id` bigint(20) UNSIGNED NOT NULL AUTO_INCREMENT,
+          `incident_id` bigint(20) UNSIGNED DEFAULT NULL,
           `name` varchar(150) NOT NULL,
           `vehicle` varchar(100) NOT NULL,
           `location` varchar(255) DEFAULT NULL,
@@ -94,6 +95,7 @@ function backup_dispatch_ensure_operator_records_table(PDO $pdo): void
           `assigned_unit_type` varchar(50) DEFAULT NULL,
           `assigned_at` datetime DEFAULT NULL,
           PRIMARY KEY (`id`),
+          KEY `idx_dispatch_operator_records_incident_id` (`incident_id`),
           KEY `idx_dispatch_operator_records_priority` (`priority`),
           KEY `idx_dispatch_operator_records_created_at` (`created_at`),
           KEY `idx_dispatch_operator_records_status` (`status`),
@@ -103,6 +105,7 @@ function backup_dispatch_ensure_operator_records_table(PDO $pdo): void
     ");
 
     $columns = [
+        'incident_id' => "`incident_id` bigint(20) UNSIGNED DEFAULT NULL AFTER `id`",
         'status' => "`status` varchar(50) DEFAULT 'pending' AFTER `created_at`",
         'assigned_to' => "`assigned_to` int(11) DEFAULT NULL AFTER `status`",
         'assigned_responder_name' => "`assigned_responder_name` varchar(150) DEFAULT NULL AFTER `assigned_to`",
@@ -118,6 +121,7 @@ function backup_dispatch_ensure_operator_records_table(PDO $pdo): void
     }
 
     $indexes = [
+        'idx_dispatch_operator_records_incident_id' => '(`incident_id`)',
         'idx_dispatch_operator_records_status' => '(`status`)',
         'idx_dispatch_operator_records_assigned_to' => '(`assigned_to`)',
         'idx_dispatch_operator_records_assigned_at' => '(`assigned_at`)',
@@ -318,8 +322,8 @@ try {
     $unitUpdate = $pdo->prepare("UPDATE units SET status = 'assigned', current_incident_id = ?, last_status_at = CURRENT_TIMESTAMP WHERE id = ?");
     $operatorRecordInsert = $pdo->prepare("
         INSERT INTO dispatch_operator_records
-            (`name`, `vehicle`, `location`, `latitude`, `longitude`, `priority`, `description`, `created_at`, `status`, `assigned_to`, `assigned_responder_name`, `assigned_unit_code`, `assigned_unit_type`, `assigned_at`)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?, ?, ?, ?, ?)
+            (`incident_id`, `name`, `vehicle`, `location`, `latitude`, `longitude`, `priority`, `description`, `created_at`, `status`, `assigned_to`, `assigned_responder_name`, `assigned_unit_code`, `assigned_unit_type`, `assigned_at`)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?, ?, ?, ?, ?)
     ");
 
     $dispatchedUnits = [];
@@ -336,6 +340,7 @@ try {
         }
 
         $operatorRecordInsert->execute([
+            $incidentId,
             $operatorName,
             backup_dispatch_vehicle_label((string)($unitMeta['unit_type'] ?? ''), (string)($unitMeta['vehicle_name'] ?? '')),
             $incidentRow['location_address'] ?? null,

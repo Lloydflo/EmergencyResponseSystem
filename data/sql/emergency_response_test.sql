@@ -306,6 +306,7 @@ CREATE TABLE `dispatches` (
 
 CREATE TABLE IF NOT EXISTS `dispatch_operator_records` (
   `id` bigint(20) UNSIGNED NOT NULL AUTO_INCREMENT,
+  `incident_id` bigint(20) UNSIGNED DEFAULT NULL,
   `name` varchar(150) NOT NULL,
   `vehicle` varchar(100) NOT NULL,
   `location` varchar(255) DEFAULT NULL,
@@ -321,6 +322,7 @@ CREATE TABLE IF NOT EXISTS `dispatch_operator_records` (
   `assigned_unit_type` varchar(50) DEFAULT NULL,
   `assigned_at` datetime DEFAULT NULL,
   PRIMARY KEY (`id`),
+  KEY `idx_dispatch_operator_records_incident_id` (`incident_id`),
   KEY `idx_dispatch_operator_records_priority` (`priority`),
   KEY `idx_dispatch_operator_records_created_at` (`created_at`),
   KEY `idx_dispatch_operator_records_status` (`status`),
