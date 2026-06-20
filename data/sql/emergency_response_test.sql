@@ -123,6 +123,7 @@ CREATE TABLE `admin_resources` (
   `plate_number` varchar(50) DEFAULT NULL,
   `position_title` varchar(150) DEFAULT NULL,
   `assignment` varchar(255) DEFAULT NULL,
+  `quantity` int(10) UNSIGNED NOT NULL DEFAULT 1,
   `notes` text DEFAULT NULL,
   `created_at` datetime NOT NULL DEFAULT current_timestamp(),
   `updated_at` datetime NOT NULL DEFAULT current_timestamp() ON UPDATE current_timestamp()
@@ -146,6 +147,7 @@ CREATE TABLE `admin_resources_archive` (
   `plate_number` varchar(50) DEFAULT NULL,
   `position_title` varchar(150) DEFAULT NULL,
   `assignment` varchar(255) DEFAULT NULL,
+  `quantity` int(10) UNSIGNED NOT NULL DEFAULT 1,
   `notes` text DEFAULT NULL,
   `created_at` datetime NOT NULL,
   `updated_at` datetime NOT NULL,
@@ -169,6 +171,7 @@ CREATE TABLE `resource_records` (
   `plate_number` varchar(50) DEFAULT NULL,
   `position_title` varchar(150) DEFAULT NULL,
   `assignment` varchar(255) DEFAULT NULL,
+  `quantity` int(10) UNSIGNED NOT NULL DEFAULT 1,
   `notes` text DEFAULT NULL,
   `created_at` datetime NOT NULL DEFAULT current_timestamp(),
   `updated_at` datetime NOT NULL DEFAULT current_timestamp() ON UPDATE current_timestamp()
@@ -192,6 +195,7 @@ CREATE TABLE `resource_records_archive` (
   `plate_number` varchar(50) DEFAULT NULL,
   `position_title` varchar(150) DEFAULT NULL,
   `assignment` varchar(255) DEFAULT NULL,
+  `quantity` int(10) UNSIGNED NOT NULL DEFAULT 1,
   `notes` text DEFAULT NULL,
   `created_at` datetime NOT NULL,
   `updated_at` datetime NOT NULL,

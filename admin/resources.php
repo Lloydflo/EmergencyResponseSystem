@@ -505,6 +505,33 @@ $pageTitle = 'Resources Status';
             font-family: inherit;
         }
 
+        .quantity-stepper {
+            display: grid;
+            grid-template-columns: 42px minmax(72px, 1fr) 42px;
+            align-items: stretch;
+            gap: 0.4rem;
+        }
+
+        .quantity-stepper .form-input {
+            text-align: center;
+            font-weight: 700;
+        }
+
+        .quantity-stepper-btn {
+            border: 1px solid #cbd5e1;
+            background: #fff;
+            color: #0f172a;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 0.9rem;
+            transition: 0.2s ease;
+        }
+
+        .quantity-stepper-btn:hover {
+            background: #f8fafc;
+            border-color: #94a3b8;
+        }
+
         .form-textarea {
             min-height: 88px;
             resize: vertical;
@@ -1309,6 +1336,19 @@ $pageTitle = 'Resources Status';
                             <label for="assignmentInput" id="assignmentLabel">Assignment / Details</label>
                             <input id="assignmentInput" class="form-input" maxlength="90" placeholder="e.g. On standby">
                         </div>
+                        <div class="form-group" id="equipmentQuantityGroup" hidden>
+                            <label for="equipmentQuantityInput">Equipment Quantity</label>
+                            <div class="quantity-stepper">
+                                <button type="button" class="quantity-stepper-btn" id="decreaseQuantityBtn" aria-label="Decrease equipment quantity">
+                                    <i class="fas fa-minus"></i>
+                                </button>
+                                <input id="equipmentQuantityInput" class="form-input" type="number" min="1" step="1" value="1" inputmode="numeric">
+                                <button type="button" class="quantity-stepper-btn" id="increaseQuantityBtn" aria-label="Increase equipment quantity">
+                                    <i class="fas fa-plus"></i>
+                                </button>
+                            </div>
+                            <div class="form-hint">Use this for equipment count, e.g. 5 oxygen tanks.</div>
+                        </div>
                         <div class="form-group full">
                             <label for="notesInput">Notes</label>
                             <textarea id="notesInput" class="form-textarea" maxlength="250" placeholder="Optional notes"></textarea>
@@ -1532,6 +1572,10 @@ $pageTitle = 'Resources Status';
         const assignmentGroup = document.getElementById('assignmentGroup');
         const assignmentLabel = document.getElementById('assignmentLabel');
         const assignmentInput = document.getElementById('assignmentInput');
+        const equipmentQuantityGroup = document.getElementById('equipmentQuantityGroup');
+        const equipmentQuantityInput = document.getElementById('equipmentQuantityInput');
+        const decreaseQuantityBtn = document.getElementById('decreaseQuantityBtn');
+        const increaseQuantityBtn = document.getElementById('increaseQuantityBtn');
         const notesInput = document.getElementById('notesInput');
         const modalHelperText = document.getElementById('modalHelperText');
         const generateCodeBtn = document.getElementById('generateCodeBtn');
@@ -1705,6 +1749,7 @@ $pageTitle = 'Resources Status';
                 plateNumber: String(raw.plateNumber || '').trim(),
                 positionTitle: String(raw.positionTitle || '').trim(),
                 assignment: String(raw.assignment || '').trim(),
+                quantity: Math.max(1, Number(raw.quantity) || 1),
                 notes: String(raw.notes || '').trim(),
                 updatedAt: String(raw.updatedAt || '')
             };
@@ -1724,6 +1769,7 @@ $pageTitle = 'Resources Status';
                 plateNumber: String(raw.plateNumber || '').trim(),
                 positionTitle: String(raw.positionTitle || '').trim(),
                 assignment: String(raw.assignment || '').trim(),
+                quantity: Math.max(1, Number(raw.quantity) || 1),
                 notes: String(raw.notes || '').trim(),
                 updatedAt: String(raw.updatedAt || ''),
                 deletedAt: String(raw.deletedAt || ''),
@@ -1868,6 +1914,11 @@ $pageTitle = 'Resources Status';
             }
             if (item.category === 'personnel' && item.positionTitle) {
                 return `Position: ${item.positionTitle}`;
+            }
+            if (item.category === 'equipment') {
+                const meta = [`Qty: ${Math.max(1, Number(item.quantity) || 1)}`];
+                if (item.assignment) meta.push(item.assignment);
+                return meta.join(' | ');
             }
             return item.notes || '';
         }
@@ -2045,7 +2096,7 @@ $pageTitle = 'Resources Status';
 
             requestSelectedList.innerHTML = selectedItems.map((item) => `
                 <span class="request-selected-chip">
-                    <span>${escapeHtml(item.code)} - ${escapeHtml(item.name)}</span>
+                    <span>${escapeHtml(item.code)} - ${escapeHtml(item.name)}${item.category === 'equipment' ? ` (Qty: ${escapeHtml(Math.max(1, Number(item.quantity) || 1))})` : ''}</span>
                     <button type="button" data-remove-backup-resource-id="${item.id}" aria-label="Remove ${escapeHtml(item.name)}">
                         <i class="fas fa-times"></i>
                     </button>
@@ -2110,6 +2161,7 @@ $pageTitle = 'Resources Status';
             const currentCategory = category || 'equipment';
             const isVehicle = currentCategory === 'vehicles';
             const isPersonnel = currentCategory === 'personnel';
+            const isEquipment = currentCategory === 'equipment';
 
             resourceNameLabel.textContent = isVehicle
                 ? 'Vehicle Name'
@@ -2121,6 +2173,8 @@ $pageTitle = 'Resources Status';
             plateNumberGroup.hidden = !isVehicle;
             positionTitleGroup.hidden = !isPersonnel;
             assignmentGroup.hidden = isPersonnel;
+            equipmentQuantityGroup.hidden = !isEquipment;
+            equipmentQuantityInput.required = isEquipment;
 
             assignmentLabel.textContent = isVehicle ? 'Assignment / Details' : 'Assignment / Details';
             assignmentInput.placeholder = isVehicle ? 'e.g. On standby' : 'e.g. Stock monitoring';
@@ -2134,6 +2188,9 @@ $pageTitle = 'Resources Status';
                 }
                 if (isPersonnel) {
                     assignmentInput.value = '';
+                }
+                if (!isEquipment) {
+                    equipmentQuantityInput.value = '1';
                 }
             }
         }
@@ -2162,6 +2219,7 @@ $pageTitle = 'Resources Status';
                 if (!resourceNameInput.value.trim()) resourceNameInput.value = 'Equipment Asset';
                 if (!locationInput.value.trim()) locationInput.value = 'Equipment Room';
                 if (!assignmentInput.value.trim()) assignmentInput.value = 'Stock monitoring';
+                if (Number(equipmentQuantityInput.value || 0) < 1) equipmentQuantityInput.value = '1';
                 if (!notesInput.value.trim()) notesInput.value = 'Inspected and ready for use.';
                 statusInput.value = 'available';
             }
@@ -2195,6 +2253,7 @@ $pageTitle = 'Resources Status';
                     item.category,
                     item.status,
                     item.location,
+                    item.quantity,
                     item.assignment,
                     item.notes
                 ].join(' ').toLowerCase();
@@ -2351,6 +2410,7 @@ $pageTitle = 'Resources Status';
                 plateNumberInput.value = target.plateNumber || '';
                 positionTitleInput.value = target.positionTitle || '';
                 assignmentInput.value = target.assignment;
+                equipmentQuantityInput.value = String(Math.max(1, Number(target.quantity) || 1));
                 notesInput.value = target.notes;
                 setFormCategoryState(target.category, { clearIrrelevant: false });
                 setSaveLoading(false);
@@ -2420,6 +2480,17 @@ $pageTitle = 'Resources Status';
             }
         }
 
+        function readEquipmentQuantity() {
+            const value = Number.parseInt(equipmentQuantityInput.value || '1', 10);
+            if (!Number.isInteger(value) || value < 1) return 1;
+            return Math.min(value, 9999);
+        }
+
+        function setEquipmentQuantity(value) {
+            const parsed = Number.parseInt(String(value), 10);
+            equipmentQuantityInput.value = String(Math.max(1, Math.min(9999, Number.isInteger(parsed) ? parsed : 1)));
+        }
+
         async function submitBackupRequest(event) {
             event.preventDefault();
 
@@ -2428,6 +2499,9 @@ $pageTitle = 'Resources Status';
                 showToast('Select at least one available resource.');
                 return;
             }
+            const totalQuantity = selectedItems.reduce((total, item) => {
+                return total + (item.category === 'equipment' ? Math.max(1, Number(item.quantity) || 1) : 1);
+            }, 0);
 
             const incidentId = Number.parseInt(requestIncidentSelect.value || '', 10);
             const incident = backupIncidents.find((item) => item.id === incidentId);
@@ -2453,7 +2527,7 @@ $pageTitle = 'Resources Status';
             formData.append('requestor', REQUEST_REQUESTOR);
             formData.append('resource_name', summaryName);
             formData.append('resource_type', requestType);
-            formData.append('quantity', String(selectedItems.length));
+            formData.append('quantity', String(totalQuantity));
             formData.append('priority', requestPriorityInput.value || 'high');
             formData.append('location', incident.location || '');
             formData.append('notes', reason);
@@ -2467,6 +2541,7 @@ $pageTitle = 'Resources Status';
                 code: item.code,
                 name: item.name,
                 category: item.category,
+                quantity: item.category === 'equipment' ? Math.max(1, Number(item.quantity) || 1) : 1,
                 location: item.location,
                 assignment: item.assignment || '',
                 notes: item.notes || ''
@@ -2551,6 +2626,7 @@ $pageTitle = 'Resources Status';
                 plateNumber: plateNumberInput.value.trim().toUpperCase(),
                 positionTitle: positionTitleInput.value.trim(),
                 assignment: assignmentInput.value.trim(),
+                quantity: categoryInput.value === 'equipment' ? readEquipmentQuantity() : 1,
                 notes: notesInput.value.trim()
             };
 
@@ -2661,6 +2737,10 @@ $pageTitle = 'Resources Status';
         cancelRequestBackupBtn.addEventListener('click', closeRequestBackupModal);
         requestIncidentSelect.addEventListener('change', updateBackupIncidentMeta);
         requestBackupForm.addEventListener('submit', submitBackupRequest);
+        decreaseQuantityBtn.addEventListener('click', () => setEquipmentQuantity(readEquipmentQuantity() - 1));
+        increaseQuantityBtn.addEventListener('click', () => setEquipmentQuantity(readEquipmentQuantity() + 1));
+        equipmentQuantityInput.addEventListener('change', () => setEquipmentQuantity(equipmentQuantityInput.value));
+        equipmentQuantityInput.addEventListener('blur', () => setEquipmentQuantity(equipmentQuantityInput.value));
 
         presetButtons.forEach((btn) => {
             btn.addEventListener('click', () => {
