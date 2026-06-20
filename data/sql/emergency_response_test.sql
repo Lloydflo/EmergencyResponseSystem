@@ -380,6 +380,60 @@ END
 $$
 DELIMITER ;
 
+DELIMITER $$
+CREATE TRIGGER `trg_dispatch_operator_records_au_complete` AFTER UPDATE ON `dispatch_operator_records` FOR EACH ROW BEGIN
+  DECLARE next_activity_log_id INT DEFAULT NULL;
+
+  IF LOWER(COALESCE(NEW.`status`, '')) = 'completed'
+     AND LOWER(COALESCE(OLD.`status`, '')) <> 'completed'
+     AND NEW.`incident_id` IS NOT NULL
+     AND NEW.`incident_id` > 0 THEN
+    UPDATE `dispatches`
+      SET `status` = 'cleared',
+          `cleared_at` = COALESCE(`cleared_at`, CURRENT_TIMESTAMP)
+      WHERE `incident_id` = NEW.`incident_id`
+        AND `status` IN ('assigned','acknowledged','enroute','on_scene');
+
+    UPDATE `units` u
+      INNER JOIN `dispatches` d ON d.`unit_id` = u.`id`
+      SET u.`status` = 'available',
+          u.`current_incident_id` = NULL,
+          u.`last_status_at` = CURRENT_TIMESTAMP
+      WHERE d.`incident_id` = NEW.`incident_id`;
+
+    UPDATE `incidents`
+      SET `status` = 'resolved',
+          `resolved_at` = COALESCE(`resolved_at`, CURRENT_TIMESTAMP),
+          `updated_at` = CURRENT_TIMESTAMP
+      WHERE `id` = NEW.`incident_id`;
+
+    SELECT COALESCE(MAX(`id`), 0) + 1 INTO next_activity_log_id FROM `activity_log`;
+
+    INSERT INTO `activity_log` (`id`, `user_id`, `action`, `entity_type`, `entity_id`, `details`, `created_at`)
+      SELECT
+        next_activity_log_id,
+        NULL,
+        'incident_resolved',
+        'incident',
+        i.`id`,
+        CONCAT('Incident ', COALESCE(NULLIF(i.`reference_no`, ''), CONCAT('#', i.`id`)), ' has been resolved.'),
+        CURRENT_TIMESTAMP
+      FROM `incidents` i
+      WHERE i.`id` = NEW.`incident_id`
+        AND NOT EXISTS (
+          SELECT 1
+          FROM `activity_log` a
+          WHERE a.`action` = 'incident_resolved'
+            AND a.`entity_type` = 'incident'
+            AND a.`entity_id` = i.`id`
+          LIMIT 1
+        )
+      LIMIT 1;
+  END IF;
+END
+$$
+DELIMITER ;
+
 -- --------------------------------------------------------
 
 --

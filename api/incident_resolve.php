@@ -73,6 +73,95 @@ function incident_resolve_column_exists(PDO $pdo, string $table, string $column)
     }
 }
 
+function incident_resolve_log_notification(PDO $pdo, int $incidentId): void
+{
+    if ($incidentId <= 0 || !incident_resolve_table_exists($pdo, 'activity_log')) {
+        return;
+    }
+
+    try {
+        $existsStmt = $pdo->prepare("
+            SELECT 1
+            FROM activity_log
+            WHERE action = 'incident_resolved'
+              AND entity_type = 'incident'
+              AND entity_id = :iid
+            LIMIT 1
+        ");
+        $existsStmt->execute([':iid' => $incidentId]);
+        if ($existsStmt->fetchColumn()) {
+            return;
+        }
+
+        $nextId = (int)$pdo->query("SELECT COALESCE(MAX(id), 0) + 1 FROM activity_log")->fetchColumn();
+        $stmt = $pdo->prepare("
+            INSERT INTO activity_log (id, user_id, action, entity_type, entity_id, details, created_at)
+            SELECT
+                :next_id,
+                NULL,
+                'incident_resolved',
+                'incident',
+                i.id,
+                CONCAT('Incident ', COALESCE(NULLIF(i.reference_no, ''), CONCAT('#', i.id)), ' has been resolved.'),
+                CURRENT_TIMESTAMP
+            FROM incidents i
+            WHERE i.id = :iid
+            LIMIT 1
+        ");
+        $stmt->execute([':next_id' => $nextId, ':iid' => $incidentId]);
+    } catch (Throwable $notificationError) {
+        error_log('Incident resolve notification skipped: ' . $notificationError->getMessage());
+    }
+}
+
+function incident_resolve_complete_operator_records(PDO $pdo, int $incidentId): void
+{
+    if (
+        $incidentId <= 0
+        || !incident_resolve_table_exists($pdo, 'dispatch_operator_records')
+        || !incident_resolve_column_exists($pdo, 'dispatch_operator_records', 'status')
+    ) {
+        return;
+    }
+
+    try {
+        $updates = 0;
+        if (incident_resolve_column_exists($pdo, 'dispatch_operator_records', 'incident_id')) {
+            $stmt = $pdo->prepare("
+                UPDATE dispatch_operator_records
+                SET status = 'completed'
+                WHERE incident_id = :iid
+                  AND LOWER(COALESCE(status, '')) NOT IN ('completed', 'resolved', 'cancelled')
+            ");
+            $stmt->execute([':iid' => $incidentId]);
+            $updates += (int)$stmt->rowCount();
+        }
+
+        if (
+            $updates === 0
+            && incident_resolve_table_exists($pdo, 'dispatches')
+            && incident_resolve_table_exists($pdo, 'units')
+            && incident_resolve_column_exists($pdo, 'dispatch_operator_records', 'assigned_unit_code')
+            && incident_resolve_column_exists($pdo, 'dispatch_operator_records', 'assigned_at')
+        ) {
+            $stmt = $pdo->prepare("
+                UPDATE dispatch_operator_records dor
+                INNER JOIN units u
+                    ON UPPER(TRIM(u.identifier)) = UPPER(TRIM(dor.assigned_unit_code))
+                INNER JOIN dispatches d
+                    ON d.unit_id = u.id
+                   AND d.incident_id = :iid
+                   AND ABS(TIMESTAMPDIFF(SECOND, d.assigned_at, COALESCE(dor.assigned_at, dor.created_at))) <= 60
+                SET dor.status = 'completed'
+                WHERE LOWER(COALESCE(dor.status, '')) NOT IN ('completed', 'resolved', 'cancelled')
+            ");
+            $stmt->execute([':iid' => $incidentId]);
+        }
+    } catch (Throwable $operatorError) {
+        error_log('Incident resolve operator-record completion skipped: ' . $operatorError->getMessage());
+    }
+}
+
 try {
     if ($incidentId === null && $incidentCode !== '') {
         $lookup = $pdo->prepare('SELECT id FROM incidents WHERE reference_no = :ref LIMIT 1');
@@ -141,6 +230,8 @@ try {
         error_log('Incident resolve resource sync skipped: ' . $syncError->getMessage());
     }
 
+    incident_resolve_complete_operator_records($pdo, $incidentId);
+
     // Mark incident resolved
     $incidentFields = ["status='resolved'"];
     if (incident_resolve_column_exists($pdo, 'incidents', 'resolved_at')) {
@@ -151,6 +242,8 @@ try {
     }
     $stmt3 = $pdo->prepare('UPDATE incidents SET ' . implode(', ', $incidentFields) . ' WHERE id = :iid');
     $stmt3->execute([':iid' => $incidentId]);
+
+    incident_resolve_log_notification($pdo, $incidentId);
 
     // Optional: add note to incident_notes
     if (

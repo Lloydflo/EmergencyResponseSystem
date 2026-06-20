@@ -48,6 +48,8 @@ try {
     $sql = "
         SELECT
             a.id AS notification_id,
+            a.action,
+            a.entity_type,
             a.created_at AS notified_at,
             a.details,
             d.id AS dispatch_id,
@@ -67,16 +69,27 @@ try {
         LEFT JOIN dispatches d
             ON d.id = a.entity_id
             AND a.entity_type = 'dispatch'
-        LEFT JOIN incidents i ON i.id = d.incident_id
+        LEFT JOIN incidents i ON i.id = CASE
+            WHEN a.entity_type = 'incident' THEN a.entity_id
+            ELSE d.incident_id
+        END
         LEFT JOIN units u ON u.id = d.unit_id
-        WHERE a.action = 'dispatch_confirmed'
+        WHERE a.action IN ('dispatch_confirmed', 'incident_resolved')
           AND a.id > ?
     ";
 
     $params = [$sinceId];
     if ($unitTypeFilter !== '') {
-        $sql .= " AND u.unit_type = ? ";
+        $sql .= " AND (
+            u.unit_type = ?
+            OR (
+                a.action = 'incident_resolved'
+                AND LOWER(COALESCE(i.type, '')) IN (?, ?)
+            )
+        ) ";
         $params[] = $unitTypeFilter;
+        $params[] = $departmentKey === 'medical' ? 'medical' : $unitTypeFilter;
+        $params[] = $departmentKey === 'police' ? 'crime' : $unitTypeFilter;
     }
 
     $sql .= " ORDER BY a.id ASC LIMIT " . (int)$limit;
@@ -97,6 +110,7 @@ try {
 
         $notifications[] = [
             'notification_id' => (int)$row['notification_id'],
+            'action' => $row['action'] ?? '',
             'notified_at' => $row['notified_at'],
             'dispatch' => [
                 'dispatch_id' => isset($row['dispatch_id']) ? (int)$row['dispatch_id'] : null,

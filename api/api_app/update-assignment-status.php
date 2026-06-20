@@ -174,7 +174,50 @@ function app_assignment_resolve_incident(PDO $pdo, array $assignment): array
     ");
     $incidentUpdate->execute([$incidentId]);
 
+    app_assignment_log_resolved_notification($pdo, $incidentId);
+
     return ["resolved" => true, "incident_id" => $incidentId];
+}
+
+function app_assignment_log_resolved_notification(PDO $pdo, int $incidentId): void
+{
+    if ($incidentId <= 0) {
+        return;
+    }
+
+    try {
+        $existsStmt = $pdo->prepare("
+            SELECT 1
+            FROM activity_log
+            WHERE action = 'incident_resolved'
+              AND entity_type = 'incident'
+              AND entity_id = ?
+            LIMIT 1
+        ");
+        $existsStmt->execute([$incidentId]);
+        if ($existsStmt->fetchColumn()) {
+            return;
+        }
+
+        $nextId = (int)$pdo->query("SELECT COALESCE(MAX(id), 0) + 1 FROM activity_log")->fetchColumn();
+        $stmt = $pdo->prepare("
+            INSERT INTO activity_log (id, user_id, action, entity_type, entity_id, details, created_at)
+            SELECT
+                ?,
+                NULL,
+                'incident_resolved',
+                'incident',
+                i.id,
+                CONCAT('Incident ', COALESCE(NULLIF(i.reference_no, ''), CONCAT('#', i.id)), ' has been resolved.'),
+                CURRENT_TIMESTAMP
+            FROM incidents i
+            WHERE i.id = ?
+            LIMIT 1
+        ");
+        $stmt->execute([$nextId, $incidentId]);
+    } catch (Throwable $e) {
+        error_log('Incident resolved notification skipped: ' . $e->getMessage());
+    }
 }
 
 try {

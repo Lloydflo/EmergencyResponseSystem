@@ -243,9 +243,13 @@ try {
         // Incident Priority Management Functionality
         let INCIDENTS = [];
         let REFRESH_TIMER = null;
+        let RESOLVED_REFRESH_TIMER = null;
+        let RESOLVED_LIST_RELOAD = null;
+        let LAST_RESOLVED_NOTIFICATION_ID = Number(sessionStorage.getItem('ers_last_resolved_notice_id') || '0') || 0;
         const API_LIST_URL = 'api/incidents_list.php';
         const API_UPDATE_URL = 'api/incident_update.php';
         const API_RESOLVE_URL = 'api/incident_resolve.php';
+        const API_RESOLVED_NOTIFICATIONS_URL = 'api/resolved_incident_notifications.php';
 
         // Priority change functionality
         document.querySelectorAll('.btn-priority').forEach(button => {
@@ -479,7 +483,56 @@ try {
                     openResolvedModal();
                 });
             }
+
+            try {
+                const params = new URLSearchParams(window.location.search);
+                const requestedView = String(params.get('view') || params.get('status') || '').toLowerCase();
+                if (requestedView === 'resolved') {
+                    window.setTimeout(openResolvedModal, 150);
+                }
+            } catch (e) {}
         });
+
+        function isResolvedModalOpen() {
+            const modal = document.getElementById('incident-resolved-modal');
+            return !!(modal && modal.style.display !== 'none');
+        }
+
+        async function pollResolvedIncidentNotifications() {
+            try {
+                const res = await fetch(API_RESOLVED_NOTIFICATIONS_URL + '?limit=5', {
+                    cache: 'no-store',
+                    credentials: 'same-origin'
+                });
+                const data = await res.json().catch(() => ({}));
+                if (!data || !data.ok || !Array.isArray(data.notifications)) return;
+
+                const latestId = Number(data.latest_id || 0);
+                if (latestId <= 0) return;
+
+                if (LAST_RESOLVED_NOTIFICATION_ID <= 0) {
+                    LAST_RESOLVED_NOTIFICATION_ID = latestId;
+                    sessionStorage.setItem('ers_last_resolved_notice_id', String(latestId));
+                    return;
+                }
+
+                if (latestId > LAST_RESOLVED_NOTIFICATION_ID) {
+                    const newItems = data.notifications.filter(item => Number(item.notification_id || 0) > LAST_RESOLVED_NOTIFICATION_ID);
+                    LAST_RESOLVED_NOTIFICATION_ID = latestId;
+                    sessionStorage.setItem('ers_last_resolved_notice_id', String(latestId));
+
+                    await fetchIncidents();
+                    if (isResolvedModalOpen() && typeof RESOLVED_LIST_RELOAD === 'function') {
+                        RESOLVED_LIST_RELOAD();
+                    }
+
+                    const latest = newItems[0] || {};
+                    const incident = latest.incident || {};
+                    const label = incident.label || incident.reference_no || (incident.id ? ('#' + incident.id) : 'Incident');
+                    showNotification(`${label} moved to View Resolved.`, 'success');
+                }
+            } catch (e) {}
+        }
 
         // Update statistics
         function updateStats() {
@@ -757,6 +810,9 @@ try {
             fetchIncidents();
             if (REFRESH_TIMER) clearInterval(REFRESH_TIMER);
             REFRESH_TIMER = setInterval(fetchIncidents, 10000); // refresh every 10s
+            pollResolvedIncidentNotifications();
+            if (RESOLVED_REFRESH_TIMER) clearInterval(RESOLVED_REFRESH_TIMER);
+            RESOLVED_REFRESH_TIMER = setInterval(pollResolvedIncidentNotifications, 5000);
         });
 
         // Modal for updating incident description
@@ -1212,6 +1268,7 @@ try {
                     });
             }
 
+            RESOLVED_LIST_RELOAD = loadResolvedList;
             loadResolvedList();
         }
 

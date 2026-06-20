@@ -11,6 +11,9 @@ $interagency_page = $normalized_user_role === 'dispatcher'
 $resources_page = $normalized_user_role === 'dispatcher'
     ? 'dispatcher/resources.php'
     : 'admin/resources.php';
+$review_page = $normalized_user_role === 'dispatcher'
+    ? 'dispatcher/incident.php?view=resolved'
+    : 'admin/review.php';
 $profile_page = 'profile.php';
 $account_settings_page = 'account_settings.php';
 $user_avatar = trim((string)($_SESSION['user_avatar'] ?? ''));
@@ -339,14 +342,21 @@ document.addEventListener('DOMContentLoaded', function() {
     const userProfileBtn = document.getElementById('userProfileBtn');
     const userProfileDropdown = document.getElementById('userProfileDropdown');
     const liveToast = document.getElementById('headerLiveToast');
+    const liveToastIcon = liveToast ? liveToast.querySelector('i') : null;
     const liveToastTitle = document.getElementById('headerLiveToastTitle');
     const liveToastText = document.getElementById('headerLiveToastText');
     const interagencyUrl = <?php echo json_encode($interagency_page); ?>;
     const resourcesUrl = <?php echo json_encode($resources_page); ?>;
+    const reviewUrl = <?php echo json_encode($review_page); ?>;
     const userRole = <?php echo json_encode($normalized_user_role); ?>;
+    const resolvedSeenKey = 'ers.resolvedNotificationSeen.' + userRole;
     const state = {
         lastUnreadCount: null,
         lastBackupCount: null,
+        lastResolvedNotificationId: null,
+        resolvedSeenId: Number(window.localStorage.getItem(resolvedSeenKey) || 0) || 0,
+        resolvedNotifications: [],
+        resolvedUnreadCount: 0,
         recentThreads: [],
         unreadThreads: [],
         backupRequests: [],
@@ -454,7 +464,27 @@ document.addEventListener('DOMContentLoaded', function() {
         const latest = state.unreadThreads[0] || state.recentThreads[0] || null;
         const backupCount = Array.isArray(state.backupRequests) ? state.backupRequests.length : 0;
         const latestBackup = backupCount > 0 ? state.backupRequests[0] : null;
+        const resolvedItems = Array.isArray(state.resolvedNotifications) ? state.resolvedNotifications.slice(0, 3) : [];
         const parts = [];
+
+        resolvedItems.forEach(function(item) {
+            const incident = item && item.incident ? item.incident : {};
+            const incidentLabel = incident.label || incident.reference_no || (incident.id ? ('#' + incident.id) : 'Incident');
+            const detailText = item.details || `${incidentLabel} has been resolved.`;
+            const isUnread = Number(item.notification_id || 0) > state.resolvedSeenId;
+            parts.push(`
+                <button type="button" class="notification-item header-reset-button" data-open-review="1">
+                    <div class="notification-icon">
+                        <i class="fas ${isUnread ? 'fa-circle-check' : 'fa-check'}"></i>
+                    </div>
+                    <div class="notification-details">
+                        <div class="notification-title">${escapeHtml(isUnread ? 'Incident resolved' : 'Resolved incident')}</div>
+                        <div class="notification-text">${escapeHtml(detailText)}</div>
+                        <div class="notification-time">${escapeHtml(relativeTime(item.notified_at || incident.resolved_at))}</div>
+                    </div>
+                </button>
+            `);
+        });
 
         if (latestBackup) {
             const incidentLabel = latestBackup.incident_code
@@ -539,6 +569,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
     function showLiveToast(count) {
         if (!liveToast || count <= 0) return;
+        if (liveToastIcon) liveToastIcon.className = 'fas fa-envelope';
         if (liveToastTitle) liveToastTitle.textContent = 'Interagency';
         if (liveToastText) liveToastText.textContent = unreadText(count);
         liveToast.setAttribute('data-toast-target', 'interagency');
@@ -552,9 +583,24 @@ document.addEventListener('DOMContentLoaded', function() {
 
     function showBackupToast(count) {
         if (!liveToast || count <= 0) return;
+        if (liveToastIcon) liveToastIcon.className = 'fas fa-truck-medical';
         if (liveToastTitle) liveToastTitle.textContent = userRole === 'dispatcher' ? 'Backup Requests' : 'Resource Requests';
         if (liveToastText) liveToastText.textContent = backupUnreadText(count);
         liveToast.setAttribute('data-toast-target', 'resources');
+        liveToast.hidden = false;
+        window.clearTimeout(state.toastTimer);
+        window.requestAnimationFrame(function() {
+            liveToast.classList.add('show');
+        });
+        state.toastTimer = window.setTimeout(hideLiveToast, 4000);
+    }
+
+    function showResolvedToast(count) {
+        if (!liveToast || count <= 0) return;
+        if (liveToastIcon) liveToastIcon.className = 'fas fa-circle-check';
+        if (liveToastTitle) liveToastTitle.textContent = 'Incident Resolved';
+        if (liveToastText) liveToastText.textContent = count === 1 ? '1 incident has been resolved' : count + ' incidents have been resolved';
+        liveToast.setAttribute('data-toast-target', 'review');
         liveToast.hidden = false;
         window.clearTimeout(state.toastTimer);
         window.requestAnimationFrame(function() {
@@ -600,6 +646,21 @@ document.addEventListener('DOMContentLoaded', function() {
         window.location.href = resourcesUrl;
     }
 
+    function openReview() {
+        window.location.href = reviewUrl;
+    }
+
+    function markResolvedNotificationsSeen() {
+        const latestId = Math.max(0, ...state.resolvedNotifications.map(function(item) {
+            return Number(item.notification_id || 0);
+        }));
+        if (latestId > state.resolvedSeenId) {
+            state.resolvedSeenId = latestId;
+            state.resolvedUnreadCount = 0;
+            window.localStorage.setItem(resolvedSeenKey, String(latestId));
+        }
+    }
+
     async function loadBackupRequestSummary() {
         if (!['dispatcher', 'admin'].includes(userRole)) {
             state.backupRequests = [];
@@ -628,6 +689,37 @@ document.addEventListener('DOMContentLoaded', function() {
 
             state.lastBackupCount = backupCount;
             state.backupRequests = backupRequests;
+        } catch (_) {}
+    }
+
+    async function loadResolvedIncidentSummary() {
+        try {
+            const response = await fetch('api/resolved_incident_notifications.php?limit=10', {
+                cache: 'no-store',
+                credentials: 'same-origin'
+            });
+            if (!response.ok) return;
+            const data = await response.json();
+            if (!data || !data.ok || !Array.isArray(data.notifications)) return;
+
+            const notifications = data.notifications;
+            const latestId = notifications.length ? Math.max(...notifications.map(function(item) {
+                return Number(item.notification_id || 0);
+            })) : 0;
+
+            if (state.lastResolvedNotificationId !== null && latestId > state.lastResolvedNotificationId) {
+                const newCount = notifications.filter(function(item) {
+                    const id = Number(item.notification_id || 0);
+                    return id > state.lastResolvedNotificationId;
+                }).length;
+                showResolvedToast(newCount);
+            }
+
+            state.lastResolvedNotificationId = latestId;
+            state.resolvedNotifications = notifications;
+            state.resolvedUnreadCount = notifications.filter(function(item) {
+                return Number(item.notification_id || 0) > state.resolvedSeenId;
+            }).length;
         } catch (_) {}
     }
 
@@ -664,7 +756,7 @@ document.addEventListener('DOMContentLoaded', function() {
             state.unreadThreads = unreadThreads;
 
             const backupCount = Array.isArray(state.backupRequests) ? state.backupRequests.length : 0;
-            setBadge(notificationBadge, unreadCount + backupCount);
+            setBadge(notificationBadge, unreadCount + backupCount + state.resolvedUnreadCount);
             setBadge(messageBadge, unreadCount);
             renderNotificationList(unreadCount);
             renderMessageList();
@@ -673,6 +765,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
     async function loadHeaderSummary() {
         await loadBackupRequestSummary();
+        await loadResolvedIncidentSummary();
         await loadInteragencySummary();
     }
 
@@ -689,6 +782,11 @@ document.addEventListener('DOMContentLoaded', function() {
             event.preventDefault();
             event.stopPropagation();
             await loadHeaderSummary();
+            markResolvedNotificationsSeen();
+            const unreadCount = Math.max(0, Number(state.lastUnreadCount) || 0);
+            const backupCount = Array.isArray(state.backupRequests) ? state.backupRequests.length : 0;
+            setBadge(notificationBadge, unreadCount + backupCount + state.resolvedUnreadCount);
+            renderNotificationList(unreadCount);
             toggleModal(notificationModal, notificationBtn, messageModal, messageBtn);
         });
     }
@@ -728,6 +826,14 @@ document.addEventListener('DOMContentLoaded', function() {
             return;
         }
 
+        const reviewTrigger = event.target.closest('[data-open-review]');
+        if (reviewTrigger) {
+            event.preventDefault();
+            markResolvedNotificationsSeen();
+            openReview();
+            return;
+        }
+
         if (notificationModal && notificationModal.classList.contains('show')) {
             if (!notificationModal.contains(event.target) && !event.target.closest('#headerNotificationBtn')) {
                 closeModal('notificationModal');
@@ -758,6 +864,11 @@ document.addEventListener('DOMContentLoaded', function() {
     if (liveToast) {
         liveToast.addEventListener('click', function(event) {
             event.preventDefault();
+            if (liveToast.getAttribute('data-toast-target') === 'review') {
+                markResolvedNotificationsSeen();
+                openReview();
+                return;
+            }
             if (liveToast.getAttribute('data-toast-target') === 'resources') {
                 openResources();
                 return;
