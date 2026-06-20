@@ -32,6 +32,7 @@ try {
         FROM dispatch_operator_records d
         LEFT JOIN users u ON u.id = d.assigned_to
         WHERE d.assigned_to = ?
+        AND LOWER(u.department) = LOWER(d.vehicle)
         AND d.status IN ('assigned','received','accepted','en_route','on_scene')
         ORDER BY d.assigned_at DESC
     ");
