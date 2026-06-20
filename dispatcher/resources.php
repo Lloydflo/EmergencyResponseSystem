@@ -553,6 +553,7 @@ try {
                         details: String(raw.details || raw.notes || ''),
                         notes: String(raw.notes || ''),
                         assignment: String(raw.assignment || ''),
+                        quantity: Math.max(1, Number(raw.quantity) || 1),
                         updatedAt: String(raw.updatedAt || raw.updated_at || ''),
                         source: String(raw.source || '')
                     };
@@ -689,6 +690,9 @@ try {
                     const subtitle = String(resource.role || '').trim();
                     if (subtitle) return subtitle;
                     const details = String(resource.details || '').trim();
+                    if (resource.type === 'equipment' && !/qty:/i.test(details)) {
+                        return `Qty: ${Math.max(1, Number(resource.quantity) || 1)}${details ? ` | ${details}` : ''}`;
+                    }
                     return details || 'No details';
                 }
 
@@ -709,6 +713,7 @@ try {
                     const safeResourceCode = escapeHtml(resourceCode);
                     const safeSubtitle = escapeHtml(subtitle);
                     const safeAssignmentLine = escapeHtml(assignmentLine);
+                    const safeQuantity = escapeHtml(Math.max(1, Number(r.quantity) || 1));
                     const safeLocation = escapeHtml(String(r.location || ''));
                     const safeTypeLabel = escapeHtml(formatResourceType(r.type));
                     const safeStatusLabel = escapeHtml(formatResourceStatus(r.status));
@@ -732,7 +737,7 @@ try {
                     if (actionSet.has('calibrate')) btns.push(`<button class=\"resource-action-btn calibrate\" title=\"Calibrate\" aria-label=\"Calibrate\" onclick=\"calibrateEquipment(this)\"><i class=\"fas fa-tools\"></i></button>`);
                     const visibleBtns = btns.slice(0, Math.min(btns.length, 4));
                     const actionsHtml = `<div class=\"actions-inline\">${visibleBtns.join('')}</div>`;
-                    return `<tr data-type=\"${r.type}\" data-status=\"${r.status}\" data-location=\"${escapeAttrValue(r.location || '')}\" data-resource-id=\"${escapeAttrValue(r.id)}\" data-resource-name=\"${escapeAttrValue(resourceName)}\" data-resource-code=\"${escapeAttrValue(resourceCode)}\" data-unit-identifier=\"${escapeAttrValue(unitIdentifier)}\" data-resource-source=\"${escapeAttrValue(r.source || '')}\" data-resource-details=\"${escapeAttrValue(r.details || '')}\" data-resource-role=\"${escapeAttrValue(r.role || '')}\" data-resource-updated=\"${escapeAttrValue(r.updatedAt || '')}\" data-resource-assignment=\"${escapeAttrValue(r.assignment || '')}\" data-resource-notes=\"${escapeAttrValue(r.notes || '')}\">\n`+
+                    return `<tr data-type=\"${r.type}\" data-status=\"${r.status}\" data-location=\"${escapeAttrValue(r.location || '')}\" data-resource-id=\"${escapeAttrValue(r.id)}\" data-resource-name=\"${escapeAttrValue(resourceName)}\" data-resource-code=\"${escapeAttrValue(resourceCode)}\" data-unit-identifier=\"${escapeAttrValue(unitIdentifier)}\" data-resource-source=\"${escapeAttrValue(r.source || '')}\" data-resource-details=\"${escapeAttrValue(r.details || '')}\" data-resource-role=\"${escapeAttrValue(r.role || '')}\" data-resource-updated=\"${escapeAttrValue(r.updatedAt || '')}\" data-resource-assignment=\"${escapeAttrValue(r.assignment || '')}\" data-resource-notes=\"${escapeAttrValue(r.notes || '')}\" data-resource-quantity=\"${safeQuantity}\">\n`+
                         `<td>${safeResourceCode}</td>`+
                         `<td class=\"name-cell resource-title\"><strong>${safeResourceName}</strong><span>${safeSubtitle}</span></td>`+
                         `<td>${safeTypeLabel}</td>`+

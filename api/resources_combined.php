@@ -31,6 +31,19 @@ function table_exists(PDO $pdo, string $tableName): bool {
     return (bool)$stmt->fetchColumn();
 }
 
+function table_column_exists(PDO $pdo, string $tableName, string $columnName): bool {
+    $stmt = $pdo->prepare(
+        "SELECT 1
+         FROM INFORMATION_SCHEMA.COLUMNS
+         WHERE TABLE_SCHEMA = DATABASE()
+           AND TABLE_NAME = ?
+           AND COLUMN_NAME = ?
+         LIMIT 1"
+    );
+    $stmt->execute([$tableName, $columnName]);
+    return (bool)$stmt->fetchColumn();
+}
+
 function map_unit_status(string $status): string {
     $status = strtolower($status);
     if (in_array($status, ['assigned', 'enroute', 'on_scene'], true)) {
@@ -105,9 +118,13 @@ function build_admin_details(array $row): string {
     $driverName = trim((string)($row['driver_name'] ?? ''));
     $plateNumber = trim((string)($row['plate_number'] ?? ''));
     $positionTitle = trim((string)($row['position_title'] ?? ''));
+    $quantity = max(1, (int)($row['quantity'] ?? 1));
 
     if ($assignment !== '') {
         $parts[] = $assignment;
+    }
+    if (strtolower((string)($row['category'] ?? '')) === 'equipment') {
+        $parts[] = 'Qty: ' . $quantity;
     }
     if ($driverName !== '') {
         $parts[] = 'Driver: ' . $driverName;
@@ -171,8 +188,9 @@ function load_user_unit_assignment_map(PDO $pdo): array {
 
 function load_shared_resource_records(PDO $pdo, string $tableName): array {
     $userUnitAssignments = load_user_unit_assignment_map($pdo);
+    $quantitySelect = table_column_exists($pdo, $tableName, 'quantity') ? ', quantity' : ', 1 AS quantity';
     $stmt = $pdo->query(
-        "SELECT id, code, name, category, status, location, driver_name, plate_number, position_title, assignment, notes, updated_at
+        "SELECT id, code, name, category, status, location, driver_name, plate_number, position_title, assignment, notes, updated_at" . $quantitySelect . "
          FROM `" . $tableName . "`
          ORDER BY updated_at DESC, id DESC"
     );
@@ -198,6 +216,7 @@ function load_shared_resource_records(PDO $pdo, string $tableName): array {
             'details' => build_admin_details($row),
             'notes' => (string)($row['notes'] ?? ''),
             'assignment' => (string)($row['assignment'] ?? ''),
+            'quantity' => max(1, (int)($row['quantity'] ?? 1)),
             'driverName' => (string)($row['driver_name'] ?? ''),
             'plateNumber' => (string)($row['plate_number'] ?? ''),
             'positionTitle' => (string)($row['position_title'] ?? ''),
@@ -256,6 +275,7 @@ try {
             'details' => $details,
             'notes' => '',
             'assignment' => '',
+            'quantity' => 1,
             'driverName' => '',
             'plateNumber' => '',
             'positionTitle' => '',
@@ -289,6 +309,7 @@ try {
             'details' => $details,
             'notes' => '',
             'assignment' => '',
+            'quantity' => 1,
             'driverName' => '',
             'plateNumber' => '',
             'positionTitle' => '',
@@ -311,6 +332,7 @@ try {
             'details' => (string)($row['notes'] ?? '') ?: 'No details provided',
             'notes' => (string)($row['notes'] ?? ''),
             'assignment' => '',
+            'quantity' => 1,
             'driverName' => '',
             'plateNumber' => '',
             'positionTitle' => '',

@@ -44,11 +44,47 @@ function ensure_dispatch_operator_records_table(PDO $pdo): void
           `priority` varchar(20) DEFAULT NULL,
           `description` text DEFAULT NULL,
           `created_at` datetime NOT NULL DEFAULT current_timestamp(),
+          `status` varchar(50) DEFAULT 'pending',
+          `assigned_to` int(11) DEFAULT NULL,
+          `assigned_responder_name` varchar(150) DEFAULT NULL,
+          `assigned_unit_code` varchar(50) DEFAULT NULL,
+          `assigned_unit_type` varchar(50) DEFAULT NULL,
+          `assigned_at` datetime DEFAULT NULL,
           PRIMARY KEY (`id`),
           KEY `idx_dispatch_operator_records_priority` (`priority`),
-          KEY `idx_dispatch_operator_records_created_at` (`created_at`)
+          KEY `idx_dispatch_operator_records_created_at` (`created_at`),
+          KEY `idx_dispatch_operator_records_status` (`status`),
+          KEY `idx_dispatch_operator_records_assigned_to` (`assigned_to`),
+          KEY `idx_dispatch_operator_records_assigned_at` (`assigned_at`)
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
     ");
+
+    $columns = [
+        'status' => "`status` varchar(50) DEFAULT 'pending' AFTER `created_at`",
+        'assigned_to' => "`assigned_to` int(11) DEFAULT NULL AFTER `status`",
+        'assigned_responder_name' => "`assigned_responder_name` varchar(150) DEFAULT NULL AFTER `assigned_to`",
+        'assigned_unit_code' => "`assigned_unit_code` varchar(50) DEFAULT NULL AFTER `assigned_responder_name`",
+        'assigned_unit_type' => "`assigned_unit_type` varchar(50) DEFAULT NULL AFTER `assigned_unit_code`",
+        'assigned_at' => "`assigned_at` datetime DEFAULT NULL AFTER `assigned_unit_type`",
+    ];
+
+    foreach ($columns as $columnName => $definition) {
+        if (!dispatch_column_exists($pdo, 'dispatch_operator_records', $columnName)) {
+            $pdo->exec("ALTER TABLE `dispatch_operator_records` ADD COLUMN {$definition}");
+        }
+    }
+
+    $indexes = [
+        'idx_dispatch_operator_records_status' => '(`status`)',
+        'idx_dispatch_operator_records_assigned_to' => '(`assigned_to`)',
+        'idx_dispatch_operator_records_assigned_at' => '(`assigned_at`)',
+    ];
+
+    foreach ($indexes as $indexName => $indexColumns) {
+        if (!dispatch_index_exists($pdo, 'dispatch_operator_records', $indexName)) {
+            $pdo->exec("ALTER TABLE `dispatch_operator_records` ADD KEY `{$indexName}` {$indexColumns}");
+        }
+    }
 }
 
 function dispatch_vehicle_label(string $unitType, string $vehicleName = ''): string
@@ -71,6 +107,11 @@ function dispatch_vehicle_label(string $unitType, string $vehicleName = ''): str
     }
     $vehicleName = trim($vehicleName);
     return $vehicleName !== '' ? $vehicleName : 'Vehicle';
+}
+
+function dispatch_philippine_timestamp(): string
+{
+    return (new DateTimeImmutable('now', new DateTimeZone('Asia/Manila')))->format('Y-m-d H:i:s');
 }
 
 function dispatch_table_exists(PDO $pdo, string $tableName): bool
@@ -108,6 +149,24 @@ function dispatch_column_exists(PDO $pdo, string $tableName, string $columnName)
     }
 }
 
+function dispatch_index_exists(PDO $pdo, string $tableName, string $indexName): bool
+{
+    try {
+        $stmt = $pdo->prepare(
+            "SELECT 1
+             FROM INFORMATION_SCHEMA.STATISTICS
+             WHERE TABLE_SCHEMA = DATABASE()
+               AND TABLE_NAME = ?
+               AND INDEX_NAME = ?
+             LIMIT 1"
+        );
+        $stmt->execute([$tableName, $indexName]);
+        return (bool)$stmt->fetchColumn();
+    } catch (Throwable $e) {
+        return false;
+    }
+}
+
 try {
     $dispatchIds = [];
     $dispatchedUnits = [];
@@ -134,28 +193,42 @@ try {
 
     $placeholders = implode(',', array_fill(0, count($unit_ids), '?'));
     $resourceTable = ers_vehicle_resource_units_table($pdo);
-    $responderOperatorExpr = 'NULL';
+    $responderIdExpr = 'NULL';
+    $responderNameExpr = 'NULL';
     if (
         dispatch_table_exists($pdo, 'users') &&
+        dispatch_column_exists($pdo, 'users', 'id') &&
         dispatch_column_exists($pdo, 'users', 'unit_code') &&
         dispatch_column_exists($pdo, 'users', 'name') &&
         dispatch_column_exists($pdo, 'users', 'role')
     ) {
-        $responderOperatorExpr = "(SELECT usr.name
-                                  FROM users usr
-                                  WHERE LOWER(COALESCE(usr.role, '')) = 'responder'
-                                    AND UPPER(TRIM(usr.unit_code)) = UPPER(TRIM(u.identifier))
-                                    AND TRIM(COALESCE(usr.name, '')) <> ''
-                                  ORDER BY usr.id DESC
-                                  LIMIT 1)";
+        $responderOrder = dispatch_column_exists($pdo, 'users', 'status')
+            ? "CASE WHEN LOWER(COALESCE(usr.status, '')) = 'active' THEN 0 ELSE 1 END, usr.id DESC"
+            : 'usr.id DESC';
+        $responderWhere = "LOWER(COALESCE(usr.role, '')) = 'responder'
+                           AND UPPER(TRIM(usr.unit_code)) = UPPER(TRIM(u.identifier))";
+        $responderIdExpr = "(SELECT usr.id
+                             FROM users usr
+                             WHERE {$responderWhere}
+                             ORDER BY {$responderOrder}
+                             LIMIT 1)";
+        $responderNameExpr = "(SELECT usr.name
+                               FROM users usr
+                               WHERE {$responderWhere}
+                                 AND TRIM(COALESCE(usr.name, '')) <> ''
+                               ORDER BY {$responderOrder}
+                               LIMIT 1)";
     }
     $resourceJoin = '';
-    $resourceSelect = $responderOperatorExpr . ' AS operator_name, NULL AS vehicle_name';
+    $resourceSelect = "{$responderIdExpr} AS assigned_user_id, {$responderNameExpr} AS responder_name, {$responderNameExpr} AS operator_name, NULL AS vehicle_name";
     if ($resourceTable !== null) {
         $resourceJoin = " LEFT JOIN `" . $resourceTable . "` rr
                           ON rr.code = u.identifier
                          AND LOWER(rr.category) = 'vehicles'";
-        $resourceSelect = 'COALESCE(NULLIF(TRIM(rr.driver_name), \'\'), ' . $responderOperatorExpr . ') AS operator_name, rr.name AS vehicle_name';
+        $resourceSelect = "{$responderIdExpr} AS assigned_user_id,
+                           {$responderNameExpr} AS responder_name,
+                           COALESCE(NULLIF(TRIM(rr.driver_name), ''), {$responderNameExpr}) AS operator_name,
+                           rr.name AS vehicle_name";
     }
 
     $unitStmt = $pdo->prepare("
@@ -195,15 +268,16 @@ try {
         }
     }
 
-    $stmtIns = $pdo->prepare("INSERT INTO dispatches (incident_id, unit_id, status, assigned_at) VALUES (?, ?, 'assigned', CURRENT_TIMESTAMP)");
+    $dispatchTime = dispatch_philippine_timestamp();
+    $stmtIns = $pdo->prepare("INSERT INTO dispatches (incident_id, unit_id, status, assigned_at) VALUES (?, ?, 'assigned', ?)");
     $stmtUnit = $pdo->prepare("UPDATE units SET status='assigned', current_incident_id=?, last_status_at=CURRENT_TIMESTAMP WHERE id=?");
     $stmtOperatorRecord = $pdo->prepare("
         INSERT INTO dispatch_operator_records
-            (`name`, `vehicle`, `location`, `latitude`, `longitude`, `priority`, `description`)
-        VALUES (?, ?, ?, ?, ?, ?, ?)
+            (`name`, `vehicle`, `location`, `latitude`, `longitude`, `priority`, `description`, `created_at`, `status`, `assigned_to`, `assigned_responder_name`, `assigned_unit_code`, `assigned_unit_type`, `assigned_at`)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?, ?, ?, ?, ?)
     ");
     foreach ($unit_ids as $unit_id) {
-        $stmtIns->execute([$incident_id, $unit_id]);
+        $stmtIns->execute([$incident_id, $unit_id, $dispatchTime]);
         $dispatchId = (int)$pdo->lastInsertId();
         $dispatchIds[] = $dispatchId;
 
@@ -215,6 +289,10 @@ try {
         if ($operatorName === '') {
             $operatorName = trim((string)($unitMeta['identifier'] ?? 'Operator'));
         }
+        $responderName = trim((string)($unitMeta['responder_name'] ?? ''));
+        if ($responderName === '') {
+            $responderName = $operatorName;
+        }
         $stmtOperatorRecord->execute([
             $operatorName,
             dispatch_vehicle_label((string)($unitMeta['unit_type'] ?? ''), (string)($unitMeta['vehicle_name'] ?? '')),
@@ -223,6 +301,12 @@ try {
             $incidentRow['longitude'] ?? null,
             $incidentRow['priority'] ?? null,
             $incidentRow['description'] ?? null,
+            $dispatchTime,
+            (int)$unitMeta['assigned_user_id'],
+            $responderName,
+            (string)($unitMeta['identifier'] ?? ''),
+            (string)($unitMeta['unit_type'] ?? ''),
+            $dispatchTime,
         ]);
 
         $dispatchedUnits[] = [
@@ -265,13 +349,13 @@ try {
         $notificationPayload = $stmtMeta->fetchAll(PDO::FETCH_ASSOC);
 
         if (!is_array($notificationPayload) || $notificationPayload === []) {
-            $notificationPayload = array_map(static function (array $unit) use ($incident_id): array {
+            $notificationPayload = array_map(static function (array $unit) use ($incident_id, $dispatchTime): array {
                 return [
                     'dispatch_id' => $unit['dispatch_id'],
                     'incident_id' => $incident_id,
                     'unit_id' => $unit['id'],
                     'dispatch_status' => 'assigned',
-                    'assigned_at' => date('Y-m-d H:i:s'),
+                    'assigned_at' => $dispatchTime,
                     'reference_no' => null,
                     'incident_type' => null,
                     'priority' => null,
@@ -295,9 +379,9 @@ try {
 
         $stmtLog = $pdo->prepare("
             INSERT INTO activity_log (user_id, action, entity_type, entity_id, details, created_at)
-            VALUES (?, 'dispatch_confirmed', 'dispatch', ?, ?, CURRENT_TIMESTAMP)
+            VALUES (?, 'dispatch_confirmed', 'dispatch', ?, ?, ?)
         ");
-        $stmtLog->execute([$userId, $dispatchIds[0] ?? null, json_encode($notificationDetails, JSON_UNESCAPED_UNICODE)]);
+        $stmtLog->execute([$userId, $dispatchIds[0] ?? null, json_encode($notificationDetails, JSON_UNESCAPED_UNICODE), $dispatchTime]);
         $notificationLogged = true;
     } catch (Throwable $logError) {
         // Dispatch already committed; keep success response even if logging fails.

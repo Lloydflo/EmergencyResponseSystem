@@ -88,6 +88,7 @@ function ensure_resource_records_table(PDO $pdo): void {
             `plate_number` VARCHAR(50) DEFAULT NULL,
             `position_title` VARCHAR(150) DEFAULT NULL,
             `assignment` VARCHAR(255) DEFAULT NULL,
+            `quantity` INT UNSIGNED NOT NULL DEFAULT 1,
             `notes` TEXT DEFAULT NULL,
             `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
             `updated_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
@@ -103,6 +104,7 @@ function ensure_resource_records_table(PDO $pdo): void {
     add_column_if_missing($pdo, RESOURCE_RECORDS_TABLE, 'longitude', "DECIMAL(10,7) DEFAULT NULL AFTER `latitude`");
     add_column_if_missing($pdo, RESOURCE_RECORDS_TABLE, 'plate_number', "VARCHAR(50) DEFAULT NULL AFTER `driver_name`");
     add_column_if_missing($pdo, RESOURCE_RECORDS_TABLE, 'position_title', "VARCHAR(150) DEFAULT NULL AFTER `plate_number`");
+    add_column_if_missing($pdo, RESOURCE_RECORDS_TABLE, 'quantity', "INT UNSIGNED NOT NULL DEFAULT 1 AFTER `assignment`");
 }
 
 function ensure_resource_records_archive_table(PDO $pdo): void {
@@ -121,6 +123,7 @@ function ensure_resource_records_archive_table(PDO $pdo): void {
             `plate_number` VARCHAR(50) DEFAULT NULL,
             `position_title` VARCHAR(150) DEFAULT NULL,
             `assignment` VARCHAR(255) DEFAULT NULL,
+            `quantity` INT UNSIGNED NOT NULL DEFAULT 1,
             `notes` TEXT DEFAULT NULL,
             `created_at` DATETIME NOT NULL,
             `updated_at` DATETIME NOT NULL,
@@ -137,6 +140,16 @@ function ensure_resource_records_archive_table(PDO $pdo): void {
     add_column_if_missing($pdo, RESOURCE_RECORDS_ARCHIVE_TABLE, 'longitude', "DECIMAL(10,7) DEFAULT NULL AFTER `latitude`");
     add_column_if_missing($pdo, RESOURCE_RECORDS_ARCHIVE_TABLE, 'plate_number', "VARCHAR(50) DEFAULT NULL AFTER `driver_name`");
     add_column_if_missing($pdo, RESOURCE_RECORDS_ARCHIVE_TABLE, 'position_title', "VARCHAR(150) DEFAULT NULL AFTER `plate_number`");
+    add_column_if_missing($pdo, RESOURCE_RECORDS_ARCHIVE_TABLE, 'quantity', "INT UNSIGNED NOT NULL DEFAULT 1 AFTER `assignment`");
+}
+
+function ensure_legacy_resource_quantity_columns(PDO $pdo): void {
+    if (table_exists($pdo, LEGACY_ADMIN_RESOURCES_TABLE)) {
+        add_column_if_missing($pdo, LEGACY_ADMIN_RESOURCES_TABLE, 'quantity', "INT UNSIGNED NOT NULL DEFAULT 1 AFTER `assignment`");
+    }
+    if (table_exists($pdo, LEGACY_ADMIN_RESOURCES_ARCHIVE_TABLE)) {
+        add_column_if_missing($pdo, LEGACY_ADMIN_RESOURCES_ARCHIVE_TABLE, 'quantity', "INT UNSIGNED NOT NULL DEFAULT 1 AFTER `assignment`");
+    }
 }
 
 function migrate_legacy_admin_resource_tables(PDO $pdo): void {
@@ -150,10 +163,10 @@ function migrate_legacy_admin_resource_tables(PDO $pdo): void {
     if ($newCount === 0 && $legacyCount > 0) {
         $pdo->exec(
             "INSERT INTO `" . RESOURCE_RECORDS_TABLE . "` (
-                id, code, name, category, status, location, driver_name, plate_number, position_title, assignment, notes, created_at, updated_at
+                id, code, name, category, status, location, driver_name, plate_number, position_title, assignment, quantity, notes, created_at, updated_at
              )
              SELECT
-                id, code, name, category, status, location, driver_name, plate_number, position_title, assignment, notes, created_at, updated_at
+                id, code, name, category, status, location, driver_name, plate_number, position_title, assignment, quantity, notes, created_at, updated_at
              FROM `" . LEGACY_ADMIN_RESOURCES_TABLE . "`"
         );
     }
@@ -168,10 +181,10 @@ function migrate_legacy_admin_resource_tables(PDO $pdo): void {
     if ($newArchiveCount === 0 && $legacyArchiveCount > 0) {
         $pdo->exec(
             "INSERT INTO `" . RESOURCE_RECORDS_ARCHIVE_TABLE . "` (
-                id, resource_id, code, name, category, status, location, driver_name, plate_number, position_title, assignment, notes, created_at, updated_at, deleted_at
+                id, resource_id, code, name, category, status, location, driver_name, plate_number, position_title, assignment, quantity, notes, created_at, updated_at, deleted_at
              )
              SELECT
-                id, resource_id, code, name, category, status, location, driver_name, plate_number, position_title, assignment, notes, created_at, updated_at, deleted_at
+                id, resource_id, code, name, category, status, location, driver_name, plate_number, position_title, assignment, quantity, notes, created_at, updated_at, deleted_at
              FROM `" . LEGACY_ADMIN_RESOURCES_ARCHIVE_TABLE . "`"
         );
     }
@@ -200,6 +213,7 @@ function normalize_payload(array $payload): array {
     $plateNumber = strtoupper(clean_text($payload['plateNumber'] ?? ''));
     $positionTitle = clean_text($payload['positionTitle'] ?? '');
     $assignment = clean_text($payload['assignment'] ?? '');
+    $quantity = isset($payload['quantity']) ? (int)$payload['quantity'] : 1;
     $notes = clean_text($payload['notes'] ?? '');
 
     $allowedCategories = ['vehicles', 'personnel', 'equipment'];
@@ -223,6 +237,9 @@ function normalize_payload(array $payload): array {
     }
     if (strlen($assignment) > 255) {
         throw new InvalidArgumentException('Assignment must be 255 chars or less');
+    }
+    if ($quantity < 1 || $quantity > 9999) {
+        throw new InvalidArgumentException('Equipment quantity must be between 1 and 9999');
     }
     if (strlen($driverName) > 150) {
         throw new InvalidArgumentException('Driver name must be 150 chars or less');
@@ -257,6 +274,7 @@ function normalize_payload(array $payload): array {
         'plateNumber' => $plateNumber,
         'positionTitle' => $positionTitle,
         'assignment' => $assignment,
+        'quantity' => $category === 'equipment' ? $quantity : 1,
         'notes' => $notes
     ];
 }
@@ -289,6 +307,7 @@ function row_to_item(array $row): array {
         'plateNumber' => (string)($row['plate_number'] ?? ''),
         'positionTitle' => (string)($row['position_title'] ?? ''),
         'assignment' => (string)($row['assignment'] ?? ''),
+        'quantity' => max(1, (int)($row['quantity'] ?? 1)),
         'notes' => (string)($row['notes'] ?? ''),
         'updatedAt' => (string)($row['updated_at'] ?? '')
     ];
@@ -309,6 +328,7 @@ function archive_row_to_item(array $row): array {
         'plateNumber' => (string)($row['plate_number'] ?? ''),
         'positionTitle' => (string)($row['position_title'] ?? ''),
         'assignment' => (string)($row['assignment'] ?? ''),
+        'quantity' => max(1, (int)($row['quantity'] ?? 1)),
         'notes' => (string)($row['notes'] ?? ''),
         'updatedAt' => (string)($row['updated_at'] ?? ''),
         'deletedAt' => (string)($row['deleted_at'] ?? ''),
@@ -318,7 +338,7 @@ function archive_row_to_item(array $row): array {
 
 function fetch_item(PDO $pdo, int $id): ?array {
     $stmt = $pdo->prepare(
-        "SELECT id, code, name, category, status, location, latitude, longitude, driver_name, plate_number, position_title, assignment, notes, updated_at
+        "SELECT id, code, name, category, status, location, latitude, longitude, driver_name, plate_number, position_title, assignment, quantity, notes, updated_at
          FROM `" . RESOURCE_RECORDS_TABLE . "`
          WHERE id = ?
          LIMIT 1"
@@ -330,7 +350,7 @@ function fetch_item(PDO $pdo, int $id): ?array {
 
 function fetch_active_resource_row(PDO $pdo, int $id): ?array {
     $stmt = $pdo->prepare(
-        "SELECT id, code, name, category, status, location, latitude, longitude, driver_name, plate_number, position_title, assignment, notes, created_at, updated_at
+        "SELECT id, code, name, category, status, location, latitude, longitude, driver_name, plate_number, position_title, assignment, quantity, notes, created_at, updated_at
          FROM `" . RESOURCE_RECORDS_TABLE . "`
          WHERE id = ?
          LIMIT 1"
@@ -342,7 +362,7 @@ function fetch_active_resource_row(PDO $pdo, int $id): ?array {
 
 function fetch_archived_resource_row(PDO $pdo, int $archiveId): ?array {
     $stmt = $pdo->prepare(
-        "SELECT id, resource_id, code, name, category, status, location, latitude, longitude, driver_name, plate_number, position_title, assignment, notes, created_at, updated_at, deleted_at
+        "SELECT id, resource_id, code, name, category, status, location, latitude, longitude, driver_name, plate_number, position_title, assignment, quantity, notes, created_at, updated_at, deleted_at
          FROM `" . RESOURCE_RECORDS_ARCHIVE_TABLE . "`
          WHERE id = ?
          LIMIT 1"
@@ -590,6 +610,7 @@ function deactivate_vehicle_resource_unit(PDO $pdo, string $identifier): void {
 try {
     ensure_resource_records_table($pdo);
     ensure_resource_records_archive_table($pdo);
+    ensure_legacy_resource_quantity_columns($pdo);
     migrate_legacy_admin_resource_tables($pdo);
     purge_expired_archived_resources($pdo);
 
@@ -598,7 +619,7 @@ try {
         $archived = isset($_GET['archived']) && (string)$_GET['archived'] === '1';
         if ($archived) {
             $stmt = $pdo->query(
-                "SELECT id, resource_id, code, name, category, status, location, latitude, longitude, assignment, notes, updated_at, deleted_at,
+                "SELECT id, resource_id, code, name, category, status, location, latitude, longitude, assignment, quantity, notes, updated_at, deleted_at,
                         driver_name, plate_number, position_title,
                         DATE_ADD(deleted_at, INTERVAL 60 DAY) AS purge_at
                  FROM `" . RESOURCE_RECORDS_ARCHIVE_TABLE . "`
@@ -608,7 +629,7 @@ try {
             $items = array_map('archive_row_to_item', $rows);
         } else {
             $stmt = $pdo->query(
-                "SELECT id, code, name, category, status, location, latitude, longitude, assignment, notes, updated_at
+                "SELECT id, code, name, category, status, location, latitude, longitude, assignment, quantity, notes, updated_at
                  , driver_name, plate_number, position_title
                  FROM `" . RESOURCE_RECORDS_TABLE . "`
                  ORDER BY updated_at DESC, id DESC"
@@ -655,8 +676,8 @@ try {
             $pdo->beginTransaction();
             try {
                 $restoreStmt = $pdo->prepare(
-                    "INSERT INTO `" . RESOURCE_RECORDS_TABLE . "` (code, name, category, status, location, latitude, longitude, driver_name, plate_number, position_title, assignment, notes, created_at, updated_at)
-                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())"
+                    "INSERT INTO `" . RESOURCE_RECORDS_TABLE . "` (code, name, category, status, location, latitude, longitude, driver_name, plate_number, position_title, assignment, quantity, notes, created_at, updated_at)
+                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())"
                 );
                 $restoreStmt->execute([
                     (string)$archivedResource['code'],
@@ -670,6 +691,7 @@ try {
                     $archivedResource['plate_number'] !== null && $archivedResource['plate_number'] !== '' ? (string)$archivedResource['plate_number'] : null,
                     $archivedResource['position_title'] !== null && $archivedResource['position_title'] !== '' ? (string)$archivedResource['position_title'] : null,
                     $archivedResource['assignment'] !== null && $archivedResource['assignment'] !== '' ? (string)$archivedResource['assignment'] : null,
+                    max(1, (int)($archivedResource['quantity'] ?? 1)),
                     $archivedResource['notes'] !== null && $archivedResource['notes'] !== '' ? (string)$archivedResource['notes'] : null,
                     (string)$archivedResource['created_at']
                 ]);
@@ -714,8 +736,8 @@ try {
 
         $payload = normalize_payload($rawPayload);
         $stmt = $pdo->prepare(
-            "INSERT INTO `" . RESOURCE_RECORDS_TABLE . "` (code, name, category, status, location, latitude, longitude, driver_name, plate_number, position_title, assignment, notes, created_at, updated_at)
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW())"
+            "INSERT INTO `" . RESOURCE_RECORDS_TABLE . "` (code, name, category, status, location, latitude, longitude, driver_name, plate_number, position_title, assignment, quantity, notes, created_at, updated_at)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW())"
         );
         $stmt->execute([
             $payload['code'],
@@ -729,6 +751,7 @@ try {
             $payload['plateNumber'] !== '' ? $payload['plateNumber'] : null,
             $payload['positionTitle'] !== '' ? $payload['positionTitle'] : null,
             $payload['assignment'] !== '' ? $payload['assignment'] : null,
+            $payload['quantity'],
             $payload['notes'] !== '' ? $payload['notes'] : null
         ]);
         $id = (int)$pdo->lastInsertId();
@@ -757,7 +780,7 @@ try {
         $payload = normalize_payload($rawPayload);
         $stmt = $pdo->prepare(
             "UPDATE `" . RESOURCE_RECORDS_TABLE . "`
-             SET code = ?, name = ?, category = ?, status = ?, location = ?, latitude = ?, longitude = ?, driver_name = ?, plate_number = ?, position_title = ?, assignment = ?, notes = ?, updated_at = NOW()
+             SET code = ?, name = ?, category = ?, status = ?, location = ?, latitude = ?, longitude = ?, driver_name = ?, plate_number = ?, position_title = ?, assignment = ?, quantity = ?, notes = ?, updated_at = NOW()
              WHERE id = ?"
         );
         $stmt->execute([
@@ -772,6 +795,7 @@ try {
             $payload['plateNumber'] !== '' ? $payload['plateNumber'] : null,
             $payload['positionTitle'] !== '' ? $payload['positionTitle'] : null,
             $payload['assignment'] !== '' ? $payload['assignment'] : null,
+            $payload['quantity'],
             $payload['notes'] !== '' ? $payload['notes'] : null,
             $id
         ]);
@@ -806,8 +830,8 @@ try {
         try {
             $archiveStmt = $pdo->prepare(
                 "INSERT INTO `" . RESOURCE_RECORDS_ARCHIVE_TABLE . "` (
-                    resource_id, code, name, category, status, location, latitude, longitude, driver_name, plate_number, position_title, assignment, notes, created_at, updated_at, deleted_at
-                 ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())"
+                    resource_id, code, name, category, status, location, latitude, longitude, driver_name, plate_number, position_title, assignment, quantity, notes, created_at, updated_at, deleted_at
+                 ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())"
             );
             $archiveStmt->execute([
                 (int)$resource['id'],
@@ -822,6 +846,7 @@ try {
                 $resource['plate_number'] !== null && $resource['plate_number'] !== '' ? (string)$resource['plate_number'] : null,
                 $resource['position_title'] !== null && $resource['position_title'] !== '' ? (string)$resource['position_title'] : null,
                 $resource['assignment'] !== null && $resource['assignment'] !== '' ? (string)$resource['assignment'] : null,
+                max(1, (int)($resource['quantity'] ?? 1)),
                 $resource['notes'] !== null && $resource['notes'] !== '' ? (string)$resource['notes'] : null,
                 (string)$resource['created_at'],
                 (string)$resource['updated_at']

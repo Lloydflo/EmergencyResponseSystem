@@ -123,6 +123,7 @@ CREATE TABLE `admin_resources` (
   `plate_number` varchar(50) DEFAULT NULL,
   `position_title` varchar(150) DEFAULT NULL,
   `assignment` varchar(255) DEFAULT NULL,
+  `quantity` int(10) UNSIGNED NOT NULL DEFAULT 1,
   `notes` text DEFAULT NULL,
   `created_at` datetime NOT NULL DEFAULT current_timestamp(),
   `updated_at` datetime NOT NULL DEFAULT current_timestamp() ON UPDATE current_timestamp()
@@ -146,6 +147,7 @@ CREATE TABLE `admin_resources_archive` (
   `plate_number` varchar(50) DEFAULT NULL,
   `position_title` varchar(150) DEFAULT NULL,
   `assignment` varchar(255) DEFAULT NULL,
+  `quantity` int(10) UNSIGNED NOT NULL DEFAULT 1,
   `notes` text DEFAULT NULL,
   `created_at` datetime NOT NULL,
   `updated_at` datetime NOT NULL,
@@ -169,6 +171,7 @@ CREATE TABLE `resource_records` (
   `plate_number` varchar(50) DEFAULT NULL,
   `position_title` varchar(150) DEFAULT NULL,
   `assignment` varchar(255) DEFAULT NULL,
+  `quantity` int(10) UNSIGNED NOT NULL DEFAULT 1,
   `notes` text DEFAULT NULL,
   `created_at` datetime NOT NULL DEFAULT current_timestamp(),
   `updated_at` datetime NOT NULL DEFAULT current_timestamp() ON UPDATE current_timestamp()
@@ -192,6 +195,7 @@ CREATE TABLE `resource_records_archive` (
   `plate_number` varchar(50) DEFAULT NULL,
   `position_title` varchar(150) DEFAULT NULL,
   `assignment` varchar(255) DEFAULT NULL,
+  `quantity` int(10) UNSIGNED NOT NULL DEFAULT 1,
   `notes` text DEFAULT NULL,
   `created_at` datetime NOT NULL,
   `updated_at` datetime NOT NULL,
@@ -310,9 +314,18 @@ CREATE TABLE IF NOT EXISTS `dispatch_operator_records` (
   `priority` varchar(20) DEFAULT NULL,
   `description` text DEFAULT NULL,
   `created_at` datetime NOT NULL DEFAULT current_timestamp(),
+  `status` varchar(50) DEFAULT 'pending',
+  `assigned_to` int(11) DEFAULT NULL,
+  `assigned_responder_name` varchar(150) DEFAULT NULL,
+  `assigned_unit_code` varchar(50) DEFAULT NULL,
+  `assigned_unit_type` varchar(50) DEFAULT NULL,
+  `assigned_at` datetime DEFAULT NULL,
   PRIMARY KEY (`id`),
   KEY `idx_dispatch_operator_records_priority` (`priority`),
-  KEY `idx_dispatch_operator_records_created_at` (`created_at`)
+  KEY `idx_dispatch_operator_records_created_at` (`created_at`),
+  KEY `idx_dispatch_operator_records_status` (`status`),
+  KEY `idx_dispatch_operator_records_assigned_to` (`assigned_to`),
+  KEY `idx_dispatch_operator_records_assigned_at` (`assigned_at`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 --

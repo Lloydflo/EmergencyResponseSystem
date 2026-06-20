@@ -21,9 +21,8 @@ try {
         SET status = 'received'
         WHERE id = ?
         AND assigned_to = ?
-        AND status = 'assigned'
+        AND status IN ('pending', 'assigned')
     ");
-
     $stmt->execute([$incident_id, $responder_id]);
 
     echo json_encode([
@@ -31,7 +30,6 @@ try {
         "message" => "Assignment received",
         "affected_rows" => $stmt->rowCount()
     ]);
-
 } catch (Throwable $e) {
     echo json_encode([
         "success" => false,
