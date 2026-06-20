@@ -257,14 +257,6 @@ try {
             ]);
             exit;
         }
-        if ((int)($unitRow['assigned_user_id'] ?? 0) <= 0) {
-            $pdo->rollBack();
-            echo json_encode([
-                'ok' => false,
-                'error' => 'Unit ' . (string)($unitRow['identifier'] ?? $unitRow['id']) . ' has no responder account assigned to its unit code'
-            ]);
-            exit;
-        }
         $availableUnits[(int)$unitRow['id']] = $unitRow;
     }
 

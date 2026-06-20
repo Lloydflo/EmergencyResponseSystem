@@ -301,15 +301,6 @@ try {
             ]);
             exit;
         }
-        if ((int)($unitRow['assigned_user_id'] ?? 0) <= 0) {
-            $pdo->rollBack();
-            http_response_code(400);
-            echo json_encode([
-                'success' => false,
-                'error' => 'Unit ' . (string)($unitRow['identifier'] ?? $unitRow['id']) . ' has no responder account assigned to its unit code'
-            ]);
-            exit;
-        }
         $availableUnits[(int)$unitRow['id']] = $unitRow;
     }
 
