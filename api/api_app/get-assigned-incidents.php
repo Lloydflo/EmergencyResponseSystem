@@ -45,7 +45,9 @@ try {
         $rows[] = [
             "assignment_id" => (string)$r["id"],
             "id"            => (string)$r["id"],
-            "type"          => (string)($r["vehicle"] ?? "fire"),
+            "type" => str_contains(strtolower($r["vehicle"] ?? ""), "fire") ? "fire" :
+          (str_contains(strtolower($r["vehicle"] ?? ""), "ambulance") ? "medical" :
+          (str_contains(strtolower($r["vehicle"] ?? ""), "police") ? "crime" : "fire")),
             "priority"      => (string)($r["priority"] ?? "medium"),
             "location"      => (string)($r["location"] ?? ""),
             "status"        => (string)($r["status"] ?? "assigned"),
