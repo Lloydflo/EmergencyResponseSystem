@@ -310,9 +310,18 @@ CREATE TABLE IF NOT EXISTS `dispatch_operator_records` (
   `priority` varchar(20) DEFAULT NULL,
   `description` text DEFAULT NULL,
   `created_at` datetime NOT NULL DEFAULT current_timestamp(),
+  `status` varchar(50) DEFAULT 'pending',
+  `assigned_to` int(11) DEFAULT NULL,
+  `assigned_responder_name` varchar(150) DEFAULT NULL,
+  `assigned_unit_code` varchar(50) DEFAULT NULL,
+  `assigned_unit_type` varchar(50) DEFAULT NULL,
+  `assigned_at` datetime DEFAULT NULL,
   PRIMARY KEY (`id`),
   KEY `idx_dispatch_operator_records_priority` (`priority`),
-  KEY `idx_dispatch_operator_records_created_at` (`created_at`)
+  KEY `idx_dispatch_operator_records_created_at` (`created_at`),
+  KEY `idx_dispatch_operator_records_status` (`status`),
+  KEY `idx_dispatch_operator_records_assigned_to` (`assigned_to`),
+  KEY `idx_dispatch_operator_records_assigned_at` (`assigned_at`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 --

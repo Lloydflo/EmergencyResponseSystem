@@ -32,7 +32,7 @@ try {
         FROM dispatch_operator_records d
         LEFT JOIN users u ON u.id = d.assigned_to
         WHERE d.assigned_to = ?
-        AND d.status IN ('assigned','accepted','en_route','on_scene')
+        AND d.status IN ('pending','assigned','accepted','en_route','on_scene')
         ORDER BY d.assigned_at DESC
     ");
 

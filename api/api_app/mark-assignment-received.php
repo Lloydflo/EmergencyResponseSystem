@@ -15,7 +15,7 @@ $stmt = $pdo->prepare("
     SET status = 'received'
     WHERE id = ?
     AND assigned_to = ?
-    AND status = 'assigned'
+    AND status IN ('pending', 'assigned')
 ");
 
 $ok = $stmt->execute([$incident_id, $responder_id]);
