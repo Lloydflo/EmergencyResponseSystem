@@ -32,7 +32,7 @@ try {
         FROM dispatch_operator_records d
         LEFT JOIN users u ON u.id = d.assigned_to
         WHERE d.assigned_to = ?
-        AND d.status IN ('pending','assigned','accepted','en_route','on_scene')
+        AND d.status IN ('pending','assigned','received','accepted','en_route','on_scene')
         ORDER BY d.assigned_at DESC
     ");
 
@@ -54,7 +54,8 @@ try {
             "longitude"     => $r["longitude"] !== null ? (float)$r["longitude"] : null,
             "unit_code"     => (string)($r["assigned_unit_code"] ?? ""),
             "unit_type"     => (string)($r["assigned_unit_type"] ?? ""),
-            "unit_status"   => (string)($r["unit_status"] ?? "")
+            "unit_status"   => (string)($r["unit_status"] ?? ""),
+            "assigned_at"   => (string)($r["assigned_at"] ?? "")
         ];
     }
 
