@@ -1586,6 +1586,32 @@ $pageTitle = 'Inter-Agency Conversations';
         </div>
     </div>
 
+    <div class="ia-modal-shell" id="addGroupMemberModal" hidden aria-hidden="true">
+        <div class="ia-modal-backdrop" data-close-add-group-member></div>
+        <div class="ia-modal" role="dialog" aria-modal="true" aria-labelledby="addGroupMemberModalTitle">
+            <div class="ia-modal-head">
+                <div>
+                    <p class="ia-modal-title" id="addGroupMemberModalTitle">Add Member</p>
+                    <p class="ia-modal-subtitle" id="addGroupMemberModalSubtitle">Choose an active user to include in this group chat.</p>
+                </div>
+                <button type="button" class="ia-modal-close" id="addGroupMemberModalCloseBtn" aria-label="Close add member modal">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+            <div class="ia-modal-body">
+                <div class="ia-modal-search">
+                    <i class="fas fa-search"></i>
+                    <input type="text" id="addGroupMemberSearchInput" placeholder="Search users to add...">
+                </div>
+                <div class="ia-user-picker-list" id="addGroupMemberUserList"></div>
+            </div>
+            <div class="ia-modal-actions">
+                <button type="button" class="ia-modal-btn secondary" id="addGroupMemberCancelBtn">Cancel</button>
+                <button type="button" class="ia-modal-btn primary" id="addGroupMemberConfirmBtn" disabled>Add Member</button>
+            </div>
+        </div>
+    </div>
+
     <script>
         (function () {
             const state = {
@@ -1607,6 +1633,11 @@ $pageTitle = 'Inter-Agency Conversations';
                 groupQuery: '',
                 groupSelectedIds: [],
                 groupLoading: false,
+                addGroupMemberUsers: [],
+                addGroupMemberQuery: '',
+                addGroupMemberSelectedId: 0,
+                addGroupMemberGroupId: 0,
+                addGroupMemberLoading: false,
                 chatSettingsOpen: false,
                 poller: null
             };
@@ -1647,6 +1678,13 @@ $pageTitle = 'Inter-Agency Conversations';
             const groupMembersModalSubtitle = document.getElementById('groupMembersModalSubtitle');
             const groupMembersModalBody = document.getElementById('groupMembersModalBody');
             const groupMembersModalCloseBtn = document.getElementById('groupMembersModalCloseBtn');
+            const addGroupMemberModal = document.getElementById('addGroupMemberModal');
+            const addGroupMemberModalSubtitle = document.getElementById('addGroupMemberModalSubtitle');
+            const addGroupMemberSearchInput = document.getElementById('addGroupMemberSearchInput');
+            const addGroupMemberUserList = document.getElementById('addGroupMemberUserList');
+            const addGroupMemberCancelBtn = document.getElementById('addGroupMemberCancelBtn');
+            const addGroupMemberConfirmBtn = document.getElementById('addGroupMemberConfirmBtn');
+            const addGroupMemberModalCloseBtn = document.getElementById('addGroupMemberModalCloseBtn');
             const totalThreadsEl = document.getElementById('iaTotalThreads');
             const activeRespondersEl = document.getElementById('iaActiveResponders');
             const unreadCountEl = document.getElementById('iaUnreadCount');
@@ -1876,6 +1914,157 @@ $pageTitle = 'Inter-Agency Conversations';
                 if (groupChatSearchInput) groupChatSearchInput.value = '';
                 syncGroupCreateState();
                 if (createGroupBtn) createGroupBtn.focus();
+            }
+
+            function selectedAddGroupMemberUser() {
+                return state.addGroupMemberUsers.find((item) => Number(item.id) === Number(state.addGroupMemberSelectedId)) || null;
+            }
+
+            function syncAddGroupMemberState() {
+                if (!addGroupMemberConfirmBtn) return;
+                addGroupMemberConfirmBtn.disabled = state.addGroupMemberLoading || !selectedAddGroupMemberUser();
+                addGroupMemberConfirmBtn.textContent = state.addGroupMemberLoading ? 'Adding...' : 'Add Member';
+            }
+
+            function renderAddGroupMemberUsers() {
+                if (!addGroupMemberUserList) return;
+
+                const query = String(state.addGroupMemberQuery || '').trim().toLowerCase();
+                const items = state.addGroupMemberUsers.filter((item) => {
+                    if (!query) return true;
+                    return `${item.name || ''} ${item.email || ''} ${item.role || ''}`.toLowerCase().includes(query);
+                });
+
+                if (items.length && !items.some((item) => Number(item.id) === Number(state.addGroupMemberSelectedId))) {
+                    state.addGroupMemberSelectedId = Number(items[0].id);
+                }
+                if (!items.length) state.addGroupMemberSelectedId = 0;
+
+                if (state.addGroupMemberLoading && !state.addGroupMemberUsers.length) {
+                    addGroupMemberUserList.innerHTML = '<div class="ia-user-picker-empty">Loading active users...</div>';
+                    syncAddGroupMemberState();
+                    return;
+                }
+
+                if (!items.length) {
+                    addGroupMemberUserList.innerHTML = '<div class="ia-user-picker-empty">All active users are already members of this group.</div>';
+                    syncAddGroupMemberState();
+                    return;
+                }
+
+                addGroupMemberUserList.innerHTML = items.map((item) => {
+                    const isSelected = Number(item.id) === Number(state.addGroupMemberSelectedId);
+                    return `
+                        <button type="button" class="ia-user-option ${isSelected ? 'selected' : ''}" data-add-group-member-user="${escapeAttr(item.id)}" aria-pressed="${isSelected ? 'true' : 'false'}">
+                            <div class="ia-user-option-top">
+                                <div>
+                                    <p class="ia-user-option-name">${escapeHtml(item.name || ('User #' + item.id))}</p>
+                                    <p class="ia-user-option-meta">${escapeHtml(item.email || 'No email provided')}</p>
+                                </div>
+                                <span class="ia-user-option-badge">${escapeHtml(formatRole(item.role || 'user'))}</span>
+                            </div>
+                            <div class="ia-user-option-bottom">
+                                <span class="ia-user-option-meta">ID ${escapeHtml(item.id)}</span>
+                                <span class="ia-user-option-status">${isSelected ? 'Selected' : 'Active account'}</span>
+                            </div>
+                        </button>
+                    `;
+                }).join('');
+                syncAddGroupMemberState();
+            }
+
+            function closeAddGroupMemberModal() {
+                if (!addGroupMemberModal) return;
+                addGroupMemberModal.classList.remove('show');
+                addGroupMemberModal.setAttribute('aria-hidden', 'true');
+                addGroupMemberModal.hidden = true;
+                document.body.style.overflow = '';
+                state.addGroupMemberUsers = [];
+                state.addGroupMemberQuery = '';
+                state.addGroupMemberSelectedId = 0;
+                state.addGroupMemberGroupId = 0;
+                state.addGroupMemberLoading = false;
+                if (addGroupMemberSearchInput) addGroupMemberSearchInput.value = '';
+                if (addGroupMemberUserList) addGroupMemberUserList.innerHTML = '';
+                syncAddGroupMemberState();
+            }
+
+            async function openAddGroupMemberModal() {
+                const active = activeThread();
+                const groupId = active ? Number(active.group_id || active.entity_id || 0) : 0;
+                if (!addGroupMemberModal || String(active && active.thread_kind || '') !== 'group' || groupId <= 0) {
+                    alert('Members can be added to group chats only.');
+                    return;
+                }
+
+                addGroupMemberModal.hidden = false;
+                addGroupMemberModal.setAttribute('aria-hidden', 'false');
+                addGroupMemberModal.classList.add('show');
+                document.body.style.overflow = 'hidden';
+                state.addGroupMemberGroupId = groupId;
+                state.addGroupMemberLoading = true;
+                state.addGroupMemberUsers = [];
+                state.addGroupMemberQuery = '';
+                state.addGroupMemberSelectedId = 0;
+                if (addGroupMemberSearchInput) addGroupMemberSearchInput.value = '';
+                if (addGroupMemberModalSubtitle) addGroupMemberModalSubtitle.textContent = `Choose an active user to add to ${active.title || 'this group chat'}.`;
+                renderAddGroupMemberUsers();
+
+                try {
+                    const [membersRes, usersRes] = await Promise.all([
+                        fetch('api/interagency_group_members.php?group_id=' + encodeURIComponent(String(groupId)), { cache: 'no-store' }),
+                        fetch('api/interagency_users.php', { cache: 'no-store' })
+                    ]);
+                    const [membersData, usersData] = await Promise.all([membersRes.json(), usersRes.json()]);
+                    if (!membersData || !membersData.ok) {
+                        throw new Error((membersData && membersData.error) ? String(membersData.error) : 'Unable to load group members.');
+                    }
+                    if (!membersData.group || !membersData.group.can_manage) {
+                        throw new Error('Only the group creator can add members.');
+                    }
+                    if (!usersData || !usersData.ok) {
+                        throw new Error('Unable to load active users.');
+                    }
+
+                    const memberIds = new Set((Array.isArray(membersData.members) ? membersData.members : []).map((member) => Number(member.id)));
+                    state.addGroupMemberUsers = (Array.isArray(usersData.items) ? usersData.items : [])
+                        .filter((item) => !memberIds.has(Number(item.id)));
+                    state.addGroupMemberLoading = false;
+                    renderAddGroupMemberUsers();
+                    window.setTimeout(() => addGroupMemberSearchInput && addGroupMemberSearchInput.focus(), 0);
+                } catch (err) {
+                    const message = (err && err.message) ? String(err.message) : 'Unable to load users.';
+                    closeAddGroupMemberModal();
+                    alert(message);
+                }
+            }
+
+            async function confirmAddGroupMember() {
+                const user = selectedAddGroupMemberUser();
+                const groupId = Number(state.addGroupMemberGroupId || 0);
+                if (!user || groupId <= 0 || state.addGroupMemberLoading) return;
+
+                state.addGroupMemberLoading = true;
+                syncAddGroupMemberState();
+                try {
+                    const res = await fetch('api/interagency_group_member_add.php', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ group_id: groupId, user_id: Number(user.id) })
+                    });
+                    const data = await res.json();
+                    if (!data || !data.ok) {
+                        throw new Error((data && data.error) ? String(data.error) : 'Unable to add member.');
+                    }
+
+                    closeAddGroupMemberModal();
+                    await loadThreads();
+                    await openGroupMembersModal();
+                } catch (err) {
+                    state.addGroupMemberLoading = false;
+                    syncAddGroupMemberState();
+                    alert((err && err.message) ? String(err.message) : 'Unable to add member.');
+                }
             }
 
             function isConversationMediaModalOpen() {
@@ -2545,6 +2734,10 @@ $pageTitle = 'Inter-Agency Conversations';
                                     <i class="fas fa-users"></i>
                                     <span>Members</span>
                                 </button>
+                                <button type="button" class="ia-chat-settings-item" data-chat-setting-action="add-member" role="menuitem">
+                                    <i class="fas fa-user-plus"></i>
+                                    <span>Add Member</span>
+                                </button>
                             ` : ''}
                             <button type="button" class="ia-chat-settings-item" data-chat-setting-action="show-images" role="menuitem">
                                 <i class="fas fa-image"></i>
@@ -2722,6 +2915,11 @@ $pageTitle = 'Inter-Agency Conversations';
 
                 if (action === 'members') {
                     await openGroupMembersModal();
+                    return;
+                }
+
+                if (action === 'add-member') {
+                    await openAddGroupMemberModal();
                     return;
                 }
 
@@ -3189,6 +3387,38 @@ $pageTitle = 'Inter-Agency Conversations';
                         }
                     });
                 }
+                if (addGroupMemberSearchInput) {
+                    addGroupMemberSearchInput.addEventListener('input', () => {
+                        state.addGroupMemberQuery = addGroupMemberSearchInput.value || '';
+                        renderAddGroupMemberUsers();
+                    });
+                }
+                if (addGroupMemberUserList) {
+                    addGroupMemberUserList.addEventListener('click', (event) => {
+                        const option = event.target.closest('[data-add-group-member-user]');
+                        if (!option) return;
+                        const userId = Number(option.getAttribute('data-add-group-member-user') || 0);
+                        if (userId <= 0) return;
+                        state.addGroupMemberSelectedId = userId;
+                        renderAddGroupMemberUsers();
+                    });
+                }
+                if (addGroupMemberConfirmBtn) {
+                    addGroupMemberConfirmBtn.addEventListener('click', confirmAddGroupMember);
+                }
+                if (addGroupMemberCancelBtn) {
+                    addGroupMemberCancelBtn.addEventListener('click', closeAddGroupMemberModal);
+                }
+                if (addGroupMemberModalCloseBtn) {
+                    addGroupMemberModalCloseBtn.addEventListener('click', closeAddGroupMemberModal);
+                }
+                if (addGroupMemberModal) {
+                    addGroupMemberModal.addEventListener('click', (event) => {
+                        if (event.target.matches('[data-close-add-group-member]')) {
+                            closeAddGroupMemberModal();
+                        }
+                    });
+                }
                 if (conversationMediaModalCloseBtn) {
                     conversationMediaModalCloseBtn.addEventListener('click', closeConversationMediaModal);
                 }
@@ -3247,6 +3477,9 @@ $pageTitle = 'Inter-Agency Conversations';
                         }
                         if (isGroupMembersModalOpen()) {
                             closeGroupMembersModal();
+                        }
+                        if (addGroupMemberModal && addGroupMemberModal.classList.contains('show')) {
+                            closeAddGroupMemberModal();
                         }
                     }
                 });
