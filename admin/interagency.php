@@ -1612,6 +1612,22 @@ $pageTitle = 'Inter-Agency Conversations';
         </div>
     </div>
 
+    <div class="ia-modal-shell" id="groupMemberRequestsModal" hidden aria-hidden="true">
+        <div class="ia-modal-backdrop" data-close-group-member-requests></div>
+        <div class="ia-modal" role="dialog" aria-modal="true" aria-labelledby="groupMemberRequestsModalTitle">
+            <div class="ia-modal-head">
+                <div>
+                    <p class="ia-modal-title" id="groupMemberRequestsModalTitle">Member Requests</p>
+                    <p class="ia-modal-subtitle" id="groupMemberRequestsModalSubtitle">Pending dispatcher requests for this group.</p>
+                </div>
+                <button type="button" class="ia-modal-close" id="groupMemberRequestsModalCloseBtn" aria-label="Close member requests modal">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+            <div class="ia-modal-body" id="groupMemberRequestsModalBody"></div>
+        </div>
+    </div>
+
     <script>
         (function () {
             const state = {
@@ -1685,6 +1701,10 @@ $pageTitle = 'Inter-Agency Conversations';
             const addGroupMemberCancelBtn = document.getElementById('addGroupMemberCancelBtn');
             const addGroupMemberConfirmBtn = document.getElementById('addGroupMemberConfirmBtn');
             const addGroupMemberModalCloseBtn = document.getElementById('addGroupMemberModalCloseBtn');
+            const groupMemberRequestsModal = document.getElementById('groupMemberRequestsModal');
+            const groupMemberRequestsModalSubtitle = document.getElementById('groupMemberRequestsModalSubtitle');
+            const groupMemberRequestsModalBody = document.getElementById('groupMemberRequestsModalBody');
+            const groupMemberRequestsModalCloseBtn = document.getElementById('groupMemberRequestsModalCloseBtn');
             const totalThreadsEl = document.getElementById('iaTotalThreads');
             const activeRespondersEl = document.getElementById('iaActiveResponders');
             const unreadCountEl = document.getElementById('iaUnreadCount');
@@ -2064,6 +2084,95 @@ $pageTitle = 'Inter-Agency Conversations';
                     state.addGroupMemberLoading = false;
                     syncAddGroupMemberState();
                     alert((err && err.message) ? String(err.message) : 'Unable to add member.');
+                }
+            }
+
+            function closeGroupMemberRequestsModal() {
+                if (!groupMemberRequestsModal) return;
+                groupMemberRequestsModal.classList.remove('show');
+                groupMemberRequestsModal.setAttribute('aria-hidden', 'true');
+                groupMemberRequestsModal.hidden = true;
+                document.body.style.overflow = '';
+                if (groupMemberRequestsModalBody) groupMemberRequestsModalBody.innerHTML = '';
+            }
+
+            function renderGroupMemberRequests(group, requests) {
+                if (!groupMemberRequestsModalBody) return;
+                const items = Array.isArray(requests) ? requests : [];
+                if (groupMemberRequestsModalSubtitle) {
+                    groupMemberRequestsModalSubtitle.textContent = `${group && group.name ? group.name : 'Group chat'} · ${items.length} pending request${items.length === 1 ? '' : 's'}.`;
+                }
+                if (!items.length) {
+                    groupMemberRequestsModalBody.innerHTML = '<div class="ia-media-empty">No pending member requests.</div>';
+                    return;
+                }
+
+                groupMemberRequestsModalBody.innerHTML = `
+                    <div class="ia-member-list">
+                        ${items.map((item) => `
+                            <article class="ia-member-card">
+                                <div class="ia-member-avatar">${escapeHtml(initialsForName(item.user_name))}</div>
+                                <div class="ia-member-main">
+                                    <p class="ia-member-name">${escapeHtml(item.user_name || ('User #' + item.user_id))}</p>
+                                    <p class="ia-member-meta">${escapeHtml(item.user_email || 'No email provided')}</p>
+                                    <p class="ia-member-meta">Requested by ${escapeHtml(item.requested_by_name || ('User #' + item.requested_by_id))}</p>
+                                </div>
+                                <div class="ia-member-side">
+                                    <span class="ia-member-badge">${escapeHtml(formatRole(item.user_role || 'user'))}</span>
+                                    <button type="button" class="ia-modal-btn primary" data-review-member-request="approve" data-request-id="${escapeAttr(item.id)}" aria-label="Approve request" title="Approve"><i class="fas fa-check"></i></button>
+                                    <button type="button" class="ia-member-remove" data-review-member-request="reject" data-request-id="${escapeAttr(item.id)}" aria-label="Reject request" title="Reject"><i class="fas fa-times"></i></button>
+                                </div>
+                            </article>
+                        `).join('')}
+                    </div>
+                `;
+            }
+
+            async function openGroupMemberRequestsModal() {
+                const active = activeThread();
+                const groupId = active ? Number(active.group_id || active.entity_id || 0) : 0;
+                if (!groupMemberRequestsModal || String(active && active.thread_kind || '') !== 'group' || groupId <= 0) {
+                    alert('Member requests are available for group chats only.');
+                    return;
+                }
+
+                groupMemberRequestsModal.hidden = false;
+                groupMemberRequestsModal.setAttribute('aria-hidden', 'false');
+                groupMemberRequestsModal.classList.add('show');
+                document.body.style.overflow = 'hidden';
+                if (groupMemberRequestsModalSubtitle) groupMemberRequestsModalSubtitle.textContent = 'Loading pending member requests...';
+                if (groupMemberRequestsModalBody) groupMemberRequestsModalBody.innerHTML = '<div class="ia-media-empty">Loading requests...</div>';
+
+                try {
+                    const res = await fetch('api/interagency_group_member_requests.php?group_id=' + encodeURIComponent(String(groupId)), { cache: 'no-store' });
+                    const data = await res.json();
+                    if (!data || !data.ok) {
+                        throw new Error((data && data.error) ? String(data.error) : 'Unable to load member requests.');
+                    }
+                    renderGroupMemberRequests(data.group || active, data.items || []);
+                } catch (err) {
+                    if (groupMemberRequestsModalSubtitle) groupMemberRequestsModalSubtitle.textContent = 'Unable to load member requests.';
+                    if (groupMemberRequestsModalBody) groupMemberRequestsModalBody.innerHTML = `<div class="ia-media-empty">${escapeHtml((err && err.message) ? err.message : 'Unable to load member requests.')}</div>`;
+                }
+            }
+
+            async function reviewGroupMemberRequest(requestId, action) {
+                const id = Number(requestId || 0);
+                if (id <= 0 || !['approve', 'reject'].includes(action)) return;
+                try {
+                    const res = await fetch('api/interagency_group_member_request_review.php', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ request_id: id, action })
+                    });
+                    const data = await res.json();
+                    if (!data || !data.ok) {
+                        throw new Error((data && data.error) ? String(data.error) : 'Unable to review member request.');
+                    }
+                    await loadThreads();
+                    await openGroupMemberRequestsModal();
+                } catch (err) {
+                    alert((err && err.message) ? String(err.message) : 'Unable to review member request.');
                 }
             }
 
@@ -2738,6 +2847,10 @@ $pageTitle = 'Inter-Agency Conversations';
                                     <i class="fas fa-user-plus"></i>
                                     <span>Add Member</span>
                                 </button>
+                                <button type="button" class="ia-chat-settings-item" data-chat-setting-action="member-requests" role="menuitem">
+                                    <i class="fas fa-user-clock"></i>
+                                    <span>Member Requests</span>
+                                </button>
                             ` : ''}
                             <button type="button" class="ia-chat-settings-item" data-chat-setting-action="show-images" role="menuitem">
                                 <i class="fas fa-image"></i>
@@ -2920,6 +3033,11 @@ $pageTitle = 'Inter-Agency Conversations';
 
                 if (action === 'add-member') {
                     await openAddGroupMemberModal();
+                    return;
+                }
+
+                if (action === 'member-requests') {
+                    await openGroupMemberRequestsModal();
                     return;
                 }
 
@@ -3419,6 +3537,24 @@ $pageTitle = 'Inter-Agency Conversations';
                         }
                     });
                 }
+                if (groupMemberRequestsModalCloseBtn) {
+                    groupMemberRequestsModalCloseBtn.addEventListener('click', closeGroupMemberRequestsModal);
+                }
+                if (groupMemberRequestsModal) {
+                    groupMemberRequestsModal.addEventListener('click', (event) => {
+                        if (event.target.matches('[data-close-group-member-requests]')) {
+                            closeGroupMemberRequestsModal();
+                            return;
+                        }
+                        const reviewBtn = event.target.closest('[data-review-member-request]');
+                        if (reviewBtn) {
+                            reviewGroupMemberRequest(
+                                reviewBtn.getAttribute('data-request-id'),
+                                String(reviewBtn.getAttribute('data-review-member-request') || '')
+                            );
+                        }
+                    });
+                }
                 if (conversationMediaModalCloseBtn) {
                     conversationMediaModalCloseBtn.addEventListener('click', closeConversationMediaModal);
                 }
@@ -3480,6 +3616,9 @@ $pageTitle = 'Inter-Agency Conversations';
                         }
                         if (addGroupMemberModal && addGroupMemberModal.classList.contains('show')) {
                             closeAddGroupMemberModal();
+                        }
+                        if (groupMemberRequestsModal && groupMemberRequestsModal.classList.contains('show')) {
+                            closeGroupMemberRequestsModal();
                         }
                     }
                 });

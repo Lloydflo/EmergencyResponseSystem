@@ -1003,6 +1003,79 @@ $pageTitle = 'Inter-Agency Coordination';
             overflow: auto;
         }
 
+        .ia-modal-search {
+            position: relative;
+            margin-bottom: 0.9rem;
+        }
+
+        .ia-modal-search i {
+            position: absolute;
+            top: 50%;
+            left: 0.8rem;
+            transform: translateY(-50%);
+            color: #64748b;
+        }
+
+        .ia-modal-search input {
+            width: 100%;
+            border: 1px solid #d7e1ea;
+            border-radius: 10px;
+            padding: 0.72rem 0.85rem 0.72rem 2.3rem;
+            color: #102a43;
+        }
+
+        .ia-user-picker-list {
+            display: grid;
+            gap: 0.65rem;
+        }
+
+        .ia-user-option {
+            width: 100%;
+            border: 1px solid #dce6ef;
+            border-radius: 14px;
+            background: #fff;
+            padding: 0.85rem 0.95rem;
+            text-align: left;
+            cursor: pointer;
+        }
+
+        .ia-user-option.selected {
+            border-color: #0f766e;
+            background: #ecfdf5;
+        }
+
+        .ia-user-option-top,
+        .ia-user-option-bottom {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 0.75rem;
+        }
+
+        .ia-user-option-name,
+        .ia-user-option-meta {
+            margin: 0;
+        }
+
+        .ia-user-option-name { font-weight: 800; color: #102a43; }
+        .ia-user-option-meta { margin-top: 0.3rem; color: #64748b; font-size: 0.78rem; }
+        .ia-user-option-badge { border-radius: 999px; padding: 0.3rem 0.55rem; background: #eef2ff; color: #3730a3; font-size: 0.72rem; font-weight: 700; }
+        .ia-user-option-status { color: #0f766e; font-size: 0.74rem; font-weight: 700; }
+        .ia-user-picker-empty { padding: 1rem; border: 1px dashed #d7e1ea; border-radius: 14px; text-align: center; color: #64748b; background: #f8fbff; }
+
+        .ia-modal-actions {
+            display: flex;
+            justify-content: flex-end;
+            gap: 0.65rem;
+            padding: 0.9rem 1.1rem;
+            border-top: 1px solid #e7edf4;
+        }
+
+        .ia-modal-btn { border: 1px solid #d7e1ea; border-radius: 10px; padding: 0.62rem 0.85rem; cursor: pointer; font-weight: 800; }
+        .ia-modal-btn.secondary { background: #fff; color: #35516d; }
+        .ia-modal-btn.primary { background: #0f766e; border-color: #0f766e; color: #fff; }
+        .ia-modal-btn:disabled { opacity: 0.55; cursor: not-allowed; }
+
         .ia-media-modal {
             width: min(760px, calc(100vw - 2rem));
         }
@@ -1322,6 +1395,32 @@ $pageTitle = 'Inter-Agency Coordination';
         </div>
     </div>
 
+    <div class="ia-modal-shell" id="requestGroupMemberModal" hidden aria-hidden="true">
+        <div class="ia-modal-backdrop" data-close-request-group-member></div>
+        <div class="ia-modal" role="dialog" aria-modal="true" aria-labelledby="requestGroupMemberModalTitle">
+            <div class="ia-modal-head">
+                <div>
+                    <p class="ia-modal-title" id="requestGroupMemberModalTitle">Request Add Member</p>
+                    <p class="ia-modal-subtitle" id="requestGroupMemberModalSubtitle">Choose an active user. An admin must approve the request first.</p>
+                </div>
+                <button type="button" class="ia-modal-close" id="requestGroupMemberModalCloseBtn" aria-label="Close member request modal">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+            <div class="ia-modal-body">
+                <div class="ia-modal-search">
+                    <i class="fas fa-search"></i>
+                    <input type="text" id="requestGroupMemberSearchInput" placeholder="Search users to request...">
+                </div>
+                <div class="ia-user-picker-list" id="requestGroupMemberUserList"></div>
+            </div>
+            <div class="ia-modal-actions">
+                <button type="button" class="ia-modal-btn secondary" id="requestGroupMemberCancelBtn">Cancel</button>
+                <button type="button" class="ia-modal-btn primary" id="requestGroupMemberConfirmBtn" disabled>Send Request</button>
+            </div>
+        </div>
+    </div>
+
     <script>
         (function () {
             const state = {
@@ -1335,6 +1434,11 @@ $pageTitle = 'Inter-Agency Coordination';
                 messageItems: {},
                 pinnedMessages: {},
                 replyTo: null,
+                groupMemberRequestUsers: [],
+                groupMemberRequestQuery: '',
+                groupMemberRequestSelectedId: 0,
+                groupMemberRequestGroupId: 0,
+                groupMemberRequestLoading: false,
                 chatSettingsOpen: false,
                 poller: null
             };
@@ -1361,6 +1465,13 @@ $pageTitle = 'Inter-Agency Coordination';
             const groupMembersModalSubtitle = document.getElementById('groupMembersModalSubtitle');
             const groupMembersModalBody = document.getElementById('groupMembersModalBody');
             const groupMembersModalCloseBtn = document.getElementById('groupMembersModalCloseBtn');
+            const requestGroupMemberModal = document.getElementById('requestGroupMemberModal');
+            const requestGroupMemberModalSubtitle = document.getElementById('requestGroupMemberModalSubtitle');
+            const requestGroupMemberSearchInput = document.getElementById('requestGroupMemberSearchInput');
+            const requestGroupMemberUserList = document.getElementById('requestGroupMemberUserList');
+            const requestGroupMemberCancelBtn = document.getElementById('requestGroupMemberCancelBtn');
+            const requestGroupMemberConfirmBtn = document.getElementById('requestGroupMemberConfirmBtn');
+            const requestGroupMemberModalCloseBtn = document.getElementById('requestGroupMemberModalCloseBtn');
             const totalThreadsEl = document.getElementById('iaTotalThreads');
             const activeRespondersEl = document.getElementById('iaActiveResponders');
             const unreadCountEl = document.getElementById('iaUnreadCount');
@@ -1655,6 +1766,144 @@ $pageTitle = 'Inter-Agency Coordination';
                     if (groupMembersModalBody) {
                         groupMembersModalBody.innerHTML = `<div class="ia-media-empty">${escapeHtml((err && err.message) ? err.message : 'Unable to load members.')}</div>`;
                     }
+                }
+            }
+
+            function selectedGroupMemberRequestUser() {
+                return state.groupMemberRequestUsers.find((item) => Number(item.id) === Number(state.groupMemberRequestSelectedId)) || null;
+            }
+
+            function syncGroupMemberRequestState() {
+                if (!requestGroupMemberConfirmBtn) return;
+                requestGroupMemberConfirmBtn.disabled = state.groupMemberRequestLoading || !selectedGroupMemberRequestUser();
+                requestGroupMemberConfirmBtn.textContent = state.groupMemberRequestLoading ? 'Sending...' : 'Send Request';
+            }
+
+            function renderGroupMemberRequestUsers() {
+                if (!requestGroupMemberUserList) return;
+                const query = String(state.groupMemberRequestQuery || '').trim().toLowerCase();
+                const items = state.groupMemberRequestUsers.filter((item) => {
+                    if (!query) return true;
+                    return `${item.name || ''} ${item.email || ''} ${item.role || ''}`.toLowerCase().includes(query);
+                });
+                if (items.length && !items.some((item) => Number(item.id) === Number(state.groupMemberRequestSelectedId))) {
+                    state.groupMemberRequestSelectedId = Number(items[0].id);
+                }
+                if (!items.length) state.groupMemberRequestSelectedId = 0;
+
+                if (state.groupMemberRequestLoading && !state.groupMemberRequestUsers.length) {
+                    requestGroupMemberUserList.innerHTML = '<div class="ia-user-picker-empty">Loading active users...</div>';
+                    syncGroupMemberRequestState();
+                    return;
+                }
+                if (!items.length) {
+                    requestGroupMemberUserList.innerHTML = '<div class="ia-user-picker-empty">All active users are already members of this group.</div>';
+                    syncGroupMemberRequestState();
+                    return;
+                }
+
+                requestGroupMemberUserList.innerHTML = items.map((item) => {
+                    const selected = Number(item.id) === Number(state.groupMemberRequestSelectedId);
+                    return `
+                        <button type="button" class="ia-user-option ${selected ? 'selected' : ''}" data-request-group-member-user="${escapeAttr(item.id)}" aria-pressed="${selected ? 'true' : 'false'}">
+                            <div class="ia-user-option-top">
+                                <div>
+                                    <p class="ia-user-option-name">${escapeHtml(item.name || ('User #' + item.id))}</p>
+                                    <p class="ia-user-option-meta">${escapeHtml(item.email || 'No email provided')}</p>
+                                </div>
+                                <span class="ia-user-option-badge">${escapeHtml(formatRole(item.role || 'user'))}</span>
+                            </div>
+                            <div class="ia-user-option-bottom">
+                                <span class="ia-user-option-meta">ID ${escapeHtml(item.id)}</span>
+                                <span class="ia-user-option-status">${selected ? 'Selected' : 'Active account'}</span>
+                            </div>
+                        </button>
+                    `;
+                }).join('');
+                syncGroupMemberRequestState();
+            }
+
+            function closeGroupMemberRequestModal() {
+                if (!requestGroupMemberModal) return;
+                requestGroupMemberModal.classList.remove('show');
+                requestGroupMemberModal.setAttribute('aria-hidden', 'true');
+                requestGroupMemberModal.hidden = true;
+                document.body.style.overflow = '';
+                state.groupMemberRequestUsers = [];
+                state.groupMemberRequestQuery = '';
+                state.groupMemberRequestSelectedId = 0;
+                state.groupMemberRequestGroupId = 0;
+                state.groupMemberRequestLoading = false;
+                if (requestGroupMemberSearchInput) requestGroupMemberSearchInput.value = '';
+                if (requestGroupMemberUserList) requestGroupMemberUserList.innerHTML = '';
+                syncGroupMemberRequestState();
+            }
+
+            async function openGroupMemberRequestModal() {
+                const active = activeThread();
+                const groupId = active ? Number(active.group_id || active.entity_id || 0) : 0;
+                if (!requestGroupMemberModal || String(active && active.thread_kind || '') !== 'group' || groupId <= 0) {
+                    alert('Member requests are available for group chats only.');
+                    return;
+                }
+
+                requestGroupMemberModal.hidden = false;
+                requestGroupMemberModal.setAttribute('aria-hidden', 'false');
+                requestGroupMemberModal.classList.add('show');
+                document.body.style.overflow = 'hidden';
+                state.groupMemberRequestGroupId = groupId;
+                state.groupMemberRequestLoading = true;
+                state.groupMemberRequestUsers = [];
+                state.groupMemberRequestQuery = '';
+                state.groupMemberRequestSelectedId = 0;
+                if (requestGroupMemberSearchInput) requestGroupMemberSearchInput.value = '';
+                if (requestGroupMemberModalSubtitle) requestGroupMemberModalSubtitle.textContent = `Choose a user to request for ${active.title || 'this group chat'}. An admin must approve first.`;
+                renderGroupMemberRequestUsers();
+
+                try {
+                    const [membersRes, usersRes] = await Promise.all([
+                        fetch('api/interagency_group_members.php?group_id=' + encodeURIComponent(String(groupId)), { cache: 'no-store' }),
+                        fetch('api/interagency_users.php', { cache: 'no-store' })
+                    ]);
+                    const [membersData, usersData] = await Promise.all([membersRes.json(), usersRes.json()]);
+                    if (!membersData || !membersData.ok || !usersData || !usersData.ok) {
+                        throw new Error((membersData && membersData.error) || (usersData && usersData.error) || 'Unable to load users.');
+                    }
+                    const memberIds = new Set((Array.isArray(membersData.members) ? membersData.members : []).map((member) => Number(member.id)));
+                    state.groupMemberRequestUsers = (Array.isArray(usersData.items) ? usersData.items : [])
+                        .filter((item) => !memberIds.has(Number(item.id)));
+                    state.groupMemberRequestLoading = false;
+                    renderGroupMemberRequestUsers();
+                    window.setTimeout(() => requestGroupMemberSearchInput && requestGroupMemberSearchInput.focus(), 0);
+                } catch (err) {
+                    closeGroupMemberRequestModal();
+                    alert((err && err.message) ? String(err.message) : 'Unable to load users.');
+                }
+            }
+
+            async function submitGroupMemberRequest() {
+                const selected = selectedGroupMemberRequestUser();
+                const groupId = Number(state.groupMemberRequestGroupId || 0);
+                if (!selected || groupId <= 0 || state.groupMemberRequestLoading) return;
+
+                state.groupMemberRequestLoading = true;
+                syncGroupMemberRequestState();
+                try {
+                    const res = await fetch('api/interagency_group_member_request.php', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ group_id: groupId, user_id: Number(selected.id) })
+                    });
+                    const data = await res.json();
+                    if (!data || !data.ok) {
+                        throw new Error((data && data.error) ? String(data.error) : 'Unable to submit member request.');
+                    }
+                    closeGroupMemberRequestModal();
+                    alert('Member request sent. The user will be added after admin approval.');
+                } catch (err) {
+                    state.groupMemberRequestLoading = false;
+                    syncGroupMemberRequestState();
+                    alert((err && err.message) ? String(err.message) : 'Unable to submit member request.');
                 }
             }
 
@@ -2071,6 +2320,10 @@ $pageTitle = 'Inter-Agency Coordination';
                                     <i class="fas fa-users"></i>
                                     <span>Members</span>
                                 </button>
+                                <button type="button" class="ia-chat-settings-item" data-chat-setting-action="add-member" role="menuitem">
+                                    <i class="fas fa-user-plus"></i>
+                                    <span>Add Member</span>
+                                </button>
                             ` : ''}
                             <button type="button" class="ia-chat-settings-item" data-chat-setting-action="show-images" role="menuitem">
                                 <i class="fas fa-image"></i>
@@ -2248,6 +2501,11 @@ $pageTitle = 'Inter-Agency Coordination';
 
                 if (action === 'members') {
                     await openGroupMembersModal();
+                    return;
+                }
+
+                if (action === 'add-member') {
+                    await openGroupMemberRequestModal();
                     return;
                 }
 
@@ -2563,6 +2821,38 @@ $pageTitle = 'Inter-Agency Coordination';
                         }
                     });
                 }
+                if (requestGroupMemberSearchInput) {
+                    requestGroupMemberSearchInput.addEventListener('input', () => {
+                        state.groupMemberRequestQuery = requestGroupMemberSearchInput.value || '';
+                        renderGroupMemberRequestUsers();
+                    });
+                }
+                if (requestGroupMemberUserList) {
+                    requestGroupMemberUserList.addEventListener('click', (event) => {
+                        const option = event.target.closest('[data-request-group-member-user]');
+                        if (!option) return;
+                        const userId = Number(option.getAttribute('data-request-group-member-user') || 0);
+                        if (userId <= 0) return;
+                        state.groupMemberRequestSelectedId = userId;
+                        renderGroupMemberRequestUsers();
+                    });
+                }
+                if (requestGroupMemberConfirmBtn) {
+                    requestGroupMemberConfirmBtn.addEventListener('click', submitGroupMemberRequest);
+                }
+                if (requestGroupMemberCancelBtn) {
+                    requestGroupMemberCancelBtn.addEventListener('click', closeGroupMemberRequestModal);
+                }
+                if (requestGroupMemberModalCloseBtn) {
+                    requestGroupMemberModalCloseBtn.addEventListener('click', closeGroupMemberRequestModal);
+                }
+                if (requestGroupMemberModal) {
+                    requestGroupMemberModal.addEventListener('click', (event) => {
+                        if (event.target.matches('[data-close-request-group-member]')) {
+                            closeGroupMemberRequestModal();
+                        }
+                    });
+                }
                 document.addEventListener('click', (event) => {
                     if (event.target.closest('[data-clear-reply]')) {
                         clearReplyTarget();
@@ -2588,6 +2878,9 @@ $pageTitle = 'Inter-Agency Coordination';
                         }
                         if (isGroupMembersModalOpen()) {
                             closeGroupMembersModal();
+                        }
+                        if (requestGroupMemberModal && requestGroupMemberModal.classList.contains('show')) {
+                            closeGroupMemberRequestModal();
                         }
                     }
                 });
