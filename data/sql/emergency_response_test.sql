@@ -95,7 +95,7 @@ CREATE TABLE IF NOT EXISTS `interagency_user_thread_reads` (
 CREATE TABLE IF NOT EXISTS `interagency_solo_chat` (
   `id` BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
   `activity_log_id` INT NOT NULL,
-  `sender_user_id` INT UNSIGNED NOT NULL,
+  `sender_user_id` VARCHAR(255) NOT NULL,
   `recipient_user_id` INT UNSIGNED NOT NULL,
   `message_details` LONGTEXT NOT NULL,
   `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -112,7 +112,7 @@ CREATE TABLE IF NOT EXISTS `interagency_groups_threads_read` (
   `id` BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
   `activity_log_id` INT NOT NULL,
   `group_id` BIGINT UNSIGNED NOT NULL,
-  `sender_user_id` INT UNSIGNED NOT NULL,
+  `sender_user_id` VARCHAR(255) NOT NULL,
   `message_details` LONGTEXT NOT NULL,
   `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
   PRIMARY KEY (`id`),
