@@ -90,6 +90,55 @@ CREATE TABLE IF NOT EXISTS `interagency_user_thread_reads` (
   KEY `idx_interagency_user_reads_user` (`user_id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
+-- Dedicated storage for one-to-one (non-group) Inter Agency messages.
+-- `activity_log_id` keeps this record linked to the existing chat activity entry.
+CREATE TABLE IF NOT EXISTS `interagency_solo_chat` (
+  `id` BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+  `activity_log_id` INT NOT NULL,
+  `sender_user_id` VARCHAR(255) NOT NULL,
+  `recipient_user_id` INT UNSIGNED NOT NULL,
+  `message_details` LONGTEXT NOT NULL,
+  `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uk_interagency_solo_chat_activity_log` (`activity_log_id`),
+  KEY `idx_interagency_solo_chat_participants` (`sender_user_id`, `recipient_user_id`),
+  KEY `idx_interagency_solo_chat_recipient_created` (`recipient_user_id`, `created_at`),
+  KEY `idx_interagency_solo_chat_created` (`created_at`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- Dedicated storage for group Inter Agency messages.
+-- The table name is retained as requested; it stores chat messages, not read-status markers.
+CREATE TABLE IF NOT EXISTS `interagency_groups_threads_read` (
+  `id` BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+  `activity_log_id` INT NOT NULL,
+  `group_id` BIGINT UNSIGNED NOT NULL,
+  `sender_user_id` VARCHAR(255) NOT NULL,
+  `message_details` LONGTEXT NOT NULL,
+  `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uk_interagency_group_chat_activity_log` (`activity_log_id`),
+  KEY `idx_interagency_group_chat_group_created` (`group_id`, `created_at`),
+  KEY `idx_interagency_group_chat_sender_created` (`sender_user_id`, `created_at`),
+  KEY `idx_interagency_group_chat_created` (`created_at`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- Pending group-member requests submitted by dispatchers for admin approval.
+CREATE TABLE IF NOT EXISTS `interagency_group_member_requests` (
+  `id` BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+  `group_id` BIGINT UNSIGNED NOT NULL,
+  `requested_user_id` INT UNSIGNED NOT NULL,
+  `requested_by_user_id` INT UNSIGNED NOT NULL,
+  `status` ENUM('pending', 'approved', 'rejected') NOT NULL DEFAULT 'pending',
+  `reviewed_by_user_id` INT UNSIGNED DEFAULT NULL,
+  `reviewed_at` DATETIME DEFAULT NULL,
+  `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `updated_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uk_interagency_group_member_request` (`group_id`, `requested_user_id`),
+  KEY `idx_interagency_group_member_request_status` (`group_id`, `status`),
+  KEY `idx_interagency_group_member_request_requester` (`requested_by_user_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
 CREATE TABLE IF NOT EXISTS `interagency_message_attachments` (
   `id` BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
   `message_id` INT NOT NULL,

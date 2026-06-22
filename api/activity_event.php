@@ -160,6 +160,123 @@ function ensure_activity_log_auto_increment(PDO $pdo): void {
     }
 }
 
+function ensure_interagency_solo_chat_table(PDO $pdo): void {
+    static $checked = false;
+    if ($checked) {
+        return;
+    }
+    $checked = true;
+
+    $pdo->exec(
+        "CREATE TABLE IF NOT EXISTS `interagency_solo_chat` (
+            `id` BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+            `activity_log_id` INT NOT NULL,
+            `sender_user_id` VARCHAR(255) NOT NULL,
+            `recipient_user_id` INT UNSIGNED NOT NULL,
+            `message_details` LONGTEXT NOT NULL,
+            `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            PRIMARY KEY (`id`),
+            UNIQUE KEY `uk_interagency_solo_chat_activity_log` (`activity_log_id`),
+            KEY `idx_interagency_solo_chat_participants` (`sender_user_id`, `recipient_user_id`),
+            KEY `idx_interagency_solo_chat_recipient_created` (`recipient_user_id`, `created_at`),
+            KEY `idx_interagency_solo_chat_created` (`created_at`)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci"
+    );
+    ensure_interagency_chat_sender_names($pdo, 'interagency_solo_chat');
+}
+
+function ensure_interagency_chat_sender_names(PDO $pdo, string $tableName): void {
+    if (!in_array($tableName, ['interagency_solo_chat', 'interagency_groups_threads_read'], true)) {
+        throw new InvalidArgumentException('Unsupported Inter Agency chat table.');
+    }
+
+    $columnStmt = $pdo->query("SHOW COLUMNS FROM `{$tableName}` LIKE 'sender_user_id'");
+    $column = $columnStmt ? $columnStmt->fetch(PDO::FETCH_ASSOC) : null;
+    $columnType = strtolower((string)($column['Type'] ?? $column['type'] ?? ''));
+    if (strpos($columnType, 'varchar') !== 0) {
+        $pdo->exec("ALTER TABLE `{$tableName}` MODIFY `sender_user_id` VARCHAR(255) NOT NULL");
+    }
+
+    $pdo->exec(
+        "UPDATE `{$tableName}` chat
+         INNER JOIN users u ON CAST(chat.sender_user_id AS UNSIGNED) = u.id
+         SET chat.sender_user_id = COALESCE(NULLIF(TRIM(u.name), ''), CONCAT('User #', u.id))
+         WHERE chat.sender_user_id REGEXP '^[0-9]+$'"
+    );
+}
+
+function interagency_sender_name(PDO $pdo, ?int $senderUserId): string {
+    if ($senderUserId === null || $senderUserId <= 0) {
+        throw new RuntimeException('Invalid Inter Agency message sender.');
+    }
+
+    $stmt = $pdo->prepare("SELECT name FROM users WHERE id = ? LIMIT 1");
+    $stmt->execute([$senderUserId]);
+    $name = trim((string)($stmt->fetchColumn() ?: ''));
+    return $name !== '' ? $name : 'User #' . $senderUserId;
+}
+
+function persist_interagency_solo_chat(PDO $pdo, int $activityLogId, string $senderName, ?int $recipientUserId, string $details): void {
+    if ($activityLogId <= 0 || $senderName === '' || $recipientUserId === null || $recipientUserId <= 0) {
+        throw new RuntimeException('Invalid Inter Agency solo chat participants.');
+    }
+
+    ensure_interagency_solo_chat_table($pdo);
+    $stmt = $pdo->prepare(
+        "INSERT INTO interagency_solo_chat
+            (activity_log_id, sender_user_id, recipient_user_id, message_details, created_at)
+         VALUES (?, ?, ?, ?, NOW())
+         ON DUPLICATE KEY UPDATE
+            sender_user_id = VALUES(sender_user_id),
+            recipient_user_id = VALUES(recipient_user_id),
+            message_details = VALUES(message_details)"
+    );
+    $stmt->execute([$activityLogId, $senderName, $recipientUserId, $details]);
+}
+
+function ensure_interagency_groups_threads_read_table(PDO $pdo): void {
+    static $checked = false;
+    if ($checked) {
+        return;
+    }
+    $checked = true;
+
+    $pdo->exec(
+        "CREATE TABLE IF NOT EXISTS `interagency_groups_threads_read` (
+            `id` BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+            `activity_log_id` INT NOT NULL,
+            `group_id` BIGINT UNSIGNED NOT NULL,
+            `sender_user_id` VARCHAR(255) NOT NULL,
+            `message_details` LONGTEXT NOT NULL,
+            `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            PRIMARY KEY (`id`),
+            UNIQUE KEY `uk_interagency_group_chat_activity_log` (`activity_log_id`),
+            KEY `idx_interagency_group_chat_group_created` (`group_id`, `created_at`),
+            KEY `idx_interagency_group_chat_sender_created` (`sender_user_id`, `created_at`),
+            KEY `idx_interagency_group_chat_created` (`created_at`)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci"
+    );
+    ensure_interagency_chat_sender_names($pdo, 'interagency_groups_threads_read');
+}
+
+function persist_interagency_group_chat(PDO $pdo, int $activityLogId, string $senderName, ?int $groupId, string $details): void {
+    if ($activityLogId <= 0 || $senderName === '' || $groupId === null || $groupId <= 0) {
+        throw new RuntimeException('Invalid Inter Agency group chat details.');
+    }
+
+    ensure_interagency_groups_threads_read_table($pdo);
+    $stmt = $pdo->prepare(
+        "INSERT INTO interagency_groups_threads_read
+            (activity_log_id, group_id, sender_user_id, message_details, created_at)
+         VALUES (?, ?, ?, ?, NOW())
+         ON DUPLICATE KEY UPDATE
+            group_id = VALUES(group_id),
+            sender_user_id = VALUES(sender_user_id),
+            message_details = VALUES(message_details)"
+    );
+    $stmt->execute([$activityLogId, $groupId, $senderName, $details]);
+}
+
 function activity_log_needs_manual_id_fallback(string $message): bool {
     return strpos($message, "Duplicate entry '0' for key 'PRIMARY'") !== false
         || strpos($message, "Field 'id' doesn't have a default value") !== false
@@ -192,6 +309,15 @@ try {
 
     if (in_array($entity_type, ['agency_chat', 'agency_user_chat', 'agency_group_chat'], true) && $details !== '') {
         persist_message_attachments($pdo, $insertedMessageId, $details);
+    }
+
+    if (in_array($entity_type, ['agency_user_chat', 'agency_group_chat'], true)) {
+        $senderName = interagency_sender_name($pdo, $user_id);
+        if ($entity_type === 'agency_user_chat') {
+            persist_interagency_solo_chat($pdo, $insertedMessageId, $senderName, $entity_id, $details);
+        } else {
+            persist_interagency_group_chat($pdo, $insertedMessageId, $senderName, $entity_id, $details);
+        }
     }
 
     if ($pdo->inTransaction()) {
