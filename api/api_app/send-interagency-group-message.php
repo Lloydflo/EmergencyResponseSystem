@@ -23,8 +23,8 @@ try {
     $sql = "
         INSERT INTO interagency_groups_threads_read
         (activity_log_id, group_id, sender_user_id, message_details, created_at)
-        VALUES
-        (NULL, :group_id, :sender_user_id, :message_details, NOW())
+       VALUES
+        (0, :group_id, :sender_user_id, :message_details, NOW())
     ";
 
     $stmt = $pdo->prepare($sql);
