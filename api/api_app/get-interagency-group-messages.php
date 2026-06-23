@@ -23,7 +23,7 @@ try {
             u.name AS sender_name,
             u.department
         FROM interagency_groups_threads_read m
-        LEFT JOIN users u ON u.id = m.sender_user_id
+        LEFT JOIN users u ON CAST(u.id AS CHAR) = m.sender_user_id
         WHERE m.group_id = :group_id
         ORDER BY m.id ASC
     ";
