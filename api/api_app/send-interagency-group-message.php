@@ -20,32 +20,31 @@ try {
         "attachments" => []
     ]);
 
+    $nextIdStmt = $pdo->query("
+        SELECT COALESCE(MAX(id), 0) + 1 AS next_id 
+        FROM activity_log
+    ");
+    $activity_log_id = intval($nextIdStmt->fetch()["next_id"]);
+
     $logStmt = $pdo->prepare("
         INSERT INTO activity_log
-        (user_id, action, entity_type, entity_id, details, created_at)
+        (id, user_id, action, entity_type, entity_id, details, created_at)
         VALUES
-        (:user_id, 'chat', 'agency_chat', :entity_id, :details, NOW())
+        (:id, :user_id, 'chat', 'agency_chat', :entity_id, :details, NOW())
     ");
 
-   $logStmt->execute([
-    "id" => $nextLogId,
-    "user_id" => is_numeric($sender_user_id) ? intval($sender_user_id) : null,
-    "entity_id" => $group_id,
-    "details" => $message_details
-]);
-
-    $activity_log_id = $nextLogId;
-
-    $nextIdStmt = $pdo->query("SELECT COALESCE(MAX(id), 0) + 1 AS next_id FROM activity_log");
-    $nextLogId = intval($nextIdStmt->fetch()["next_id"]);
-
-    $activity_log_id = $pdo->lastInsertId();
+    $logStmt->execute([
+        "id" => $activity_log_id,
+        "user_id" => is_numeric($sender_user_id) ? intval($sender_user_id) : null,
+        "entity_id" => $group_id,
+        "details" => $message_details
+    ]);
 
     $stmt = $pdo->prepare("
-        INSERT INTO activity_log
-            (id, user_id, action, entity_type, entity_id, details, created_at)
-            VALUES
-            (:id, :user_id, 'chat', 'agency_chat', :entity_id, :details, NOW())
+        INSERT INTO interagency_groups_threads_read
+        (activity_log_id, group_id, sender_user_id, message_details, created_at)
+        VALUES
+        (:activity_log_id, :group_id, :sender_user_id, :message_details, NOW())
     ");
 
     $stmt->execute([
@@ -57,8 +56,7 @@ try {
 
     echo json_encode([
         "success" => true,
-        "message" => "Message sent",
-        "id" => $pdo->lastInsertId()
+        "message" => "Message sent"
     ]);
 
 } catch (Throwable $e) {
