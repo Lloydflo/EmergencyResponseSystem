@@ -1,40 +1,48 @@
 <?php
 header("Content-Type: application/json");
-require_once "../db.php";
 
-$group_id = isset($_POST["group_id"]) ? intval($_POST["group_id"]) : 0;
-$sender_user_id = isset($_POST["sender_user_id"]) ? intval($_POST["sender_user_id"]) : 0;
-$text = trim($_POST["text"] ?? "");
+require_once __DIR__ . "/connect.php";
 
-if ($group_id <= 0 || $sender_user_id <= 0 || $text === "") {
-    echo json_encode(["success" => false, "message" => "Missing fields"]);
-    exit;
-}
+try {
+    $pdo = db();
 
-$message_details = json_encode([
-    "text" => $text,
-    "attachments" => []
-]);
+    $group_id = isset($_POST["group_id"]) ? intval($_POST["group_id"]) : 0;
+    $sender_user_id = isset($_POST["sender_user_id"]) ? intval($_POST["sender_user_id"]) : 0;
+    $text = trim($_POST["text"] ?? "");
 
-$sql = "
-    INSERT INTO interagency_groups_threads_read
-    (activity_log_id, group_id, sender_user_id, message_details, created_at)
-    VALUES
-    (NULL, ?, ?, ?, NOW())
-";
+    if ($group_id <= 0 || $sender_user_id <= 0 || $text === "") {
+        echo json_encode(["success" => false, "message" => "Missing fields"]);
+        exit;
+    }
 
-$stmt = $conn->prepare($sql);
-$stmt->bind_param("iis", $group_id, $sender_user_id, $message_details);
+    $message_details = json_encode([
+        "text" => $text,
+        "attachments" => []
+    ]);
 
-if ($stmt->execute()) {
+    $sql = "
+        INSERT INTO interagency_groups_threads_read
+        (activity_log_id, group_id, sender_user_id, message_details, created_at)
+        VALUES
+        (NULL, :group_id, :sender_user_id, :message_details, NOW())
+    ";
+
+    $stmt = $pdo->prepare($sql);
+    $stmt->execute([
+        "group_id" => $group_id,
+        "sender_user_id" => $sender_user_id,
+        "message_details" => $message_details
+    ]);
+
     echo json_encode([
         "success" => true,
         "message" => "Message sent",
-        "id" => $stmt->insert_id
+        "id" => $pdo->lastInsertId()
     ]);
-} else {
+
+} catch (Throwable $e) {
     echo json_encode([
         "success" => false,
-        "message" => $stmt->error
+        "message" => $e->getMessage()
     ]);
 }
