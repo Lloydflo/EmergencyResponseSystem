@@ -39,6 +39,7 @@ try {
     while ($row = $stmt->fetch()) {
         $details = json_decode($row["message_details"], true);
         $text = $details["text"] ?? "";
+        $text = preg_replace('/^\[ROUTINE\]\s*/', '', $text);
 
         $messages[] = [
             "id" => strval($row["id"]),
