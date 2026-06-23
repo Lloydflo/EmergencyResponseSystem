@@ -14,20 +14,26 @@ try {
     }
 
     $stmt = $pdo->prepare("
-        SELECT
-            m.id,
-            m.group_id,
-            m.sender_user_id,
-            m.message_details,
-            m.created_at,
-            u.name AS sender_name,
-            u.department
-        FROM interagency_groups_threads_read m
-        LEFT JOIN users u
-            ON CAST(u.id AS CHAR CHARACTER SET utf8mb4) COLLATE utf8mb4_unicode_ci
-            = m.sender_user_id COLLATE utf8mb4_unicode_ci
-        WHERE m.group_id = :group_id
-        ORDER BY m.created_at ASC, m.id ASC
+    SELECT
+        m.id,
+        m.group_id,
+        m.sender_user_id,
+        m.message_details,
+        m.created_at,
+        u.name AS sender_name,
+        u.department,
+        a.file_name,
+        a.file_url,
+        a.mime_type,
+        a.is_image
+    FROM interagency_groups_threads_read m
+    LEFT JOIN users u
+        ON CAST(u.id AS CHAR CHARACTER SET utf8mb4) COLLATE utf8mb4_unicode_ci
+        = m.sender_user_id COLLATE utf8mb4_unicode_ci
+    LEFT JOIN interagency_message_attachments a
+        ON a.message_id = m.id
+    WHERE m.group_id = :group_id
+    ORDER BY m.created_at ASC, m.id ASC
     ");
 
     $stmt->execute([
@@ -41,6 +47,10 @@ try {
         $text = $details["text"] ?? "";
         $text = preg_replace('/^\[ROUTINE\]\s*/', '', $text);
 
+        $isImage = intval($row["is_image"] ?? 0) === 1;
+        $fileUrl = $row["file_url"] ?? null;
+        $fileName = $row["file_name"] ?? null;
+
         $messages[] = [
             "id" => strval($row["id"]),
             "groupId" => intval($row["group_id"]),
@@ -48,6 +58,9 @@ try {
             "senderName" => $row["sender_name"] ?: "Unknown",
             "role" => $row["department"] ?: "",
             "text" => $text,
+            "type" => $fileUrl ? ($isImage ? "IMAGE" : "FILE") : "TEXT",
+            "attachmentUri" => $fileUrl,
+            "attachmentName" => $fileName,
             "createdAt" => strtotime($row["created_at"]) * 1000
         ];
     }
