@@ -27,19 +27,25 @@ try {
         (:user_id, 'chat', 'agency_chat', :entity_id, :details, NOW())
     ");
 
-    $logStmt->execute([
-        "user_id" => is_numeric($sender_user_id) ? intval($sender_user_id) : null,
-        "entity_id" => $group_id,
-        "details" => $message_details
-    ]);
+   $logStmt->execute([
+    "id" => $nextLogId,
+    "user_id" => is_numeric($sender_user_id) ? intval($sender_user_id) : null,
+    "entity_id" => $group_id,
+    "details" => $message_details
+]);
+
+    $activity_log_id = $nextLogId;
+
+    $nextIdStmt = $pdo->query("SELECT COALESCE(MAX(id), 0) + 1 AS next_id FROM activity_log");
+    $nextLogId = intval($nextIdStmt->fetch()["next_id"]);
 
     $activity_log_id = $pdo->lastInsertId();
 
     $stmt = $pdo->prepare("
-        INSERT INTO interagency_groups_threads_read
-        (activity_log_id, group_id, sender_user_id, message_details, created_at)
-        VALUES
-        (:activity_log_id, :group_id, :sender_user_id, :message_details, NOW())
+        INSERT INTO activity_log
+            (id, user_id, action, entity_type, entity_id, details, created_at)
+            VALUES
+            (:id, :user_id, 'chat', 'agency_chat', :entity_id, :details, NOW())
     ");
 
     $stmt->execute([
