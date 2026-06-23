@@ -6,15 +6,15 @@ require_once __DIR__ . "/connect.php";
 try {
     $pdo = db();
 
-    $group_id = isset($_GET["group_id"]) ? intval($_GET["group_id"]) : 0;
+    $group_id = intval($_GET["group_id"] ?? 0);
 
     if ($group_id <= 0) {
         echo json_encode(["success" => false, "message" => "Missing group_id"]);
         exit;
     }
 
-    $sql = "
-        SELECT 
+    $stmt = $pdo->prepare("
+        SELECT
             m.id,
             m.group_id,
             m.sender_user_id,
@@ -23,13 +23,15 @@ try {
             u.name AS sender_name,
             u.department
         FROM interagency_groups_threads_read m
-        LEFT JOIN users u ON CAST(u.id AS CHAR) = m.sender_user_id
+        LEFT JOIN users u
+            ON CAST(u.id AS CHAR) = m.sender_user_id
         WHERE m.group_id = :group_id
-        ORDER BY m.id ASC
-    ";
+        ORDER BY m.created_at ASC, m.id ASC
+    ");
 
-    $stmt = $pdo->prepare($sql);
-    $stmt->execute(["group_id" => $group_id]);
+    $stmt->execute([
+        "group_id" => $group_id
+    ]);
 
     $messages = [];
 
@@ -38,11 +40,11 @@ try {
         $text = $details["text"] ?? "";
 
         $messages[] = [
-            "id" => intval($row["id"]),
+            "id" => strval($row["id"]),
             "groupId" => intval($row["group_id"]),
             "senderId" => strval($row["sender_user_id"]),
-            "senderName" => $row["sender_name"] ?? "Unknown",
-            "role" => $row["department"] ?? "",
+            "senderName" => $row["sender_name"] ?: "Unknown",
+            "role" => $row["department"] ?: "",
             "text" => $text,
             "createdAt" => strtotime($row["created_at"]) * 1000
         ];
