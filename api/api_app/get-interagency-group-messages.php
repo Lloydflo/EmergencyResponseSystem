@@ -24,7 +24,8 @@ try {
             u.department
         FROM interagency_groups_threads_read m
         LEFT JOIN users u
-            ON CAST(u.id AS CHAR) = m.sender_user_id
+            ON CAST(u.id AS CHAR CHARACTER SET utf8mb4) COLLATE utf8mb4_unicode_ci
+            = m.sender_user_id COLLATE utf8mb4_unicode_ci
         WHERE m.group_id = :group_id
         ORDER BY m.created_at ASC, m.id ASC
     ");
