@@ -1,14 +1,12 @@
 <?php
 header("Content-Type: application/json");
-require_once "../db.php";
+
+require_once __DIR__ . "/../db.php";
 
 $user_id = isset($_GET["user_id"]) ? intval($_GET["user_id"]) : 0;
 
 if ($user_id <= 0) {
-    echo json_encode([
-        "success" => false,
-        "message" => "Missing user_id"
-    ]);
+    echo json_encode(["success" => false, "message" => "Missing user_id"]);
     exit;
 }
 
@@ -30,6 +28,12 @@ $sql = "
 ";
 
 $stmt = $conn->prepare($sql);
+
+if (!$stmt) {
+    echo json_encode(["success" => false, "message" => $conn->error]);
+    exit;
+}
+
 $stmt->bind_param("i", $user_id);
 $stmt->execute();
 $result = $stmt->get_result();
