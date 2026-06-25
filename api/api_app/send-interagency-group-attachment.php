@@ -2,9 +2,11 @@
 header("Content-Type: application/json");
 
 require_once __DIR__ . "/connect.php";
+require_once __DIR__ . "/../../includes/user_presence.php";
 
 try {
     $pdo = db();
+    $now = date("Y-m-d H:i:s");
 
     $group_id = intval($_POST["group_id"] ?? 0);
     $sender_user_id = trim($_POST["sender_user_id"] ?? "");
@@ -18,6 +20,9 @@ try {
         echo json_encode(["success" => false, "message" => "Missing fields"]);
         exit;
     }
+    if (is_numeric($sender_user_id)) {
+        touch_user_presence($pdo, intval($sender_user_id));
+    }
 
     $messageText = $is_image === 1 ? "Image" : $file_name;
 
@@ -25,10 +30,10 @@ try {
         "text" => $messageText,
         "attachments" => [
             [
-                "file_name" => $file_name,
-                "file_url" => $file_url,
+                "name" => $file_name,
+                "url" => $file_url,
                 "mime_type" => $mime_type,
-                "file_size" => $file_size,
+                "size" => $file_size,
                 "is_image" => $is_image
             ]
         ]
@@ -44,28 +49,30 @@ try {
         INSERT INTO activity_log
         (id, user_id, action, entity_type, entity_id, details, created_at)
         VALUES
-        (:id, :user_id, 'chat_attachment', 'agency_chat', :entity_id, :details, NOW())
+        (:id, :user_id, 'chat_attachment', 'agency_group_chat', :entity_id, :details, :created_at)
     ");
 
     $logStmt->execute([
         "id" => $activity_log_id,
         "user_id" => is_numeric($sender_user_id) ? intval($sender_user_id) : null,
         "entity_id" => $group_id,
-        "details" => $message_details
+        "details" => $message_details,
+        "created_at" => $now
     ]);
 
     $msgStmt = $pdo->prepare("
         INSERT INTO interagency_groups_threads_read
         (activity_log_id, group_id, sender_user_id, message_details, created_at)
         VALUES
-        (:activity_log_id, :group_id, :sender_user_id, :message_details, NOW())
+        (:activity_log_id, :group_id, :sender_user_id, :message_details, :created_at)
     ");
 
     $msgStmt->execute([
         "activity_log_id" => $activity_log_id,
         "group_id" => $group_id,
         "sender_user_id" => $sender_user_id,
-        "message_details" => $message_details
+        "message_details" => $message_details,
+        "created_at" => $now
     ]);
 
     $message_id = $pdo->lastInsertId();
@@ -74,16 +81,17 @@ try {
         INSERT INTO interagency_message_attachments
         (message_id, file_name, file_url, file_path, mime_type, file_size, is_image, created_at)
         VALUES
-        (:message_id, :file_name, :file_url, NULL, :mime_type, :file_size, :is_image, NOW())
+        (:message_id, :file_name, :file_url, NULL, :mime_type, :file_size, :is_image, :created_at)
     ");
 
     $attStmt->execute([
-        "message_id" => $message_id,
+        "message_id" => $activity_log_id,
         "file_name" => $file_name,
         "file_url" => $file_url,
         "mime_type" => $mime_type,
         "file_size" => $file_size,
-        "is_image" => $is_image
+        "is_image" => $is_image,
+        "created_at" => $now
     ]);
 
     echo json_encode([

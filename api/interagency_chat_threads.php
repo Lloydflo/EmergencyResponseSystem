@@ -3,6 +3,8 @@ header('Content-Type: application/json');
 
 require_once __DIR__ . '/../includes/db.php';
 require_once __DIR__ . '/../includes/auth.php';
+require_once __DIR__ . '/../includes/interagency_time.php';
+require_once __DIR__ . '/../includes/user_presence.php';
 
 if (!is_logged_in()) {
     http_response_code(401);
@@ -16,6 +18,7 @@ if (!$pdo) {
     echo json_encode(['ok' => false, 'error' => 'DB connection unavailable']);
     exit;
 }
+interagency_apply_database_timezone($pdo);
 
 function ensure_interagency_reads_table(PDO $pdo): void {
     $pdo->exec(
@@ -116,6 +119,24 @@ function ensure_interagency_group_reads_table(PDO $pdo): void {
     );
 }
 
+function ensure_interagency_group_messages_table(PDO $pdo): void {
+    $pdo->exec(
+        "CREATE TABLE IF NOT EXISTS `interagency_groups_threads_read` (
+            `id` BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+            `activity_log_id` INT NOT NULL,
+            `group_id` BIGINT UNSIGNED NOT NULL,
+            `sender_user_id` VARCHAR(255) NOT NULL,
+            `message_details` LONGTEXT NOT NULL,
+            `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            PRIMARY KEY (`id`),
+            UNIQUE KEY `uk_interagency_group_chat_activity_log` (`activity_log_id`),
+            KEY `idx_interagency_group_chat_group_created` (`group_id`, `created_at`),
+            KEY `idx_interagency_group_chat_sender_created` (`sender_user_id`, `created_at`),
+            KEY `idx_interagency_group_chat_created` (`created_at`)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci"
+    );
+}
+
 function ensure_interagency_thread_titles_table(PDO $pdo): void {
     $pdo->exec(
         "CREATE TABLE IF NOT EXISTS `interagency_thread_titles` (
@@ -160,10 +181,10 @@ function parse_message_details(string $raw): array {
             if (isset($decoded['attachments']) && is_array($decoded['attachments'])) {
                 foreach ($decoded['attachments'] as $a) {
                     if (!is_array($a)) continue;
-                    $url = trim((string)($a['url'] ?? ''));
+                    $url = trim((string)($a['url'] ?? $a['file_url'] ?? ''));
                     if ($url === '') continue;
                     $attachments[] = [
-                        'name' => trim((string)($a['name'] ?? basename($url))),
+                        'name' => trim((string)($a['name'] ?? $a['file_name'] ?? basename($url))),
                         'url' => $url
                     ];
                 }
@@ -236,10 +257,12 @@ try {
     ensure_interagency_user_reads_table($pdo);
     ensure_interagency_group_tables($pdo);
     ensure_interagency_group_reads_table($pdo);
+    ensure_interagency_group_messages_table($pdo);
     ensure_interagency_thread_titles_table($pdo);
 
     $user = get_logged_in_user();
     $currentUserId = (int)($user['id'] ?? 0);
+    touch_user_presence($pdo, $currentUserId);
     $departmentEntityIds = array_keys($threadDefs);
     $departmentEntityIdList = implode(',', array_map('intval', $departmentEntityIds));
 
@@ -288,10 +311,16 @@ try {
          FROM activity_log a
          LEFT JOIN users u ON u.id = a.user_id
          INNER JOIN (
-             SELECT entity_id, MAX(id) AS max_id
-             FROM activity_log
-             WHERE entity_type='agency_chat' AND entity_id IN ($departmentEntityIdList)
-             GROUP BY entity_id
+             SELECT a2.entity_id, MAX(a2.id) AS max_id
+             FROM activity_log a2
+             WHERE a2.entity_type='agency_chat'
+               AND a2.entity_id IN ($departmentEntityIdList)
+               AND NOT EXISTS (
+                   SELECT 1
+                   FROM interagency_groups_threads_read legacy
+                   WHERE legacy.activity_log_id = a2.id
+               )
+             GROUP BY a2.entity_id
          ) latest ON latest.max_id = a.id"
     );
     $latestRows = $latestStmt->fetchAll(PDO::FETCH_ASSOC);
@@ -302,7 +331,7 @@ try {
         }
         $threads[$eid]['last_message_id'] = (int)$row['id'];
         $threads[$eid]['last_text'] = preview_text_from_details((string)$row['details']);
-        $threads[$eid]['last_at'] = (string)$row['created_at'];
+        $threads[$eid]['last_at'] = interagency_manila_iso((string)$row['created_at']);
         $threads[$eid]['last_sender_name'] = (string)$row['sender_name'];
         $threads[$eid]['last_sender_role'] = strtolower((string)$row['sender_role']);
     }
@@ -313,6 +342,11 @@ try {
          INNER JOIN users u ON u.id = a.user_id
          WHERE a.entity_type = 'agency_chat'
            AND a.entity_id IN ($departmentEntityIdList)
+           AND NOT EXISTS (
+               SELECT 1
+               FROM interagency_groups_threads_read legacy
+               WHERE legacy.activity_log_id = a.id
+           )
            AND LOWER(u.role) <> 'admin'
          GROUP BY a.entity_id"
     );
@@ -332,6 +366,11 @@ try {
         "SELECT entity_id, COUNT(*) AS total_messages
          FROM activity_log
          WHERE entity_type='agency_chat' AND entity_id IN ($departmentEntityIdList)
+           AND NOT EXISTS (
+               SELECT 1
+               FROM interagency_groups_threads_read legacy
+               WHERE legacy.activity_log_id = activity_log.id
+           )
          GROUP BY entity_id"
     );
     $totalRows = $totalStmt->fetchAll(PDO::FETCH_ASSOC);
@@ -358,7 +397,12 @@ try {
     $unreadStmt = $pdo->prepare(
         "SELECT COUNT(*) AS unread_count
          FROM activity_log
-         WHERE entity_type='agency_chat' AND entity_id = ? AND id > ?"
+         WHERE entity_type='agency_chat' AND entity_id = ? AND id > ?
+           AND NOT EXISTS (
+               SELECT 1
+               FROM interagency_groups_threads_read legacy
+               WHERE legacy.activity_log_id = activity_log.id
+           )"
     );
 
     $totalUnread = 0;
@@ -509,7 +553,7 @@ try {
             'tone' => 'responder',
             'last_message_id' => $latest ? (int)$latest['id'] : 0,
             'last_text' => $latest ? preview_text_from_details((string)$latest['details']) : '',
-            'last_at' => $latest ? (string)$latest['created_at'] : null,
+            'last_at' => $latest ? interagency_manila_iso((string)$latest['created_at']) : null,
             'last_sender_name' => $latest ? (string)$latest['sender_name'] : null,
             'last_sender_role' => $latest ? strtolower((string)$latest['sender_role']) : null,
             'total_messages' => $totalMessages,
@@ -556,10 +600,19 @@ try {
              FROM activity_log a
              LEFT JOIN users u ON u.id = a.user_id
              INNER JOIN (
-                 SELECT entity_id, MAX(id) AS max_id
-                 FROM activity_log
-                 WHERE entity_type='agency_group_chat' AND entity_id IN ($placeholders)
-                 GROUP BY entity_id
+                 SELECT a2.entity_id, MAX(a2.id) AS max_id
+                 FROM activity_log a2
+                 WHERE a2.entity_id IN ($placeholders)
+                   AND (
+                       a2.entity_type='agency_group_chat'
+                       OR EXISTS (
+                           SELECT 1
+                           FROM interagency_groups_threads_read legacy
+                           WHERE legacy.activity_log_id = a2.id
+                             AND legacy.group_id = a2.entity_id
+                       )
+                   )
+                 GROUP BY a2.entity_id
              ) latest ON latest.max_id = a.id"
         );
         $groupLatestStmt->execute($groupIds);
@@ -570,7 +623,16 @@ try {
         $groupTotalStmt = $pdo->prepare(
             "SELECT entity_id, COUNT(*) AS total_messages
              FROM activity_log
-             WHERE entity_type='agency_group_chat' AND entity_id IN ($placeholders)
+             WHERE entity_id IN ($placeholders)
+               AND (
+                   entity_type='agency_group_chat'
+                   OR EXISTS (
+                       SELECT 1
+                       FROM interagency_groups_threads_read legacy
+                       WHERE legacy.activity_log_id = activity_log.id
+                         AND legacy.group_id = activity_log.entity_id
+                   )
+               )
              GROUP BY entity_id"
         );
         $groupTotalStmt->execute($groupIds);
@@ -592,8 +654,16 @@ try {
     $groupUnreadStmt = $pdo->prepare(
         "SELECT COUNT(*) AS unread_count
          FROM activity_log
-         WHERE entity_type='agency_group_chat'
-           AND entity_id = ?
+         WHERE entity_id = ?
+           AND (
+               entity_type='agency_group_chat'
+               OR EXISTS (
+                   SELECT 1
+                   FROM interagency_groups_threads_read legacy
+                   WHERE legacy.activity_log_id = activity_log.id
+                     AND legacy.group_id = activity_log.entity_id
+               )
+           )
            AND user_id <> ?
            AND id > ?"
     );
@@ -624,7 +694,7 @@ try {
             'member_count' => (int)($row['member_count'] ?? 0),
             'last_message_id' => $latest ? (int)$latest['id'] : 0,
             'last_text' => $latest ? preview_text_from_details((string)$latest['details']) : '',
-            'last_at' => $latest ? (string)$latest['created_at'] : (string)($row['created_at'] ?? ''),
+            'last_at' => $latest ? interagency_manila_iso((string)$latest['created_at']) : interagency_manila_iso((string)($row['created_at'] ?? '')),
             'last_sender_name' => $latest ? (string)$latest['sender_name'] : null,
             'last_sender_role' => $latest ? strtolower((string)$latest['sender_role']) : null,
             'total_messages' => $totalMessages,

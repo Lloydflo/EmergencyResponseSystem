@@ -1,7 +1,8 @@
 <?php
 header("Content-Type: application/json");
 
-require_once __DIR__ . '/../includes/db.php';
+require_once __DIR__ . '/../../includes/db.php';
+require_once __DIR__ . '/../../includes/user_presence.php';
 
 $input = json_decode(file_get_contents("php://input"), true);
 if (!is_array($input)) {
@@ -82,6 +83,7 @@ try {
 
     $upd = $pdo->prepare("UPDATE users SET last_login = NOW() WHERE id = ?");
     $upd->execute([(int)$user["id"]]);
+    mark_user_online($pdo, (int)$user["id"]);
 
     echo json_encode([
         "success" => true,

@@ -3,6 +3,7 @@ header('Content-Type: application/json');
 
 require_once __DIR__ . '/../includes/db.php';
 require_once __DIR__ . '/../includes/auth.php';
+require_once __DIR__ . '/../includes/user_presence.php';
 
 if (!is_logged_in()) {
     http_response_code(401);
@@ -38,20 +39,36 @@ function ensure_interagency_user_threads_table(PDO $pdo): void {
 
 try {
     ensure_interagency_user_threads_table($pdo);
+    ensure_user_presence_table($pdo);
 
     $user = get_logged_in_user();
     $currentUserId = (int)($user['id'] ?? 0);
+    touch_user_presence($pdo, $currentUserId);
+    $includeInactive = isset($_GET['include_inactive']) && (string)$_GET['include_inactive'] === '1';
+    $includeSelf = isset($_GET['include_self']) && (string)$_GET['include_self'] === '1';
+    $presenceStatusExpr = user_presence_status_sql('up');
+
+    $statusFilter = $includeInactive ? '' : " AND u.status = 'active'";
+    $selfFilter = $includeSelf ? '' : ' AND u.id <> ?';
+    $params = [$currentUserId];
+    if (!$includeSelf) {
+        $params[] = $currentUserId;
+    }
 
     $stmt = $pdo->prepare(
         "SELECT u.id, u.name, u.email, u.role, u.status,
+                {$presenceStatusExpr} AS presence_status,
+                up.last_seen_at,
                 CASE WHEN t.target_user_id IS NULL THEN 0 ELSE 1 END AS has_thread
          FROM users u
          LEFT JOIN interagency_user_thread_pairs t
                 ON t.owner_user_id = ? AND t.target_user_id = u.id AND t.is_active = 1
-         WHERE u.status = 'active' AND u.id <> ?
+         LEFT JOIN user_presence up
+                ON up.user_id = u.id
+         WHERE 1=1{$selfFilter}{$statusFilter}
          ORDER BY u.name ASC"
     );
-    $stmt->execute([$currentUserId, $currentUserId]);
+    $stmt->execute($params);
     $rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
     $items = array_map(static function (array $row): array {
@@ -61,6 +78,9 @@ try {
             'email' => (string)$row['email'],
             'role' => strtolower((string)$row['role']),
             'status' => strtolower((string)$row['status']),
+            'account_status' => strtolower((string)$row['status']),
+            'presence_status' => strtolower((string)($row['presence_status'] ?? 'offline')),
+            'last_seen_at' => $row['last_seen_at'] !== null ? (string)$row['last_seen_at'] : null,
             'has_thread' => ((int)$row['has_thread']) === 1
         ];
     }, $rows);

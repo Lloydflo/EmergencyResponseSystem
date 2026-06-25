@@ -4,6 +4,7 @@ header('Content-Type: application/json');
 require_once __DIR__ . '/../includes/db.php';
 require_once __DIR__ . '/../includes/auth.php';
 require_once __DIR__ . '/../includes/media_storage.php';
+require_once __DIR__ . '/../includes/interagency_time.php';
 
 if (!is_logged_in()) {
     http_response_code(401);
@@ -17,6 +18,7 @@ if (!$pdo) {
     echo json_encode(['ok' => false, 'error' => 'DB connection unavailable']);
     exit;
 }
+interagency_apply_database_timezone($pdo);
 
 function dept_to_entity_id(string $dept): ?int {
     switch (strtolower(trim($dept))) {
@@ -118,6 +120,24 @@ function ensure_interagency_group_reads_table(PDO $pdo): void {
     );
 }
 
+function ensure_interagency_group_messages_table(PDO $pdo): void {
+    $pdo->exec(
+        "CREATE TABLE IF NOT EXISTS `interagency_groups_threads_read` (
+            `id` BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+            `activity_log_id` INT NOT NULL,
+            `group_id` BIGINT UNSIGNED NOT NULL,
+            `sender_user_id` VARCHAR(255) NOT NULL,
+            `message_details` LONGTEXT NOT NULL,
+            `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            PRIMARY KEY (`id`),
+            UNIQUE KEY `uk_interagency_group_chat_activity_log` (`activity_log_id`),
+            KEY `idx_interagency_group_chat_group_created` (`group_id`, `created_at`),
+            KEY `idx_interagency_group_chat_sender_created` (`sender_user_id`, `created_at`),
+            KEY `idx_interagency_group_chat_created` (`created_at`)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci"
+    );
+}
+
 function current_user_can_access_group(PDO $pdo, int $groupId, int $userId): bool {
     if ($groupId <= 0 || $userId <= 0) {
         return false;
@@ -149,13 +169,13 @@ function parse_message_details(string $raw): array {
             if (isset($decoded['attachments']) && is_array($decoded['attachments'])) {
                 foreach ($decoded['attachments'] as $a) {
                     if (!is_array($a)) continue;
-                    $url = trim((string)($a['url'] ?? ''));
+                    $url = trim((string)($a['url'] ?? $a['file_url'] ?? ''));
                     if ($url === '') continue;
                     $attachments[] = [
-                        'name' => trim((string)($a['name'] ?? basename($url))),
+                        'name' => trim((string)($a['name'] ?? $a['file_name'] ?? basename($url))),
                         'url' => preg_match('#^https?://#i', $url) || strpos($url, '/') === 0 ? $url : media_endpoint_url($url),
                         'mime_type' => trim((string)($a['mime_type'] ?? '')),
-                        'size' => (int)($a['size'] ?? 0),
+                        'size' => (int)($a['size'] ?? $a['file_size'] ?? 0),
                         'is_image' => !empty($a['is_image'])
                     ];
                 }
@@ -250,6 +270,7 @@ $limit = isset($_GET['limit']) ? max(1, min(100, (int)$_GET['limit'])) : 50;
 $markRead = isset($_GET['mark_read']) && (string)$_GET['mark_read'] === '1';
 
 try {
+    ensure_interagency_group_messages_table($pdo);
     $params = [];
     $entityType = 'agency_chat';
 
@@ -272,20 +293,32 @@ try {
                        COALESCE(NULLIF(u.role, ''), 'system') AS sender_role
                 FROM activity_log a
                 LEFT JOIN users u ON u.id = a.user_id
-                WHERE a.entity_type=?";
-    $params[] = $entityType;
+                WHERE ";
 
     $eid = null;
     if ($threadKind === 'user') {
+        $sqlBase .= "a.entity_type = ?";
+        $params[] = $entityType;
         $sqlBase .= " AND ((a.user_id = ? AND a.entity_id = ?) OR (a.user_id = ? AND a.entity_id = ?))";
         $params[] = $currentUserId;
         $params[] = $targetUserId;
         $params[] = $targetUserId;
         $params[] = $currentUserId;
     } elseif ($threadKind === 'group') {
+        $sqlBase .= "(a.entity_type = ? OR EXISTS (
+                         SELECT 1
+                         FROM interagency_groups_threads_read legacy
+                         WHERE legacy.activity_log_id = a.id
+                           AND legacy.group_id = ?
+                     ))";
+        $params[] = $entityType;
+        $params[] = $groupId;
         $sqlBase .= " AND a.entity_id = ?";
         $params[] = $groupId;
-    } elseif ($dept !== '' && strtolower($dept) !== 'all') {
+    } else {
+        $sqlBase .= "a.entity_type = ?";
+        $params[] = $entityType;
+        if ($dept !== '' && strtolower($dept) !== 'all') {
         $eid = dept_to_entity_id($dept);
         if ($eid === null) {
             echo json_encode(['ok' => true, 'items' => [], 'current_user_id' => $currentUserId]);
@@ -293,6 +326,12 @@ try {
         }
         $sqlBase .= " AND a.entity_id = ?";
         $params[] = $eid;
+        }
+        $sqlBase .= " AND NOT EXISTS (
+                         SELECT 1
+                         FROM interagency_groups_threads_read legacy
+                         WHERE legacy.activity_log_id = a.id
+                     )";
     }
 
     if ($sinceId > 0) {
@@ -334,7 +373,7 @@ try {
             'text' => (string)$parsed['text'],
             'attachments' => $attachments,
             'reply_to' => $parsed['reply_to'],
-            'created_at' => (string)$row['created_at'],
+            'created_at' => interagency_manila_iso((string)$row['created_at']),
             'sender_user_id' => $senderUserId > 0 ? $senderUserId : null,
             'sender_name' => (string)$row['sender_name'],
             'sender_role' => strtolower((string)$row['sender_role']),
@@ -347,8 +386,16 @@ try {
         $maxStmt = $pdo->prepare(
             "SELECT COALESCE(MAX(id), 0) AS max_id
              FROM activity_log
-             WHERE entity_type='agency_group_chat'
-               AND entity_id=?"
+             WHERE entity_id=?
+               AND (
+                   entity_type='agency_group_chat'
+                   OR EXISTS (
+                       SELECT 1
+                       FROM interagency_groups_threads_read legacy
+                       WHERE legacy.activity_log_id = activity_log.id
+                         AND legacy.group_id = activity_log.entity_id
+                   )
+               )"
         );
         $maxStmt->execute([$groupId]);
         $maxId = (int)($maxStmt->fetchColumn() ?: 0);
@@ -385,7 +432,17 @@ try {
         }
     } elseif ($markRead && $eid !== null && $currentUserId > 0) {
         ensure_interagency_reads_table($pdo);
-        $maxStmt = $pdo->prepare("SELECT COALESCE(MAX(id), 0) AS max_id FROM activity_log WHERE entity_type='agency_chat' AND entity_id=?");
+        $maxStmt = $pdo->prepare(
+            "SELECT COALESCE(MAX(id), 0) AS max_id
+             FROM activity_log
+             WHERE entity_type='agency_chat'
+               AND entity_id=?
+               AND NOT EXISTS (
+                   SELECT 1
+                   FROM interagency_groups_threads_read legacy
+                   WHERE legacy.activity_log_id = activity_log.id
+               )"
+        );
         $maxStmt->execute([$eid]);
         $maxId = (int)($maxStmt->fetchColumn() ?: 0);
         if ($maxId > 0) {

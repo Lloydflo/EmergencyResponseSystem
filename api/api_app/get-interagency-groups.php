@@ -1,6 +1,7 @@
 <?php
 header("Content-Type: application/json");
 require_once __DIR__ . "/connect.php";
+require_once __DIR__ . "/../../includes/user_presence.php";
 
 try {
     $pdo = db();
@@ -11,6 +12,7 @@ try {
         echo json_encode(["success" => false, "message" => "Missing user_id"]);
         exit;
     }
+    touch_user_presence($pdo, $user_id);
 
     $sql = "
         SELECT

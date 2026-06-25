@@ -2,15 +2,20 @@
 header("Content-Type: application/json");
 
 require_once __DIR__ . "/connect.php";
+require_once __DIR__ . "/../../includes/user_presence.php";
 
 try {
     $pdo = db();
 
     $group_id = intval($_GET["group_id"] ?? 0);
+    $user_id = intval($_GET["user_id"] ?? 0);
 
     if ($group_id <= 0) {
         echo json_encode(["success" => false, "message" => "Missing group_id"]);
         exit;
+    }
+    if ($user_id > 0) {
+        touch_user_presence($pdo, $user_id);
     }
 
     $stmt = $pdo->prepare("
@@ -31,7 +36,7 @@ try {
         ON CAST(u.id AS CHAR CHARACTER SET utf8mb4) COLLATE utf8mb4_unicode_ci
         = m.sender_user_id COLLATE utf8mb4_unicode_ci
     LEFT JOIN interagency_message_attachments a
-        ON a.message_id = m.id
+        ON a.message_id = m.activity_log_id OR a.message_id = m.id
     WHERE m.group_id = :group_id
     ORDER BY m.created_at ASC, m.id ASC
     ");

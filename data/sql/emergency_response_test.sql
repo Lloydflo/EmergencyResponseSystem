@@ -90,6 +90,17 @@ CREATE TABLE IF NOT EXISTS `interagency_user_thread_reads` (
   KEY `idx_interagency_user_reads_user` (`user_id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
+CREATE TABLE IF NOT EXISTS `user_presence` (
+  `user_id` INT UNSIGNED NOT NULL,
+  `session_id` VARCHAR(128) DEFAULT NULL,
+  `is_online` TINYINT(1) NOT NULL DEFAULT 0,
+  `last_seen_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `logged_in_at` DATETIME DEFAULT NULL,
+  `logged_out_at` DATETIME DEFAULT NULL,
+  PRIMARY KEY (`user_id`),
+  KEY `idx_user_presence_online_seen` (`is_online`, `last_seen_at`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
 -- Dedicated storage for one-to-one (non-group) Inter Agency messages.
 -- `activity_log_id` keeps this record linked to the existing chat activity entry.
 CREATE TABLE IF NOT EXISTS `interagency_solo_chat` (

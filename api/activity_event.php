@@ -4,6 +4,7 @@ header('Content-Type: application/json');
 require_once __DIR__ . '/../includes/db.php';
 require_once __DIR__ . '/../includes/auth.php';
 require_once __DIR__ . '/../includes/media_storage.php';
+require_once __DIR__ . '/../includes/interagency_time.php';
 
 $pdo = get_db_connection();
 if (!$pdo) {
@@ -49,6 +50,8 @@ if ($action === '') {
     echo json_encode(['ok' => false, 'error' => 'Missing action']);
     exit;
 }
+
+$isInteragencyChat = in_array($entity_type, ['agency_chat', 'agency_user_chat', 'agency_group_chat'], true);
 
 function extract_attachments_from_details(string $details): array {
     $details = trim($details);
@@ -225,13 +228,13 @@ function persist_interagency_solo_chat(PDO $pdo, int $activityLogId, string $sen
     $stmt = $pdo->prepare(
         "INSERT INTO interagency_solo_chat
             (activity_log_id, sender_user_id, recipient_user_id, message_details, created_at)
-         VALUES (?, ?, ?, ?, NOW())
+         VALUES (?, ?, ?, ?, ?)
          ON DUPLICATE KEY UPDATE
             sender_user_id = VALUES(sender_user_id),
             recipient_user_id = VALUES(recipient_user_id),
             message_details = VALUES(message_details)"
     );
-    $stmt->execute([$activityLogId, $senderName, $recipientUserId, $details]);
+    $stmt->execute([$activityLogId, $senderName, $recipientUserId, $details, interagency_now()]);
 }
 
 function ensure_interagency_groups_threads_read_table(PDO $pdo): void {
@@ -268,13 +271,13 @@ function persist_interagency_group_chat(PDO $pdo, int $activityLogId, string $se
     $stmt = $pdo->prepare(
         "INSERT INTO interagency_groups_threads_read
             (activity_log_id, group_id, sender_user_id, message_details, created_at)
-         VALUES (?, ?, ?, ?, NOW())
+         VALUES (?, ?, ?, ?, ?)
          ON DUPLICATE KEY UPDATE
             group_id = VALUES(group_id),
             sender_user_id = VALUES(sender_user_id),
             message_details = VALUES(message_details)"
     );
-    $stmt->execute([$activityLogId, $groupId, $senderName, $details]);
+    $stmt->execute([$activityLogId, $groupId, $senderName, $details, interagency_now()]);
 }
 
 function activity_log_needs_manual_id_fallback(string $message): bool {
@@ -285,15 +288,24 @@ function activity_log_needs_manual_id_fallback(string $message): bool {
 
 try {
     ensure_activity_log_auto_increment($pdo);
-    if (in_array($entity_type, ['agency_chat', 'agency_user_chat', 'agency_group_chat'], true) && $details !== '') {
+    if ($isInteragencyChat) {
+        interagency_apply_database_timezone($pdo);
+    }
+    if ($isInteragencyChat && $details !== '') {
         prepare_interagency_attachment_storage($pdo, $details);
     }
     $pdo->beginTransaction();
 
     $insertedMessageId = 0;
-    $stmt = $pdo->prepare("INSERT INTO activity_log (user_id, action, entity_type, entity_id, details) VALUES (?, ?, ?, ?, ?)");
+    if ($isInteragencyChat) {
+        $stmt = $pdo->prepare("INSERT INTO activity_log (user_id, action, entity_type, entity_id, details, created_at) VALUES (?, ?, ?, ?, ?, ?)");
+        $insertParams = [$user_id, $action, $entity_type, $entity_id, $details, interagency_now()];
+    } else {
+        $stmt = $pdo->prepare("INSERT INTO activity_log (user_id, action, entity_type, entity_id, details) VALUES (?, ?, ?, ?, ?)");
+        $insertParams = [$user_id, $action, $entity_type, $entity_id, $details];
+    }
     try {
-        $stmt->execute([$user_id, $action, $entity_type, $entity_id, $details]);
+        $stmt->execute($insertParams);
         $insertedMessageId = (int)$pdo->lastInsertId();
     } catch (Throwable $e) {
         $msg = (string)$e->getMessage();
@@ -302,12 +314,17 @@ try {
         }
 
         $nextId = (int)$pdo->query("SELECT COALESCE(MAX(id), 0) + 1 FROM activity_log")->fetchColumn();
-        $stmtManual = $pdo->prepare("INSERT INTO activity_log (id, user_id, action, entity_type, entity_id, details) VALUES (?, ?, ?, ?, ?, ?)");
-        $stmtManual->execute([$nextId, $user_id, $action, $entity_type, $entity_id, $details]);
+        if ($isInteragencyChat) {
+            $stmtManual = $pdo->prepare("INSERT INTO activity_log (id, user_id, action, entity_type, entity_id, details, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)");
+            $stmtManual->execute([$nextId, $user_id, $action, $entity_type, $entity_id, $details, interagency_now()]);
+        } else {
+            $stmtManual = $pdo->prepare("INSERT INTO activity_log (id, user_id, action, entity_type, entity_id, details) VALUES (?, ?, ?, ?, ?, ?)");
+            $stmtManual->execute([$nextId, $user_id, $action, $entity_type, $entity_id, $details]);
+        }
         $insertedMessageId = $nextId;
     }
 
-    if (in_array($entity_type, ['agency_chat', 'agency_user_chat', 'agency_group_chat'], true) && $details !== '') {
+    if ($isInteragencyChat && $details !== '') {
         persist_message_attachments($pdo, $insertedMessageId, $details);
     }
 
