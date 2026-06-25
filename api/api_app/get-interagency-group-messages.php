@@ -31,7 +31,7 @@ try {
         ON CAST(u.id AS CHAR CHARACTER SET utf8mb4) COLLATE utf8mb4_unicode_ci
         = m.sender_user_id COLLATE utf8mb4_unicode_ci
     LEFT JOIN interagency_message_attachments a
-        ON a.message_id = m.id
+        ON a.message_id = m.activity_log_id OR a.message_id = m.id
     WHERE m.group_id = :group_id
     ORDER BY m.created_at ASC, m.id ASC
     ");
