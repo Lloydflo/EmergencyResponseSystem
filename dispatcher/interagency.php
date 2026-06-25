@@ -110,18 +110,123 @@ $pageTitle = 'Inter-Agency Coordination';
 
         .ia-board {
             display: grid;
-            grid-template-columns: 350px 1fr;
+            grid-template-columns: 330px minmax(0, 1fr) 270px;
             gap: 0.9rem;
             min-height: 620px;
         }
 
         .ia-list-panel,
-        .ia-chat-panel {
+        .ia-chat-panel,
+        .ia-user-status-panel {
             background: var(--ia-card);
             border: 1px solid var(--ia-border);
             border-radius: 14px;
             box-shadow: 0 6px 18px rgba(15, 23, 42, 0.06);
             overflow: hidden;
+        }
+
+        .ia-user-status-panel {
+            border-right: 4px solid #0f766e;
+            display: flex;
+            flex-direction: column;
+            min-width: 0;
+        }
+
+        .ia-user-status-head {
+            padding: 0.85rem;
+            border-bottom: 1px solid var(--ia-border);
+            background: #f8fbff;
+        }
+
+        .ia-user-status-title {
+            margin: 0;
+            color: var(--ia-text);
+            font-size: 0.95rem;
+            font-weight: 800;
+        }
+
+        .ia-user-status-sub {
+            margin: 0.2rem 0 0;
+            color: var(--ia-muted);
+            font-size: 0.76rem;
+        }
+
+        .ia-user-status-list {
+            max-height: 545px;
+            overflow-y: auto;
+        }
+
+        .ia-user-status-item {
+            display: flex;
+            align-items: center;
+            gap: 0.7rem;
+            padding: 0.8rem 0.85rem;
+            border-bottom: 1px solid #edf2f7;
+            min-width: 0;
+        }
+
+        .ia-user-status-avatar {
+            width: 34px;
+            height: 34px;
+            border-radius: 50%;
+            background: #e0f2fe;
+            color: #0369a1;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            flex-shrink: 0;
+            font-size: 0.82rem;
+        }
+
+        .ia-user-status-main {
+            flex: 1;
+            min-width: 0;
+        }
+
+        .ia-user-status-name {
+            margin: 0;
+            color: #102132;
+            font-size: 0.86rem;
+            font-weight: 800;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .ia-user-status-role {
+            margin: 0.15rem 0 0;
+            color: #5f7286;
+            font-size: 0.73rem;
+            text-transform: capitalize;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .ia-user-status-state {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.35rem;
+            border: 1px solid #d9e5ef;
+            border-radius: 999px;
+            padding: 0.22rem 0.45rem;
+            color: #475569;
+            background: #f8fafc;
+            font-size: 0.7rem;
+            font-weight: 800;
+            white-space: nowrap;
+        }
+
+        .ia-user-status-state.online {
+            border-color: #bbf7d0;
+            background: #ecfdf5;
+            color: #166534;
+        }
+
+        .ia-user-status-state.offline {
+            border-color: #e2e8f0;
+            background: #f1f5f9;
+            color: #64748b;
         }
 
         .ia-list-top {
@@ -1244,12 +1349,29 @@ $pageTitle = 'Inter-Agency Coordination';
             color: #64748b;
         }
 
+        @media (max-width: 1280px) {
+            .ia-board {
+                grid-template-columns: 320px minmax(0, 1fr);
+            }
+
+            .ia-user-status-panel {
+                grid-column: 1 / -1;
+                border-right-width: 1px;
+                border-top: 4px solid #0f766e;
+            }
+
+            .ia-user-status-list {
+                max-height: 260px;
+            }
+        }
+
         @media (max-width: 1080px) {
             .ia-board {
                 grid-template-columns: 1fr;
             }
 
-            .ia-thread-list {
+            .ia-thread-list,
+            .ia-user-status-list {
                 max-height: 320px;
             }
         }
@@ -1357,6 +1479,16 @@ $pageTitle = 'Inter-Agency Coordination';
                         <div class="ia-note">Tip: choose thread sa kaliwa, then send incident update directly to that department/responder.</div>
                     </div>
                 </section>
+
+                <aside class="ia-user-status-panel" aria-label="User status list">
+                    <div class="ia-user-status-head">
+                        <p class="ia-user-status-title">Users</p>
+                        <p class="ia-user-status-sub">Online and offline status</p>
+                    </div>
+                    <div class="ia-user-status-list" id="userStatusList" aria-live="polite">
+                        <div class="ia-empty-list">Loading users...</div>
+                    </div>
+                </aside>
             </section>
         </div>
     </div>
@@ -1439,6 +1571,7 @@ $pageTitle = 'Inter-Agency Coordination';
                 groupMemberRequestSelectedId: 0,
                 groupMemberRequestGroupId: 0,
                 groupMemberRequestLoading: false,
+                userStatuses: [],
                 chatSettingsOpen: false,
                 poller: null
             };
@@ -1475,6 +1608,7 @@ $pageTitle = 'Inter-Agency Coordination';
             const totalThreadsEl = document.getElementById('iaTotalThreads');
             const activeRespondersEl = document.getElementById('iaActiveResponders');
             const unreadCountEl = document.getElementById('iaUnreadCount');
+            const userStatusListEl = document.getElementById('userStatusList');
 
             function escapeHtml(value) {
                 return String(value || '')
@@ -2247,6 +2381,66 @@ $pageTitle = 'Inter-Agency Coordination';
                 unreadCountEl.textContent = String((stats && stats.unread_messages) || 0);
             }
 
+            function userOnlineState(user) {
+                const status = String((user && user.status) || '').trim().toLowerCase();
+                const online = status === 'active' || status === 'online';
+                return {
+                    key: online ? 'online' : 'offline',
+                    label: online ? 'Online' : 'Offline'
+                };
+            }
+
+            function userIconByRole(role) {
+                const normalized = String(role || '').trim().toLowerCase();
+                if (normalized === 'admin') return 'fa-user-tie';
+                if (normalized === 'dispatcher' || normalized === 'operator') return 'fa-headset';
+                return 'fa-user';
+            }
+
+            function renderUserStatuses() {
+                if (!userStatusListEl) return;
+                const users = Array.isArray(state.userStatuses) ? state.userStatuses : [];
+                if (!users.length) {
+                    userStatusListEl.innerHTML = '<div class="ia-empty-list">No users found.</div>';
+                    return;
+                }
+
+                userStatusListEl.innerHTML = users.map((user) => {
+                    const stateInfo = userOnlineState(user);
+                    return `
+                        <div class="ia-user-status-item">
+                            <div class="ia-user-status-avatar">
+                                <i class="fas ${escapeHtml(userIconByRole(user.role))}"></i>
+                            </div>
+                            <div class="ia-user-status-main">
+                                <p class="ia-user-status-name">${escapeHtml(user.name || user.email || ('User #' + user.id))}</p>
+                                <p class="ia-user-status-role">${escapeHtml(user.role || 'user')}</p>
+                            </div>
+                            <span class="ia-user-status-state ${escapeHtml(stateInfo.key)}">
+                                <span class="ia-dot ${escapeHtml(stateInfo.key)}"></span>
+                                ${escapeHtml(stateInfo.label)}
+                            </span>
+                        </div>
+                    `;
+                }).join('');
+            }
+
+            async function loadUserStatuses() {
+                if (!userStatusListEl) return;
+                try {
+                    const res = await fetch('api/interagency_users.php?include_inactive=1&include_self=1', { cache: 'no-store' });
+                    const data = await res.json();
+                    if (!data || !data.ok) {
+                        userStatusListEl.innerHTML = '<div class="ia-empty-list">Unable to load users.</div>';
+                        return;
+                    }
+                    state.userStatuses = Array.isArray(data.items) ? data.items : [];
+                    renderUserStatuses();
+                } catch (_) {
+                    userStatusListEl.innerHTML = '<div class="ia-empty-list">Unable to load users.</div>';
+                }
+            }
+
             function previewText(item) {
                 const text = String(item.last_text || '').trim();
                 const sender = String(item.last_sender_name || '').trim();
@@ -2398,6 +2592,7 @@ $pageTitle = 'Inter-Agency Coordination';
                 renderOverview(data.stats || null);
                 renderThreadList();
                 renderChatHeader();
+                loadUserStatuses();
             }
 
             async function loadMessages(initial, markRead) {

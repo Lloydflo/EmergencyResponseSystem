@@ -41,6 +41,15 @@ try {
 
     $user = get_logged_in_user();
     $currentUserId = (int)($user['id'] ?? 0);
+    $includeInactive = isset($_GET['include_inactive']) && (string)$_GET['include_inactive'] === '1';
+    $includeSelf = isset($_GET['include_self']) && (string)$_GET['include_self'] === '1';
+
+    $statusFilter = $includeInactive ? '' : " AND u.status = 'active'";
+    $selfFilter = $includeSelf ? '' : ' AND u.id <> ?';
+    $params = [$currentUserId];
+    if (!$includeSelf) {
+        $params[] = $currentUserId;
+    }
 
     $stmt = $pdo->prepare(
         "SELECT u.id, u.name, u.email, u.role, u.status,
@@ -48,10 +57,10 @@ try {
          FROM users u
          LEFT JOIN interagency_user_thread_pairs t
                 ON t.owner_user_id = ? AND t.target_user_id = u.id AND t.is_active = 1
-         WHERE u.status = 'active' AND u.id <> ?
+         WHERE 1=1{$selfFilter}{$statusFilter}
          ORDER BY u.name ASC"
     );
-    $stmt->execute([$currentUserId, $currentUserId]);
+    $stmt->execute($params);
     $rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
     $items = array_map(static function (array $row): array {
