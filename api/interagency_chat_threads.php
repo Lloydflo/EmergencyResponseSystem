@@ -4,6 +4,7 @@ header('Content-Type: application/json');
 require_once __DIR__ . '/../includes/db.php';
 require_once __DIR__ . '/../includes/auth.php';
 require_once __DIR__ . '/../includes/interagency_time.php';
+require_once __DIR__ . '/../includes/user_presence.php';
 
 if (!is_logged_in()) {
     http_response_code(401);
@@ -261,6 +262,7 @@ try {
 
     $user = get_logged_in_user();
     $currentUserId = (int)($user['id'] ?? 0);
+    touch_user_presence($pdo, $currentUserId);
     $departmentEntityIds = array_keys($threadDefs);
     $departmentEntityIdList = implode(',', array_map('intval', $departmentEntityIds));
 

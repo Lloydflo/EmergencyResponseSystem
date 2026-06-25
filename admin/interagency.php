@@ -2906,8 +2906,8 @@ $pageTitle = 'Inter-Agency Conversations';
             }
 
             function userOnlineState(user) {
-                const status = String((user && user.status) || '').trim().toLowerCase();
-                const online = status === 'active' || status === 'online';
+                const status = String((user && user.presence_status) || '').trim().toLowerCase();
+                const online = status === 'online';
                 return {
                     key: online ? 'online' : 'offline',
                     label: online ? 'Online' : 'Offline'

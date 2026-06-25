@@ -278,6 +278,8 @@ function logout_user(): void {
 
     if ($isAuthenticatedSession && $userId !== null && $userId > 0) {
         require_once __DIR__ . '/activity_log.php';
+        require_once __DIR__ . '/db.php';
+        require_once __DIR__ . '/user_presence.php';
         log_activity_event(
             $userId,
             'logout',
@@ -285,6 +287,10 @@ function logout_user(): void {
             $userId,
             trim($roleLabel . ' ' . $userName . ' signed out')
         );
+        $pdo = get_db_connection();
+        if ($pdo instanceof PDO) {
+            mark_user_offline($pdo, $userId);
+        }
     }
 
     // Unset all session variables

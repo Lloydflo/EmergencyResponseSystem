@@ -2,6 +2,7 @@
 header("Content-Type: application/json");
 
 require_once __DIR__ . "/connect.php";
+require_once __DIR__ . "/../../includes/user_presence.php";
 
 try {
     $pdo = db();
@@ -14,6 +15,9 @@ try {
     if ($group_id <= 0 || $sender_user_id === "" || $text === "") {
         echo json_encode(["success" => false, "message" => "Missing fields"]);
         exit;
+    }
+    if (is_numeric($sender_user_id)) {
+        touch_user_presence($pdo, intval($sender_user_id));
     }
 
     $message_details = json_encode([
