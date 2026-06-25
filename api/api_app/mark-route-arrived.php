@@ -3,6 +3,7 @@ header("Content-Type: application/json");
 
 require_once __DIR__ . "/connect.php";
 
+
 function distanceMeters($lat1, $lon1, $lat2, $lon2) {
     $earthRadius = 6371000;
 
@@ -34,6 +35,27 @@ try {
         ]);
         exit;
     }
+            $check = $pdo->prepare("
+            SELECT id, arrived_at
+            FROM responder_route_summary
+            WHERE incident_id = :incident_id
+            AND responder_id = :responder_id
+            AND arrived_at IS NOT NULL
+            LIMIT 1
+        ");
+
+        $check->execute([
+            ":incident_id" => $incident_id,
+            ":responder_id" => $responder_id
+        ]);
+
+        if ($check->fetch()) {
+            echo json_encode([
+                "success" => false,
+                "message" => "Arrival already recorded"
+            ]);
+            exit;
+        }
 
     $stmt = $pdo->prepare("
         SELECT latitude, longitude, speed, recorded_at
