@@ -4,6 +4,7 @@ header('Content-Type: application/json');
 require_once __DIR__ . '/../includes/db.php';
 require_once __DIR__ . '/../includes/auth.php';
 require_once __DIR__ . '/../includes/media_storage.php';
+require_once __DIR__ . '/../includes/interagency_time.php';
 
 if (!is_logged_in()) {
     http_response_code(401);
@@ -17,6 +18,7 @@ if (!$pdo) {
     echo json_encode(['ok' => false, 'error' => 'DB connection unavailable']);
     exit;
 }
+interagency_apply_database_timezone($pdo);
 
 function dept_to_entity_id(string $dept): ?int {
     switch (strtolower(trim($dept))) {
@@ -334,7 +336,7 @@ try {
             'text' => (string)$parsed['text'],
             'attachments' => $attachments,
             'reply_to' => $parsed['reply_to'],
-            'created_at' => (string)$row['created_at'],
+            'created_at' => interagency_manila_iso((string)$row['created_at']),
             'sender_user_id' => $senderUserId > 0 ? $senderUserId : null,
             'sender_name' => (string)$row['sender_name'],
             'sender_role' => strtolower((string)$row['sender_role']),

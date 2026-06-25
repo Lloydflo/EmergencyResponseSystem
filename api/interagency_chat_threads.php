@@ -3,6 +3,7 @@ header('Content-Type: application/json');
 
 require_once __DIR__ . '/../includes/db.php';
 require_once __DIR__ . '/../includes/auth.php';
+require_once __DIR__ . '/../includes/interagency_time.php';
 
 if (!is_logged_in()) {
     http_response_code(401);
@@ -16,6 +17,7 @@ if (!$pdo) {
     echo json_encode(['ok' => false, 'error' => 'DB connection unavailable']);
     exit;
 }
+interagency_apply_database_timezone($pdo);
 
 function ensure_interagency_reads_table(PDO $pdo): void {
     $pdo->exec(
@@ -302,7 +304,7 @@ try {
         }
         $threads[$eid]['last_message_id'] = (int)$row['id'];
         $threads[$eid]['last_text'] = preview_text_from_details((string)$row['details']);
-        $threads[$eid]['last_at'] = (string)$row['created_at'];
+        $threads[$eid]['last_at'] = interagency_manila_iso((string)$row['created_at']);
         $threads[$eid]['last_sender_name'] = (string)$row['sender_name'];
         $threads[$eid]['last_sender_role'] = strtolower((string)$row['sender_role']);
     }
@@ -509,7 +511,7 @@ try {
             'tone' => 'responder',
             'last_message_id' => $latest ? (int)$latest['id'] : 0,
             'last_text' => $latest ? preview_text_from_details((string)$latest['details']) : '',
-            'last_at' => $latest ? (string)$latest['created_at'] : null,
+            'last_at' => $latest ? interagency_manila_iso((string)$latest['created_at']) : null,
             'last_sender_name' => $latest ? (string)$latest['sender_name'] : null,
             'last_sender_role' => $latest ? strtolower((string)$latest['sender_role']) : null,
             'total_messages' => $totalMessages,
@@ -624,7 +626,7 @@ try {
             'member_count' => (int)($row['member_count'] ?? 0),
             'last_message_id' => $latest ? (int)$latest['id'] : 0,
             'last_text' => $latest ? preview_text_from_details((string)$latest['details']) : '',
-            'last_at' => $latest ? (string)$latest['created_at'] : (string)($row['created_at'] ?? ''),
+            'last_at' => $latest ? interagency_manila_iso((string)$latest['created_at']) : interagency_manila_iso((string)($row['created_at'] ?? '')),
             'last_sender_name' => $latest ? (string)$latest['sender_name'] : null,
             'last_sender_role' => $latest ? strtolower((string)$latest['sender_role']) : null,
             'total_messages' => $totalMessages,

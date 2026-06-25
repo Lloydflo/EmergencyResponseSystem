@@ -2191,8 +2191,16 @@ $pageTitle = 'Inter-Agency Coordination';
                 }
             }
 
+            function parsePhilippineDate(dateLike) {
+                const raw = String(dateLike || '').trim();
+                if (!raw) return new Date(NaN);
+                const normalized = raw.includes('T') ? raw : raw.replace(' ', 'T');
+                const hasTimezone = /(?:Z|[+-]\d{2}:?\d{2})$/i.test(normalized);
+                return new Date(hasTimezone ? normalized : `${normalized}+08:00`);
+            }
+
             function rel(dateLike) {
-                const d = new Date(dateLike);
+                const d = parsePhilippineDate(dateLike);
                 if (isNaN(d.getTime())) return 'just now';
                 const mins = Math.max(0, Math.round((Date.now() - d.getTime()) / 60000));
                 if (!mins) return 'just now';
@@ -2202,9 +2210,9 @@ $pageTitle = 'Inter-Agency Coordination';
             }
 
             function time(dateLike) {
-                const d = new Date(dateLike);
+                const d = parsePhilippineDate(dateLike);
                 if (isNaN(d.getTime())) return 'Now';
-                return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+                return d.toLocaleTimeString('en-PH', { timeZone: 'Asia/Manila', hour: '2-digit', minute: '2-digit' });
             }
 
             function activeThread() {
