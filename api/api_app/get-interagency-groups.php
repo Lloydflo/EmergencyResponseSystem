@@ -1,53 +1,85 @@
 <?php
 header("Content-Type: application/json");
-require_once "../db.php";
+require_once __DIR__ . "/connect.php";
 
-$user_id = isset($_GET["user_id"]) ? intval($_GET["user_id"]) : 0;
+try {
+    $pdo = db();
 
-if ($user_id <= 0) {
+    $user_id = intval($_GET["user_id"] ?? 0);
+
+    if ($user_id <= 0) {
+        echo json_encode(["success" => false, "message" => "Missing user_id"]);
+        exit;
+    }
+
+    $sql = "
+        SELECT
+            gt.id,
+            gt.name,
+
+            CASE 
+                WHEN gm.id IS NOT NULL THEN 1 
+                ELSE 0 
+            END AS is_member,
+
+            CASE 
+                WHEN req.id IS NOT NULL THEN 1 
+                ELSE 0 
+            END AS request_pending,
+
+            COALESCE(r.last_read_id, 0) AS last_read_id
+
+        FROM interagency_group_threads gt
+
+        LEFT JOIN interagency_group_members gm
+            ON gm.group_id = gt.id
+            AND gm.user_id = :user_id
+            AND gm.is_active = 1
+
+        LEFT JOIN interagency_group_member_requests req
+            ON req.group_id = gt.id
+            AND req.requested_user_id = :user_id
+            AND req.status = 'pending'
+
+        LEFT JOIN interagency_group_thread_reads r
+            ON r.group_id = gt.id
+            AND r.user_id = :user_id
+
+        WHERE gt.is_active = 1
+        ORDER BY gt.name ASC
+    ";
+
+    $stmt = $pdo->prepare($sql);
+    $stmt->execute(["user_id" => $user_id]);
+
+    $groups = [];
+
+    while ($row = $stmt->fetch()) {
+        $isMember = intval($row["is_member"]) === 1;
+        $requestPending = intval($row["request_pending"]) === 1;
+
+        $groups[] = [
+            "id" => intval($row["id"]),
+            "name" => $row["name"],
+            "displayName" => $row["name"],
+            "isMember" => $isMember,
+            "requestPending" => $requestPending,
+            "lastMessage" => $isMember
+                ? "Tap to open group chat"
+                : ($requestPending ? "Request pending approval" : "Request access to join"),
+            "unreadCount" => 0,
+            "lastReadId" => intval($row["last_read_id"])
+        ];
+    }
+
+    echo json_encode([
+        "success" => true,
+        "groups" => $groups
+    ]);
+
+} catch (Throwable $e) {
     echo json_encode([
         "success" => false,
-        "message" => "Missing user_id"
+        "message" => $e->getMessage()
     ]);
-    exit;
 }
-
-$sql = "
-    SELECT 
-        gt.id,
-        gt.name,
-        COALESCE(r.last_read_id, 0) AS last_read_id
-    FROM interagency_group_members gm
-    INNER JOIN interagency_group_threads gt
-        ON gt.id = gm.group_id
-    LEFT JOIN interagency_group_thread_reads r
-        ON r.group_id = gt.id
-        AND r.user_id = gm.user_id
-    WHERE gm.user_id = ?
-      AND gm.is_active = 1
-      AND gt.is_active = 1
-    ORDER BY gt.name ASC
-";
-
-$stmt = $conn->prepare($sql);
-$stmt->bind_param("i", $user_id);
-$stmt->execute();
-$result = $stmt->get_result();
-
-$groups = [];
-
-while ($row = $result->fetch_assoc()) {
-    $groups[] = [
-        "id" => intval($row["id"]),
-        "name" => $row["name"],
-        "displayName" => $row["name"],
-        "lastMessage" => "Tap to open group chat",
-        "unreadCount" => 0,
-        "lastReadId" => intval($row["last_read_id"])
-    ];
-}
-
-echo json_encode([
-    "success" => true,
-    "groups" => $groups
-]);
