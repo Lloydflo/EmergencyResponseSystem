@@ -65,12 +65,30 @@ try {
         $fileName = $row["file_name"] ?? null;
 
         if (!$fileUrl && isset($details["attachments"][0])) {
-            $att = $details["attachments"][0];
+        $att = $details["attachments"][0];
 
-            $fileUrl = $att["file_url"] ?? null;
-            $fileName = $att["file_name"] ?? null;
-            $isImage = intval($att["is_image"] ?? 0) === 1;
-        }
+        $fileUrl =
+            $att["file_url"] ??
+            $att["fileUrl"] ??
+            $att["url"] ??
+            null;
+
+        $fileName =
+            $att["file_name"] ??
+            $att["fileName"] ??
+            $att["name"] ??
+            null;
+
+        $mimeType =
+            $att["mime_type"] ??
+            $att["mimeType"] ??
+            $row["mime_type"] ??
+            "";
+
+        $isImage =
+            intval($att["is_image"] ?? 0) === 1 ||
+            str_starts_with(strtolower($mimeType), "image/");
+    }
 
         if ($fileUrl && !str_starts_with($fileUrl, "http")) {
             $fileUrl = "https://emergency-response.alertaraqc.com/" . ltrim($fileUrl, "/");
