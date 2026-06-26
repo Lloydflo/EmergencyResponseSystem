@@ -36,6 +36,7 @@
 .review-stat-card,
 .review-toolbar,
 .review-results-bar,
+.review-table-shell,
 .review-card,
 .review-panel,
 .review-modal-dialog {
@@ -185,9 +186,145 @@
 }
 
 .review-incident-list {
+    min-width: 0;
+}
+
+.review-table-shell {
+    width: 100%;
+    max-height: min(62vh, 680px);
+    overflow: auto;
+    border-radius: 22px;
+}
+
+.review-table-shell::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+}
+
+.review-table-shell::-webkit-scrollbar-track {
+    background: #e2e8f0;
+    border-radius: 999px;
+}
+
+.review-table-shell::-webkit-scrollbar-thumb {
+    background: #94a3b8;
+    border-radius: 999px;
+}
+
+.review-incidents-table {
+    width: 100%;
+    min-width: 1120px;
+    border-collapse: separate;
+    border-spacing: 0;
+    color: #0f172a;
+}
+
+.review-incidents-table thead {
+    position: sticky;
+    top: 0;
+    z-index: 2;
+    background: #f8fafc;
+    box-shadow: 0 1px 0 #e2e8f0;
+}
+
+.review-incidents-table th,
+.review-incidents-table td {
+    padding: 0.95rem 1rem;
+    border-bottom: 1px solid #e2e8f0;
+    text-align: left;
+    vertical-align: top;
+}
+
+.review-incidents-table th {
+    font-size: 0.78rem;
+    font-weight: 800;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: #64748b;
+    white-space: nowrap;
+}
+
+.review-incidents-table tbody tr {
+    background: rgba(255, 255, 255, 0.84);
+    transition: background 0.18s ease;
+}
+
+.review-incidents-table tbody tr:hover {
+    background: #f8fbff;
+}
+
+.review-incidents-table tbody tr.priority-high td:first-child {
+    border-left: 4px solid #ef4444;
+}
+
+.review-incidents-table tbody tr.priority-medium td:first-child {
+    border-left: 4px solid #f59e0b;
+}
+
+.review-incidents-table tbody tr.priority-low td:first-child {
+    border-left: 4px solid #22c55e;
+}
+
+.review-table-incident {
+    max-width: 260px;
+}
+
+.review-table-incident strong,
+.review-table-incident span,
+.review-table-incident small,
+.review-table-stack span {
+    display: block;
+}
+
+.review-table-incident strong {
+    color: #0f172a;
+    font-weight: 800;
+    word-break: break-word;
+}
+
+.review-table-incident span {
+    margin-top: 0.28rem;
+    color: #475569;
+    font-weight: 700;
+}
+
+.review-table-incident small {
+    margin-top: 0.42rem;
+    color: #64748b;
+    line-height: 1.5;
+}
+
+.review-table-location {
+    min-width: 190px;
+    max-width: 260px;
+    color: #334155;
+    line-height: 1.55;
+}
+
+.review-table-chips {
+    display: flex;
+    flex-direction: column;
+    gap: 0.4rem;
+    align-items: flex-start;
+}
+
+.review-table-stack {
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(420px, 1fr));
-    gap: 1rem;
+    gap: 0.28rem;
+    color: #475569;
+    font-size: 0.9rem;
+    line-height: 1.45;
+    min-width: 150px;
+}
+
+.review-table-stack strong {
+    color: #0f172a;
+}
+
+.review-table-actions {
+    display: grid;
+    gap: 0.5rem;
+    min-width: 136px;
 }
 
 .review-card {
@@ -754,6 +891,7 @@
 [data-theme="dark"] .review-stat-card,
 [data-theme="dark"] .review-toolbar,
 [data-theme="dark"] .review-results-bar,
+[data-theme="dark"] .review-table-shell,
 [data-theme="dark"] .review-card,
 [data-theme="dark"] .review-panel,
 [data-theme="dark"] .review-modal-dialog {
@@ -766,6 +904,8 @@
 [data-theme="dark"] .toolbar-field label,
 [data-theme="dark"] .review-results-bar p,
 [data-theme="dark"] .review-stat-card p,
+[data-theme="dark"] .review-incidents-table th,
+[data-theme="dark"] .review-table-incident small,
 [data-theme="dark"] .review-card-type,
 [data-theme="dark"] .review-card-location .label,
 [data-theme="dark"] .metric-pill .label,
@@ -786,6 +926,9 @@
 
 [data-theme="dark"] .review-stat-card strong,
 [data-theme="dark"] .review-results-bar h3,
+[data-theme="dark"] .review-incidents-table,
+[data-theme="dark"] .review-table-incident strong,
+[data-theme="dark"] .review-table-stack strong,
 [data-theme="dark"] .review-card-ref,
 [data-theme="dark"] .review-card-location strong,
 [data-theme="dark"] .metric-pill,
@@ -820,14 +963,40 @@
 }
 
 [data-theme="dark"] .review-card-description,
+[data-theme="dark"] .review-table-incident span,
+[data-theme="dark"] .review-table-location,
+[data-theme="dark"] .review-table-stack,
 [data-theme="dark"] .spotlight-description,
 [data-theme="dark"] .feedback-note {
     color: #cbd5e1 !important;
 }
 
 [data-theme="dark"] .review-card-footer,
-[data-theme="dark"] .review-modal-header {
+[data-theme="dark"] .review-modal-header,
+[data-theme="dark"] .review-incidents-table th,
+[data-theme="dark"] .review-incidents-table td {
     border-color: #334155 !important;
+}
+
+[data-theme="dark"] .review-incidents-table thead {
+    background: #0f172a !important;
+    box-shadow: 0 1px 0 #334155;
+}
+
+[data-theme="dark"] .review-incidents-table tbody tr {
+    background: rgba(15, 23, 42, 0.86);
+}
+
+[data-theme="dark"] .review-incidents-table tbody tr:hover {
+    background: #111827;
+}
+
+[data-theme="dark"] .review-table-shell::-webkit-scrollbar-track {
+    background: #0f172a;
+}
+
+[data-theme="dark"] .review-table-shell::-webkit-scrollbar-thumb {
+    background: #475569;
 }
 
 [data-theme="dark"] .metric-pill,
@@ -919,14 +1088,18 @@
     .review-toolbar,
     .review-results-bar,
     .review-panel,
-    .review-card {
+    .review-card,
+    .review-table-shell {
         border-radius: 20px;
     }
 
     .review-stats-grid,
-    .review-toolbar,
-    .review-incident-list {
+    .review-toolbar {
         grid-template-columns: 1fr;
+    }
+
+    .review-table-shell {
+        max-height: 60vh;
     }
 
     .toolbar-actions {

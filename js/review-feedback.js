@@ -57,6 +57,8 @@
   let currentItems = [];
   let currentIncident = null;
   let selectedRating = 0;
+  let searchDebounceTimer = null;
+  let loadRequestSeq = 0;
 
   function buildQuery() {
     const params = new URLSearchParams();
@@ -73,22 +75,27 @@
   }
 
   async function loadIncidents() {
+    const requestSeq = ++loadRequestSeq;
     container.innerHTML = loadingMarkup('Loading closed incidents...');
     setApplyLoading(true);
 
     try {
       const response = await fetch('api/incidents_list.php?' + buildQuery(), { cache: 'no-store' });
       const data = await response.json();
+      if (requestSeq !== loadRequestSeq) return;
       if (!data.ok) throw new Error(data.error || 'Failed to load incidents');
 
       currentItems = sortItems(data.items || []);
       renderStats(currentItems);
       renderIncidents(currentItems);
     } catch (error) {
+      if (requestSeq !== loadRequestSeq) return;
       container.innerHTML = emptyMarkup('fas fa-triangle-exclamation', 'Failed to load closed incidents.', escapeHtml(error.message));
       resultsMeta.textContent = 'Unable to load results.';
     } finally {
-      setApplyLoading(false);
+      if (requestSeq === loadRequestSeq) {
+        setApplyLoading(false);
+      }
     }
   }
 
@@ -131,7 +138,7 @@
       return;
     }
 
-    container.innerHTML = items.map(item => {
+    const rows = items.map(item => {
       const status = normalizeStatus(item.status);
       const priority = normalizePriority(item.priority);
       const ratingText = toNumber(item.avg_rating) !== null
@@ -141,56 +148,76 @@
       const plate = clean(item.plate_number) || 'Not recorded';
       const vehicle = clean(item.vehicle_name) || clean(item.assigned_unit) || 'Not recorded';
       const unit = clean(item.assigned_unit) || 'Unassigned';
+      const code = item.incident_code || item.reference_no || 'No reference';
+      const closedAt = item.resolved_at || item.cleared_at;
+      const incidentId = escapeAttribute(item.id || '');
 
       return `
-        <article class="review-card priority-${priority}">
-          <div class="review-card-header">
-            <div>
-              <h4 class="review-card-ref">${escapeHtml(item.incident_code || item.reference_no || 'No reference')}</h4>
-              <p class="review-card-type">${escapeHtml(item.type || 'Incident')}</p>
-            </div>
-            <div class="review-card-badges">
+        <tr class="priority-${priority}">
+          <td class="review-table-incident">
+            <strong>${escapeHtml(code)}</strong>
+            <span>${escapeHtml(item.type || 'Incident')}</span>
+            <small>${escapeHtml(item.description || 'No incident description provided.')}</small>
+          </td>
+          <td>
+            <div class="review-table-chips">
               <span class="status-chip status-${status}">${escapeHtml(statusLabel(status))}</span>
               <span class="priority-chip priority-${priority}">${escapeHtml(priorityLabel(priority))}</span>
             </div>
-          </div>
-
-          <div class="review-card-body">
-            <div class="review-card-copy">
-              <p class="review-card-description">${escapeHtml(item.description || 'No incident description provided.')}</p>
-              <div class="review-card-location">
-                <span class="label">Incident Location</span>
-                <strong>${escapeHtml(item.location || 'No location recorded')}</strong>
-              </div>
+          </td>
+          <td class="review-table-location">${escapeHtml(item.location || 'No location recorded')}</td>
+          <td>
+            <div class="review-table-stack">
+              <span><strong>Response:</strong> ${escapeHtml(formatMinutes(item.response_time_min))}</span>
+              <span><strong>Resolution:</strong> ${escapeHtml(formatMinutes(item.resolution_time_min))}</span>
             </div>
-
-            <div class="review-card-metrics">
-              ${metricPill('Response Time', formatMinutes(item.response_time_min))}
-              ${metricPill('Resolution Time', formatMinutes(item.resolution_time_min))}
-              ${metricPill('Driver', driver)}
-              ${metricPill('Plate Number', plate)}
-              ${metricPill('Vehicle / Unit', `${vehicle}${vehicle !== unit ? ' / ' + unit : ''}`)}
-              ${metricPill('Rating Feedback', ratingText)}
+          </td>
+          <td>
+            <div class="review-table-stack">
+              <span><strong>Unit:</strong> ${escapeHtml(unit)}</span>
+              <span><strong>Vehicle:</strong> ${escapeHtml(vehicle)}</span>
+              <span><strong>Driver:</strong> ${escapeHtml(driver)}</span>
+              <span><strong>Plate:</strong> ${escapeHtml(plate)}</span>
             </div>
-          </div>
-
-          <div class="review-card-footer">
-            <div class="review-card-times">
-              <span><i class="fas fa-calendar-plus"></i> Reported ${escapeHtml(formatDate(item.created_at))}</span>
-              <span><i class="fas fa-flag-checkered"></i> Closed ${escapeHtml(formatDate(item.resolved_at || item.cleared_at))}</span>
+          </td>
+          <td>${escapeHtml(ratingText)}</td>
+          <td>
+            <div class="review-table-stack">
+              <span><strong>Reported:</strong> ${escapeHtml(formatDate(item.created_at))}</span>
+              <span><strong>Closed:</strong> ${escapeHtml(formatDate(closedAt))}</span>
             </div>
-            <div class="review-card-actions">
-              <button type="button" class="btn-card-action" data-open-review="${item.id}">
-                <i class="fas fa-eye"></i> View Details
-              </button>
-              <button type="button" class="btn-card-action primary" data-open-review="${item.id}">
-                <i class="fas fa-star"></i> Rate & Feedback
-              </button>
-            </div>
-          </div>
-        </article>
+          </td>
+          <td class="review-table-actions">
+            <button type="button" class="btn-card-action" data-open-review="${incidentId}">
+              <i class="fas fa-eye"></i> View
+            </button>
+            <button type="button" class="btn-card-action primary" data-open-review="${incidentId}">
+              <i class="fas fa-star"></i> Feedback
+            </button>
+          </td>
+        </tr>
       `;
     }).join('');
+
+    container.innerHTML = `
+      <div class="review-table-shell">
+        <table class="review-incidents-table">
+          <thead>
+            <tr>
+              <th>Incident</th>
+              <th>Status</th>
+              <th>Location</th>
+              <th>Timeline</th>
+              <th>Responder / Vehicle</th>
+              <th>Rating</th>
+              <th>Dates</th>
+              <th>Action</th>
+            </tr>
+          </thead>
+          <tbody>${rows}</tbody>
+        </table>
+      </div>
+    `;
 
     qsa('[data-open-review]', container).forEach(button => {
       button.addEventListener('click', () => {
@@ -519,15 +546,6 @@
     return 'Low Priority';
   }
 
-  function metricPill(label, value) {
-    return `
-      <div class="metric-pill">
-        <span class="label">${escapeHtml(label)}</span>
-        <strong>${escapeHtml(value)}</strong>
-      </div>
-    `;
-  }
-
   function renderStars(rating) {
     if (!rating) return '<span class="feedback-date">No rating</span>';
     return Array.from({ length: 5 }, (_, index) => {
@@ -600,6 +618,22 @@
     applyFiltersBtn.setAttribute('aria-disabled', isLoading ? 'true' : 'false');
   }
 
+  function scheduleSearchLoad(delay = 350) {
+    if (searchDebounceTimer) {
+      window.clearTimeout(searchDebounceTimer);
+    }
+    searchDebounceTimer = window.setTimeout(() => {
+      searchDebounceTimer = null;
+      loadIncidents();
+    }, delay);
+  }
+
+  function cancelSearchLoad() {
+    if (!searchDebounceTimer) return;
+    window.clearTimeout(searchDebounceTimer);
+    searchDebounceTimer = null;
+  }
+
   function escapeHtml(value) {
     return String(value)
       .replaceAll('&', '&amp;')
@@ -619,8 +653,12 @@
     setSelectedRating(button.dataset.rating);
   });
 
-  applyFiltersBtn?.addEventListener('click', loadIncidents);
+  applyFiltersBtn?.addEventListener('click', () => {
+    cancelSearchLoad();
+    loadIncidents();
+  });
   clearFiltersBtn?.addEventListener('click', () => {
+    cancelSearchLoad();
     if (statusFilter) statusFilter.value = 'closed';
     if (dayFilter) dayFilter.value = '';
     if (searchInput) searchInput.value = '';
@@ -635,12 +673,14 @@
     renderStats(currentItems);
     renderIncidents(currentItems);
   });
-  searchInput?.addEventListener('keypress', event => {
+  searchInput?.addEventListener('keydown', event => {
     if (event.key === 'Enter') {
       event.preventDefault();
+      cancelSearchLoad();
       loadIncidents();
     }
   });
+  searchInput?.addEventListener('input', () => scheduleSearchLoad());
 
   modalOverlay?.addEventListener('click', hideModal);
   modalClose?.addEventListener('click', hideModal);

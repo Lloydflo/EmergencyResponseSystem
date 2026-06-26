@@ -229,6 +229,57 @@ $pageTitle = 'Inter-Agency Conversations';
             color: #64748b;
         }
 
+        [data-theme="dark"] .ia-user-status-panel {
+            background: #111827;
+            border-color: #334155;
+            border-right-color: #14b8a6;
+            box-shadow: 0 10px 24px rgba(0, 0, 0, 0.24);
+        }
+
+        [data-theme="dark"] .ia-user-status-head {
+            background: #1f2937;
+            border-bottom-color: #334155;
+        }
+
+        [data-theme="dark"] .ia-user-status-title,
+        [data-theme="dark"] .ia-user-status-name {
+            color: #f8fafc;
+        }
+
+        [data-theme="dark"] .ia-user-status-sub,
+        [data-theme="dark"] .ia-user-status-role,
+        [data-theme="dark"] .ia-empty-list {
+            color: #cbd5e1;
+        }
+
+        [data-theme="dark"] .ia-user-status-item {
+            border-bottom-color: #334155;
+        }
+
+        [data-theme="dark"] .ia-user-status-avatar {
+            background: #0f172a;
+            border: 1px solid #334155;
+            color: #7dd3fc;
+        }
+
+        [data-theme="dark"] .ia-user-status-state {
+            background: #1e293b;
+            border-color: #475569;
+            color: #e2e8f0;
+        }
+
+        [data-theme="dark"] .ia-user-status-state.online {
+            background: rgba(34, 197, 94, 0.16);
+            border-color: rgba(34, 197, 94, 0.45);
+            color: #bbf7d0;
+        }
+
+        [data-theme="dark"] .ia-user-status-state.offline {
+            background: #1e293b;
+            border-color: #475569;
+            color: #cbd5e1;
+        }
+
         .ia-list-top {
             padding: 0.85rem;
             border-bottom: 1px solid var(--ia-border);
