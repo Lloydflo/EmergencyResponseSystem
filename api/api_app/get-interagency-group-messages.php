@@ -58,6 +58,9 @@ try {
     while ($row = $stmt->fetch()) {
         $details = json_decode($row["message_details"], true);
         $text = $details["text"] ?? "";
+        if ($fileUrl && !$isImage && $fileName) {
+        $text = $fileName;
+    }
         $text = preg_replace('/^\[ROUTINE\]\s*/', '', $text);
 
         $isImage = intval($row["is_image"] ?? 0) === 1;
