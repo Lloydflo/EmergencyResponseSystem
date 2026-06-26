@@ -62,18 +62,19 @@ try {
 
         $isImage = intval($row["is_image"] ?? 0) === 1;
         $fileUrl = $row["file_url"] ?? null;
-        if ($fileUrl && str_starts_with($fileUrl, "api/interagency_attachment.php")) {
-            $attachmentId = null;
-
-            if (preg_match('/id=([0-9]+)/', $fileUrl, $matches)) {
-                $attachmentId = $matches[1];
-            }
-
-            if ($attachmentId) {
-                $fileUrl = "https://emergency-response.alertaraqc.com/api/api_app/interagency_attachment.php?id=" . $attachmentId;
-            }
-        }
         $fileName = $row["file_name"] ?? null;
+
+        if (!$fileUrl && isset($details["attachments"][0])) {
+            $att = $details["attachments"][0];
+
+            $fileUrl = $att["file_url"] ?? null;
+            $fileName = $att["file_name"] ?? null;
+            $isImage = intval($att["is_image"] ?? 0) === 1;
+        }
+
+        if ($fileUrl && !str_starts_with($fileUrl, "http")) {
+            $fileUrl = "https://emergency-response.alertaraqc.com/" . ltrim($fileUrl, "/");
+        }
 
         $messages[] = [
             "id" => strval($row["id"]),
