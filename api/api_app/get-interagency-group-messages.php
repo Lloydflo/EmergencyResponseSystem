@@ -32,25 +32,17 @@ try {
         a.mime_type,
         a.is_image
     FROM interagency_groups_threads_read m
-    LEFT JOIN users u
-        ON u.id = (
-            SELECT u2.id
-            FROM users u2
-            WHERE
-                CAST(u2.id AS CHAR CHARACTER SET utf8mb4) COLLATE utf8mb4_unicode_ci
-                = m.sender_user_id COLLATE utf8mb4_unicode_ci
-                OR
-                u2.name COLLATE utf8mb4_unicode_ci
-                = m.sender_user_id COLLATE utf8mb4_unicode_ci
-            ORDER BY
-                CASE
-                    WHEN CAST(u2.id AS CHAR CHARACTER SET utf8mb4) COLLATE utf8mb4_unicode_ci
-                    = m.sender_user_id COLLATE utf8mb4_unicode_ci THEN 0
-                    ELSE 1
-                END,
-                u2.id DESC
-            LIMIT 1
-        )
+   LEFT JOIN users u
+    ON u.id = (
+        SELECT MAX(u2.id)
+        FROM users u2
+        WHERE
+            CAST(u2.id AS CHAR CHARACTER SET utf8mb4) COLLATE utf8mb4_unicode_ci
+            = m.sender_user_id COLLATE utf8mb4_unicode_ci
+            OR
+            u2.name COLLATE utf8mb4_unicode_ci
+            = m.sender_user_id COLLATE utf8mb4_unicode_ci
+    )
     LEFT JOIN interagency_message_attachments a
     ON a.message_id = m.id
     WHERE m.group_id = :group_id
