@@ -740,34 +740,44 @@ function initMap() {
     console.log("✅ Dispatch map loaded (Leaflet, real-time)");
 }
 
-function addIncidentMarker(id, lat, lng, info) {
-    if (incidentMarkers[id]) {
-        map.removeLayer(incidentMarkers[id]);
-    }
-    const marker = L.marker([lat, lng], { icon: getIncidentIcon() })
-        .addTo(map)
-        .bindPopup(`<strong>${info}</strong>`);
-    incidentMarkers[id] = marker;
-}
-
-
 // Use the same getIcon as gps.php for all marker types
 
 // ===============================
 // ICONS (sync with gps.php)
 // ===============================
 function getIcon(type) {
-    const icons = {
-        ambulance: "https://maps.google.com/mapfiles/ms/icons/green-dot.png",
-        police: "https://maps.google.com/mapfiles/ms/icons/blue-dot.png",
-        fire: "https://maps.google.com/mapfiles/ms/icons/red-dot.png",
-        incident: "https://maps.google.com/mapfiles/ms/icons/yellow-dot.png"
-    };
-    return L.icon({
-        iconUrl: icons[type] || icons.incident,
-        iconSize: [32, 32],
-        iconAnchor: [16, 32]
+    const meta = getMarkerIconMeta(type);
+    return L.divIcon({
+        className: 'ers-unit-div-icon',
+        html: `
+            <div style="width:38px;height:38px;border-radius:50% 50% 50% 8px;transform:rotate(-45deg);background:${meta.color};border:2px solid #fff;box-shadow:0 8px 18px rgba(15,23,42,.35);display:flex;align-items:center;justify-content:center;">
+                <i class="fas ${meta.icon}" style="transform:rotate(45deg);color:#fff;font-size:17px;line-height:1;"></i>
+            </div>
+        `,
+        iconSize: [38, 38],
+        iconAnchor: [19, 38],
+        popupAnchor: [0, -34]
     });
+}
+
+function getMarkerIconMeta(type) {
+    const key = String(type || '').trim().toLowerCase();
+    const icons = {
+        ambulance: { icon: 'fa-ambulance', color: '#16a34a' },
+        medical: { icon: 'fa-ambulance', color: '#16a34a' },
+        police: { icon: 'fa-shield-alt', color: '#2563eb' },
+        crime: { icon: 'fa-shield-alt', color: '#2563eb' },
+        fire: { icon: 'fa-truck', color: '#dc2626' },
+        rescue: { icon: 'fa-life-ring', color: '#ea580c' },
+        incident: { icon: 'fa-exclamation-triangle', color: '#f59e0b' },
+        other: { icon: 'fa-truck-medical', color: '#64748b' }
+    };
+    return icons[key] || icons.other;
+}
+
+function markerLegendSwatch(type) {
+    const meta = getMarkerIconMeta(type);
+    return `<span style="width:22px;height:22px;border-radius:50%;background:${meta.color};display:inline-flex;align-items:center;justify-content:center;margin-right:7px;box-shadow:0 1px 3px rgba(0,0,0,.2);"><i class="fas ${meta.icon}" style="color:#fff;font-size:11px;"></i></span>`;
 }
 // ===============================
 // LEGEND CONTROL (sync with gps.php)
@@ -786,10 +796,11 @@ function addLegendControl() {
         div.style.lineHeight = '1.4';
         div.innerHTML = `
             <div style="font-weight:700;margin-bottom:6px;color:#111827">Legend</div>
-            <div style="display:flex;align-items:center;margin-bottom:4px;color:#374151"><img src="https://maps.google.com/mapfiles/ms/icons/green-dot.png" width="14" height="14" style="margin-right:6px">Ambulance</div>
-            <div style="display:flex;align-items:center;margin-bottom:4px;color:#374151"><img src="https://maps.google.com/mapfiles/ms/icons/blue-dot.png" width="14" height="14" style="margin-right:6px">Police</div>
-            <div style="display:flex;align-items:center;margin-bottom:4px;color:#374151"><img src="https://maps.google.com/mapfiles/ms/icons/red-dot.png" width="14" height="14" style="margin-right:6px">Fire</div>
-            <div style="display:flex;align-items:center;color:#374151"><img src="https://maps.google.com/mapfiles/ms/icons/yellow-dot.png" width="14" height="14" style="margin-right:6px">Incident</div>
+            <div style="display:flex;align-items:center;margin-bottom:4px;color:#374151">${markerLegendSwatch('ambulance')}Ambulance</div>
+            <div style="display:flex;align-items:center;margin-bottom:4px;color:#374151">${markerLegendSwatch('police')}Police</div>
+            <div style="display:flex;align-items:center;margin-bottom:4px;color:#374151">${markerLegendSwatch('fire')}Fire</div>
+            <div style="display:flex;align-items:center;margin-bottom:4px;color:#374151">${markerLegendSwatch('rescue')}Rescue</div>
+            <div style="display:flex;align-items:center;color:#374151">${markerLegendSwatch('incident')}Incident</div>
             <div style="margin-top:6px;font-size:11px;color:#4b5563">Heatmap shows recent hotspots</div>
         `;
         return div;
@@ -851,6 +862,7 @@ function syncUnitMarkers(items) {
             const label = `${id}`;
             if (markers[id]) {
                 markers[id].marker.setLatLng([lat, lng]);
+                markers[id].marker.setIcon(getIcon(type));
                 const popupHtml = `
                     <strong>${label}</strong><br>
                     ${typeof speed === 'number' && isFinite(speed) ? `Speed: ${speed.toFixed(1)} km/h<br>` : ''}
@@ -858,6 +870,7 @@ function syncUnitMarkers(items) {
                 `;
                 markers[id].marker.bindPopup(popupHtml);
                 markers[id].speedKph = speed;
+                markers[id].unitType = String(type || '').toLowerCase();
             } else {
                 addUnitMarker(id, lat, lng, label, type, speed);
             }
@@ -881,12 +894,14 @@ function syncAvailableUnitMarkers(items) {
         if (!isNaN(lat) && !isNaN(lng)) {
             if (markers[id]) {
                 markers[id].marker.setLatLng([lat, lng]);
+                markers[id].marker.setIcon(getIcon(type));
                 markers[id].marker.bindPopup(`
                     <strong>${id}</strong><br>
                     ${typeof speed === 'number' && isFinite(speed) ? `Speed: ${speed.toFixed(1)} km/h<br>` : ''}
                     Coords: ${lat.toFixed(5)}, ${lng.toFixed(5)}
                 `);
                 markers[id].speedKph = speed;
+                markers[id].unitType = String(type || '').toLowerCase();
             } else {
                 addUnitMarker(id, lat, lng, `${id}`, type, speed);
             }

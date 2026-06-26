@@ -264,11 +264,16 @@ append_type_filter($where, $params, 'i.type', $typeValues, 'incident');
 
 if ($search !== '') {
     $where[] = "(
+        CAST(i.id AS CHAR) LIKE :search OR
         i.reference_no LIKE :search OR
+        i.title LIKE :search OR
         i.type LIKE :search OR
         i.location_address LIKE :search OR
         i.description LIKE :search OR
-        u.identifier LIKE :search" .
+        c.caller_name LIKE :search OR
+        c.caller_phone LIKE :search OR
+        u.identifier LIKE :search OR
+        u.unit_type LIKE :search" .
         ($resourceRecordsTable !== null ? " OR ar.name LIKE :search OR ar.driver_name LIKE :search OR ar.plate_number LIKE :search" : '') .
     ')';
     $params[':search'] = '%' . $search . '%';

@@ -314,7 +314,7 @@ try {
                     <i class="fas fa-paper-plane"></i>
                     Request
                 </button>
-                <button class="quick-action-btn" onclick="emergencyAllocation()">
+                <button class="quick-action-btn" id="emergencyAllocationBtn" onclick="emergencyAllocation()">
                     <i class="fas fa-exclamation-triangle"></i>
                     Emergency Allocation
                 </button>
@@ -2157,26 +2157,60 @@ try {
 
 
         function emergencyAllocation() {
-            if (confirm('Activate emergency resource allocation protocol? This will override normal procedures and prioritize all available resources.')) {
-                // In production, this would trigger an API call
-                fetch('api/emergency_allocation.php', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ action: 'activate' })
-                }).then(response => response.json())
-                  .then(data => {
-                      if (data.success) {
-                          showNotification('Emergency allocation protocol activated. All available resources prioritized.', 'error');
-                          // Refresh resource list
-                          setTimeout(() => location.reload(), 2000);
-                      } else {
-                          showNotification('Failed to activate emergency protocol: ' + (data.error || 'Unknown error'), 'error');
-                      }
-                  }).catch(error => {
-                      console.error('Error:', error);
-                      showNotification('Emergency protocol activation initiated (simulated)', 'error');
-                  });
+            if (!confirm('Activate emergency resource allocation protocol? Available units will be assigned to active incidents by priority.')) {
+                return;
             }
+
+            const btn = document.getElementById('emergencyAllocationBtn');
+            const originalHtml = btn ? btn.innerHTML : '';
+            if (btn) {
+                btn.disabled = true;
+                btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Allocating...';
+            }
+
+            fetch('api/emergency_allocation.php', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+                credentials: 'same-origin',
+                body: JSON.stringify({ action: 'activate' })
+            }).then(async response => {
+                const data = await response.json().catch(() => ({}));
+                if (!response.ok || !(data && (data.ok || data.success))) {
+                    throw new Error(data && data.error ? data.error : 'Unknown error');
+                }
+                return data;
+            }).then(data => {
+                const allocated = Number(data.allocated_count || data.summary?.units_allocated || 0);
+                const incidents = Number(data.active_incidents || data.summary?.active_incidents || 0);
+                const availableBefore = Number(data.available_units_before || data.summary?.units_available_before || 0);
+                const remaining = Number(data.available_units_after || data.summary?.units_available_after || 0);
+
+                if (allocated > 0) {
+                    const remainingNote = remaining === 0 ? ' All available units are now committed.' : ` ${remaining} unit${remaining === 1 ? '' : 's'} still available.`;
+                    showNotification(`Emergency allocation complete: ${allocated} unit${allocated === 1 ? '' : 's'} assigned across ${incidents} active incident${incidents === 1 ? '' : 's'}.${remainingNote}`, 'success');
+                } else if (incidents <= 0) {
+                    showNotification('Emergency allocation checked: no active incidents need units right now.', 'info');
+                } else if (availableBefore > 0) {
+                    showNotification('Emergency allocation checked: active incidents already have priority unit coverage.', 'info');
+                } else {
+                    showNotification('Emergency allocation checked: no available units could be assigned.', 'info');
+                }
+
+                if (typeof loadResources === 'function') {
+                    loadResources(false);
+                }
+                if (typeof loadDispatcherBackupData === 'function') {
+                    loadDispatcherBackupData().catch(() => {});
+                }
+            }).catch(error => {
+                console.error('Emergency allocation error:', error);
+                showNotification('Failed to activate emergency allocation: ' + error.message, 'error');
+            }).finally(() => {
+                if (btn) {
+                    btn.disabled = false;
+                    btn.innerHTML = originalHtml || '<i class="fas fa-exclamation-triangle"></i> Emergency Allocation';
+                }
+            });
         }
 
         function resourceReport() {
