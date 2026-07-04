@@ -15,7 +15,14 @@ if ($responder_id <= 0 || $responder_name === "" || $requested_department === ""
     exit;
 }
 
- $stmt->execute([
+try {
+    $stmt = $pdo->prepare("
+        INSERT INTO backup_requests
+            (responder_id, responder_name, department, requested_department, resources, is_full_backup, incident_id)
+        VALUES (?, ?, ?, ?, ?, ?, ?)
+    ");
+
+    $stmt->execute([
         $responder_id,
         $responder_name,
         $department,
@@ -32,7 +39,7 @@ if ($responder_id <= 0 || $responder_name === "" || $requested_department === ""
         "message" => "Backup request sent",
         "id" => $newId
     ]);
-     catch (Throwable $e) {
+} catch (Throwable $e) {
     echo json_encode([
         "success" => false,
         "message" => $e->getMessage()
