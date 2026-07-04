@@ -1287,7 +1287,7 @@ document.addEventListener('DOMContentLoaded', () => {
         if (!container) return;
         const hasCards = container.querySelector('.call-card');
         if (hasCards) return; // server-side rendered
-        fetch('api/incidents_list.php?status=pending')
+        fetch('api/incidents_list.php?status=active')
             .then(r => r.json())
             .then(res => {
                 if (!res.ok) return;
