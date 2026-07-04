@@ -15,7 +15,7 @@ if ($responder_id <= 0 || $responder_name === "" || $requested_department === ""
     exit;
 }
 
-    $stmt->execute([
+ $stmt->execute([
         $responder_id,
         $responder_name,
         $department,
@@ -25,12 +25,14 @@ if ($responder_id <= 0 || $responder_name === "" || $requested_department === ""
         $incident_id
     ]);
 
+    $newId = (int)$pdo->lastInsertId();
+
     echo json_encode([
         "success" => true,
-        "message" => "Backup request sent"
+        "message" => "Backup request sent",
+        "id" => $newId
     ]);
-
-} catch (Throwable $e) {
+     catch (Throwable $e) {
     echo json_encode([
         "success" => false,
         "message" => $e->getMessage()
