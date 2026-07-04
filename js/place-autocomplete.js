@@ -82,18 +82,19 @@
         const dropdown = document.createElement('div');
         dropdown.className = 'autocomplete-dropdown';
         dropdown.style.position = 'absolute';
-        dropdown.style.background = '#fff';
-        dropdown.style.border = '1px solid #e5e7eb';
+        dropdown.style.background = '#ffffff';
+        dropdown.style.border = '1px solid #cbd5e1';
+        dropdown.style.borderRadius = '8px';
         dropdown.style.zIndex = 2000;
         dropdown.style.width = input.offsetWidth + 'px';
-        dropdown.style.maxHeight = '180px';
+        dropdown.style.maxHeight = '220px';
         dropdown.style.overflowY = 'auto';
-        dropdown.style.boxShadow = '0 2px 8px rgba(0,0,0,0.08)';
+        dropdown.style.boxShadow = '0 10px 30px rgba(0,0,0,0.15)';
         const parent = input.parentElement;
         if (parent) {
             parent.style.position = 'relative';
             dropdown.style.left = '0px';
-            dropdown.style.top = (input.offsetTop + input.offsetHeight) + 'px';
+            dropdown.style.top = (input.offsetTop + input.offsetHeight + 4) + 'px';
             parent.appendChild(dropdown);
         }
         return dropdown;
@@ -146,7 +147,7 @@
 
         function renderMessage(text) {
             if (!dropdown) return;
-            dropdown.innerHTML = `<div style="padding:8px 12px;color:#888;">${text}</div>`;
+            dropdown.innerHTML = `<div style="padding:12px 14px; color:#64748b; font-size:0.9rem; font-weight:500; text-align:center;">${text}</div>`;
         }
 
         function selectPlace(place) {
@@ -164,9 +165,20 @@
             const directCoords = parseCoordinateText(rawInput);
             if (directCoords) {
                 const coordItem = document.createElement('div');
-                coordItem.style.padding = '8px 12px';
+                coordItem.style.padding = '10px 14px';
                 coordItem.style.cursor = 'pointer';
+                coordItem.style.color = '#1f2937';
+                coordItem.style.fontSize = '0.95rem';
+                coordItem.style.borderBottom = '1px solid #f0f0f0';
+                coordItem.style.fontWeight = '500';
+                coordItem.style.transition = 'background-color 0.2s ease';
                 coordItem.textContent = `Use coordinates: ${directCoords.lat.toFixed(6)}, ${directCoords.lon.toFixed(6)}`;
+                coordItem.addEventListener('mouseenter', function () {
+                    coordItem.style.backgroundColor = '#e0f2fe';
+                });
+                coordItem.addEventListener('mouseleave', function () {
+                    coordItem.style.backgroundColor = 'transparent';
+                });
                 coordItem.addEventListener('mousedown', function (e) {
                     e.preventDefault();
                     selectPlace({
@@ -188,8 +200,18 @@
             items.forEach((place) => {
                 const item = document.createElement('div');
                 item.textContent = place.display_name || '';
-                item.style.padding = '8px 12px';
+                item.style.padding = '10px 14px';
                 item.style.cursor = 'pointer';
+                item.style.color = '#1f2937';
+                item.style.fontSize = '0.95rem';
+                item.style.borderBottom = '1px solid #f0f0f0';
+                item.style.transition = 'background-color 0.2s ease';
+                item.addEventListener('mouseenter', function () {
+                    item.style.backgroundColor = '#e0f2fe';
+                });
+                item.addEventListener('mouseleave', function () {
+                    item.style.backgroundColor = 'transparent';
+                });
                 item.addEventListener('mousedown', function (e) {
                     e.preventDefault();
                     selectPlace(place);

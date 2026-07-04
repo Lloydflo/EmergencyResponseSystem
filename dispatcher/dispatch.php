@@ -174,10 +174,6 @@ try {
                     <i class="fas fa-notes-medical"></i>
                     <span>Mass Casualty</span>
                 </button>
-                <button class="quick-action-btn" onclick="resourceRequest()">
-                    <i class="fas fa-box"></i>
-                    <span>Resource Request</span>
-                </button>
             </section>
 
             <div class="dispatch-grid">
@@ -1291,7 +1287,7 @@ document.addEventListener('DOMContentLoaded', () => {
         if (!container) return;
         const hasCards = container.querySelector('.call-card');
         if (hasCards) return; // server-side rendered
-        fetch('api/incidents_list.php?status=pending')
+        fetch('api/incidents_list.php?status=active')
             .then(r => r.json())
             .then(res => {
                 if (!res.ok) return;
