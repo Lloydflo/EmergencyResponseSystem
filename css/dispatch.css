@@ -235,7 +235,7 @@
 
 .quick-actions {
     display: grid;
-    grid-template-columns: repeat(4, minmax(0, 1fr));
+    grid-template-columns: repeat(3, minmax(0, 1fr));
     gap: 1rem;
     margin-bottom: 1.5rem;
 }
@@ -262,10 +262,6 @@
 
 .quick-action-btn:nth-child(3) {
     background: linear-gradient(155deg, #7c2d12 0%, #c2410c 100%);
-}
-
-.quick-action-btn:nth-child(4) {
-    background: linear-gradient(155deg, #14532d 0%, #15803d 100%);
 }
 
 .quick-action-btn:hover {

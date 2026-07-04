@@ -174,10 +174,6 @@ try {
                     <i class="fas fa-notes-medical"></i>
                     <span>Mass Casualty</span>
                 </button>
-                <button class="quick-action-btn" onclick="resourceRequest()">
-                    <i class="fas fa-box"></i>
-                    <span>Resource Request</span>
-                </button>
             </section>
 
             <div class="dispatch-grid">

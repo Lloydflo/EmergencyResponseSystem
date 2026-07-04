@@ -1064,10 +1064,10 @@ try {
                                 <table class="dispatcher-request-table">
                                     <thead>
                                         <tr>
-                                            <th>Add</th>
                                             <th>Unit</th>
                                             <th>Type</th>
                                             <th>Status</th>
+                                            <th>Action</th>
                                         </tr>
                                     </thead>
                                     <tbody id="dispatcherAvailableUnitsBody">
@@ -1079,21 +1079,22 @@ try {
                                             <?php foreach ($dispatcherAvailableUnits as $unit): ?>
                                                 <tr data-unit-id="<?php echo (int)$unit['id']; ?>">
                                                     <td>
+                                                        <strong><?php echo htmlspecialchars((string)$unit['identifier']); ?></strong><br>
+                                                        <span class="dispatcher-request-subtle">Unit ID: <?php echo (int)$unit['id']; ?></span>
+                                                    </td>
+                                                    <td><?php echo htmlspecialchars(ucfirst((string)$unit['unit_type'])); ?></td>
+                                                    <td><span class="status-badge status-approved">Available</span></td>
+                                                    <td>
                                                         <button
                                                             type="button"
                                                             class="request-action-btn dispatcher-unit-btn"
                                                             data-toggle-dispatcher-unit="<?php echo (int)$unit['id']; ?>"
                                                             data-unit-label="<?php echo htmlspecialchars((string)$unit['identifier'], ENT_QUOTES); ?>"
                                                         >
-                                                            <i class="fas fa-plus"></i>
+                                                            <i class="fas fa-check"></i>
+                                                            <span>Dispatch</span>
                                                         </button>
                                                     </td>
-                                                    <td>
-                                                        <strong><?php echo htmlspecialchars((string)$unit['identifier']); ?></strong><br>
-                                                        <span class="dispatcher-request-subtle">Unit ID: <?php echo (int)$unit['id']; ?></span>
-                                                    </td>
-                                                    <td><?php echo htmlspecialchars(ucfirst((string)$unit['unit_type'])); ?></td>
-                                                    <td><span class="status-badge status-approved">Available</span></td>
                                                 </tr>
                                             <?php endforeach; ?>
                                         <?php endif; ?>
@@ -1101,7 +1102,7 @@ try {
                                 </table>
                             </div>
                             <div class="dispatcher-selected-units" id="dispatcherSelectedUnits">
-                                Select available units using the + button.
+                                Select available units using the Dispatch button.
                             </div>
                         </section>
 
@@ -1132,7 +1133,7 @@ try {
                 </div>
                 <div class="modal-footer">
                     <button type="button" class="btn-cancel" onclick="closeDispatcherRequestModal()">Cancel</button>
-                    <button type="submit" class="btn-submit" id="dispatcherRequestSubmitBtn">Send Request to Responders</button>
+                    <button type="submit" class="btn-submit" id="dispatcherRequestSubmitBtn">Send Request</button>
                 </div>
             </form>
         </div>
@@ -1666,21 +1667,22 @@ try {
             tbody.innerHTML = dispatcherAvailableUnitsData.map((unit) => `
                 <tr data-unit-id="${unit.id}">
                     <td>
+                        <strong>${escapeHtml(unit.identifier || `Unit #${unit.id}`)}</strong><br>
+                        <span class="dispatcher-request-subtle">Unit ID: ${escapeHtml(unit.id || '')}</span>
+                    </td>
+                    <td>${escapeHtml((unit.unit_type || '').charAt(0).toUpperCase() + (unit.unit_type || '').slice(1))}</td>
+                    <td><span class="status-badge status-approved">Available</span></td>
+                    <td>
                         <button
                             type="button"
                             class="request-action-btn dispatcher-unit-btn"
                             data-toggle-dispatcher-unit="${unit.id}"
                             data-unit-label="${escapeAttrValue(unit.identifier || `Unit #${unit.id}`)}"
                         >
-                            <i class="fas fa-plus"></i>
+                            <i class="fas fa-check"></i>
+                            <span>Dispatch</span>
                         </button>
                     </td>
-                    <td>
-                        <strong>${escapeHtml(unit.identifier || `Unit #${unit.id}`)}</strong><br>
-                        <span class="dispatcher-request-subtle">Unit ID: ${escapeHtml(unit.id || '')}</span>
-                    </td>
-                    <td>${escapeHtml((unit.unit_type || '').charAt(0).toUpperCase() + (unit.unit_type || '').slice(1))}</td>
-                    <td><span class="status-badge status-approved">Available</span></td>
                 </tr>
             `).join('');
         }
@@ -1806,7 +1808,7 @@ try {
             }
 
             if (selectedDispatcherUnitIds.size === 0) {
-                selectedUnitsEl.innerHTML = 'Select available units using the + button.';
+                selectedUnitsEl.innerHTML = 'Select available units using the Dispatch button.';
                 syncDispatcherSubmitState();
                 return;
             }
@@ -1984,7 +1986,7 @@ try {
                 })
                 .finally(() => {
                     if (submitBtn) {
-                        submitBtn.textContent = 'Send Request to Responders';
+                        submitBtn.textContent = 'Send Request';
                         syncDispatcherSubmitState();
                     }
                 });
