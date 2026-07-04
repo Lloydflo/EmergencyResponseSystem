@@ -21,9 +21,12 @@
 
   const modal = qs('#reviewModal');
   const modalOverlay = qs('#reviewModalOverlay');
+  const modalDialog = qs('.review-modal-dialog');
   const modalClose = qs('#modalClose');
   const closeFeedbackBtn = qs('#closeFeedbackBtn');
   const saveFeedbackBtn = qs('#saveFeedbackBtn');
+  const incidentDetailPanel = qs('#incidentDetailPanel');
+  const feedbackReviewPanel = qs('#feedbackReviewPanel');
 
   const modalTitle = qs('#modalTitle');
   const modalStatusBadge = qs('#modalStatusBadge');
@@ -188,10 +191,10 @@
             </div>
           </td>
           <td class="review-table-actions">
-            <button type="button" class="btn-card-action" data-open-review="${incidentId}">
+            <button type="button" class="btn-card-action" data-open-review="${incidentId}" data-review-mode="details">
               <i class="fas fa-eye"></i> View
             </button>
-            <button type="button" class="btn-card-action primary" data-open-review="${incidentId}">
+            <button type="button" class="btn-card-action primary" data-open-review="${incidentId}" data-review-mode="feedback">
               <i class="fas fa-star"></i> Feedback
             </button>
           </td>
@@ -220,16 +223,19 @@
     `;
 
     qsa('[data-open-review]', container).forEach(button => {
-      button.addEventListener('click', () => {
+      button.addEventListener('click', event => {
+        event.preventDefault();
+        event.stopPropagation();
         const incidentId = parseInt(button.getAttribute('data-open-review') || '', 10);
+        const mode = button.getAttribute('data-review-mode') || 'details';
         if (Number.isInteger(incidentId)) {
-          openReviewModal(incidentId);
+          openReviewModal(incidentId, mode);
         }
       });
     });
   }
 
-  async function openReviewModal(incidentId) {
+  async function openReviewModal(incidentId, mode = 'details') {
     resetModalState();
     feedbackIncidentId.value = String(incidentId);
     showModal();
@@ -253,6 +259,7 @@
       populateIncidentSummary(detailsData.incident);
       renderFeedback(feedbackData);
       renderProofs(proofsData);
+      focusReviewModalSection(mode);
     } catch (error) {
       feedbackList.innerHTML = `<div class="feedback-empty">${escapeHtml(error.message || 'Unable to load incident review.')}</div>`;
       proofGallery.innerHTML = '<div class="proof-empty">Unable to load proof gallery.</div>';
@@ -422,6 +429,9 @@
     modalOverlay.hidden = false;
     modal.hidden = false;
     document.body.classList.add('review-modal-open');
+    if (modalDialog) {
+      modalDialog.scrollTop = 0;
+    }
   }
 
   function hideModal() {
@@ -457,6 +467,36 @@
     feedbackSummary.innerHTML = '';
     feedbackList.innerHTML = '<div class="feedback-empty">Loading feedback...</div>';
     proofGallery.innerHTML = '<div class="proof-empty">Loading proof gallery...</div>';
+  }
+
+  function focusReviewModalSection(mode) {
+    if (!modalDialog) return;
+
+    const isFeedbackMode = mode === 'feedback';
+    const target = isFeedbackMode ? feedbackReviewPanel : incidentDetailPanel;
+
+    window.requestAnimationFrame(() => {
+      if (!target) {
+        modalDialog.scrollTo({ top: 0, behavior: 'auto' });
+        return;
+      }
+
+      if (isFeedbackMode) {
+        const dialogBox = modalDialog.getBoundingClientRect();
+        const targetBox = target.getBoundingClientRect();
+        const nextTop = modalDialog.scrollTop + targetBox.top - dialogBox.top - 16;
+        modalDialog.scrollTo({ top: Math.max(0, nextTop), behavior: 'smooth' });
+        target.classList.add('review-panel-focus');
+        window.setTimeout(() => target.classList.remove('review-panel-focus'), 1200);
+        const focusTarget = qs('.rating-star', ratingInput) || feedbackNoteInput;
+        if (focusTarget) {
+          window.setTimeout(() => focusTarget.focus({ preventScroll: true }), 260);
+        }
+        return;
+      }
+
+      modalDialog.scrollTo({ top: 0, behavior: 'auto' });
+    });
   }
 
   function setSelectedRating(value) {

@@ -114,7 +114,7 @@ if ($reviewerName === '') {
             </div>
 
             <div class="review-modal-body">
-                <section class="incident-spotlight">
+                <section id="incidentDetailPanel" class="incident-spotlight">
                     <div class="spotlight-copy">
                         <div class="spotlight-badges">
                             <span id="modalStatusBadge" class="status-chip">Status</span>
@@ -164,7 +164,7 @@ if ($reviewerName === '') {
                 </section>
 
                 <section class="review-modal-columns">
-                    <article class="review-panel">
+                    <article id="feedbackReviewPanel" class="review-panel">
                         <div class="panel-head">
                             <div>
                                 <h4><i class="fas fa-pen-to-square"></i> Add Dispatcher Feedback</h4>

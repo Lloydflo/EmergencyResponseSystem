@@ -44,6 +44,37 @@ $departmentMap = [
 $departmentKey = strtolower($department);
 $unitTypeFilter = isset($departmentMap[$departmentKey]) ? $departmentMap[$departmentKey] : '';
 
+function protocol_alert_matches_department(array $details, string $unitTypeFilter, string $departmentKey): bool {
+    if ($unitTypeFilter === '') {
+        return true;
+    }
+
+    $audience = strtolower(trim((string)($details['audience'] ?? '')));
+    if ($audience === '' && isset($details['fields']) && is_array($details['fields'])) {
+        $audience = strtolower(trim((string)($details['fields']['audience'] ?? '')));
+    }
+
+    if ($audience === '') {
+        return true;
+    }
+
+    if (strpos($audience, 'all') !== false || strpos($audience, 'public') !== false) {
+        return true;
+    }
+
+    if ($unitTypeFilter === 'ambulance') {
+        return strpos($audience, 'ems') !== false
+            || strpos($audience, 'medical') !== false
+            || strpos($audience, 'ambulance') !== false;
+    }
+
+    if ($unitTypeFilter === 'police') {
+        return strpos($audience, 'police') !== false || strpos($audience, 'crime') !== false;
+    }
+
+    return strpos($audience, $unitTypeFilter) !== false || strpos($audience, $departmentKey) !== false;
+}
+
 try {
     $sql = "
         SELECT
@@ -74,7 +105,13 @@ try {
             ELSE d.incident_id
         END
         LEFT JOIN units u ON u.id = d.unit_id
-        WHERE a.action IN ('dispatch_confirmed', 'incident_resolved')
+        WHERE a.action IN (
+            'dispatch_confirmed',
+            'incident_resolved',
+            'emergency_broadcast',
+            'lockdown_protocol',
+            'mass_casualty_incident'
+        )
           AND a.id > ?
     ";
 
@@ -85,6 +122,11 @@ try {
             OR (
                 a.action = 'incident_resolved'
                 AND LOWER(COALESCE(i.type, '')) IN (?, ?)
+            )
+            OR a.action IN (
+                'emergency_broadcast',
+                'lockdown_protocol',
+                'mass_casualty_incident'
             )
         ) ";
         $params[] = $unitTypeFilter;
@@ -106,6 +148,15 @@ try {
             if (is_array($decoded)) {
                 $details = $decoded;
             }
+        }
+
+        $isProtocolAlert = in_array((string)($row['action'] ?? ''), [
+            'emergency_broadcast',
+            'lockdown_protocol',
+            'mass_casualty_incident'
+        ], true);
+        if ($isProtocolAlert && $unitTypeFilter !== '' && !protocol_alert_matches_department($details ?? [], $unitTypeFilter, $departmentKey)) {
+            continue;
         }
 
         $notifications[] = [

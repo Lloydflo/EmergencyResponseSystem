@@ -685,6 +685,10 @@
     padding: 1.15rem;
 }
 
+.review-panel.review-panel-focus {
+    box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.28), 0 18px 38px rgba(15, 23, 42, 0.12);
+}
+
 .review-panel h4 {
     margin: 0;
     display: flex;
