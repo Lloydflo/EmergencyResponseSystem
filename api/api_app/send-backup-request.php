@@ -17,7 +17,7 @@ if ($responder_id <= 0 || $responder_name === "" || $requested_department === ""
 
 try {
     $stmt = $pdo->prepare("
-        INSERT INTO backup_requests
+        INSERT INTO responder_backup_requests
             (responder_id, responder_name, department, requested_department, resources, is_full_backup, incident_id)
         VALUES (?, ?, ?, ?, ?, ?, ?)
     ");
