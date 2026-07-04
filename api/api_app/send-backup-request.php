@@ -2,6 +2,8 @@
 header("Content-Type: application/json");
 require __DIR__ . "/connect.php";
 
+$pdo = db();   // ← ADD THIS LINE
+
 $responder_id = intval($_POST["responder_id"] ?? 0);
 $responder_name = trim($_POST["responder_name"] ?? "");
 $department = trim($_POST["department"] ?? "");
