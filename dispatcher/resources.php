@@ -724,9 +724,7 @@ try {
                     // Build actions and render inline (up to 4)
                     const btns = [];
                     const resourceActions = Array.isArray(r.actions) ? r.actions.slice() : [];
-                    if (!resourceActions.includes('deploy')) resourceActions.unshift('deploy');
                     const actionSet = new Set(resourceActions);
-                    if (actionSet.has('deploy')) btns.push(`<button class=\"resource-action-btn deploy\" title=\"Deploy\" aria-label=\"Deploy\" onclick=\"deployResource(this)\"><i class=\"fas fa-play\"></i></button>`);
                     if (actionSet.has('track')) btns.push(`<button class=\"resource-action-btn track\" title=\"Track\" aria-label=\"Track\" onclick=\"trackResource(this)\"><i class=\"fas fa-location-arrow\"></i></button>`);
                     if (actionSet.has('service')) btns.push(`<button class=\"resource-action-btn service\" title=\"Service\" aria-label=\"Service\" onclick=\"serviceResource(this)\"><i class=\"fas fa-wrench\"></i></button>`);
                     if (actionSet.has('details')) btns.push(`<button class=\"resource-action-btn details\" title=\"Details\" aria-label=\"Details\" onclick=\"resourceDetails(this)\"><i class=\"fas fa-info-circle\"></i></button>`);
@@ -1181,42 +1179,6 @@ try {
         </div>
     </div>
 
-    <!-- Deploy Resource Modal -->
-    <div class="resource-request-modal" id="deployModal">
-        <div class="modal-content">
-            <div class="modal-header">
-                <h3>Deploy Resource</h3>
-                <button class="modal-close" onclick="closeDeployModal()">
-                    <i class="fas fa-times"></i>
-                </button>
-            </div>
-            <div class="modal-body">
-                <form id="deployForm" onsubmit="submitDeployForm(event)">
-                    <div class="form-group">
-                        <label for="deploy-resource-name">Resource</label>
-                        <input type="text" id="deploy-resource-name" readonly>
-                    </div>
-                    <div class="form-group">
-                        <label for="deploy-location">Location <span class="required">*</span></label>
-                        <input type="text" id="deploy-location" name="location" placeholder="Enter deployment location" required>
-                    </div>
-                    <div class="form-group">
-                        <label for="deploy-quantity">Quantity <span class="required">*</span></label>
-                        <input type="number" id="deploy-quantity" name="quantity" min="1" value="1" required>
-                    </div>
-                    <div class="form-group">
-                        <label for="deploy-notes">Notes</label>
-                        <textarea id="deploy-notes" name="notes" rows="3" placeholder="Add deployment notes..."></textarea>
-                    </div>
-                    <div class="modal-footer">
-                        <button type="button" class="btn-cancel" onclick="closeDeployModal()">Cancel</button>
-                        <button type="submit" class="btn-submit">Deploy</button>
-                    </div>
-                </form>
-            </div>
-        </div>
-    </div>
-
     <script>
         function refreshAIPredictions() {
             const container = document.getElementById('ai-predictive-content');
@@ -1339,97 +1301,6 @@ try {
 
             currentTab = tabName;
             showNotification(`${tabName.charAt(0).toUpperCase() + tabName.slice(1)} resources loaded`, 'info');
-        }
-
-        // Resource deployment functionality
-        let pendingDeployContext = null;
-
-        function deployResource(button) {
-            const row = button.closest('tr');
-            if (!row) return;
-            const resourceName = row.getAttribute('data-resource-name') || 'Resource';
-            const resourceId = row.getAttribute('data-resource-id');
-            const resourceType = row.getAttribute('data-type');
-            const resourceSource = row.getAttribute('data-resource-source') || '';
-            const resourceLocation = row.querySelector('.detail-value') ? row.querySelector('.detail-value').textContent.trim() : '';
-            if (!resourceId) { showNotification('Missing resource id', 'error'); return; }
-            openDeployModal({
-                id: Number(resourceId),
-                type: resourceType || '',
-                source: resourceSource,
-                name: resourceName.trim(),
-                location: resourceLocation
-            });
-        }
-
-        function openDeployModal(context) {
-            const modal = document.getElementById('deployModal');
-            const form = document.getElementById('deployForm');
-            if (!modal || !form) return;
-            pendingDeployContext = context;
-            document.getElementById('deploy-resource-name').value = context.name || 'Resource';
-            document.getElementById('deploy-location').value = context.location || '';
-            document.getElementById('deploy-quantity').value = '1';
-            document.getElementById('deploy-notes').value = '';
-            modal.classList.add('show');
-            document.body.style.overflow = 'hidden';
-        }
-
-        function closeDeployModal() {
-            const modal = document.getElementById('deployModal');
-            const form = document.getElementById('deployForm');
-            if (modal) modal.classList.remove('show');
-            if (form) form.reset();
-            document.body.style.overflow = '';
-            pendingDeployContext = null;
-        }
-
-        function submitDeployForm(event) {
-            event.preventDefault();
-            if (!pendingDeployContext) {
-                showNotification('No resource selected for deployment', 'error');
-                return;
-            }
-            const formData = new FormData(event.target);
-            const location = String(formData.get('location') || '').trim();
-            const quantity = Number(formData.get('quantity') || 0);
-            const notes = String(formData.get('notes') || '').trim();
-
-            if (!location) {
-                showNotification('Location is required', 'error');
-                return;
-            }
-            if (!Number.isFinite(quantity) || quantity < 1) {
-                showNotification('Quantity must be at least 1', 'error');
-                return;
-            }
-
-            const payload = {
-                id: Number(pendingDeployContext.id),
-                type: pendingDeployContext.type,
-                source: pendingDeployContext.source || '',
-                action: 'deploy',
-                location: location,
-                quantity: quantity,
-                notes: notes
-            };
-
-            fetch('api/deploy_resource.php', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(payload)
-            })
-            .then(r => r.json())
-            .then(data => {
-                if (data && data.ok) {
-                    showNotification(`${pendingDeployContext.name} deployed to ${location}`, 'success');
-                    closeDeployModal();
-                    loadResources();
-                } else {
-                    showNotification('Failed to deploy resource' + (data && data.error ? ': ' + data.error : ''), 'error');
-                }
-            })
-            .catch(() => showNotification('Network error', 'error'));
         }
 
         // Resource tracking functionality
