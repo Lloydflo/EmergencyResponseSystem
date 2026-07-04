@@ -319,6 +319,35 @@ try {
         </div>
     </form>
 </div>
+
+<div id="dispatch-protocol-modal" class="protocol-modal" aria-hidden="true">
+    <form id="dispatch-protocol-form" class="protocol-modal-content">
+        <button type="button" class="protocol-modal-close" onclick="closeDispatchProtocolModal()" aria-label="Close">&times;</button>
+        <div class="protocol-modal-header">
+            <div class="protocol-modal-icon" id="protocol-modal-icon"><i class="fas fa-bullhorn"></i></div>
+            <div>
+                <div class="protocol-modal-eyebrow">Dispatch Protocol</div>
+                <h2 id="protocol-modal-title">Emergency Broadcast</h2>
+                <p id="protocol-modal-subtitle">Send an urgent advisory to response teams.</p>
+            </div>
+        </div>
+
+        <div id="protocol-modal-fields" class="protocol-modal-fields"></div>
+
+        <div class="protocol-preview-block">
+            <label>Message Preview</label>
+            <pre id="protocol-message-preview"></pre>
+        </div>
+
+        <div class="protocol-modal-actions">
+            <button type="button" class="protocol-btn-secondary" onclick="closeDispatchProtocolModal()">Cancel</button>
+            <button id="protocol-submit-btn" type="submit" class="protocol-btn-primary">
+                <i class="fas fa-paper-plane"></i>
+                <span>Send Protocol</span>
+            </button>
+        </div>
+    </form>
+</div>
 <script>
 // Modal logic (moved to end for guaranteed loading)
 let currentIncidentId = null;
@@ -1060,28 +1089,6 @@ function postJSON(url, payload) {
     }).then(r => r.json());
 }
 
-function emergencyBroadcast() {
-    const msg = prompt('Broadcast message:');
-    if (!msg) return;
-    postJSON('api/activity_event.php', { action: 'broadcast', entity_type: 'system', details: msg })
-        .then(() => showNotification('Emergency broadcast sent', 'success'))
-        .catch(() => showNotification('Broadcast failed', 'error'));
-}
-function lockdownProtocol() {
-    if (!confirm('Activate lockdown protocol?')) return;
-    postJSON('api/activity_event.php', { action: 'lockdown', entity_type: 'system', details: 'Lockdown initiated by dispatch' })
-        .then(() => showNotification('Lockdown protocol activated', 'warning'))
-        .catch(() => showNotification('Lockdown failed', 'error'));
-}
-
-function massCasualty() {
-    const info = prompt('Mass casualty details (location/resources):');
-    if (!info) return;
-    postJSON('api/activity_event.php', { action: 'mci', entity_type: 'incident', details: info })
-        .then(() => showNotification('MCI protocol logged', 'info'))
-        .catch(() => showNotification('MCI log failed', 'error'));
-}
-
 function resourceRequest() {
     const name = prompt('Resource name (e.g., Ventilator, Ambulance)');
     if (!name) return;
@@ -1336,56 +1343,283 @@ document.addEventListener('DOMContentLoaded', () => {
 function postJSON(url, payload) {
     return fetch(url, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+        credentials: 'same-origin',
         body: JSON.stringify(payload || {})
-    }).then(r => r.json());
+    }).then(async r => {
+        const data = await r.json().catch(() => ({}));
+        if (!r.ok) {
+            throw new Error(data.error || data.message || 'Request failed');
+        }
+        return data;
+    });
 }
 
-function emergencyBroadcast() {
-    const msg = prompt('Broadcast message to all units:');
-    if (!msg) return;
-    postJSON('api/activity_event.php', {
-        action: 'broadcast',
-        entity_type: 'system',
-        details: msg
-    }).then(res => {
-        if (res.ok) {
-            showNotification('Emergency broadcast sent', 'success');
-        } else {
-            alert('Failed to send broadcast');
+const DISPATCH_PROTOCOLS = {
+    broadcast: {
+        action: 'emergency_broadcast',
+        title: 'Emergency Broadcast',
+        subtitle: 'Send an urgent advisory to responders, selected departments, or public channels.',
+        icon: 'fa-bullhorn',
+        iconText: '🚨',
+        label: 'EMERGENCY BROADCAST',
+        tone: 'success',
+        submitLabel: 'Send Broadcast',
+        fields: [
+            { name: 'headline', label: 'Alert Title', type: 'text', required: true, value: 'Major Fire Alert' },
+            { name: 'location', label: 'Location', type: 'text', required: true, value: 'Commonwealth Avenue, Quezon City' },
+            { name: 'status', label: 'Status', type: 'select', required: true, value: 'Active', options: ['Active', 'Monitoring', 'Contained', 'Resolved'] },
+            { name: 'audience', label: 'Audience', type: 'select', required: true, value: 'All Responders', options: ['All Responders', 'Fire Department', 'Police Department', 'EMS / Medical', 'Public Advisory', 'All Departments'] },
+            { name: 'advisory', label: 'Public Advisory', type: 'textarea', required: true, full: true, value: 'Avoid the area.' },
+            { name: 'response', label: 'Responder Instruction', type: 'textarea', required: true, full: true, value: 'Fire Department and EMS respond immediately.' }
+        ],
+        preview(values) {
+            return [
+                `${this.iconText} ${this.label}`,
+                '',
+                values.headline,
+                '',
+                `Location: ${values.location}`,
+                '',
+                `Status: ${values.status}`,
+                '',
+                values.advisory,
+                '',
+                values.response
+            ].filter(line => line !== undefined && line !== null).join('\n');
         }
-    }).catch(() => alert('Network error'));
+    },
+    lockdown: {
+        action: 'lockdown_protocol',
+        title: 'Lockdown Protocol',
+        subtitle: 'Restrict movement and alert response teams when an area becomes unsafe.',
+        icon: 'fa-lock',
+        iconText: '🔴',
+        label: 'LOCKDOWN',
+        tone: 'warning',
+        submitLabel: 'Activate Lockdown',
+        fields: [
+            { name: 'area', label: 'Area', type: 'text', required: true, value: 'Barangay Holy Spirit' },
+            { name: 'reason', label: 'Reason', type: 'select', required: true, value: 'Armed suspect', options: ['Active shooter', 'Armed suspect', 'Bomb threat', 'Terrorist attack', 'Jail escape', 'Hostage situation'] },
+            { name: 'audience', label: 'Notify', type: 'select', required: true, value: 'All Responders', options: ['All Responders', 'Police Department', 'Fire Department', 'EMS / Medical', 'Public Advisory', 'All Departments'] },
+            { name: 'status', label: 'Status', type: 'select', required: true, value: 'Active', options: ['Active', 'Monitoring', 'Lifted'] },
+            { name: 'instructions', label: 'Lockdown Instructions', type: 'textarea', required: true, full: true, value: 'Secure the area. Restrict movement until cleared by command.' }
+        ],
+        preview(values) {
+            return [
+                `${this.iconText} ${this.label}`,
+                '',
+                'Area:',
+                '',
+                values.area,
+                '',
+                'Reason:',
+                '',
+                values.reason,
+                '',
+                'Status:',
+                '',
+                values.status,
+                '',
+                values.instructions
+            ].filter(line => line !== undefined && line !== null).join('\n');
+        }
+    },
+    mci: {
+        action: 'mass_casualty_incident',
+        title: 'Mass Casualty Incident',
+        subtitle: 'Declare a major incident when victims exceed immediately available resources.',
+        icon: 'fa-notes-medical',
+        iconText: '🚨',
+        label: 'MASS CASUALTY INCIDENT',
+        tone: 'error',
+        submitLabel: 'Declare MCI',
+        fields: [
+            { name: 'location', label: 'Location', type: 'text', required: true, value: 'EDSA' },
+            { name: 'victims', label: 'Victims', type: 'number', required: true, value: '42', min: '1' },
+            { name: 'priority', label: 'Priority', type: 'select', required: true, value: 'Critical', options: ['Critical', 'High', 'Medium'] },
+            { name: 'audience', label: 'Notify', type: 'select', required: true, value: 'All Departments', options: ['All Departments', 'All Responders', 'EMS / Medical', 'Fire Department', 'Police Department', 'Public Advisory'] },
+            { name: 'resources', label: 'Resources Needed', type: 'textarea', required: true, full: true, value: '12 Ambulances\nFire Units\nPolice\nHospitals' },
+            { name: 'notes', label: 'Command Notes', type: 'textarea', required: false, full: true, value: 'Prepare triage and hospital coordination.' }
+        ],
+        preview(values) {
+            const resources = String(values.resources || '')
+                .split(/\r?\n/)
+                .map(line => line.trim())
+                .filter(Boolean)
+                .map(line => `• ${line}`)
+                .join('\n');
+            return [
+                `${this.iconText} ${this.label}`,
+                '',
+                'Location:',
+                '',
+                values.location,
+                '',
+                'Victims:',
+                '',
+                values.victims,
+                '',
+                'Priority:',
+                '',
+                values.priority,
+                '',
+                'Resources Needed:',
+                '',
+                resources,
+                values.notes ? '\n' + values.notes : ''
+            ].filter(line => line !== undefined && line !== null).join('\n');
+        }
+    }
+};
+
+function emergencyBroadcast() {
+    openDispatchProtocolModal('broadcast');
 }
 
 function lockdownProtocol() {
-    if (!confirm('Activate lockdown protocol?')) return;
-    postJSON('api/activity_event.php', {
-        action: 'lockdown',
-        entity_type: 'system',
-        details: 'City-wide lockdown activated from Dispatch Center'
-    }).then(res => {
-        if (res.ok) {
-            showNotification('Lockdown protocol activated', 'warning');
-        } else {
-            alert('Failed to activate protocol');
-        }
-    }).catch(() => alert('Network error'));
+    openDispatchProtocolModal('lockdown');
 }
 
 function massCasualty() {
-    const info = prompt('Describe mass casualty incident (location/details):');
-    if (!info) return;
+    openDispatchProtocolModal('mci');
+}
+
+function openDispatchProtocolModal(kind) {
+    const config = DISPATCH_PROTOCOLS[kind];
+    const modal = document.getElementById('dispatch-protocol-modal');
+    const form = document.getElementById('dispatch-protocol-form');
+    const fields = document.getElementById('protocol-modal-fields');
+    const title = document.getElementById('protocol-modal-title');
+    const subtitle = document.getElementById('protocol-modal-subtitle');
+    const icon = document.getElementById('protocol-modal-icon');
+    const submitText = document.querySelector('#protocol-submit-btn span');
+    if (!config || !modal || !form || !fields) return;
+
+    form.dataset.kind = kind;
+    title.textContent = config.title;
+    subtitle.textContent = config.subtitle;
+    icon.innerHTML = `<i class="fas ${config.icon}"></i>`;
+    if (submitText) submitText.textContent = config.submitLabel;
+    fields.innerHTML = config.fields.map(renderProtocolField).join('');
+    modal.classList.add('is-open');
+    modal.setAttribute('aria-hidden', 'false');
+    updateDispatchProtocolPreview();
+
+    const firstField = fields.querySelector('input, select, textarea');
+    if (firstField) {
+        window.setTimeout(() => firstField.focus(), 80);
+    }
+}
+
+function closeDispatchProtocolModal() {
+    const modal = document.getElementById('dispatch-protocol-modal');
+    const form = document.getElementById('dispatch-protocol-form');
+    if (modal) {
+        modal.classList.remove('is-open');
+        modal.setAttribute('aria-hidden', 'true');
+    }
+    if (form) {
+        form.removeAttribute('data-kind');
+    }
+}
+
+function renderProtocolField(field) {
+    const requiredMark = field.required ? ' <span style="color:#dc2626">*</span>' : '';
+    const fullClass = field.full ? ' protocol-field-full' : '';
+    const attrs = [
+        `name="${escapeHtml(field.name)}"`,
+        `id="protocol-field-${escapeHtml(field.name)}"`,
+        field.required ? 'required' : '',
+        field.min ? `min="${escapeHtml(field.min)}"` : ''
+    ].filter(Boolean).join(' ');
+
+    let control = '';
+    if (field.type === 'select') {
+        control = `<select ${attrs}>${field.options.map(option => {
+            const selected = option === field.value ? ' selected' : '';
+            return `<option value="${escapeHtml(option)}"${selected}>${escapeHtml(option)}</option>`;
+        }).join('')}</select>`;
+    } else if (field.type === 'textarea') {
+        control = `<textarea ${attrs}>${escapeHtml(field.value || '')}</textarea>`;
+    } else {
+        control = `<input type="${escapeHtml(field.type || 'text')}" value="${escapeHtml(field.value || '')}" ${attrs}>`;
+    }
+
+    return `
+        <div class="protocol-field${fullClass}">
+            <label for="protocol-field-${escapeHtml(field.name)}">${escapeHtml(field.label)}${requiredMark}</label>
+            ${control}
+        </div>`;
+}
+
+function collectDispatchProtocolValues() {
+    const form = document.getElementById('dispatch-protocol-form');
+    const values = {};
+    if (!form) return values;
+    new FormData(form).forEach((value, key) => {
+        values[key] = String(value || '').trim();
+    });
+    return values;
+}
+
+function updateDispatchProtocolPreview() {
+    const form = document.getElementById('dispatch-protocol-form');
+    const preview = document.getElementById('protocol-message-preview');
+    if (!form || !preview) return;
+    const config = DISPATCH_PROTOCOLS[form.dataset.kind];
+    if (!config) return;
+    preview.textContent = config.preview(collectDispatchProtocolValues());
+}
+
+function submitDispatchProtocol(event) {
+    event.preventDefault();
+    const form = document.getElementById('dispatch-protocol-form');
+    const submitBtn = document.getElementById('protocol-submit-btn');
+    if (!form) return;
+    const kind = form.dataset.kind;
+    const config = DISPATCH_PROTOCOLS[kind];
+    if (!config) return;
+
+    const values = collectDispatchProtocolValues();
+    const missing = config.fields.find(field => field.required && !values[field.name]);
+    if (missing) {
+        showNotification(`${missing.label} is required`, 'warning');
+        const input = form.querySelector(`[name="${missing.name}"]`);
+        if (input) input.focus();
+        return;
+    }
+
+    const formattedMessage = config.preview(values);
+    const details = {
+        protocol: kind,
+        protocol_label: config.label,
+        audience: values.audience || '',
+        location: values.location || values.area || '',
+        status: values.status || '',
+        priority: values.priority || '',
+        fields: values,
+        formatted_message: formattedMessage,
+        created_at: new Date().toISOString()
+    };
+
+    if (submitBtn) submitBtn.disabled = true;
     postJSON('api/activity_event.php', {
-        action: 'mci_alert',
-        entity_type: 'incident',
-        details: info
+        action: config.action,
+        entity_type: 'dispatch_protocol',
+        details: JSON.stringify(details)
     }).then(res => {
-        if (res.ok) {
-            showNotification('Mass casualty alert recorded', 'error');
+        if (res && res.ok) {
+            showNotification(`${config.title} sent`, config.tone);
+            closeDispatchProtocolModal();
         } else {
-            alert('Failed to record alert');
+            showNotification('Protocol alert failed', 'error');
         }
-    }).catch(() => alert('Network error'));
+    }).catch(() => {
+        showNotification('Network error', 'error');
+    }).finally(() => {
+        if (submitBtn) submitBtn.disabled = false;
+    });
 }
 
 function resourceRequest() {
@@ -1417,6 +1651,23 @@ function resourceRequest() {
       })
       .catch(() => alert('Network error'));
 }
+
+document.addEventListener('DOMContentLoaded', () => {
+    const form = document.getElementById('dispatch-protocol-form');
+    const modal = document.getElementById('dispatch-protocol-modal');
+    if (form) {
+        form.addEventListener('input', updateDispatchProtocolPreview);
+        form.addEventListener('change', updateDispatchProtocolPreview);
+        form.addEventListener('submit', submitDispatchProtocol);
+    }
+    if (modal) {
+        modal.addEventListener('click', event => {
+            if (event.target === modal) {
+                closeDispatchProtocolModal();
+            }
+        });
+    }
+});
 
 // Card action handlers
 function viewDetails(btn) {
