@@ -15,24 +15,6 @@ if ($responder_id <= 0 || $responder_name === "" || $requested_department === ""
     exit;
 }
 
-try {
-    $pdo = db();
-
-    $stmt = $pdo->prepare("
-        INSERT INTO responder_backup_requests (
-            responder_id,
-            responder_name,
-            department,
-            requested_department,
-            resources,
-            is_full_backup,
-            incident_id,
-            status,
-            created_at
-        )
-        VALUES (?, ?, ?, ?, ?, ?, ?, 'pending', NOW())
-    ");
-
     $stmt->execute([
         $responder_id,
         $responder_name,
