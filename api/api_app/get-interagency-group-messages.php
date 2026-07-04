@@ -32,11 +32,19 @@ try {
         a.mime_type,
         a.is_image
     FROM interagency_groups_threads_read m
-    LEFT JOIN users u
-        ON CAST(u.id AS CHAR CHARACTER SET utf8mb4) COLLATE utf8mb4_unicode_ci
-        = m.sender_user_id COLLATE utf8mb4_unicode_ci
+   LEFT JOIN users u
+    ON u.id = (
+        SELECT MAX(u2.id)
+        FROM users u2
+        WHERE
+            CAST(u2.id AS CHAR CHARACTER SET utf8mb4) COLLATE utf8mb4_unicode_ci
+            = m.sender_user_id COLLATE utf8mb4_unicode_ci
+            OR
+            u2.name COLLATE utf8mb4_unicode_ci
+            = m.sender_user_id COLLATE utf8mb4_unicode_ci
+    )
     LEFT JOIN interagency_message_attachments a
-        ON a.message_id = m.activity_log_id OR a.message_id = m.id
+    ON a.message_id = m.id
     WHERE m.group_id = :group_id
     ORDER BY m.created_at ASC, m.id ASC
     ");
@@ -50,11 +58,44 @@ try {
     while ($row = $stmt->fetch()) {
         $details = json_decode($row["message_details"], true);
         $text = $details["text"] ?? "";
+        if ($fileUrl && !$isImage && $fileName) {
+        $text = $fileName;
+    }
         $text = preg_replace('/^\[ROUTINE\]\s*/', '', $text);
 
         $isImage = intval($row["is_image"] ?? 0) === 1;
         $fileUrl = $row["file_url"] ?? null;
         $fileName = $row["file_name"] ?? null;
+
+        if (!$fileUrl && isset($details["attachments"][0])) {
+        $att = $details["attachments"][0];
+
+        $fileUrl =
+            $att["file_url"] ??
+            $att["fileUrl"] ??
+            $att["url"] ??
+            null;
+
+        $fileName =
+            $att["file_name"] ??
+            $att["fileName"] ??
+            $att["name"] ??
+            null;
+
+        $mimeType =
+            $att["mime_type"] ??
+            $att["mimeType"] ??
+            $row["mime_type"] ??
+            "";
+
+        $isImage =
+            intval($att["is_image"] ?? 0) === 1 ||
+            str_starts_with(strtolower($mimeType), "image/");
+    }
+
+        if ($fileUrl && !str_starts_with($fileUrl, "http")) {
+            $fileUrl = "https://emergency-response.alertaraqc.com/" . ltrim($fileUrl, "/");
+        }
 
         $messages[] = [
             "id" => strval($row["id"]),
