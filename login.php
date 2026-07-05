@@ -12,7 +12,7 @@ debug_log('--- LOGIN.PHP START ---');
 require_once __DIR__ . '/includes/auth.php';
 debug_log('auth.php loaded');
 
-$pageTitle = 'Role-Based Login';
+$pageTitle = 'Login';
 $error_message = '';
 $success_message = '';
 $allowed_roles = [
