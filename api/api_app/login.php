@@ -33,8 +33,8 @@ if (!$pdo) {
 }
 
 try {
-    $stmt = $pdo->prepare("
-        SELECT id, email, password, name, role, status, department
+     $stmt = $pdo->prepare("
+        SELECT id, email, password, name, role, status, department, profile_image_path
         FROM users
         WHERE email = ?
         ORDER BY id DESC
@@ -94,6 +94,7 @@ try {
             "email" => (string)$user["email"],
             "role" => (string)$user["role"],
             "department" => (string)($user["department"] ?? ""),
+            "profile_image_path" => (string)($user["profile_image_path"] ?? ""),
         ]
     ]);
 } catch (Throwable $e) {
