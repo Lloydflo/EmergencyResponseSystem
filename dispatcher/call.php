@@ -199,7 +199,7 @@ $pageTitle = 'Emergency Call Center';
                                 </div>
                                 <div class="form-row">
                                     <div class="form-group">
-                                        <label>Incident Type</label>
+                                        <label>Vehicle Type</label>
                                         <div class="incident-type-dropdown" id="incidentTypeDropdown">
                                             <button type="button" class="incident-type-trigger" id="incidentTypeTrigger" aria-expanded="false" aria-controls="incidentTypeMenu">
                                                 <span id="incidentTypeTriggerText">Select type</span>
@@ -217,10 +217,6 @@ $pageTitle = 'Emergency Call Center';
                                                 <label class="incident-type-option">
                                                     <input type="checkbox" name="incidentTypes" value="police">
                                                     <span><i class="fas fa-shield-alt"></i> Police Emergency</span>
-                                                </label>
-                                                <label class="incident-type-option">
-                                                    <input type="checkbox" name="incidentTypes" value="traffic">
-                                                    <span><i class="fas fa-car-crash"></i> Traffic Accident</span>
                                                 </label>
                                             </div>
                                         </div>

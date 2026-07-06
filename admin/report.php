@@ -425,6 +425,34 @@ try {
                     <canvas id="dispatchDailyChart" class="chart-canvas"></canvas>
                 </div>
             </div>
+
+            <!-- Admin Performance Review Chart -->
+            <div class="chart-container">
+                <div class="chart-header">
+                    <h3 class="chart-title">Admin Performance Review</h3>
+                    <div class="chart-controls">
+                        <button class="btn-report" onclick="refreshPerformanceChart()"><i class="fas fa-sync"></i> Refresh</button>
+                        <button class="btn-report" onclick="exportChart('performanceChart')"><i class="fas fa-download"></i> Export</button>
+                    </div>
+                </div>
+                <div style="position: relative; width: 100%; height: 320px;">
+                    <canvas id="performanceChart" class="chart-canvas"></canvas>
+                </div>
+            </div>
+
+            <!-- Resources Audit Report Chart -->
+            <div class="chart-container">
+                <div class="chart-header">
+                    <h3 class="chart-title">Resources Audit Report</h3>
+                    <div class="chart-controls">
+                        <button class="btn-report" onclick="refreshResourcesChart()"><i class="fas fa-sync"></i> Refresh</button>
+                        <button class="btn-report" onclick="exportChart('resourcesChart')"><i class="fas fa-download"></i> Export</button>
+                    </div>
+                </div>
+                <div style="position: relative; width: 100%; height: 320px;">
+                    <canvas id="resourcesChart" class="chart-canvas"></canvas>
+                </div>
+            </div>
             </div>
 
             <!-- Dispatch Breakdown Table -->
@@ -1178,6 +1206,8 @@ try {
         let typesChart = null;
         let callDurationChart = null;
         let dispatchDailyChart = null;
+        let performanceChart = null;
+        let resourcesChart = null;
         let dispatchUnitBreakdown = [];
 
         const reportBarValueLabelsPlugin = {
@@ -1600,6 +1630,149 @@ try {
                         });
                     }
                 }
+
+                // Admin Performance Review Chart
+                if (metricsData.ok) {
+                    const performanceMetrics = metricsData.metrics || {};
+                    const perfLabels = ['Response Time', 'Success Rate', 'Utilization', 'Availability'];
+                    const perfValues = [
+                        Math.min(100, Math.max(0, 100 - ((performanceMetrics.avg_response_time_min || 10) / 10 * 20))),
+                        performanceMetrics.success_rate || 0,
+                        performanceMetrics.resource_utilization || 0,
+                        performanceMetrics.uptime_percentage || 95
+                    ];
+                    const ctx5 = document.getElementById('performanceChart');
+                    if (ctx5) {
+                        if (performanceChart) performanceChart.destroy();
+                        performanceChart = new Chart(ctx5, {
+                            type: 'radar',
+                            data: {
+                                labels: perfLabels,
+                                datasets: [{
+                                    label: 'Admin Performance Metrics',
+                                    data: perfValues,
+                                    borderColor: '#3b82f6',
+                                    backgroundColor: 'rgba(59, 130, 246, 0.15)',
+                                    pointBackgroundColor: '#3b82f6',
+                                    pointBorderColor: '#fff',
+                                    pointHoverBackgroundColor: '#fff',
+                                    pointHoverBorderColor: '#3b82f6',
+                                    pointRadius: 5,
+                                    pointHoverRadius: 7,
+                                    fill: true,
+                                    tension: 0.4,
+                                    borderWidth: 2
+                                }]
+                            },
+                            options: {
+                                responsive: true,
+                                maintainAspectRatio: false,
+                                plugins: {
+                                    legend: {
+                                        position: 'bottom',
+                                        labels: { color: theme.text }
+                                    },
+                                    tooltip: {
+                                        backgroundColor: theme.tooltipBg,
+                                        borderColor: theme.tooltipBorder,
+                                        borderWidth: 1,
+                                        titleColor: theme.tooltipText,
+                                        bodyColor: theme.tooltipText,
+                                        callbacks: {
+                                            label(context) {
+                                                return `${context.label}: ${Number(context.raw || 0).toFixed(1)}%`;
+                                            }
+                                        }
+                                    }
+                                },
+                                scales: {
+                                    r: {
+                                        min: 0,
+                                        max: 100,
+                                        beginAtZero: true,
+                                        ticks: {
+                                            precision: 0,
+                                            color: theme.muted,
+                                            backdropColor: 'transparent',
+                                            stepSize: 20
+                                        },
+                                        grid: { color: theme.grid },
+                                        angleLines: { color: theme.grid },
+                                        pointLabels: { color: theme.text, font: { weight: '600' } }
+                                    }
+                                }
+                            }
+                        });
+                    }
+                }
+
+                // Resources Audit Report Chart
+                if (dispData.ok) {
+                    const resAudit = dispData.metrics || {};
+                    const auditLabels = ['Available', 'In Use', 'Maintenance', 'Out of Service'];
+                    const auditValues = [
+                        resAudit.available_units || 0,
+                        resAudit.in_use_units || 0,
+                        resAudit.maintenance_units || 0,
+                        resAudit.unavailable_units || 0
+                    ];
+                    const ctx6 = document.getElementById('resourcesChart');
+                    if (ctx6) {
+                        if (resourcesChart) resourcesChart.destroy();
+                        resourcesChart = new Chart(ctx6, {
+                            type: 'bar',
+                            data: {
+                                labels: auditLabels,
+                                datasets: [{
+                                    label: 'Resource Status',
+                                    data: auditValues,
+                                    backgroundColor: [
+                                        'rgba(34, 197, 94, 0.8)',
+                                        'rgba(59, 130, 246, 0.8)',
+                                        'rgba(245, 158, 11, 0.8)',
+                                        'rgba(239, 68, 68, 0.8)'
+                                    ],
+                                    borderColor: ['#22c55e', '#3b82f6', '#f59e0b', '#ef4444'],
+                                    borderRadius: 8,
+                                    borderSkipped: false,
+                                    barThickness: 32,
+                                    maxBarThickness: 40
+                                }]
+                            },
+                            options: {
+                                responsive: true,
+                                maintainAspectRatio: false,
+                                indexAxis: 'x',
+                                plugins: {
+                                    legend: { display: false },
+                                    tooltip: {
+                                        backgroundColor: theme.tooltipBg,
+                                        borderColor: theme.tooltipBorder,
+                                        borderWidth: 1,
+                                        titleColor: theme.tooltipText,
+                                        bodyColor: theme.tooltipText,
+                                        callbacks: {
+                                            label(context) {
+                                                return `${context.label}: ${context.raw} unit(s)`;
+                                            }
+                                        }
+                                    }
+                                },
+                                scales: {
+                                    x: {
+                                        ticks: { color: theme.text, font: { weight: '600' } },
+                                        grid: { color: theme.grid, drawBorder: false }
+                                    },
+                                    y: {
+                                        beginAtZero: true,
+                                        ticks: { precision: 0, stepSize: 1, color: theme.muted },
+                                        grid: { color: theme.grid, drawBorder: false }
+                                    }
+                                }
+                            }
+                        });
+                    }
+                }
             } catch (e) {
                 console.error('refreshCharts failed', e);
             }
@@ -1919,6 +2092,16 @@ try {
         async function refreshDispatchReport() {
             await Promise.all([refreshMetrics(currentFilters), refreshCharts(currentFilters)]);
             showNotification('Dispatch report refreshed', 'success');
+        }
+
+        async function refreshPerformanceChart() {
+            await refreshCharts(currentFilters);
+            showNotification('Performance chart refreshed', 'success');
+        }
+
+        async function refreshResourcesChart() {
+            await refreshCharts(currentFilters);
+            showNotification('Resources chart refreshed', 'success');
         }
 
         // Initialize
