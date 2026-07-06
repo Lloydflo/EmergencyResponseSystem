@@ -25,26 +25,21 @@ try {
         "attachments" => []
     ]);
 
-    $nextIdStmt = $pdo->query("
-        SELECT COALESCE(MAX(id), 0) + 1 AS next_id 
-        FROM activity_log
-    ");
-    $activity_log_id = intval($nextIdStmt->fetch()["next_id"]);
-
     $logStmt = $pdo->prepare("
-        INSERT INTO activity_log
-        (id, user_id, action, entity_type, entity_id, details, created_at)
-        VALUES
-        (:id, :user_id, 'chat', 'agency_group_chat', :entity_id, :details, :created_at)
+    INSERT INTO activity_log
+    (user_id, action, entity_type, entity_id, details, created_at)
+    VALUES
+    (:user_id, 'chat', 'agency_group_chat', :entity_id, :details, :created_at)
     ");
 
     $logStmt->execute([
-        "id" => $activity_log_id,
         "user_id" => is_numeric($sender_user_id) ? intval($sender_user_id) : null,
         "entity_id" => $group_id,
         "details" => $message_details,
         "created_at" => $now
     ]);
+
+    $activity_log_id = intval($pdo->lastInsertId());
 
     $stmt = $pdo->prepare("
         INSERT INTO interagency_groups_threads_read
