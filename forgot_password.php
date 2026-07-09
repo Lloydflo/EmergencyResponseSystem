@@ -150,22 +150,28 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 } elseif (($user['status'] ?? '') !== 'active') {
                     $error_messages[] = 'This account is inactive. Please contact support.';
                 } else {
-                    $otpCode = (string)random_int(100000, 999999);
-                    $saved = saveOtpToDatabase($email, $otpCode, 3);
-
-                    if (!$saved) {
-                        $error_messages[] = 'Unable to generate verification code. Please try again.';
+                    $cooldownWait = getRecentOtpRequestWaitSeconds($email, 60);
+                    if ($cooldownWait > 0) {
+                        $error_messages[] = getOtpCooldownMessage($cooldownWait);
                     } else {
-                        $sent = sendOtpEmail($email, $otpCode, 'Emergency Response System');
-                        if (!$sent) {
-                            $error_messages[] = 'Verification code email failed to send. Please try again.';
-                        } else {
-                            $_SESSION['forgot_password_email'] = $email;
-                            $_SESSION['forgot_password_verified'] = false;
-                            unset($_SESSION['forgot_password_verified_at']);
+                        $otpCode = (string)random_int(100000, 999999);
+                        $saved = saveOtpToDatabase($email, $otpCode, 3);
 
-                            $step = 'otp';
-                            $success_message = 'Verification code sent. Please check your email.';
+                        if (!$saved) {
+                            $error_messages[] = 'Unable to generate verification code. Please try again.';
+                        } else {
+                            $sent = sendOtpEmail($email, $otpCode, 'Emergency Response System');
+                            if (!$sent) {
+                                markOtpEmailDeliveryFailed($email, $otpCode);
+                                $error_messages[] = getLastOtpEmailErrorMessage('Verification code email could not be delivered because no working sender is configured.');
+                            } else {
+                                $_SESSION['forgot_password_email'] = $email;
+                                $_SESSION['forgot_password_verified'] = false;
+                                unset($_SESSION['forgot_password_verified_at']);
+
+                                $step = 'otp';
+                                $success_message = 'Verification code sent. Please check your email.';
+                            }
                         }
                     }
                 }

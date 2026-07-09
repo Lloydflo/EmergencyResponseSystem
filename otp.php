@@ -16,19 +16,25 @@ if (!isset($_SESSION['otp']) || !isset($_SESSION['otp_email'])) {
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     require_once __DIR__ . '/includes/mail_helper.php';
     if (isset($_POST['resend_otp'])) {
-        // Generate new OTP, save to DB, send email, reset timer
-        $otp = rand(100000, 999999);
-        $otpSaved = saveOtpToDatabase($_SESSION['otp_email'], $otp, 3);
-        if (!$otpSaved) {
-            $error_message = 'Failed to save OTP to database. Please try again later.';
+        $cooldownWait = getRecentOtpRequestWaitSeconds((string)$_SESSION['otp_email'], 60);
+        if ($cooldownWait > 0) {
+            $error_message = getOtpCooldownMessage($cooldownWait);
         } else {
-            $_SESSION['otp'] = $otp;
-            $_SESSION['otp_expiry'] = time() + 180; // 3 minutes
-            $mailSent = sendOtpEmail($_SESSION['otp_email'], $otp);
-            if ($mailSent) {
-                $error_message = 'A new OTP has been sent to your email.';
+            // Generate new OTP, save to DB, send email, reset timer
+            $otp = rand(100000, 999999);
+            $otpSaved = saveOtpToDatabase($_SESSION['otp_email'], $otp, 3);
+            if (!$otpSaved) {
+                $error_message = 'Failed to save OTP to database. Please try again later.';
             } else {
-                $error_message = 'Failed to resend OTP. Please try again later.';
+                $_SESSION['otp'] = $otp;
+                $_SESSION['otp_expiry'] = time() + 180; // 3 minutes
+                $mailSent = sendOtpEmail($_SESSION['otp_email'], $otp);
+                if ($mailSent) {
+                    $error_message = 'A new OTP has been sent to your email.';
+                } else {
+                    markOtpEmailDeliveryFailed((string)$_SESSION['otp_email'], (string)$otp);
+                    $error_message = getLastOtpEmailErrorMessage('Failed to resend OTP because email delivery is not configured with a working sender.');
+                }
             }
         }
     } else {
