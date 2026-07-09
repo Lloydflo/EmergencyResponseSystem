@@ -2,10 +2,11 @@
 header("Content-Type: application/json");
 require __DIR__ . "/connect.php";
 
-$request_id = intval($_GET["request_id"] ?? $_POST["request_id"] ?? 0);
+$request_id  = intval($_GET["request_id"] ?? $_POST["request_id"] ?? 0);
+$responder_id = intval($_GET["responder_id"] ?? $_POST["responder_id"] ?? 0);
 
-if ($request_id <= 0) {
-    echo json_encode(["success" => false, "message" => "Invalid request_id"]);
+if ($request_id <= 0 || $responder_id <= 0) {
+    echo json_encode(["success" => false, "message" => "Invalid request_id or responder_id"]);
     exit;
 }
 
@@ -15,10 +16,10 @@ try {
     $stmt = $pdo->prepare("
         SELECT id, status, requested_department, resources, is_full_backup, created_at, updated_at
         FROM responder_backup_requests
-        WHERE id = ?
+        WHERE id = ? AND responder_id = ?
         LIMIT 1
     ");
-    $stmt->execute([$request_id]);
+    $stmt->execute([$request_id, $responder_id]);
     $row = $stmt->fetch(PDO::FETCH_ASSOC);
 
     if (!$row) {

@@ -56,11 +56,20 @@ try {
 
   // return responder user
   $u = $pdo->prepare("
-  SELECT id, name, email, role, department, unit_code, unit_type, unit_status
-  FROM users 
-  WHERE email=? 
-  LIMIT 1
-");
+    SELECT
+        id,
+        name,
+        email,
+        role,
+        department,
+        unit_code,
+        unit_type,
+        unit_status,
+        profile_image_path
+    FROM users
+    WHERE email=?
+    LIMIT 1
+    ");
   $u->execute([$email]);
   $responder = $u->fetch();
 
@@ -72,16 +81,17 @@ try {
 echo json_encode([
     "success" => true,
     "message" => "OTP verified",
-    "user"    => [
-        "id"          => (int)$responder["id"],
-        "name"        => (string)$responder["name"],
-        "email"       => (string)$responder["email"],
-        "role"        => (string)($responder["role"] ?? ""),
-        "department"  => (string)($responder["department"] ?? ""),
-        "unit_code"   => (string)($responder["unit_code"] ?? ""),
-        "unit_type"   => (string)($responder["unit_type"] ?? ""),
-        "unit_status" => (string)($responder["unit_status"] ?? "available")
-    ]
+    "user" => [
+    "id"          => (int)$responder["id"],
+    "name"        => (string)$responder["name"],
+    "email"       => (string)$responder["email"],
+    "role"        => (string)($responder["role"] ?? ""),
+    "department"  => (string)($responder["department"] ?? ""),
+    "unit_code"   => (string)($responder["unit_code"] ?? ""),
+    "unit_type"   => (string)($responder["unit_type"] ?? ""),
+    "unit_status" => (string)($responder["unit_status"] ?? "available"),
+    "profile_image_path" => (string)($responder["profile_image_path"] ?? "")
+]
 ]);
 
 } catch (Throwable $e) {
