@@ -820,9 +820,8 @@ function initFirebaseLiveTracking() {
 
             const status = String(r.status || 'available');
             const isEnRoute = status === 'en_route';
-            const type = isEnRoute
-                ? String(r.department || r.unitType || 'other').toLowerCase()
-                : 'idle';
+            const dept = String(r.department || r.unitType || 'other').toLowerCase();
+            const type = isEnRoute ? dept : `idle_${dept}`;
 
             if (markers[key]) {
                 markers[key].marker.setLatLng([lat, lng]);
@@ -864,7 +863,16 @@ function getMarkerIconMeta(type) {
         rescue: { icon: 'fa-life-ring', color: '#ea580c' },
         incident: { icon: 'fa-exclamation-triangle', color: '#f59e0b' },
         other: { icon: 'fa-truck-medical', color: '#64748b' },
-        idle: { icon: 'fa-circle-dot', color: '#94a3b8' }
+        idle: { icon: 'fa-circle-dot', color: '#94a3b8' },
+        // Idle-but-colored-by-department variants — same accent color as the
+        // active icon, but a plain dot instead of the department's vehicle
+        // icon, so dispatchers can distinguish "idle fire" from "en-route fire"
+        // at a glance without opening the popup.
+        idle_fire: { icon: 'fa-circle-dot', color: '#dc2626' },
+        idle_medical: { icon: 'fa-circle-dot', color: '#16a34a' },
+        idle_police: { icon: 'fa-circle-dot', color: '#2563eb' },
+        idle_crime: { icon: 'fa-circle-dot', color: '#2563eb' },
+        idle_rescue: { icon: 'fa-circle-dot', color: '#ea580c' }
     };
     return icons[key] || icons.other;
 }
@@ -889,14 +897,18 @@ function addLegendControl() {
         div.style.color = '#1f2937';
         div.style.lineHeight = '1.4';
         div.innerHTML = `
-            <div style="font-weight:700;margin-bottom:6px;color:#111827">Legend</div>
-            <div style="display:flex;align-items:center;margin-bottom:4px;color:#374151">${markerLegendSwatch('ambulance')}Ambulance</div>
-            <div style="display:flex;align-items:center;margin-bottom:4px;color:#374151">${markerLegendSwatch('police')}Police</div>
-            <div style="display:flex;align-items:center;margin-bottom:4px;color:#374151">${markerLegendSwatch('fire')}Fire</div>
-            <div style="display:flex;align-items:center;margin-bottom:4px;color:#374151">${markerLegendSwatch('rescue')}Rescue</div>
-            <div style="display:flex;align-items:center;color:#374151">${markerLegendSwatch('incident')}Incident</div>
-            <div style="margin-top:6px;font-size:11px;color:#4b5563">Heatmap shows recent hotspots</div>
-        `;
+        <div style="font-weight:600;margin-bottom:6px">Legend</div>
+        <div style="display:flex;align-items:center;margin-bottom:4px">${markerLegendSwatch('ambulance')}Ambulance (En Route)</div>
+        <div style="display:flex;align-items:center;margin-bottom:4px">${markerLegendSwatch('police')}Police (En Route)</div>
+        <div style="display:flex;align-items:center;margin-bottom:4px">${markerLegendSwatch('fire')}Fire (En Route)</div>
+        <div style="display:flex;align-items:center;margin-bottom:4px">${markerLegendSwatch('rescue')}Rescue (En Route)</div>
+        <div style="display:flex;align-items:center;margin-bottom:8px">${markerLegendSwatch('incident')}Incident</div>
+        <div style="font-weight:600;margin-bottom:6px;border-top:1px solid #eee;padding-top:6px">Idle / Standby</div>
+        <div style="display:flex;align-items:center;margin-bottom:4px">${markerLegendSwatch('idle_fire')}Fire</div>
+        <div style="display:flex;align-items:center;margin-bottom:4px">${markerLegendSwatch('idle_medical')}Medical</div>
+        <div style="display:flex;align-items:center">${markerLegendSwatch('idle_police')}Police</div>
+        <div style="margin-top:6px;font-size:11px;color:#666">Heatmap shows recent hotspots</div>
+    `;
         return div;
     };
     legend.addTo(map);
