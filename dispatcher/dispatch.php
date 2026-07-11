@@ -344,6 +344,21 @@ try {
         </div>
     </form>
 </div>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-database-compat.js"></script>
+<script>
+    const firebaseConfig = {
+        apiKey: "YOUR_WEB_API_KEY",
+        authDomain: "emergencyresponseapp-f5110.firebaseapp.com",
+        databaseURL: "https://emergencyresponseapp-f5110-default-rtdb.firebaseio.com",
+        projectId: "emergencyresponseapp-f5110",
+        storageBucket: "emergencyresponseapp-f5110.appspot.com",
+        messagingSenderId: "YOUR_SENDER_ID",
+        appId: "YOUR_APP_ID"
+    };
+    firebase.initializeApp(firebaseConfig);
+    const rtdb = firebase.database();
+</script>
 <script>
 // Modal logic (moved to end for guaranteed loading)
 let currentIncidentId = null;
@@ -759,6 +774,7 @@ function initMap() {
     loadDispatchedUnits();
     loadAvailableUnits();
     loadIncidentMarkers();
+    initFirebaseLiveTracking();
     addLegendControl();
     updateMapVisibility();
     startLivePolling();
@@ -785,6 +801,58 @@ function getIcon(type) {
     });
 }
 
+function initFirebaseLiveTracking() {
+    rtdb.ref('live_locations').on('value', (snapshot) => {
+        const data = snapshot.val() || {};
+        const seenKeys = new Set();
+
+        Object.values(data).forEach((r) => {
+            const lat = parseFloat(r.lat);
+            const lng = parseFloat(r.lng);
+            if (isNaN(lat) || isNaN(lng)) return;
+
+            const key = String(r.unitCode || r.responderId || '').trim();
+            if (!key) return;
+            seenKeys.add(key);
+
+            const label = `${key} — ${r.responderName || 'Responder'}`;
+            const speedKph = typeof r.speed === 'number' ? r.speed * 3.6 : null;
+
+            const status = String(r.status || 'available');
+            const isEnRoute = status === 'en_route';
+            const type = isEnRoute
+                ? String(r.department || r.unitType || 'other').toLowerCase()
+                : 'idle';
+
+            if (markers[key]) {
+                markers[key].marker.setLatLng([lat, lng]);
+                markers[key].marker.setIcon(getIcon(type));
+                markers[key].marker.bindPopup(`
+                    <strong>${label}</strong><br>
+                    Status: ${r.status || 'unknown'}<br>
+                    ${speedKph !== null ? `Speed: ${speedKph.toFixed(1)} km/h<br>` : ''}
+                    Coords: ${lat.toFixed(5)}, ${lng.toFixed(5)}<br>
+                    <em>Live GPS</em>
+                `);
+                markers[key].isLive = true;
+            } else {
+                addUnitMarker(key, lat, lng, label, type, speedKph);
+                markers[key].isLive = true;
+            }
+        });
+
+        Object.keys(markers).forEach((key) => {
+            if (markers[key].isLive && !seenKeys.has(key)) {
+                map.removeLayer(markers[key].marker);
+                delete markers[key];
+            }
+        });
+    }, (error) => {
+        console.error('Firebase live_locations read failed:', error);
+        showNotification('Live GPS feed disconnected', 'error');
+    });
+}
+
 function getMarkerIconMeta(type) {
     const key = String(type || '').trim().toLowerCase();
     const icons = {
@@ -795,7 +863,8 @@ function getMarkerIconMeta(type) {
         fire: { icon: 'fa-truck', color: '#dc2626' },
         rescue: { icon: 'fa-life-ring', color: '#ea580c' },
         incident: { icon: 'fa-exclamation-triangle', color: '#f59e0b' },
-        other: { icon: 'fa-truck-medical', color: '#64748b' }
+        other: { icon: 'fa-truck-medical', color: '#64748b' },
+        idle: { icon: 'fa-circle-dot', color: '#94a3b8' }
     };
     return icons[key] || icons.other;
 }
@@ -879,6 +948,7 @@ function loadDispatchedUnits() {
 function syncUnitMarkers(items) {
     items.forEach(u => {
         const id = u.identifier;
+        if (markers[id] && markers[id].isLive) return;
         const type = u.unit_type || 'other';
         const lat = parseFloat(u.latitude);
         const lng = parseFloat(u.longitude);
@@ -912,6 +982,7 @@ function fetchAvailableUnitsData() {
 function syncAvailableUnitMarkers(items) {
     (items || []).forEach(u => {
         const id = u.identifier;
+        if (markers[id] && markers[id].isLive) return;
         const type = u.unit_type || 'other';
         const lat = parseFloat(u.latitude);
         const lng = parseFloat(u.longitude);
