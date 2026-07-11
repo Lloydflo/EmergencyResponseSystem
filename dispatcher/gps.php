@@ -156,6 +156,22 @@ $pageTitle = 'GPS Tracking System';
     <!-- ============================================
          COMPLETE FUNCTIONAL GPS TRACKING SYSTEM
          ============================================ -->
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-database-compat.js"></script>
+<script>
+    const firebaseConfig = {
+        apiKey: "YOUR_WEB_API_KEY",
+        authDomain: "emergencyresponseapp-f5110.firebaseapp.com",
+        databaseURL: "https://emergencyresponseapp-f5110-default-rtdb.firebaseio.com",
+        projectId: "emergencyresponseapp-f5110",
+        storageBucket: "emergencyresponseapp-f5110.appspot.com",
+        messagingSenderId: "YOUR_SENDER_ID",
+        appId: "YOUR_APP_ID"
+    };
+    firebase.initializeApp(firebaseConfig);
+    const rtdb = firebase.database();
+</script>
+
     <script>
 let map;
 let markers = {};
@@ -223,6 +239,7 @@ function initMap() {
     // Load units from API and render
     loadDispatchedUnits();
     loadAvailableUnits();
+    initFirebaseLiveTracking();
 
     // Load incidents and add warning markers
     loadIncidentMarkers();
@@ -312,7 +329,17 @@ function getMarkerIconMeta(type) {
         fire: { icon: 'fa-truck', color: '#dc2626' },
         rescue: { icon: 'fa-life-ring', color: '#ea580c' },
         incident: { icon: 'fa-exclamation-triangle', color: '#f59e0b' },
-        other: { icon: 'fa-truck-medical', color: '#64748b' }
+        other: { icon: 'fa-truck-medical', color: '#64748b' },
+        idle: { icon: 'fa-circle-dot', color: '#94a3b8' },
+        // Idle-but-colored-by-department variants — same accent color as the
+        // active icon, but a plain dot instead of the department's vehicle
+        // icon, so dispatchers can distinguish "idle fire" from "en-route fire"
+        // at a glance without opening the popup.
+        idle_fire: { icon: 'fa-circle-dot', color: '#dc2626' },
+        idle_medical: { icon: 'fa-circle-dot', color: '#16a34a' },
+        idle_police: { icon: 'fa-circle-dot', color: '#2563eb' },
+        idle_crime: { icon: 'fa-circle-dot', color: '#2563eb' },
+        idle_rescue: { icon: 'fa-circle-dot', color: '#ea580c' }
     };
     return icons[key] || icons.other;
 }
@@ -1124,11 +1151,15 @@ function addLegendControl() {
         div.style.fontSize = '12px';
         div.innerHTML = `
             <div style="font-weight:600;margin-bottom:6px">Legend</div>
-            <div style="display:flex;align-items:center;margin-bottom:4px">${markerLegendSwatch('ambulance')}Ambulance</div>
-            <div style="display:flex;align-items:center;margin-bottom:4px">${markerLegendSwatch('police')}Police</div>
-            <div style="display:flex;align-items:center;margin-bottom:4px">${markerLegendSwatch('fire')}Fire</div>
-            <div style="display:flex;align-items:center;margin-bottom:4px">${markerLegendSwatch('rescue')}Rescue</div>
-            <div style="display:flex;align-items:center">${markerLegendSwatch('incident')}Incident</div>
+            <div style="display:flex;align-items:center;margin-bottom:4px">${markerLegendSwatch('ambulance')}Ambulance (En Route)</div>
+            <div style="display:flex;align-items:center;margin-bottom:4px">${markerLegendSwatch('police')}Police (En Route)</div>
+            <div style="display:flex;align-items:center;margin-bottom:4px">${markerLegendSwatch('fire')}Fire (En Route)</div>
+            <div style="display:flex;align-items:center;margin-bottom:4px">${markerLegendSwatch('rescue')}Rescue (En Route)</div>
+            <div style="display:flex;align-items:center;margin-bottom:8px">${markerLegendSwatch('incident')}Incident</div>
+            <div style="font-weight:600;margin-bottom:6px;border-top:1px solid #eee;padding-top:6px">Idle / Standby</div>
+            <div style="display:flex;align-items:center;margin-bottom:4px">${markerLegendSwatch('idle_fire')}Fire</div>
+            <div style="display:flex;align-items:center;margin-bottom:4px">${markerLegendSwatch('idle_medical')}Medical</div>
+            <div style="display:flex;align-items:center">${markerLegendSwatch('idle_police')}Police</div>
             <div style="margin-top:6px;font-size:11px;color:#666">Heatmap shows recent hotspots</div>
         `;
         return div;
@@ -1326,6 +1357,99 @@ function syncUnitMarkers(items) {
         const lat = parseFloat(u.latitude);
         const lng = parseFloat(u.longitude);
         const speed = (u.speed_kph !== undefined && u.speed_kph !== null) ? parseFloat(u.speed_kph) : null;
+        if (!isNaN(lat) && !isNaN(lng)) {
+            const label = `${id}`;
+            if (markers[id]) {
+                markers[id].marker.setLatLng([lat, lng]);
+                markers[id].marker.setIcon(getIcon(type));
+                const popupHtml = `
+                    <strong>${label}</strong><br>
+                    ${typeof speed === 'number' && isFinite(speed) ? `Speed: ${speed.toFixed(1)} km/h<br>` : ''}
+                    Coords: ${lat.toFixed(5)}, ${lng.toFixed(5)}
+                `;
+                markers[id].marker.bindPopup(popupHtml);
+                markers[id].speedKph = speed;
+                markers[id].unitType = String(type || '').toLowerCase();
+                markers[id].unitDbId = u.id !== undefined && u.id !== null ? String(u.id) : markers[id].unitDbId;
+            } else {
+                addUnitMarker(id, lat, lng, label, type, speed, u.id);
+            }
+        }
+        rememberUnitIdentity(u);
+    });
+    tryTrackPendingUnit();
+    tryShowPendingRoute().catch(() => {});
+    refreshActiveRoute();
+}
+
+function initFirebaseLiveTracking() {
+    rtdb.ref('live_locations').on('value', (snapshot) => {
+        const data = snapshot.val() || {};
+        const seenKeys = new Set();
+
+        Object.values(data).forEach((r) => {
+            const lat = parseFloat(r.lat);
+            const lng = parseFloat(r.lng);
+            if (isNaN(lat) || isNaN(lng)) return;
+
+            const key = String(r.unitCode || r.responderId || '').trim();
+            if (!key) return;
+            seenKeys.add(key);
+
+            const label = `${key} — ${r.responderName || 'Responder'}`;
+            const speedKph = typeof r.speed === 'number' ? r.speed * 3.6 : null;
+
+            const status = String(r.status || 'available');
+            const isEnRoute = status === 'en_route';
+            const dept = String(r.department || r.unitType || 'other').toLowerCase();
+            const type = isEnRoute ? dept : `idle_${dept}`;
+
+            if (markers[key]) {
+                markers[key].marker.setLatLng([lat, lng]);
+                markers[key].marker.setIcon(getIcon(type));
+                markers[key].marker.bindPopup(`
+                    <strong>${label}</strong><br>
+                    Status: ${r.status || 'unknown'}<br>
+                    ${speedKph !== null ? `Speed: ${speedKph.toFixed(1)} km/h<br>` : ''}
+                    Coords: ${lat.toFixed(5)}, ${lng.toFixed(5)}<br>
+                    <em>Live GPS</em>
+                `);
+                markers[key].isLive = true;
+            } else {
+                addUnitMarker(key, lat, lng, label, type, speedKph, r.responderId);
+                markers[key].isLive = true;
+            }
+        });
+
+        Object.keys(markers).forEach((key) => {
+            if (markers[key].isLive && !seenKeys.has(key)) {
+                map.removeLayer(markers[key].marker);
+                delete markers[key];
+            }
+        });
+    }, (error) => {
+        console.error('Firebase live_locations read failed:', error);
+        showNotification('Live GPS feed disconnected', 'error');
+    });
+}
+
+function syncUnitMarkers(items) {
+    items.forEach(u => {
+        const id = u.identifier;
+        const type = u.unit_type || 'other';
+        const lat = parseFloat(u.latitude);
+        const lng = parseFloat(u.longitude);
+        const speed = (u.speed_kph !== undefined && u.speed_kph !== null) ? parseFloat(u.speed_kph) : null;
+
+        // If Firebase live GPS already owns this marker, don't let the
+        // MySQL poll clobber its position — Firebase is the higher-frequency,
+        // more current source while the unit is actively en route. Still
+        // update non-position fields (incident title/status) via the popup.
+        if (markers[id] && markers[id].isLive) {
+            rememberUnitIdentity(u);
+            return;
+        }
+
         if (!isNaN(lat) && !isNaN(lng)) {
             const label = `${id}`;
             if (markers[id]) {
