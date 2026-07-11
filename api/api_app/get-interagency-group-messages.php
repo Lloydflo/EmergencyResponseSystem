@@ -18,6 +18,20 @@ try {
         touch_user_presence($pdo, $user_id);
     }
 
+    $othersReadUpTo = 0;
+    if ($user_id > 0) {
+    $readStmt = $pdo->prepare("
+        SELECT MAX(last_read_id) as max_read
+        FROM interagency_group_thread_reads
+        WHERE group_id = :group_id AND user_id != :user_id
+    ");
+    $readStmt->execute([
+        "group_id" => $group_id,
+        "user_id" => $user_id
+    ]);
+    $othersReadUpTo = intval($readStmt->fetch()["max_read"] ?? 0);
+    }
+
     $stmt = $pdo->prepare("
     SELECT
         m.id,
@@ -63,6 +77,8 @@ try {
     }
         $text = preg_replace('/^\[ROUTINE\]\s*/', '', $text);
 
+        $status = ($othersReadUpTo >= intval($row["id"])) ? "read" : "delivered";
+
         $isImage = intval($row["is_image"] ?? 0) === 1;
         $fileUrl = $row["file_url"] ?? null;
         $fileName = $row["file_name"] ?? null;
@@ -107,7 +123,8 @@ try {
             "type" => $fileUrl ? ($isImage ? "IMAGE" : "FILE") : "TEXT",
             "attachmentUri" => $fileUrl,
             "attachmentName" => $fileName,
-            "createdAt" => strtotime($row["created_at"]) * 1000
+            "createdAt" => strtotime($row["created_at"]) * 1000,
+            "status" => $status   // <-- new
         ];
     }
 
