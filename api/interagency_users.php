@@ -37,6 +37,94 @@ function ensure_interagency_user_threads_table(PDO $pdo): void {
     );
 }
 
+function interagency_users_table_exists(PDO $pdo, string $table): bool {
+    $stmt = $pdo->prepare(
+        'SELECT 1
+         FROM information_schema.TABLES
+         WHERE TABLE_SCHEMA = DATABASE()
+           AND TABLE_NAME = ?
+         LIMIT 1'
+    );
+    $stmt->execute([$table]);
+    return (bool)$stmt->fetchColumn();
+}
+
+function interagency_users_column_exists(PDO $pdo, string $table, string $column): bool {
+    $stmt = $pdo->prepare(
+        'SELECT 1
+         FROM information_schema.COLUMNS
+         WHERE TABLE_SCHEMA = DATABASE()
+           AND TABLE_NAME = ?
+           AND COLUMN_NAME = ?
+         LIMIT 1'
+    );
+    $stmt->execute([$table, $column]);
+    return (bool)$stmt->fetchColumn();
+}
+
+function interagency_users_active_assignment_map(PDO $pdo): array {
+    if (
+        !interagency_users_table_exists($pdo, 'dispatch_operator_records')
+        || !interagency_users_column_exists($pdo, 'dispatch_operator_records', 'assigned_to')
+        || !interagency_users_column_exists($pdo, 'dispatch_operator_records', 'status')
+    ) {
+        return [];
+    }
+
+    $activeStatuses = [
+        'pending',
+        'assigned',
+        'acknowledged',
+        'received',
+        'accepted',
+        'enroute',
+        'en_route',
+        'on_scene',
+        'busy',
+        'in_use',
+    ];
+    $placeholders = implode(',', array_fill(0, count($activeStatuses), '?'));
+    $stmt = $pdo->prepare(
+        "SELECT assigned_to
+         FROM dispatch_operator_records
+         WHERE assigned_to IS NOT NULL
+           AND assigned_to > 0
+           AND LOWER(status) IN ({$placeholders})
+         GROUP BY assigned_to"
+    );
+    $stmt->execute($activeStatuses);
+
+    $map = [];
+    foreach ($stmt->fetchAll(PDO::FETCH_COLUMN) as $userId) {
+        $map[(int)$userId] = true;
+    }
+    return $map;
+}
+
+function interagency_users_availability_status(array $row, array $activeAssignments): string {
+    $accountStatus = strtolower(trim((string)($row['status'] ?? '')));
+    if ($accountStatus !== 'active') {
+        return 'offline';
+    }
+
+    $userId = (int)($row['id'] ?? 0);
+    if ($userId > 0 && !empty($activeAssignments[$userId])) {
+        return 'responding';
+    }
+
+    $unitStatus = strtolower(trim((string)($row['unit_status'] ?? '')));
+    if (in_array($unitStatus, ['busy', 'in_use', 'assigned', 'acknowledged', 'enroute', 'en_route', 'on_scene', 'active', 'in_progress', 'dispatched'], true)) {
+        return 'busy';
+    }
+
+    $presenceStatus = strtolower(trim((string)($row['presence_status'] ?? 'offline')));
+    if ($presenceStatus !== 'online') {
+        return 'offline';
+    }
+
+    return 'available';
+}
+
 try {
     ensure_interagency_user_threads_table($pdo);
     ensure_user_presence_table($pdo);
@@ -47,6 +135,10 @@ try {
     $includeInactive = isset($_GET['include_inactive']) && (string)$_GET['include_inactive'] === '1';
     $includeSelf = isset($_GET['include_self']) && (string)$_GET['include_self'] === '1';
     $presenceStatusExpr = user_presence_status_sql('up');
+    $unitStatusSelect = interagency_users_column_exists($pdo, 'users', 'unit_status')
+        ? 'u.unit_status'
+        : 'NULL AS unit_status';
+    $activeAssignments = interagency_users_active_assignment_map($pdo);
 
     $statusFilter = $includeInactive ? '' : " AND u.status = 'active'";
     $selfFilter = $includeSelf ? '' : ' AND u.id <> ?';
@@ -56,7 +148,7 @@ try {
     }
 
     $stmt = $pdo->prepare(
-        "SELECT u.id, u.name, u.email, u.role, u.status,
+        "SELECT u.id, u.name, u.email, u.role, u.status, {$unitStatusSelect},
                 {$presenceStatusExpr} AS presence_status,
                 up.last_seen_at,
                 CASE WHEN t.target_user_id IS NULL THEN 0 ELSE 1 END AS has_thread
@@ -71,7 +163,8 @@ try {
     $stmt->execute($params);
     $rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
-    $items = array_map(static function (array $row): array {
+    $items = array_map(static function (array $row) use ($activeAssignments): array {
+        $availabilityStatus = interagency_users_availability_status($row, $activeAssignments);
         return [
             'id' => (int)$row['id'],
             'name' => (string)$row['name'],
@@ -80,6 +173,9 @@ try {
             'status' => strtolower((string)$row['status']),
             'account_status' => strtolower((string)$row['status']),
             'presence_status' => strtolower((string)($row['presence_status'] ?? 'offline')),
+            'availability_status' => $availabilityStatus,
+            'user_status' => $availabilityStatus,
+            'unit_status' => strtolower((string)($row['unit_status'] ?? '')),
             'last_seen_at' => $row['last_seen_at'] !== null ? (string)$row['last_seen_at'] : null,
             'has_thread' => ((int)$row['has_thread']) === 1
         ];
