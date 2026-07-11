@@ -1420,6 +1420,48 @@ function initFirebaseLiveTracking() {
     });
 }
 
+function syncUnitMarkers(items) {
+    items.forEach(u => {
+        const id = u.identifier;
+        const type = u.unit_type || 'other';
+        const lat = parseFloat(u.latitude);
+        const lng = parseFloat(u.longitude);
+        const speed = (u.speed_kph !== undefined && u.speed_kph !== null) ? parseFloat(u.speed_kph) : null;
+
+        // If Firebase live GPS already owns this marker, don't let the
+        // MySQL poll clobber its position — Firebase is the higher-frequency,
+        // more current source while the unit is actively en route. Still
+        // update non-position fields (incident title/status) via the popup.
+        if (markers[id] && markers[id].isLive) {
+            rememberUnitIdentity(u);
+            return;
+        }
+
+        if (!isNaN(lat) && !isNaN(lng)) {
+            const label = `${id}`;
+            if (markers[id]) {
+                markers[id].marker.setLatLng([lat, lng]);
+                markers[id].marker.setIcon(getIcon(type));
+                const popupHtml = `
+                    <strong>${label}</strong><br>
+                    ${typeof speed === 'number' && isFinite(speed) ? `Speed: ${speed.toFixed(1)} km/h<br>` : ''}
+                    Coords: ${lat.toFixed(5)}, ${lng.toFixed(5)}
+                `;
+                markers[id].marker.bindPopup(popupHtml);
+                markers[id].speedKph = speed;
+                markers[id].unitType = String(type || '').toLowerCase();
+                markers[id].unitDbId = u.id !== undefined && u.id !== null ? String(u.id) : markers[id].unitDbId;
+            } else {
+                addUnitMarker(id, lat, lng, label, type, speed, u.id);
+            }
+        }
+        rememberUnitIdentity(u);
+    });
+    tryTrackPendingUnit();
+    tryShowPendingRoute().catch(() => {});
+    refreshActiveRoute();
+}
+
 function escapeHtml(s) {
     return String(s || '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'})[c] || c);
 }
