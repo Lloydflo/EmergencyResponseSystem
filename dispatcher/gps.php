@@ -1379,16 +1379,13 @@ function initFirebaseLiveTracking() {
             const lng = parseFloat(r.lng);
             if (isNaN(lat) || isNaN(lng)) return;
 
-            // Key by unitCode to merge with existing MySQL-driven markers
-            // (e.g. "VEH-004") — same identifier your dispatch board uses.
             const key = String(r.unitCode || r.responderId || '').trim();
             if (!key) return;
             seenKeys.add(key);
 
-            const type = String(r.department || r.unitType || 'other').toLowerCase();
             const label = `${key} — ${r.responderName || 'Responder'}`;
-            const speedKph = typeof r.speed === 'number' ? r.speed * 3.6 : null; // m/s -> km/h
-            
+            const speedKph = typeof r.speed === 'number' ? r.speed * 3.6 : null;
+
             const status = String(r.status || 'available');
             const isEnRoute = status === 'en_route';
             const type = isEnRoute
@@ -1412,9 +1409,6 @@ function initFirebaseLiveTracking() {
             }
         });
 
-        // Remove markers for responders who went offline (their Firebase node
-        // is removed on RouteMonitoringService.onDestroy()), but only ones we
-        // created from this live feed — don't touch MySQL-sourced markers.
         Object.keys(markers).forEach((key) => {
             if (markers[key].isLive && !seenKeys.has(key)) {
                 map.removeLayer(markers[key].marker);
