@@ -217,10 +217,23 @@ $pageTitle = 'Inter-Agency Coordination';
             white-space: nowrap;
         }
 
+        .ia-user-status-state.responding,
         .ia-user-status-state.online {
             border-color: #bbf7d0;
             background: #ecfdf5;
             color: #166534;
+        }
+
+        .ia-user-status-state.available {
+            border-color: #fde68a;
+            background: #fffbeb;
+            color: #92400e;
+        }
+
+        .ia-user-status-state.busy {
+            border-color: #fecdd3;
+            background: #fff1f2;
+            color: #be123c;
         }
 
         .ia-user-status-state.offline {
@@ -268,10 +281,23 @@ $pageTitle = 'Inter-Agency Coordination';
             color: #e2e8f0;
         }
 
+        [data-theme="dark"] .ia-user-status-state.responding,
         [data-theme="dark"] .ia-user-status-state.online {
             background: rgba(34, 197, 94, 0.16);
             border-color: rgba(34, 197, 94, 0.45);
             color: #bbf7d0;
+        }
+
+        [data-theme="dark"] .ia-user-status-state.available {
+            background: rgba(245, 158, 11, 0.16);
+            border-color: rgba(245, 158, 11, 0.45);
+            color: #fde68a;
+        }
+
+        [data-theme="dark"] .ia-user-status-state.busy {
+            background: rgba(244, 63, 94, 0.16);
+            border-color: rgba(244, 63, 94, 0.45);
+            color: #fecdd3;
         }
 
         [data-theme="dark"] .ia-user-status-state.offline {
@@ -506,13 +532,18 @@ $pageTitle = 'Inter-Agency Coordination';
             flex-shrink: 0;
         }
 
+        .ia-dot.responding,
         .ia-dot.online,
         .ia-dot.active {
             background: #22c55e;
         }
 
-        .ia-dot.busy {
+        .ia-dot.available {
             background: #f59e0b;
+        }
+
+        .ia-dot.busy {
+            background: #f43f5e;
         }
 
         .ia-dot.offline,
@@ -1730,7 +1761,7 @@ $pageTitle = 'Inter-Agency Coordination';
                 <aside class="ia-user-status-panel" aria-label="User status list">
                     <div class="ia-user-status-head">
                         <p class="ia-user-status-title">Users</p>
-                        <p class="ia-user-status-sub">Online and offline status</p>
+                        <p class="ia-user-status-sub">Responder availability status</p>
                     </div>
                     <div class="ia-user-status-list" id="userStatusList" aria-live="polite">
                         <div class="ia-empty-list">Loading users...</div>
@@ -2788,11 +2819,18 @@ $pageTitle = 'Inter-Agency Coordination';
             }
 
             function userOnlineState(user) {
-                const status = String((user && user.presence_status) || '').trim().toLowerCase();
-                const online = status === 'online';
+                const rawStatus = String((user && (user.availability_status || user.user_status || user.presence_status)) || '').trim().toLowerCase();
+                const normalized = rawStatus === 'online' ? 'available' : rawStatus;
+                const labels = {
+                    responding: 'Responding',
+                    available: 'Available',
+                    busy: 'Busy',
+                    offline: 'Offline'
+                };
+                const key = Object.prototype.hasOwnProperty.call(labels, normalized) ? normalized : 'offline';
                 return {
-                    key: online ? 'online' : 'offline',
-                    label: online ? 'Online' : 'Offline'
+                    key,
+                    label: labels[key]
                 };
             }
 
