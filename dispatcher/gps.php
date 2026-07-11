@@ -329,7 +329,8 @@ function getMarkerIconMeta(type) {
         fire: { icon: 'fa-truck', color: '#dc2626' },
         rescue: { icon: 'fa-life-ring', color: '#ea580c' },
         incident: { icon: 'fa-exclamation-triangle', color: '#f59e0b' },
-        other: { icon: 'fa-truck-medical', color: '#64748b' }
+        other: { icon: 'fa-truck-medical', color: '#64748b' },
+        idle: { icon: 'fa-circle-dot', color: '#94a3b8' }, // muted gray, distinct from active dispatch colors
     };
     return icons[key] || icons.other;
 }
@@ -1387,6 +1388,12 @@ function initFirebaseLiveTracking() {
             const type = String(r.department || r.unitType || 'other').toLowerCase();
             const label = `${key} — ${r.responderName || 'Responder'}`;
             const speedKph = typeof r.speed === 'number' ? r.speed * 3.6 : null; // m/s -> km/h
+            
+            const status = String(r.status || 'available');
+            const isEnRoute = status === 'en_route';
+            const type = isEnRoute
+                ? String(r.department || r.unitType || 'other').toLowerCase()
+                : 'idle';
 
             if (markers[key]) {
                 markers[key].marker.setLatLng([lat, lng]);
