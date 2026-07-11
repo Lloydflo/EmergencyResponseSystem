@@ -107,6 +107,11 @@ function interagency_users_availability_status(array $row, array $activeAssignme
         return 'offline';
     }
 
+    $presenceStatus = strtolower(trim((string)($row['presence_status'] ?? 'offline')));
+    if ($presenceStatus !== 'online') {
+        return 'offline';
+    }
+
     $userId = (int)($row['id'] ?? 0);
     if ($userId > 0 && !empty($activeAssignments[$userId])) {
         return 'responding';
@@ -115,11 +120,6 @@ function interagency_users_availability_status(array $row, array $activeAssignme
     $unitStatus = strtolower(trim((string)($row['unit_status'] ?? '')));
     if (in_array($unitStatus, ['busy', 'in_use', 'assigned', 'acknowledged', 'enroute', 'en_route', 'on_scene', 'active', 'in_progress', 'dispatched'], true)) {
         return 'busy';
-    }
-
-    $presenceStatus = strtolower(trim((string)($row['presence_status'] ?? 'offline')));
-    if ($presenceStatus !== 'online') {
-        return 'offline';
     }
 
     return 'available';

@@ -274,19 +274,20 @@ function logout_user(): void {
     $userName = trim((string)($_SESSION['user_name'] ?? 'User'));
     $rawRole = trim((string)($_SESSION['login_role'] ?? $_SESSION['user_role'] ?? 'user'));
     $roleLabel = ucwords(str_replace(['_', '-'], ' ', $rawRole !== '' ? $rawRole : 'user'));
-    $isAuthenticatedSession = !empty($_SESSION['logged_in']) || !empty($_SESSION['otp_verified']);
 
-    if ($isAuthenticatedSession && $userId !== null && $userId > 0) {
+    if ($userId !== null && $userId > 0) {
         require_once __DIR__ . '/activity_log.php';
         require_once __DIR__ . '/db.php';
         require_once __DIR__ . '/user_presence.php';
-        log_activity_event(
-            $userId,
-            'logout',
-            'auth',
-            $userId,
-            trim($roleLabel . ' ' . $userName . ' signed out')
-        );
+        if (!empty($_SESSION['logged_in']) || !empty($_SESSION['otp_verified'])) {
+            log_activity_event(
+                $userId,
+                'logout',
+                'auth',
+                $userId,
+                trim($roleLabel . ' ' . $userName . ' signed out')
+            );
+        }
         $pdo = get_db_connection();
         if ($pdo instanceof PDO) {
             mark_user_offline($pdo, $userId);
