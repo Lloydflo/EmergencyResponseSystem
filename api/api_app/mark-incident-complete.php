@@ -1,6 +1,7 @@
 <?php
 header("Content-Type: application/json");
 require __DIR__ . "/connect.php";
+require_once __DIR__ . "/../../includes/vehicle_resource_units.php";
 
 $assignment_id = intval($_POST["assignment_id"] ?? 0);
 $responder_id  = intval($_POST["responder_id"] ?? 0);
@@ -91,13 +92,14 @@ function app_complete_ensure_incident_link(PDO $pdo): void
 
 function app_complete_find_dispatch(PDO $pdo, array $assignment): ?array
 {
+    $activeDispatchStatuses = "'assigned','acknowledged','enroute','en_route','on_scene','busy','in_use'";
     $incidentId = (int)($assignment["incident_id"] ?? 0);
     if ($incidentId > 0) {
         $stmt = $pdo->prepare("
             SELECT d.id AS dispatch_id, d.incident_id, d.unit_id
             FROM dispatches d
             WHERE d.incident_id = ?
-            ORDER BY CASE WHEN d.status IN ('assigned','acknowledged','enroute','on_scene') THEN 0 ELSE 1 END, d.id DESC
+            ORDER BY CASE WHEN d.status IN ({$activeDispatchStatuses}) THEN 0 ELSE 1 END, d.id DESC
             LIMIT 1
         ");
         $stmt->execute([$incidentId]);
@@ -118,7 +120,7 @@ function app_complete_find_dispatch(PDO $pdo, array $assignment): ?array
         INNER JOIN units u ON u.id = d.unit_id
         WHERE UPPER(TRIM(u.identifier)) = UPPER(TRIM(?))
           AND d.incident_id > 0
-          AND d.status IN ('assigned','acknowledged','enroute','on_scene')
+          AND d.status IN ({$activeDispatchStatuses})
         ORDER BY d.assigned_at DESC, d.id DESC
         LIMIT 1
     ");
@@ -146,11 +148,29 @@ function app_complete_resolve_incident(PDO $pdo, array $assignment, int $respond
     $unitIds = array_values(array_filter(array_map(static function ($row): int {
         return (int)($row["unit_id"] ?? 0);
     }, $unitIdsStmt->fetchAll(PDO::FETCH_ASSOC))));
+    $dispatchUnitId = $dispatch ? (int)($dispatch["unit_id"] ?? 0) : 0;
+    if ($dispatchUnitId > 0) {
+        $unitIds[] = $dispatchUnitId;
+    }
+
+    $unitCode = trim((string)($assignment["assigned_unit_code"] ?? ""));
+    if ($unitCode === "") {
+        $unitCode = trim((string)($assignment["responder_unit_code"] ?? ""));
+    }
+    if ($unitCode !== "") {
+        $unitLookup = $pdo->prepare("SELECT id FROM units WHERE UPPER(TRIM(identifier)) = UPPER(TRIM(?)) LIMIT 1");
+        $unitLookup->execute([$unitCode]);
+        $unitLookupId = (int)$unitLookup->fetchColumn();
+        if ($unitLookupId > 0) {
+            $unitIds[] = $unitLookupId;
+        }
+    }
+    $unitIds = array_values(array_unique(array_filter($unitIds)));
 
     $dispatchUpdate = $pdo->prepare("
         UPDATE dispatches
         SET status = 'cleared', cleared_at = COALESCE(cleared_at, CURRENT_TIMESTAMP)
-        WHERE incident_id = ? AND status IN ('assigned','acknowledged','enroute','on_scene')
+        WHERE incident_id = ? AND status IN ('assigned','acknowledged','enroute','en_route','on_scene','busy','in_use')
     ");
     $dispatchUpdate->execute([$incidentId]);
 
@@ -161,6 +181,9 @@ function app_complete_resolve_incident(PDO $pdo, array $assignment, int $respond
             WHERE id IN ($placeholders)
         ");
         $unitUpdate->execute($unitIds);
+        ers_sync_vehicle_resource_status_by_unit_ids($pdo, $unitIds, 'available');
+    } elseif ($unitCode !== "") {
+        ers_update_vehicle_resource_status_by_identifier($pdo, $unitCode, 'available');
     }
 
     global $notes, $relativePath;
