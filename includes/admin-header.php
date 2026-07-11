@@ -350,13 +350,18 @@ document.addEventListener('DOMContentLoaded', function() {
     const reviewUrl = <?php echo json_encode($review_page); ?>;
     const userRole = <?php echo json_encode($normalized_user_role); ?>;
     const resolvedSeenKey = 'ers.resolvedNotificationSeen.' + userRole;
+    const incidentCardSeenKey = 'ers.interagencyIncidentCardSeen.' + userRole;
     const state = {
         lastUnreadCount: null,
         lastBackupCount: null,
         lastResolvedNotificationId: null,
+        lastIncidentCardNotificationId: null,
         resolvedSeenId: Number(window.localStorage.getItem(resolvedSeenKey) || 0) || 0,
+        incidentCardSeenId: Number(window.localStorage.getItem(incidentCardSeenKey) || 0) || 0,
         resolvedNotifications: [],
         resolvedUnreadCount: 0,
+        incidentCardNotifications: [],
+        incidentCardUnreadCount: 0,
         recentThreads: [],
         unreadThreads: [],
         backupRequests: [],
@@ -415,6 +420,32 @@ document.addEventListener('DOMContentLoaded', function() {
         return count + ' pending resource requests';
     }
 
+    function incidentCardUnreadText(count) {
+        if (count <= 0) return 'No new incident cards';
+        if (count === 1) return '1 new incident card';
+        return count + ' new incident cards';
+    }
+
+    function incidentCardLabel(item) {
+        const card = item && item.incident_card ? item.incident_card : {};
+        const ref = String(card.reference_no || '').trim();
+        if (ref) return ref;
+        const id = Number(card.incident_id || 0);
+        return id > 0 ? ('#' + id) : 'Incident';
+    }
+
+    function incidentCardText(item) {
+        const card = item && item.incident_card ? item.incident_card : {};
+        const label = incidentCardLabel(item);
+        const type = String(card.type || '').trim();
+        const priority = String(card.priority || '').trim();
+        const sender = String(item && item.sender_name ? item.sender_name : 'Someone');
+        const pieces = [];
+        if (type) pieces.push(type);
+        if (priority) pieces.push(priority);
+        return sender + ' sent incident card ' + label + (pieces.length ? ' (' + pieces.join(', ') + ')' : '');
+    }
+
     function threadTitle(item) {
         if (!item || typeof item !== 'object') return 'Interagency';
         return String(
@@ -465,7 +496,25 @@ document.addEventListener('DOMContentLoaded', function() {
         const backupCount = Array.isArray(state.backupRequests) ? state.backupRequests.length : 0;
         const latestBackup = backupCount > 0 ? state.backupRequests[0] : null;
         const resolvedItems = Array.isArray(state.resolvedNotifications) ? state.resolvedNotifications.slice(0, 3) : [];
+        const incidentCardItems = Array.isArray(state.incidentCardNotifications) ? state.incidentCardNotifications.slice(0, 3) : [];
         const parts = [];
+
+        incidentCardItems.forEach(function(item) {
+            const label = incidentCardLabel(item);
+            const isUnread = Number(item.notification_id || 0) > state.incidentCardSeenId;
+            parts.push(`
+                <button type="button" class="notification-item header-reset-button" data-open-interagency="1" data-incident-card-notification="1">
+                    <div class="notification-icon">
+                        <i class="fas ${isUnread ? 'fa-triangle-exclamation' : 'fa-clipboard-list'}"></i>
+                    </div>
+                    <div class="notification-details">
+                        <div class="notification-title">${escapeHtml(isUnread ? 'Incident card sent' : 'Incident card')}</div>
+                        <div class="notification-text">${escapeHtml(incidentCardText(item))}</div>
+                        <div class="notification-time">${escapeHtml(label)} · ${escapeHtml(relativeTime(item.notified_at))}</div>
+                    </div>
+                </button>
+            `);
+        });
 
         resolvedItems.forEach(function(item) {
             const incident = item && item.incident ? item.incident : {};
@@ -609,6 +658,20 @@ document.addEventListener('DOMContentLoaded', function() {
         state.toastTimer = window.setTimeout(hideLiveToast, 4000);
     }
 
+    function showIncidentCardToast(count) {
+        if (!liveToast || count <= 0) return;
+        if (liveToastIcon) liveToastIcon.className = 'fas fa-triangle-exclamation';
+        if (liveToastTitle) liveToastTitle.textContent = 'Incident Card';
+        if (liveToastText) liveToastText.textContent = incidentCardUnreadText(count);
+        liveToast.setAttribute('data-toast-target', 'incident-card');
+        liveToast.hidden = false;
+        window.clearTimeout(state.toastTimer);
+        window.requestAnimationFrame(function() {
+            liveToast.classList.add('show');
+        });
+        state.toastTimer = window.setTimeout(hideLiveToast, 4000);
+    }
+
     function closeModal(modalId) {
         const modal = document.getElementById(modalId);
         if (!modal) return;
@@ -658,6 +721,17 @@ document.addEventListener('DOMContentLoaded', function() {
             state.resolvedSeenId = latestId;
             state.resolvedUnreadCount = 0;
             window.localStorage.setItem(resolvedSeenKey, String(latestId));
+        }
+    }
+
+    function markIncidentCardNotificationsSeen() {
+        const latestId = Math.max(0, ...state.incidentCardNotifications.map(function(item) {
+            return Number(item.notification_id || 0);
+        }));
+        if (latestId > state.incidentCardSeenId) {
+            state.incidentCardSeenId = latestId;
+            state.incidentCardUnreadCount = 0;
+            window.localStorage.setItem(incidentCardSeenKey, String(latestId));
         }
     }
 
@@ -723,6 +797,44 @@ document.addEventListener('DOMContentLoaded', function() {
         } catch (_) {}
     }
 
+    async function loadIncidentCardSummary() {
+        if (userRole !== 'admin') {
+            state.incidentCardNotifications = [];
+            state.incidentCardUnreadCount = 0;
+            state.lastIncidentCardNotificationId = 0;
+            return;
+        }
+
+        try {
+            const response = await fetch('api/interagency_incident_card_notifications.php?limit=10', {
+                cache: 'no-store',
+                credentials: 'same-origin'
+            });
+            if (!response.ok) return;
+            const data = await response.json();
+            if (!data || !data.ok || !Array.isArray(data.notifications)) return;
+
+            const notifications = data.notifications;
+            const latestId = notifications.length ? Math.max(...notifications.map(function(item) {
+                return Number(item.notification_id || 0);
+            })) : 0;
+
+            if (state.lastIncidentCardNotificationId !== null && latestId > state.lastIncidentCardNotificationId) {
+                const newCount = notifications.filter(function(item) {
+                    const id = Number(item.notification_id || 0);
+                    return id > state.lastIncidentCardNotificationId;
+                }).length;
+                showIncidentCardToast(newCount);
+            }
+
+            state.lastIncidentCardNotificationId = latestId;
+            state.incidentCardNotifications = notifications;
+            state.incidentCardUnreadCount = notifications.filter(function(item) {
+                return Number(item.notification_id || 0) > state.incidentCardSeenId;
+            }).length;
+        } catch (_) {}
+    }
+
     async function loadInteragencySummary() {
         try {
             const response = await fetch('api/interagency_chat_threads.php', {
@@ -756,7 +868,7 @@ document.addEventListener('DOMContentLoaded', function() {
             state.unreadThreads = unreadThreads;
 
             const backupCount = Array.isArray(state.backupRequests) ? state.backupRequests.length : 0;
-            setBadge(notificationBadge, unreadCount + backupCount + state.resolvedUnreadCount);
+            setBadge(notificationBadge, unreadCount + backupCount + state.resolvedUnreadCount + state.incidentCardUnreadCount);
             setBadge(messageBadge, unreadCount);
             renderNotificationList(unreadCount);
             renderMessageList();
@@ -766,6 +878,7 @@ document.addEventListener('DOMContentLoaded', function() {
     async function loadHeaderSummary() {
         await loadBackupRequestSummary();
         await loadResolvedIncidentSummary();
+        await loadIncidentCardSummary();
         await loadInteragencySummary();
     }
 
@@ -783,9 +896,10 @@ document.addEventListener('DOMContentLoaded', function() {
             event.stopPropagation();
             await loadHeaderSummary();
             markResolvedNotificationsSeen();
+            markIncidentCardNotificationsSeen();
             const unreadCount = Math.max(0, Number(state.lastUnreadCount) || 0);
             const backupCount = Array.isArray(state.backupRequests) ? state.backupRequests.length : 0;
-            setBadge(notificationBadge, unreadCount + backupCount + state.resolvedUnreadCount);
+            setBadge(notificationBadge, unreadCount + backupCount + state.resolvedUnreadCount + state.incidentCardUnreadCount);
             renderNotificationList(unreadCount);
             toggleModal(notificationModal, notificationBtn, messageModal, messageBtn);
         });
@@ -815,6 +929,9 @@ document.addEventListener('DOMContentLoaded', function() {
         const trigger = event.target.closest('[data-open-interagency]');
         if (trigger) {
             event.preventDefault();
+            if (trigger.hasAttribute('data-incident-card-notification')) {
+                markIncidentCardNotificationsSeen();
+            }
             openInteragency();
             return;
         }
@@ -864,6 +981,11 @@ document.addEventListener('DOMContentLoaded', function() {
     if (liveToast) {
         liveToast.addEventListener('click', function(event) {
             event.preventDefault();
+            if (liveToast.getAttribute('data-toast-target') === 'incident-card') {
+                markIncidentCardNotificationsSeen();
+                openInteragency();
+                return;
+            }
             if (liveToast.getAttribute('data-toast-target') === 'review') {
                 markResolvedNotificationsSeen();
                 openReview();

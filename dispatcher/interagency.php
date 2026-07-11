@@ -1400,6 +1400,202 @@ $pageTitle = 'Inter-Agency Coordination';
             color: #64748b;
         }
 
+        .ia-incident-card {
+            border: 1px solid #fed7aa;
+            border-radius: 12px;
+            background: linear-gradient(135deg, #fffbeb 0%, #fff7ed 100%);
+            padding: 0.7rem 0.8rem;
+            margin-bottom: 0.45rem;
+            max-width: 320px;
+        }
+
+        .ia-message.outgoing .ia-incident-card {
+            border-color: #99e6d0;
+            background: linear-gradient(135deg, #f0fdfa 0%, #ecfeff 100%);
+        }
+
+        .ia-incident-card-head {
+            display: flex;
+            align-items: center;
+            gap: 0.45rem;
+            margin-bottom: 0.4rem;
+        }
+
+        .ia-incident-card-head i {
+            color: #b45309;
+            font-size: 0.85rem;
+        }
+
+        .ia-incident-card-head .ia-incident-card-label {
+            font-size: 0.72rem;
+            font-weight: 800;
+            text-transform: uppercase;
+            letter-spacing: 0.04em;
+            color: #b45309;
+        }
+
+        .ia-incident-status {
+            margin-left: auto;
+            border-radius: 999px;
+            padding: 0.2rem 0.55rem;
+            font-size: 0.68rem;
+            font-weight: 800;
+            text-transform: uppercase;
+            letter-spacing: 0.03em;
+            white-space: nowrap;
+        }
+
+        .ia-incident-status.status-pending {
+            background: #fef3c7;
+            color: #92400e;
+        }
+
+        .ia-incident-status.status-accepted {
+            background: #dcfce7;
+            color: #166534;
+        }
+
+        .ia-incident-status.status-declined {
+            background: #fee2e2;
+            color: #991b1b;
+        }
+
+        .ia-incident-id {
+            color: #7c2d12;
+            font-size: 1.25rem;
+            font-weight: 900;
+            line-height: 1.1;
+            word-break: break-word;
+        }
+
+        .ia-incident-card-head + .ia-incident-id {
+            margin-top: -0.1rem;
+        }
+
+        .ia-incident-meta {
+            margin: 0.35rem 0 0.6rem;
+            color: #78350f;
+            font-size: 0.8rem;
+            line-height: 1.4;
+        }
+
+        .ia-incident-meta .ia-incident-meta-type {
+            font-weight: 700;
+        }
+
+        .ia-incident-actions {
+            display: grid;
+            grid-template-columns: 1fr;
+        }
+
+        .ia-incident-btn {
+            border: 1px solid #fdba74;
+            background: #fff;
+            color: #9a3412;
+            border-radius: 9px;
+            padding: 0.5rem 0.3rem;
+            font-size: 0.78rem;
+            font-weight: 700;
+            cursor: pointer;
+            transition: 0.2s ease;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 0.3rem;
+        }
+
+        .ia-incident-btn:hover:not(:disabled) {
+            background: #fff7ed;
+            border-color: #fb923c;
+        }
+
+        .ia-incident-detail-grid {
+            display: grid;
+            gap: 0.7rem;
+        }
+
+        .ia-incident-detail-row {
+            display: grid;
+            grid-template-columns: 130px 1fr;
+            gap: 0.5rem;
+            align-items: start;
+        }
+
+        .ia-incident-detail-key {
+            color: #64748b;
+            font-size: 0.78rem;
+            font-weight: 800;
+            text-transform: uppercase;
+            letter-spacing: 0.03em;
+        }
+
+        .ia-incident-detail-value {
+            margin: 0;
+            color: #102a43;
+            font-size: 0.88rem;
+            line-height: 1.4;
+            word-break: break-word;
+        }
+
+        .ia-incident-detail-badge {
+            display: inline-block;
+            border-radius: 999px;
+            padding: 0.2rem 0.6rem;
+            font-size: 0.74rem;
+            font-weight: 800;
+            text-transform: capitalize;
+        }
+
+        [data-theme="dark"] #incidentDetailModal .ia-modal {
+            background: #111827;
+            border-color: #334155;
+            color: #e5e7eb;
+        }
+
+        [data-theme="dark"] #incidentDetailModal .ia-modal-head {
+            background: #0f172a;
+            border-bottom-color: #475569;
+        }
+
+        [data-theme="dark"] #incidentDetailModal .ia-modal-title {
+            color: #f8fafc;
+        }
+
+        [data-theme="dark"] #incidentDetailModal .ia-modal-subtitle {
+            color: #cbd5e1;
+        }
+
+        [data-theme="dark"] #incidentDetailModal .ia-modal-close {
+            background: #1e293b;
+            border-color: #475569;
+            color: #e2e8f0;
+        }
+
+        [data-theme="dark"] #incidentDetailModal .ia-modal-close:hover,
+        [data-theme="dark"] #incidentDetailModal .ia-modal-close:focus-visible {
+            background: #334155;
+            color: #ffffff;
+        }
+
+        [data-theme="dark"] #incidentDetailModal .ia-media-empty {
+            background: #0f172a;
+            border-color: #475569;
+            color: #cbd5e1;
+        }
+
+        [data-theme="dark"] #incidentDetailModal .ia-incident-detail-key {
+            color: #94a3b8;
+        }
+
+        [data-theme="dark"] #incidentDetailModal .ia-incident-detail-value {
+            color: #e2e8f0;
+        }
+
+        [data-theme="dark"] #incidentDetailModal .ia-incident-detail-badge {
+            border: 1px solid rgba(226, 232, 240, 0.28);
+            box-shadow: 0 0 0 1px rgba(15, 23, 42, 0.18);
+        }
+
         @media (max-width: 1280px) {
             .ia-board {
                 grid-template-columns: 320px minmax(0, 1fr);
@@ -1578,6 +1774,22 @@ $pageTitle = 'Inter-Agency Coordination';
         </div>
     </div>
 
+    <div class="ia-modal-shell" id="incidentDetailModal" hidden aria-hidden="true">
+        <div class="ia-modal-backdrop" data-close-incident-detail></div>
+        <div class="ia-modal" role="dialog" aria-modal="true" aria-labelledby="incidentDetailModalTitle">
+            <div class="ia-modal-head">
+                <div>
+                    <p class="ia-modal-title" id="incidentDetailModalTitle">Incident Details</p>
+                    <p class="ia-modal-subtitle" id="incidentDetailModalSubtitle">Shared incident information.</p>
+                </div>
+                <button type="button" class="ia-modal-close" id="incidentDetailModalCloseBtn" aria-label="Close incident details">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+            <div class="ia-modal-body" id="incidentDetailModalBody"></div>
+        </div>
+    </div>
+
     <div class="ia-modal-shell" id="requestGroupMemberModal" hidden aria-hidden="true">
         <div class="ia-modal-backdrop" data-close-request-group-member></div>
         <div class="ia-modal" role="dialog" aria-modal="true" aria-labelledby="requestGroupMemberModalTitle">
@@ -1649,6 +1861,10 @@ $pageTitle = 'Inter-Agency Coordination';
             const groupMembersModalSubtitle = document.getElementById('groupMembersModalSubtitle');
             const groupMembersModalBody = document.getElementById('groupMembersModalBody');
             const groupMembersModalCloseBtn = document.getElementById('groupMembersModalCloseBtn');
+            const incidentDetailModal = document.getElementById('incidentDetailModal');
+            const incidentDetailModalBody = document.getElementById('incidentDetailModalBody');
+            const incidentDetailModalSubtitle = document.getElementById('incidentDetailModalSubtitle');
+            const incidentDetailModalCloseBtn = document.getElementById('incidentDetailModalCloseBtn');
             const requestGroupMemberModal = document.getElementById('requestGroupMemberModal');
             const requestGroupMemberModalSubtitle = document.getElementById('requestGroupMemberModalSubtitle');
             const requestGroupMemberSearchInput = document.getElementById('requestGroupMemberSearchInput');
@@ -1702,6 +1918,9 @@ $pageTitle = 'Inter-Agency Coordination';
                 if (String(item.thread_kind || '') === 'group') {
                     const count = Number(item.member_count || 0);
                     return count > 0 ? `Group Chat · ${count} member(s)` : 'Group Chat';
+                }
+                if (String(item.thread_kind || '') === 'external') {
+                    return 'External System';
                 }
                 if (String(item.kind || '') === 'department') {
                     return 'Department Channel';
@@ -1954,6 +2173,91 @@ $pageTitle = 'Inter-Agency Coordination';
                 }
             }
 
+            function isIncidentDetailModalOpen() {
+                return !!(incidentDetailModal && incidentDetailModal.classList.contains('show'));
+            }
+
+            function closeIncidentDetail() {
+                if (!incidentDetailModal) return;
+                incidentDetailModal.classList.remove('show');
+                incidentDetailModal.setAttribute('aria-hidden', 'true');
+                incidentDetailModal.hidden = true;
+                document.body.style.overflow = '';
+            }
+
+            async function openIncidentDetail(incidentId) {
+                if (!incidentDetailModal || !incidentDetailModalBody) return;
+                incidentDetailModal.hidden = false;
+                incidentDetailModal.setAttribute('aria-hidden', 'false');
+                incidentDetailModal.classList.add('show');
+                document.body.style.overflow = 'hidden';
+                incidentDetailModalBody.innerHTML = '<div class="ia-media-empty">Loading incident details...</div>';
+                if (incidentDetailModalSubtitle) {
+                    incidentDetailModalSubtitle.textContent = `Incident #${incidentId}`;
+                }
+                try {
+                    const res = await fetch('api/incident_details.php?id=' + encodeURIComponent(String(incidentId)), { cache: 'no-store' });
+                    const data = await res.json();
+                    if (!data || !data.ok || !data.incident) {
+                        incidentDetailModalBody.innerHTML = '<div class="ia-media-empty">Incident not found.</div>';
+                        return;
+                    }
+                    renderIncidentDetail(data.incident);
+                } catch (_) {
+                    incidentDetailModalBody.innerHTML = '<div class="ia-media-empty">Unable to load incident details.</div>';
+                }
+            }
+
+            function renderIncidentDetail(incident) {
+                if (!incidentDetailModalBody) return;
+                const id = Number(incident.id) || 0;
+                const rows = [];
+                const addRow = (key, value) => {
+                    if (value === null || value === undefined || value === '') return;
+                    rows.push({ key, value: String(value) });
+                };
+                if (incident.reference_no) addRow('Reference', incident.reference_no);
+                addRow('Type', incident.type);
+                addRow('Priority', incident.priority);
+                addRow('Status', incident.status);
+                addRow('Title', incident.title);
+                addRow('Location', incident.location_address);
+                addRow('Description', incident.description);
+                addRow('Reported by', incident.caller_name);
+                addRow('Assigned unit', incident.assigned_unit_identifier);
+                if (incident.created_at) addRow('Reported at', incident.created_at);
+
+                const statusValue = String(incident.status || '').trim().toLowerCase();
+                const statusColor = statusValue === 'resolved' || statusValue === 'closed'
+                    ? 'background:#dcfce7;color:#166534'
+                    : (statusValue === 'dispatched' || statusValue === 'active'
+                        ? 'background:#dbeafe;color:#1e40af'
+                        : 'background:#fef3c7;color:#92400e');
+
+                incidentDetailModalBody.innerHTML = `
+                    <div class="ia-incident-detail-grid">
+                        <div class="ia-incident-detail-row">
+                            <span class="ia-incident-detail-key">Incident ID</span>
+                            <p class="ia-incident-detail-value">#${id}</p>
+                        </div>
+                        ${rows.map((row) => {
+                            if (row.key === 'Status') {
+                                return `
+                                    <div class="ia-incident-detail-row">
+                                        <span class="ia-incident-detail-key">Status</span>
+                                        <p class="ia-incident-detail-value"><span class="ia-incident-detail-badge" style="${statusColor}">${escapeHtml(row.value)}</span></p>
+                                    </div>`;
+                            }
+                            return `
+                                <div class="ia-incident-detail-row">
+                                    <span class="ia-incident-detail-key">${escapeHtml(row.key)}</span>
+                                    <p class="ia-incident-detail-value">${escapeHtml(row.value)}</p>
+                                </div>`;
+                        }).join('')}
+                    </div>
+                `;
+            }
+
             function selectedGroupMemberRequestUser() {
                 return state.groupMemberRequestUsers.find((item) => Number(item.id) === Number(state.groupMemberRequestSelectedId)) || null;
             }
@@ -2111,7 +2415,43 @@ $pageTitle = 'Inter-Agency Coordination';
                 return Array.isArray(data.attachments) ? data.attachments : [];
             }
 
+            function renderIncidentCard(item) {
+                const card = item && item.incident_card && typeof item.incident_card === 'object' ? item.incident_card : null;
+                if (!card) return '';
+                const incidentId = Number(card.incident_id || 0);
+                const refNo = String(card.reference_no || '').trim();
+                const label = refNo !== '' ? escapeHtml(refNo) : `#${incidentId}`;
+                const type = String(card.type || '').trim();
+                const priority = String(card.priority || '').trim();
+                const location = String(card.location || '').trim();
+                const status = String(item.incident_status || 'pending').toLowerCase();
+                const statusLabel = status === 'accepted' ? 'Accepted' : (status === 'declined' ? 'Declined' : 'Pending');
+                const metaParts = [];
+                if (type) metaParts.push(`<span class="ia-incident-meta-type">${escapeHtml(type)}</span>`);
+                if (priority) metaParts.push(escapeHtml(priority));
+                if (location) metaParts.push(escapeHtml(location));
+                const metaHtml = metaParts.length ? `<div class="ia-incident-meta">${metaParts.join(' &middot; ')}</div>` : '';
+                const viewDisabled = incidentId > 0 ? '' : 'disabled';
+                return `
+                    <div class="ia-incident-card">
+                        <div class="ia-incident-card-head">
+                            <i class="fas fa-triangle-exclamation"></i>
+                            <span class="ia-incident-card-label">Incident</span>
+                            <span class="ia-incident-status status-${escapeAttr(status)}" data-incident-status>${escapeHtml(statusLabel)}</span>
+                        </div>
+                        <div class="ia-incident-id">${label}</div>
+                        ${metaHtml}
+                        <div class="ia-incident-actions">
+                            <button type="button" class="ia-incident-btn view" data-incident-view="${escapeAttr(incidentId)}" ${viewDisabled}>
+                                <i class="fas fa-eye"></i> View Details
+                            </button>
+                        </div>
+                    </div>
+                `;
+            }
+
             function renderMessageBody(item) {
+                const incidentHtml = renderIncidentCard(item);
                 const text = String(item.text || '').trim();
                 const attachments = Array.isArray(item.attachments) ? item.attachments : [];
                 const replyTo = item && item.reply_to && typeof item.reply_to === 'object' ? item.reply_to : null;
@@ -2136,7 +2476,7 @@ $pageTitle = 'Inter-Agency Coordination';
                         }).join('')}
                     </div>
                 ` : '';
-                return replyHtml + textHtml + filesHtml;
+                return incidentHtml + replyHtml + textHtml + filesHtml;
             }
 
             function stripPriorityPrefix(text) {
@@ -2184,6 +2524,10 @@ $pageTitle = 'Inter-Agency Coordination';
                 const plainText = stripPriorityPrefix(item && item.text ? item.text : '');
                 if (plainText) {
                     return plainText.length > 100 ? `${plainText.slice(0, 100)}...` : plainText;
+                }
+                if (item && item.incident_card && typeof item.incident_card === 'object') {
+                    const refNo = String(item.incident_card.reference_no || '').trim();
+                    return refNo ? `Incident ${refNo}` : 'Incident card';
                 }
                 const attachments = (item && Array.isArray(item.attachments)) ? item.attachments : [];
                 if (attachments.length === 1) {
@@ -2397,7 +2741,15 @@ $pageTitle = 'Inter-Agency Coordination';
             function time(dateLike) {
                 const d = parsePhilippineDate(dateLike);
                 if (isNaN(d.getTime())) return 'Now';
-                return d.toLocaleTimeString('en-PH', { timeZone: 'Asia/Manila', hour: '2-digit', minute: '2-digit' });
+                return d.toLocaleString('en-PH', {
+                    timeZone: 'Asia/Manila',
+                    weekday: 'short',
+                    month: 'short',
+                    day: 'numeric',
+                    year: 'numeric',
+                    hour: '2-digit',
+                    minute: '2-digit'
+                });
             }
 
             function activeThread() {
@@ -2408,6 +2760,9 @@ $pageTitle = 'Inter-Agency Coordination';
                 if (!thread) return '';
                 if (String(thread.thread_kind || '') === 'group') {
                     return `group:${thread.group_id || thread.entity_id || 0}`;
+                }
+                if (String(thread.thread_kind || '') === 'external') {
+                    return `external:${thread.external_message_id || thread.entity_id || 0}`;
                 }
                 if (String(thread.thread_kind || '') === 'user') {
                     return `user:${thread.user_id || thread.entity_id || 0}`;
@@ -2658,6 +3013,9 @@ $pageTitle = 'Inter-Agency Coordination';
                 if (kind === 'group') {
                     params.set('thread_kind', 'group');
                     params.set('group_id', String(active.group_id || active.entity_id || 0));
+                } else if (kind === 'external') {
+                    params.set('thread_kind', 'external');
+                    params.set('message_id', String(active.external_message_id || active.entity_id || 0));
                 } else if (kind === 'user') {
                     params.set('thread_kind', 'user');
                     params.set('user_id', String(active.user_id || active.entity_id || 0));
@@ -2795,6 +3153,10 @@ $pageTitle = 'Inter-Agency Coordination';
                     attachment_count: Number(state.replyTo.attachment_count || 0)
                 } : null;
                 const threadKind = String(active.thread_kind || '');
+                if (threadKind === 'external') {
+                    alert('External incident conversations are read-only.');
+                    return 0;
+                }
                 const isUserThread = threadKind === 'user';
                 const isGroupThread = threadKind === 'group';
                 const entityType = isGroupThread ? 'agency_group_chat' : (isUserThread ? 'agency_user_chat' : 'agency_chat');
@@ -3018,6 +3380,17 @@ $pageTitle = 'Inter-Agency Coordination';
                 });
 
                 chatTimelineEl.addEventListener('click', async (event) => {
+                    const incidentViewBtn = event.target.closest('[data-incident-view]');
+                    if (incidentViewBtn) {
+                        event.preventDefault();
+                        event.stopPropagation();
+                        const incidentId = Number(incidentViewBtn.getAttribute('data-incident-view') || 0);
+                        if (incidentId > 0) {
+                            await openIncidentDetail(incidentId);
+                        }
+                        return;
+                    }
+
                     const toggle = event.target.closest('[data-message-menu-toggle]');
                     if (toggle) {
                         event.preventDefault();
@@ -3072,6 +3445,16 @@ $pageTitle = 'Inter-Agency Coordination';
                     groupMembersModal.addEventListener('click', (event) => {
                         if (event.target.matches('[data-close-group-members]')) {
                             closeGroupMembersModal();
+                        }
+                    });
+                }
+                if (incidentDetailModalCloseBtn) {
+                    incidentDetailModalCloseBtn.addEventListener('click', closeIncidentDetail);
+                }
+                if (incidentDetailModal) {
+                    incidentDetailModal.addEventListener('click', (event) => {
+                        if (event.target.matches('[data-close-incident-detail]')) {
+                            closeIncidentDetail();
                         }
                     });
                 }
@@ -3132,6 +3515,9 @@ $pageTitle = 'Inter-Agency Coordination';
                         }
                         if (isGroupMembersModalOpen()) {
                             closeGroupMembersModal();
+                        }
+                        if (isIncidentDetailModalOpen()) {
+                            closeIncidentDetail();
                         }
                         if (requestGroupMemberModal && requestGroupMemberModal.classList.contains('show')) {
                             closeGroupMemberRequestModal();

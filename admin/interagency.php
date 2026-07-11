@@ -941,9 +941,13 @@ $pageTitle = 'Inter-Agency Conversations';
 
         .ia-form-row {
             display: grid;
-            grid-template-columns: 160px 1fr auto auto;
-            gap: 0.6rem;
+            grid-template-columns: 160px minmax(0, 1fr) auto auto auto;
+            gap: 0.55rem;
             align-items: center;
+        }
+
+        .ia-input {
+            padding: 0.5rem 0.62rem;
         }
 
         .ia-select,
@@ -1581,6 +1585,228 @@ $pageTitle = 'Inter-Agency Conversations';
                 flex-direction: column;
             }
         }
+
+        .ia-incident-card {
+            border: 1px solid #fed7aa;
+            border-radius: 12px;
+            background: linear-gradient(135deg, #fffbeb 0%, #fff7ed 100%);
+            padding: 0.7rem 0.8rem;
+            margin-bottom: 0.45rem;
+            max-width: 320px;
+        }
+
+        .ia-message.outgoing .ia-incident-card {
+            border-color: #99e6d0;
+            background: linear-gradient(135deg, #f0fdfa 0%, #ecfeff 100%);
+        }
+
+        .ia-incident-card-head {
+            display: flex;
+            align-items: center;
+            gap: 0.45rem;
+            margin-bottom: 0.4rem;
+        }
+
+        .ia-incident-card-head i {
+            color: #b45309;
+            font-size: 0.85rem;
+        }
+
+        .ia-incident-card-head .ia-incident-card-label {
+            font-size: 0.72rem;
+            font-weight: 800;
+            text-transform: uppercase;
+            letter-spacing: 0.04em;
+            color: #b45309;
+        }
+
+        .ia-incident-status {
+            margin-left: auto;
+            border-radius: 999px;
+            padding: 0.2rem 0.55rem;
+            font-size: 0.68rem;
+            font-weight: 800;
+            text-transform: uppercase;
+            letter-spacing: 0.03em;
+            white-space: nowrap;
+        }
+
+        .ia-incident-status.status-pending {
+            background: #fef3c7;
+            color: #92400e;
+        }
+
+        .ia-incident-status.status-accepted {
+            background: #dcfce7;
+            color: #166534;
+        }
+
+        .ia-incident-status.status-declined {
+            background: #fee2e2;
+            color: #991b1b;
+        }
+
+        .ia-incident-id {
+            color: #7c2d12;
+            font-size: 1.25rem;
+            font-weight: 900;
+            line-height: 1.1;
+            word-break: break-word;
+        }
+
+        .ia-incident-card-head + .ia-incident-id {
+            margin-top: -0.1rem;
+        }
+
+        .ia-incident-meta {
+            margin: 0.35rem 0 0.6rem;
+            color: #78350f;
+            font-size: 0.8rem;
+            line-height: 1.4;
+        }
+
+        .ia-incident-meta .ia-incident-meta-type {
+            font-weight: 700;
+        }
+
+        .ia-incident-actions {
+            display: grid;
+            grid-template-columns: 1fr 1fr 1fr;
+            gap: 0.4rem;
+        }
+
+        .ia-incident-btn {
+            border: 1px solid #fdba74;
+            background: #fff;
+            color: #9a3412;
+            border-radius: 9px;
+            padding: 0.5rem 0.3rem;
+            font-size: 0.78rem;
+            font-weight: 700;
+            cursor: pointer;
+            transition: 0.2s ease;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 0.3rem;
+        }
+
+        .ia-incident-btn:hover:not(:disabled) {
+            background: #fff7ed;
+            border-color: #fb923c;
+        }
+
+        .ia-incident-btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+        .ia-incident-btn.accept {
+            border-color: #86efac;
+            color: #166534;
+        }
+
+        .ia-incident-btn.accept:hover:not(:disabled) {
+            background: #f0fdf4;
+            border-color: #4ade80;
+        }
+
+        .ia-incident-btn.decline {
+            border-color: #fca5a5;
+            color: #991b1b;
+        }
+
+        .ia-incident-btn.decline:hover:not(:disabled) {
+            background: #fef2f2;
+            border-color: #f87171;
+        }
+
+        .ia-incident-detail-grid {
+            display: grid;
+            gap: 0.7rem;
+        }
+
+        .ia-incident-detail-row {
+            display: grid;
+            grid-template-columns: 130px 1fr;
+            gap: 0.5rem;
+            align-items: start;
+        }
+
+        .ia-incident-detail-key {
+            color: #64748b;
+            font-size: 0.78rem;
+            font-weight: 800;
+            text-transform: uppercase;
+            letter-spacing: 0.03em;
+        }
+
+        .ia-incident-detail-value {
+            margin: 0;
+            color: #102a43;
+            font-size: 0.88rem;
+            line-height: 1.4;
+            word-break: break-word;
+        }
+
+        .ia-incident-detail-badge {
+            display: inline-block;
+            border-radius: 999px;
+            padding: 0.2rem 0.6rem;
+            font-size: 0.74rem;
+            font-weight: 800;
+            text-transform: capitalize;
+        }
+
+        [data-theme="dark"] #incidentDetailModal .ia-modal {
+            background: #111827;
+            border-color: #334155;
+            color: #e5e7eb;
+        }
+
+        [data-theme="dark"] #incidentDetailModal .ia-modal-head {
+            background: #0f172a;
+            border-bottom-color: #475569;
+        }
+
+        [data-theme="dark"] #incidentDetailModal .ia-modal-title {
+            color: #f8fafc;
+        }
+
+        [data-theme="dark"] #incidentDetailModal .ia-modal-subtitle {
+            color: #cbd5e1;
+        }
+
+        [data-theme="dark"] #incidentDetailModal .ia-modal-close {
+            background: #1e293b;
+            border-color: #475569;
+            color: #e2e8f0;
+        }
+
+        [data-theme="dark"] #incidentDetailModal .ia-modal-close:hover,
+        [data-theme="dark"] #incidentDetailModal .ia-modal-close:focus-visible {
+            background: #334155;
+            color: #ffffff;
+        }
+
+        [data-theme="dark"] #incidentDetailModal .ia-media-empty {
+            background: #0f172a;
+            border-color: #475569;
+            color: #cbd5e1;
+        }
+
+        [data-theme="dark"] #incidentDetailModal .ia-incident-detail-key {
+            color: #94a3b8;
+        }
+
+        [data-theme="dark"] #incidentDetailModal .ia-incident-detail-value {
+            color: #e2e8f0;
+        }
+
+        [data-theme="dark"] #incidentDetailModal .ia-incident-detail-badge {
+            border: 1px solid rgba(226, 232, 240, 0.28);
+            box-shadow: 0 0 0 1px rgba(15, 23, 42, 0.18);
+        }
     </style>
 </head>
 <body>
@@ -1651,6 +1877,9 @@ $pageTitle = 'Inter-Agency Conversations';
                                     <option value="Critical">Critical</option>
                                 </select>
                                 <input type="text" id="messageInput" class="ia-input" maxlength="260" placeholder="Type a message">
+                                <button type="button" class="ia-attach" id="sendIncidentBtn" title="Send incident card to conversation">
+                                    <i class="fas fa-bullhorn"></i>
+                                </button>
                                 <button type="button" class="ia-attach" id="attachFileBtn" title="Attach files/images">
                                     <i class="fas fa-paperclip"></i>
                                 </button>
@@ -1811,6 +2040,47 @@ $pageTitle = 'Inter-Agency Conversations';
         </div>
     </div>
 
+    <div class="ia-modal-shell" id="incidentPickerModal" hidden aria-hidden="true">
+        <div class="ia-modal-backdrop" data-close-incident-picker></div>
+        <div class="ia-modal" role="dialog" aria-modal="true" aria-labelledby="incidentPickerModalTitle">
+            <div class="ia-modal-head">
+                <div>
+                    <p class="ia-modal-title" id="incidentPickerModalTitle">Send Incident</p>
+                    <p class="ia-modal-subtitle" id="incidentPickerModalSubtitle">Pick an incident to share as a card in this conversation.</p>
+                </div>
+                <button type="button" class="ia-modal-close" id="incidentPickerModalCloseBtn" aria-label="Close incident picker">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+            <div class="ia-modal-body">
+                <div class="ia-modal-search">
+                    <i class="fas fa-search"></i>
+                    <input type="text" id="incidentPickerSearchInput" placeholder="Search by ID, code, type, or location...">
+                </div>
+                <div class="ia-user-picker-list" id="incidentPickerList"></div>
+            </div>
+            <div class="ia-modal-actions">
+                <button type="button" class="ia-modal-btn secondary" id="incidentPickerCancelBtn">Cancel</button>
+            </div>
+        </div>
+    </div>
+
+    <div class="ia-modal-shell" id="incidentDetailModal" hidden aria-hidden="true">
+        <div class="ia-modal-backdrop" data-close-incident-detail></div>
+        <div class="ia-modal" role="dialog" aria-modal="true" aria-labelledby="incidentDetailModalTitle">
+            <div class="ia-modal-head">
+                <div>
+                    <p class="ia-modal-title" id="incidentDetailModalTitle">Incident Details</p>
+                    <p class="ia-modal-subtitle" id="incidentDetailModalSubtitle">Shared incident information.</p>
+                </div>
+                <button type="button" class="ia-modal-close" id="incidentDetailModalCloseBtn" aria-label="Close incident details">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+            <div class="ia-modal-body" id="incidentDetailModalBody"></div>
+        </div>
+    </div>
+
     <script>
         (function () {
             const state = {
@@ -1839,7 +2109,10 @@ $pageTitle = 'Inter-Agency Conversations';
                 addGroupMemberLoading: false,
                 userStatuses: [],
                 chatSettingsOpen: false,
-                poller: null
+                poller: null,
+                incidentPickerItems: [],
+                incidentPickerQuery: '',
+                incidentPickerLoading: false
             };
 
             const threadListEl = document.getElementById('threadList');
@@ -1851,6 +2124,16 @@ $pageTitle = 'Inter-Agency Conversations';
             const chatForm = document.getElementById('chatForm');
             const attachFileBtn = document.getElementById('attachFileBtn');
             const messageFilesInput = document.getElementById('messageFiles');
+            const sendIncidentBtn = document.getElementById('sendIncidentBtn');
+            const incidentPickerModal = document.getElementById('incidentPickerModal');
+            const incidentPickerSearchInput = document.getElementById('incidentPickerSearchInput');
+            const incidentPickerList = document.getElementById('incidentPickerList');
+            const incidentPickerCancelBtn = document.getElementById('incidentPickerCancelBtn');
+            const incidentPickerModalCloseBtn = document.getElementById('incidentPickerModalCloseBtn');
+            const incidentDetailModal = document.getElementById('incidentDetailModal');
+            const incidentDetailModalBody = document.getElementById('incidentDetailModalBody');
+            const incidentDetailModalSubtitle = document.getElementById('incidentDetailModalSubtitle');
+            const incidentDetailModalCloseBtn = document.getElementById('incidentDetailModalCloseBtn');
             const replyPreviewEl = document.getElementById('replyPreview');
             const filePreviewEl = document.getElementById('filePreview');
             const addThreadBtn = document.getElementById('addThreadBtn');
@@ -1935,6 +2218,9 @@ $pageTitle = 'Inter-Agency Conversations';
                 if (String(item.thread_kind || '') === 'group') {
                     const count = Number(item.member_count || 0);
                     return count > 0 ? `Group Chat · ${count} member(s)` : 'Group Chat';
+                }
+                if (String(item.thread_kind || '') === 'external') {
+                    return 'External System';
                 }
                 if (String(item.kind || '') === 'department') {
                     return 'Department Channel';
@@ -2635,7 +2921,49 @@ $pageTitle = 'Inter-Agency Conversations';
                 return Array.isArray(data.attachments) ? data.attachments : [];
             }
 
+            function renderIncidentCard(item) {
+                const card = item && item.incident_card && typeof item.incident_card === 'object' ? item.incident_card : null;
+                if (!card) return '';
+                const incidentId = Number(card.incident_id || 0);
+                const refNo = String(card.reference_no || '').trim();
+                const label = refNo !== '' ? escapeHtml(refNo) : `#${incidentId}`;
+                const type = String(card.type || '').trim();
+                const priority = String(card.priority || '').trim();
+                const location = String(card.location || '').trim();
+                const status = String(item.incident_status || 'pending').toLowerCase();
+                const statusLabel = status === 'accepted' ? 'Accepted' : (status === 'declined' ? 'Declined' : 'Pending');
+                const metaParts = [];
+                if (type) metaParts.push(`<span class="ia-incident-meta-type">${escapeHtml(type)}</span>`);
+                if (priority) metaParts.push(escapeHtml(priority));
+                if (location) metaParts.push(escapeHtml(location));
+                const metaHtml = metaParts.length ? `<div class="ia-incident-meta">${metaParts.join(' · ')}</div>` : '';
+                const buttonsDisabled = status !== 'pending' ? 'disabled' : '';
+                return `
+                    <div class="ia-incident-card">
+                        <div class="ia-incident-card-head">
+                            <i class="fas fa-triangle-exclamation"></i>
+                            <span class="ia-incident-card-label">Incident</span>
+                            <span class="ia-incident-status status-${escapeAttr(status)}" data-incident-status>${escapeHtml(statusLabel)}</span>
+                        </div>
+                        <div class="ia-incident-id">${label}</div>
+                        ${metaHtml}
+                        <div class="ia-incident-actions">
+                            <button type="button" class="ia-incident-btn view" data-incident-view="${escapeAttr(incidentId)}">
+                                <i class="fas fa-eye"></i> View incident
+                            </button>
+                            <button type="button" class="ia-incident-btn accept" data-incident-accept ${buttonsDisabled}>
+                                <i class="fas fa-check"></i> Accept
+                            </button>
+                            <button type="button" class="ia-incident-btn decline" data-incident-decline ${buttonsDisabled}>
+                                <i class="fas fa-times"></i> Decline
+                            </button>
+                        </div>
+                    </div>
+                `;
+            }
+
             function renderMessageBody(item) {
+                const incidentHtml = renderIncidentCard(item);
                 const text = String(item.text || '').trim();
                 const attachments = Array.isArray(item.attachments) ? item.attachments : [];
                 const replyTo = item && item.reply_to && typeof item.reply_to === 'object' ? item.reply_to : null;
@@ -2660,7 +2988,7 @@ $pageTitle = 'Inter-Agency Conversations';
                         }).join('')}
                     </div>
                 ` : '';
-                return replyHtml + textHtml + filesHtml;
+                return incidentHtml + replyHtml + textHtml + filesHtml;
             }
 
             function stripPriorityPrefix(text) {
@@ -2921,7 +3249,15 @@ $pageTitle = 'Inter-Agency Conversations';
             function time(dateLike) {
                 const d = parsePhilippineDate(dateLike);
                 if (isNaN(d.getTime())) return 'Now';
-                return d.toLocaleTimeString('en-PH', { timeZone: 'Asia/Manila', hour: '2-digit', minute: '2-digit' });
+                return d.toLocaleString('en-PH', {
+                    timeZone: 'Asia/Manila',
+                    weekday: 'short',
+                    month: 'short',
+                    day: 'numeric',
+                    year: 'numeric',
+                    hour: '2-digit',
+                    minute: '2-digit'
+                });
             }
 
             function activeThread() {
@@ -2932,6 +3268,9 @@ $pageTitle = 'Inter-Agency Conversations';
                 if (!thread) return '';
                 if (String(thread.thread_kind || '') === 'group') {
                     return `group:${thread.group_id || thread.entity_id || 0}`;
+                }
+                if (String(thread.thread_kind || '') === 'external') {
+                    return `external:${thread.external_message_id || thread.entity_id || 0}`;
                 }
                 if (String(thread.thread_kind || '') === 'user') {
                     return `user:${thread.user_id || thread.entity_id || 0}`;
@@ -3185,6 +3524,9 @@ $pageTitle = 'Inter-Agency Conversations';
                 if (kind === 'group') {
                     params.set('thread_kind', 'group');
                     params.set('group_id', String(active.group_id || active.entity_id || 0));
+                } else if (kind === 'external') {
+                    params.set('thread_kind', 'external');
+                    params.set('message_id', String(active.external_message_id || active.entity_id || 0));
                 } else if (kind === 'user') {
                     params.set('thread_kind', 'user');
                     params.set('user_id', String(active.user_id || active.entity_id || 0));
@@ -3311,6 +3653,310 @@ $pageTitle = 'Inter-Agency Conversations';
                 }
             }
 
+            async function sendChatPayload(payloadObj) {
+                const active = activeThread();
+                if (!active) {
+                    alert('No active thread selected.');
+                    return 0;
+                }
+                const threadKind = String(active.thread_kind || '');
+                if (threadKind === 'external') {
+                    alert('External incident conversations are read-only.');
+                    return 0;
+                }
+                const isUserThread = threadKind === 'user';
+                const isGroupThread = threadKind === 'group';
+                const entityType = isGroupThread ? 'agency_group_chat' : (isUserThread ? 'agency_user_chat' : 'agency_chat');
+                const entityId = isGroupThread
+                    ? Number(active.group_id || active.entity_id || 0)
+                    : (isUserThread
+                        ? Number(active.user_id || active.entity_id || 0)
+                        : Number(active.entity_id || 0));
+                if (!Number.isInteger(entityId) || entityId <= 0) {
+                    alert('Invalid thread target. Please re-open the thread.');
+                    return 0;
+                }
+                try {
+                    const res = await fetch('api/activity_event.php', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            action: 'chat',
+                            entity_type: entityType,
+                            entity_id: entityId,
+                            details: JSON.stringify(payloadObj)
+                        })
+                    });
+                    const data = await res.json();
+                    if (!data || !data.ok) {
+                        const reason = (data && (data.detail || data.error)) ? String(data.detail || data.error) : 'Send failed';
+                        alert('Failed to send message: ' + reason);
+                        return 0;
+                    }
+                    return Number(data.message_id) || 0;
+                } catch (error) {
+                    const reason = (error && error.message) ? String(error.message) : 'Network error while sending message.';
+                    alert(reason);
+                    return 0;
+                }
+            }
+
+            function isIncidentPickerOpen() {
+                return !!(incidentPickerModal && incidentPickerModal.classList.contains('show'));
+            }
+
+            function openIncidentPicker() {
+                if (!incidentPickerModal) return;
+                if (!activeThread()) {
+                    alert('Select a conversation first.');
+                    return;
+                }
+                incidentPickerModal.hidden = false;
+                incidentPickerModal.setAttribute('aria-hidden', 'false');
+                incidentPickerModal.classList.add('show');
+                document.body.style.overflow = 'hidden';
+                state.incidentPickerLoading = true;
+                state.incidentPickerQuery = '';
+                state.incidentPickerItems = [];
+                if (incidentPickerSearchInput) incidentPickerSearchInput.value = '';
+                renderIncidentPicker();
+                loadIncidentPicker();
+                window.setTimeout(() => {
+                    if (incidentPickerSearchInput) incidentPickerSearchInput.focus();
+                }, 0);
+            }
+
+            function closeIncidentPicker() {
+                if (!incidentPickerModal) return;
+                incidentPickerModal.classList.remove('show');
+                incidentPickerModal.setAttribute('aria-hidden', 'true');
+                incidentPickerModal.hidden = true;
+                document.body.style.overflow = '';
+                state.incidentPickerLoading = false;
+                state.incidentPickerQuery = '';
+                state.incidentPickerItems = [];
+                if (incidentPickerSearchInput) incidentPickerSearchInput.value = '';
+                if (sendIncidentBtn) sendIncidentBtn.focus();
+            }
+
+            async function loadIncidentPicker() {
+                state.incidentPickerLoading = true;
+                renderIncidentPicker();
+                try {
+                    const res = await fetch('api/incidents_list.php?status=active', { cache: 'no-store' });
+                    const data = await res.json();
+                    if (!data || !data.ok) {
+                        state.incidentPickerItems = [];
+                    } else {
+                        state.incidentPickerItems = Array.isArray(data.items) ? data.items : [];
+                    }
+                } catch (_) {
+                    state.incidentPickerItems = [];
+                }
+                state.incidentPickerLoading = false;
+                renderIncidentPicker();
+            }
+
+            function renderIncidentPicker() {
+                if (!incidentPickerList) return;
+                const query = String(state.incidentPickerQuery || '').trim().toLowerCase();
+                const items = state.incidentPickerItems.filter((item) => {
+                    if (!query) return true;
+                    const hay = `#${item.id} ${item.incident_code || ''} ${item.type || ''} ${item.location || ''} ${item.title || ''}`.toLowerCase();
+                    return hay.includes(query);
+                });
+
+                if (state.incidentPickerLoading && !state.incidentPickerItems.length) {
+                    incidentPickerList.innerHTML = '<div class="ia-user-picker-empty">Loading incidents...</div>';
+                    return;
+                }
+                if (!items.length) {
+                    const emptyLabel = state.incidentPickerItems.length ? 'No incidents match your search.' : 'No active incidents available.';
+                    incidentPickerList.innerHTML = `<div class="ia-user-picker-empty">${escapeHtml(emptyLabel)}</div>`;
+                    return;
+                }
+
+                incidentPickerList.innerHTML = items.map((item) => {
+                    const code = String(item.incident_code || '').trim();
+                    const idLabel = code !== '' ? escapeHtml(code) : `#${item.id}`;
+                    const type = String(item.type || '').trim();
+                    const location = String(item.location || '').trim();
+                    const priority = String(item.priority || '').trim();
+                    const status = String(item.status || '').trim();
+                    const metaParts = [];
+                    if (type) metaParts.push(escapeHtml(type));
+                    if (priority) metaParts.push(escapeHtml(priority));
+                    if (status) metaParts.push(escapeHtml(status));
+                    const metaHtml = metaParts.length ? `<p class="ia-user-option-meta">${metaParts.join(' · ')}</p>` : '';
+                    const locHtml = location ? `<span class="ia-user-option-status">${escapeHtml(location)}</span>` : '';
+                    return `
+                        <button type="button" class="ia-user-option" data-incident-option="${escapeAttr(item.id)}" aria-pressed="false">
+                            <div class="ia-user-option-top">
+                                <div>
+                                    <p class="ia-user-option-name">${idLabel}</p>
+                                    ${metaHtml}
+                                </div>
+                                ${locHtml}
+                            </div>
+                        </button>
+                    `;
+                }).join('');
+            }
+
+            async function sendIncidentCard(incident) {
+                if (!incident) return;
+                const incidentId = Number(incident.id) || 0;
+                if (incidentId <= 0) return;
+                const card = {
+                    incident_id: incidentId,
+                    reference_no: String(incident.incident_code || '').trim(),
+                    title: String(incident.title || '').trim(),
+                    type: String(incident.type || '').trim(),
+                    location: String(incident.location || '').trim(),
+                    priority: String(incident.priority || '').trim()
+                };
+                const messageId = await sendChatPayload({ incident_card: card });
+                if (messageId > 0) {
+                    closeIncidentPicker();
+                    await loadMessages(false, true);
+                    await loadThreads();
+                }
+            }
+
+            function updateIncidentCardDom(article, item) {
+                if (!article || !item) return;
+                const status = String(item.incident_status || 'pending').toLowerCase();
+                const badge = article.querySelector('[data-incident-status]');
+                if (badge) {
+                    badge.textContent = status === 'accepted' ? 'Accepted' : (status === 'declined' ? 'Declined' : 'Pending');
+                    badge.className = 'ia-incident-status status-' + escapeAttr(status);
+                }
+                const acceptBtn = article.querySelector('[data-incident-accept]');
+                const declineBtn = article.querySelector('[data-incident-decline]');
+                if (acceptBtn) acceptBtn.disabled = status !== 'pending';
+                if (declineBtn) declineBtn.disabled = status !== 'pending';
+            }
+
+            async function handleIncidentDecision(article, item, decision) {
+                if (!article || !item || !item.incident_card) return;
+                const messageId = Number(item.id) || 0;
+                const incidentId = Number(item.incident_card.incident_id) || 0;
+                if (messageId <= 0) return;
+                if (String(item.incident_status || 'pending') !== 'pending') return;
+
+                const confirmMsg = decision === 'accepted'
+                    ? 'Accept this incident assignment?'
+                    : 'Decline this incident assignment?';
+                if (!window.confirm(confirmMsg)) return;
+
+                let statusRes;
+                try {
+                    const res = await fetch('api/interagency_incident_status.php', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ message_id: messageId, incident_id: incidentId, status: decision })
+                    });
+                    statusRes = await res.json();
+                } catch (_) {
+                    statusRes = null;
+                }
+                if (!statusRes || !statusRes.ok) {
+                    alert('Unable to record the decision. Please try again.');
+                    return;
+                }
+
+                item.incident_status = decision;
+                updateIncidentCardDom(article, item);
+
+                const label = String(item.incident_card.reference_no || ('#' + incidentId));
+                const verb = decision === 'accepted' ? 'accepted' : 'declined';
+                const followUp = `[INCIDENT] Incident ${label} ${verb} by ${state.currentUser.name}`;
+                await sendChatPayload({ text: followUp });
+                await loadMessages(false, true);
+                await loadThreads();
+            }
+
+            function closeIncidentDetail() {
+                if (!incidentDetailModal) return;
+                incidentDetailModal.classList.remove('show');
+                incidentDetailModal.setAttribute('aria-hidden', 'true');
+                incidentDetailModal.hidden = true;
+                document.body.style.overflow = '';
+            }
+
+            async function openIncidentDetail(incidentId) {
+                if (!incidentDetailModal || !incidentDetailModalBody) return;
+                incidentDetailModal.hidden = false;
+                incidentDetailModal.setAttribute('aria-hidden', 'false');
+                incidentDetailModal.classList.add('show');
+                document.body.style.overflow = 'hidden';
+                incidentDetailModalBody.innerHTML = '<div class="ia-media-empty">Loading incident details...</div>';
+                if (incidentDetailModalSubtitle) {
+                    incidentDetailModalSubtitle.textContent = `Incident #${incidentId}`;
+                }
+                try {
+                    const res = await fetch('api/incident_details.php?id=' + encodeURIComponent(String(incidentId)), { cache: 'no-store' });
+                    const data = await res.json();
+                    if (!data || !data.ok || !data.incident) {
+                        incidentDetailModalBody.innerHTML = '<div class="ia-media-empty">Incident not found.</div>';
+                        return;
+                    }
+                    renderIncidentDetail(data.incident);
+                } catch (_) {
+                    incidentDetailModalBody.innerHTML = '<div class="ia-media-empty">Unable to load incident details.</div>';
+                }
+            }
+
+            function renderIncidentDetail(incident) {
+                if (!incidentDetailModalBody) return;
+                const id = Number(incident.id) || 0;
+                const rows = [];
+                const addRow = (key, value) => {
+                    if (value === null || value === undefined || value === '') return;
+                    rows.push({ key, value: String(value) });
+                };
+                if (incident.reference_no) addRow('Reference', incident.reference_no);
+                addRow('Type', incident.type);
+                addRow('Priority', incident.priority);
+                addRow('Status', incident.status);
+                addRow('Title', incident.title);
+                addRow('Location', incident.location_address);
+                addRow('Description', incident.description);
+                addRow('Reported by', incident.caller_name);
+                addRow('Assigned unit', incident.assigned_unit_identifier);
+                if (incident.created_at) addRow('Reported at', incident.created_at);
+
+                const statusValue = String(incident.status || '').trim().toLowerCase();
+                const statusColor = statusValue === 'resolved' || statusValue === 'closed'
+                    ? 'background:#dcfce7;color:#166534'
+                    : (statusValue === 'dispatched' || statusValue === 'active'
+                        ? 'background:#dbeafe;color:#1e40af'
+                        : 'background:#fef3c7;color:#92400e');
+
+                incidentDetailModalBody.innerHTML = `
+                    <div class="ia-incident-detail-grid">
+                        <div class="ia-incident-detail-row">
+                            <span class="ia-incident-detail-key">Incident ID</span>
+                            <p class="ia-incident-detail-value">#${id}</p>
+                        </div>
+                        ${rows.map((row) => {
+                            if (row.key === 'Status') {
+                                return `
+                                    <div class="ia-incident-detail-row">
+                                        <span class="ia-incident-detail-key">Status</span>
+                                        <p class="ia-incident-detail-value"><span class="ia-incident-detail-badge" style="${statusColor}">${escapeHtml(row.value)}</span></p>
+                                    </div>`;
+                            }
+                            return `
+                                <div class="ia-incident-detail-row">
+                                    <span class="ia-incident-detail-key">${escapeHtml(row.key)}</span>
+                                    <p class="ia-incident-detail-value">${escapeHtml(row.value)}</p>
+                                </div>`;
+                        }).join('')}
+                    </div>
+                `;
+            }
+
             async function handleSendMessage(event) {
                 event.preventDefault();
                 const text = messageInput.value.trim();
@@ -3326,19 +3972,7 @@ $pageTitle = 'Inter-Agency Conversations';
                     text: String(state.replyTo.text || ''),
                     attachment_count: Number(state.replyTo.attachment_count || 0)
                 } : null;
-                const threadKind = String(active.thread_kind || '');
-                const isUserThread = threadKind === 'user';
-                const isGroupThread = threadKind === 'group';
-                const entityType = isGroupThread ? 'agency_group_chat' : (isUserThread ? 'agency_user_chat' : 'agency_chat');
-                const entityId = isGroupThread
-                    ? Number(active.group_id || active.entity_id || 0)
-                    : (isUserThread
-                        ? Number(active.user_id || active.entity_id || 0)
-                        : Number(active.entity_id || 0));
-                if (!Number.isInteger(entityId) || entityId <= 0) {
-                    alert('Invalid thread target. Please re-open the thread.');
-                    return;
-                }
+
                 try {
                     const attachments = await uploadPendingFiles();
                     const payloadObj = {
@@ -3348,24 +3982,8 @@ $pageTitle = 'Inter-Agency Conversations';
                     if (replyTo) {
                         payloadObj.reply_to = replyTo;
                     }
-                    const details = JSON.stringify(payloadObj);
-
-                    const res = await fetch('api/activity_event.php', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({
-                            action: 'chat',
-                            entity_type: entityType,
-                            entity_id: entityId,
-                            details: details
-                        })
-                    });
-                    const data = await res.json();
-                    if (!data || !data.ok) {
-                        const reason = (data && (data.detail || data.error)) ? String(data.detail || data.error) : 'Send failed';
-                        alert('Failed to send message: ' + reason);
-                        return;
-                    }
+                    const messageId = await sendChatPayload(payloadObj);
+                    if (messageId <= 0) return;
                     messageInput.value = '';
                     clearPendingFiles();
                     clearReplyTarget();
@@ -3648,6 +4266,34 @@ $pageTitle = 'Inter-Agency Conversations';
                 });
 
                 chatTimelineEl.addEventListener('click', async (event) => {
+                    const viewBtn = event.target.closest('[data-incident-view]');
+                    if (viewBtn) {
+                        event.preventDefault();
+                        const incidentId = Number(viewBtn.getAttribute('data-incident-view') || 0);
+                        if (incidentId > 0) {
+                            await openIncidentDetail(incidentId);
+                        }
+                        return;
+                    }
+                    const acceptBtn = event.target.closest('[data-incident-accept]');
+                    if (acceptBtn) {
+                        event.preventDefault();
+                        const article = acceptBtn.closest('.ia-message');
+                        const messageId = article ? String(article.getAttribute('data-message-id') || '') : '';
+                        const item = messageId ? state.messageItems[messageId] : null;
+                        await handleIncidentDecision(article, item, 'accepted');
+                        return;
+                    }
+                    const declineBtn = event.target.closest('[data-incident-decline]');
+                    if (declineBtn) {
+                        event.preventDefault();
+                        const article = declineBtn.closest('.ia-message');
+                        const messageId = article ? String(article.getAttribute('data-message-id') || '') : '';
+                        const item = messageId ? state.messageItems[messageId] : null;
+                        await handleIncidentDecision(article, item, 'declined');
+                        return;
+                    }
+
                     const toggle = event.target.closest('[data-message-menu-toggle]');
                     if (toggle) {
                         event.preventDefault();
@@ -3756,6 +4402,49 @@ $pageTitle = 'Inter-Agency Conversations';
                     groupChatModal.addEventListener('click', (event) => {
                         if (event.target.matches('[data-close-group-chat]')) {
                             closeGroupChatModal();
+                        }
+                    });
+                }
+                if (sendIncidentBtn) {
+                    sendIncidentBtn.addEventListener('click', openIncidentPicker);
+                }
+                if (incidentPickerSearchInput) {
+                    incidentPickerSearchInput.addEventListener('input', () => {
+                        state.incidentPickerQuery = incidentPickerSearchInput.value || '';
+                        renderIncidentPicker();
+                    });
+                }
+                if (incidentPickerList) {
+                    incidentPickerList.addEventListener('click', (event) => {
+                        const option = event.target.closest('[data-incident-option]');
+                        if (!option) return;
+                        const incidentId = Number(option.getAttribute('data-incident-option') || 0);
+                        const incident = state.incidentPickerItems.find((item) => Number(item.id) === incidentId) || null;
+                        if (incident) {
+                            sendIncidentCard(incident);
+                        }
+                    });
+                }
+                if (incidentPickerCancelBtn) {
+                    incidentPickerCancelBtn.addEventListener('click', closeIncidentPicker);
+                }
+                if (incidentPickerModalCloseBtn) {
+                    incidentPickerModalCloseBtn.addEventListener('click', closeIncidentPicker);
+                }
+                if (incidentPickerModal) {
+                    incidentPickerModal.addEventListener('click', (event) => {
+                        if (event.target.matches('[data-close-incident-picker]')) {
+                            closeIncidentPicker();
+                        }
+                    });
+                }
+                if (incidentDetailModalCloseBtn) {
+                    incidentDetailModalCloseBtn.addEventListener('click', closeIncidentDetail);
+                }
+                if (incidentDetailModal) {
+                    incidentDetailModal.addEventListener('click', (event) => {
+                        if (event.target.matches('[data-close-incident-detail]')) {
+                            closeIncidentDetail();
                         }
                     });
                 }
@@ -3873,6 +4562,12 @@ $pageTitle = 'Inter-Agency Conversations';
                         }
                         if (groupMemberRequestsModal && groupMemberRequestsModal.classList.contains('show')) {
                             closeGroupMemberRequestsModal();
+                        }
+                        if (isIncidentPickerOpen()) {
+                            closeIncidentPicker();
+                        }
+                        if (incidentDetailModal && incidentDetailModal.classList.contains('show')) {
+                            closeIncidentDetail();
                         }
                     }
                 });

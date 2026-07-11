@@ -539,6 +539,25 @@ INSERT INTO `incidents` (`id`, `reference_no`, `type`, `priority`, `status`, `ti
 -- --------------------------------------------------------
 
 --
+-- Table structure for table `external_incident_links`
+--
+
+CREATE TABLE IF NOT EXISTS `external_incident_links` (
+  `id` BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+  `source_system` VARCHAR(120) NOT NULL,
+  `external_incident_id` VARCHAR(120) NOT NULL,
+  `incident_id` BIGINT UNSIGNED NOT NULL,
+  `payload_json` LONGTEXT DEFAULT NULL,
+  `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `updated_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uk_external_incident_source` (`source_system`, `external_incident_id`),
+  KEY `idx_external_incident_links_incident` (`incident_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- --------------------------------------------------------
+
+--
 -- Table structure for table `incident_notes`
 --
 

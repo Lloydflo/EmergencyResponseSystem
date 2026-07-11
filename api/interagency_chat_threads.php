@@ -137,6 +137,40 @@ function ensure_interagency_group_messages_table(PDO $pdo): void {
     );
 }
 
+function ensure_interagency_solo_chat_table(PDO $pdo): void {
+    $pdo->exec(
+        "CREATE TABLE IF NOT EXISTS `interagency_solo_chat` (
+            `id` BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+            `activity_log_id` INT NOT NULL,
+            `sender_user_id` VARCHAR(255) NOT NULL,
+            `recipient_user_id` INT UNSIGNED NOT NULL,
+            `message_details` LONGTEXT NOT NULL,
+            `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            PRIMARY KEY (`id`),
+            UNIQUE KEY `uk_interagency_solo_chat_activity_log` (`activity_log_id`),
+            KEY `idx_interagency_solo_chat_participants` (`sender_user_id`, `recipient_user_id`),
+            KEY `idx_interagency_solo_chat_recipient_created` (`recipient_user_id`, `created_at`),
+            KEY `idx_interagency_solo_chat_created` (`created_at`)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci"
+    );
+}
+
+function ensure_interagency_external_reads_table(PDO $pdo): void {
+    $pdo->exec(
+        "CREATE TABLE IF NOT EXISTS `interagency_external_thread_reads` (
+            `id` BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+            `user_id` INT UNSIGNED NOT NULL,
+            `activity_log_id` INT NOT NULL,
+            `last_read_id` INT NOT NULL DEFAULT 0,
+            `updated_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+            PRIMARY KEY (`id`),
+            UNIQUE KEY `uk_interagency_external_read` (`user_id`, `activity_log_id`),
+            KEY `idx_interagency_external_reads_user` (`user_id`),
+            KEY `idx_interagency_external_reads_activity` (`activity_log_id`)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci"
+    );
+}
+
 function ensure_interagency_thread_titles_table(PDO $pdo): void {
     $pdo->exec(
         "CREATE TABLE IF NOT EXISTS `interagency_thread_titles` (
@@ -200,12 +234,44 @@ function preview_text_from_details(string $raw): string {
     $text = (string)($parsed['text'] ?? '');
     $attachments = is_array($parsed['attachments'] ?? null) ? $parsed['attachments'] : [];
     if ($text !== '') return $text;
+    $decoded = json_decode(trim($raw), true);
+    if (is_array($decoded) && isset($decoded['incident_card']) && is_array($decoded['incident_card'])) {
+        $card = $decoded['incident_card'];
+        $label = trim((string)($card['reference_no'] ?? ''));
+        if ($label === '' && !empty($card['incident_id'])) {
+            $label = '#' . (string)$card['incident_id'];
+        }
+        return '[INCIDENT] Incident ' . ($label !== '' ? $label : 'card');
+    }
     if (!count($attachments)) return '';
     if (count($attachments) === 1) {
         $name = trim((string)($attachments[0]['name'] ?? 'Attachment'));
         return '[Attachment] ' . ($name !== '' ? $name : 'File');
     }
     return '[' . count($attachments) . ' attachments]';
+}
+
+function external_title_from_details(string $raw, string $fallback): string {
+    $decoded = json_decode(trim($raw), true);
+    if (is_array($decoded)) {
+        $title = trim((string)($decoded['external_conversation_title'] ?? ''));
+        if ($title !== '') {
+            return $title;
+        }
+        $sender = trim((string)($decoded['external_sender_name'] ?? ''));
+        if ($sender !== '') {
+            return $sender;
+        }
+    }
+    return $fallback !== '' ? $fallback : 'External System';
+}
+
+function external_interagency_intake_enabled(): bool {
+    if (!function_exists('ers_env')) {
+        return false;
+    }
+    $value = strtolower((string)ers_env('ERS_EXTERNAL_INTAKE_ENABLED', ''));
+    return in_array($value, ['1', 'true', 'yes', 'on'], true);
 }
 
 function derive_thread_status(?string $accountStatus, ?string $lastActivityAt): string {
@@ -258,10 +324,13 @@ try {
     ensure_interagency_group_tables($pdo);
     ensure_interagency_group_reads_table($pdo);
     ensure_interagency_group_messages_table($pdo);
+    ensure_interagency_solo_chat_table($pdo);
+    ensure_interagency_external_reads_table($pdo);
     ensure_interagency_thread_titles_table($pdo);
 
     $user = get_logged_in_user();
     $currentUserId = (int)($user['id'] ?? 0);
+    $externalIntakeEnabled = external_interagency_intake_enabled();
     touch_user_presence($pdo, $currentUserId);
     $departmentEntityIds = array_keys($threadDefs);
     $departmentEntityIdList = implode(',', array_map('intval', $departmentEntityIds));
@@ -560,6 +629,62 @@ try {
             'unread' => $unreadCount
         ];
         $totalUnread += $unreadCount;
+    }
+
+    if ($externalIntakeEnabled) {
+        $externalStmt = $pdo->prepare(
+            "SELECT
+                s.activity_log_id,
+                s.sender_user_id,
+                s.message_details,
+                s.created_at,
+                COALESCE(a.details, s.message_details) AS details,
+                COALESCE(a.created_at, s.created_at) AS activity_created_at,
+                COALESCE(r.last_read_id, 0) AS last_read_id
+             FROM interagency_solo_chat s
+             LEFT JOIN activity_log a ON a.id = s.activity_log_id
+             LEFT JOIN interagency_external_thread_reads r
+                    ON r.user_id = s.recipient_user_id
+                   AND r.activity_log_id = s.activity_log_id
+             WHERE s.recipient_user_id = ?
+               AND COALESCE(a.user_id, 0) = 0
+             ORDER BY s.activity_log_id DESC"
+        );
+        $externalStmt->execute([$currentUserId]);
+        foreach ($externalStmt->fetchAll(PDO::FETCH_ASSOC) as $row) {
+            $messageId = (int)($row['activity_log_id'] ?? 0);
+            if ($messageId <= 0) {
+                continue;
+            }
+            $senderName = trim((string)($row['sender_user_id'] ?? 'External System'));
+            if ($senderName === '') {
+                $senderName = 'External System';
+            }
+            $details = (string)($row['details'] ?? $row['message_details'] ?? '');
+            $lastReadId = (int)($row['last_read_id'] ?? 0);
+            $unreadCount = $messageId > $lastReadId ? 1 : 0;
+            $threads[] = [
+                'id' => 'external-' . $messageId,
+                'department' => 'external',
+                'thread_kind' => 'external',
+                'external_message_id' => $messageId,
+                'entity_id' => $messageId,
+                'title' => external_title_from_details($details, $senderName),
+                'kind' => 'external',
+                'role' => 'external',
+                'status' => 'active',
+                'icon' => 'fa-building',
+                'tone' => 'external',
+                'last_message_id' => $messageId,
+                'last_text' => preview_text_from_details($details),
+                'last_at' => interagency_manila_iso((string)($row['activity_created_at'] ?? $row['created_at'] ?? '')),
+                'last_sender_name' => $senderName,
+                'last_sender_role' => 'external',
+                'total_messages' => 1,
+                'unread' => $unreadCount
+            ];
+            $totalUnread += $unreadCount;
+        }
     }
 
     $groupStmt = $pdo->prepare(
