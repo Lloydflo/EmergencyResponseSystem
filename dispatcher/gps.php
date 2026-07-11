@@ -156,6 +156,22 @@ $pageTitle = 'GPS Tracking System';
     <!-- ============================================
          COMPLETE FUNCTIONAL GPS TRACKING SYSTEM
          ============================================ -->
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-database-compat.js"></script>
+<script>
+    const firebaseConfig = {
+        apiKey: "YOUR_WEB_API_KEY",
+        authDomain: "emergencyresponseapp-f5110.firebaseapp.com",
+        databaseURL: "https://emergencyresponseapp-f5110-default-rtdb.firebaseio.com",
+        projectId: "emergencyresponseapp-f5110",
+        storageBucket: "emergencyresponseapp-f5110.appspot.com",
+        messagingSenderId: "YOUR_SENDER_ID",
+        appId: "YOUR_APP_ID"
+    };
+    firebase.initializeApp(firebaseConfig);
+    const rtdb = firebase.database();
+</script>
+
     <script>
 let map;
 let markers = {};
@@ -223,6 +239,7 @@ function initMap() {
     // Load units from API and render
     loadDispatchedUnits();
     loadAvailableUnits();
+    initFirebaseLiveTracking();
 
     // Load incidents and add warning markers
     loadIncidentMarkers();
@@ -1349,6 +1366,58 @@ function syncUnitMarkers(items) {
     tryTrackPendingUnit();
     tryShowPendingRoute().catch(() => {});
     refreshActiveRoute();
+}
+
+function initFirebaseLiveTracking() {
+    rtdb.ref('live_locations').on('value', (snapshot) => {
+        const data = snapshot.val() || {};
+        const seenKeys = new Set();
+
+        Object.values(data).forEach((r) => {
+            const lat = parseFloat(r.lat);
+            const lng = parseFloat(r.lng);
+            if (isNaN(lat) || isNaN(lng)) return;
+
+            // Key by unitCode to merge with existing MySQL-driven markers
+            // (e.g. "VEH-004") — same identifier your dispatch board uses.
+            const key = String(r.unitCode || r.responderId || '').trim();
+            if (!key) return;
+            seenKeys.add(key);
+
+            const type = String(r.department || r.unitType || 'other').toLowerCase();
+            const label = `${key} — ${r.responderName || 'Responder'}`;
+            const speedKph = typeof r.speed === 'number' ? r.speed * 3.6 : null; // m/s -> km/h
+
+            if (markers[key]) {
+                markers[key].marker.setLatLng([lat, lng]);
+                markers[key].marker.setIcon(getIcon(type));
+                markers[key].marker.bindPopup(`
+                    <strong>${label}</strong><br>
+                    Status: ${r.status || 'unknown'}<br>
+                    ${speedKph !== null ? `Speed: ${speedKph.toFixed(1)} km/h<br>` : ''}
+                    Coords: ${lat.toFixed(5)}, ${lng.toFixed(5)}<br>
+                    <em>Live GPS</em>
+                `);
+                markers[key].isLive = true;
+            } else {
+                addUnitMarker(key, lat, lng, label, type, speedKph, r.responderId);
+                markers[key].isLive = true;
+            }
+        });
+
+        // Remove markers for responders who went offline (their Firebase node
+        // is removed on RouteMonitoringService.onDestroy()), but only ones we
+        // created from this live feed — don't touch MySQL-sourced markers.
+        Object.keys(markers).forEach((key) => {
+            if (markers[key].isLive && !seenKeys.has(key)) {
+                map.removeLayer(markers[key].marker);
+                delete markers[key];
+            }
+        });
+    }, (error) => {
+        console.error('Firebase live_locations read failed:', error);
+        showNotification('Live GPS feed disconnected', 'error');
+    });
 }
 
 function escapeHtml(s) {
