@@ -238,11 +238,8 @@ if (!function_exists('ers_sync_vehicle_resource_unit')) {
         $existingUnit = ers_find_unit_by_identifiers($pdo, [$identifier, $previousCode]);
         $unitType = ers_infer_vehicle_unit_type($resource);
         $unitStatus = ers_map_vehicle_resource_status_to_unit_status((string) ($resource['status'] ?? 'available'));
-        [$latitude, $longitude, $coordinateSource] = ers_vehicle_resource_coordinates($resource, $unitType);
         $hasLastStatusAt = ers_vehicle_resource_column_exists($pdo, 'units', 'last_status_at');
         $hasCurrentIncidentId = ers_vehicle_resource_column_exists($pdo, 'units', 'current_incident_id');
-        $hasLatitude = ers_vehicle_resource_column_exists($pdo, 'units', 'latitude');
-        $hasLongitude = ers_vehicle_resource_column_exists($pdo, 'units', 'longitude');
 
         if ($existingUnit) {
             $fields = ['identifier = ?', 'unit_type = ?', 'status = ?'];
@@ -253,18 +250,6 @@ if (!function_exists('ers_sync_vehicle_resource_unit')) {
             }
             if ($hasCurrentIncidentId && $unitStatus === 'available') {
                 $fields[] = 'current_incident_id = NULL';
-            }
-            $hasMissingCoordinates = ($existingUnit['latitude'] ?? null) === null || ($existingUnit['longitude'] ?? null) === null;
-            $hasDefaultCoordinates = ers_vehicle_resource_is_default_coordinate($existingUnit['latitude'] ?? null, $existingUnit['longitude'] ?? null);
-            $shouldUpdateCoordinates = $hasMissingCoordinates
-                || $coordinateSource === 'explicit'
-                || ($unitStatus === 'available' && ($coordinateSource === 'geocoded' || $hasDefaultCoordinates));
-
-            if ($hasLatitude && $hasLongitude && $shouldUpdateCoordinates) {
-                $fields[] = 'latitude = ?';
-                $fields[] = 'longitude = ?';
-                $params[] = $latitude;
-                $params[] = $longitude;
             }
 
             $params[] = (int) $existingUnit['id'];
@@ -288,10 +273,8 @@ if (!function_exists('ers_sync_vehicle_resource_unit')) {
         if (ers_vehicle_resource_column_exists($pdo, 'units', 'latitude') && ers_vehicle_resource_column_exists($pdo, 'units', 'longitude')) {
             $columns[] = 'latitude';
             $columns[] = 'longitude';
-            $values[] = '?';
-            $values[] = '?';
-            $params[] = $latitude;
-            $params[] = $longitude;
+            $values[] = 'NULL';
+            $values[] = 'NULL';
         }
 
         $stmt = $pdo->prepare(
@@ -373,6 +356,32 @@ if (!function_exists('ers_sync_vehicle_resource_status_by_unit_ids')) {
         }
 
         return $count;
+    }
+}
+
+if (!function_exists('ers_update_responder_unit_status')) {
+    function ers_update_responder_unit_status(PDO $pdo, int $responderId, string $status): bool
+    {
+        $status = strtolower(trim($status));
+        if ($responderId <= 0 || $status === '' || !ers_vehicle_resource_table_exists($pdo, 'users')) {
+            return false;
+        }
+        if (!ers_vehicle_resource_column_exists($pdo, 'users', 'unit_status')) {
+            return false;
+        }
+
+        $roleFilter = ers_vehicle_resource_column_exists($pdo, 'users', 'role')
+            ? " AND LOWER(COALESCE(`role`, '')) = 'responder'"
+            : '';
+
+        $stmt = $pdo->prepare(
+            "UPDATE `users`
+             SET `unit_status` = ?
+             WHERE `id` = ?{$roleFilter}"
+        );
+        $stmt->execute([$status, $responderId]);
+
+        return $stmt->rowCount() > 0;
     }
 }
 

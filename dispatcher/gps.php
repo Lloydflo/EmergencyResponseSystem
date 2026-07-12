@@ -375,6 +375,27 @@ function addIncidentMarker(id, lat, lng, label) {
   markers[id] = { marker, type: "incident" };
 }
 
+function removeUnitMarkerByIdentifier(identifier) {
+    const id = String(identifier || '').trim();
+    if (!id || !markers[id] || markers[id].type !== 'unit') return;
+    try { map.removeLayer(markers[id].marker); } catch (e) {}
+    delete markers[id];
+}
+
+function isResponderUnitOnline(unit) {
+    const online = String(unit && unit.presence_status ? unit.presence_status : '').trim().toLowerCase() === 'online';
+    const hasCurrentLocation = String(unit && unit.location_current !== undefined && unit.location_current !== null ? unit.location_current : '').trim() === '1';
+    return online && hasCurrentLocation;
+}
+
+function onlineResponderUnits(items) {
+    return (items || []).filter(u => {
+        if (isResponderUnitOnline(u)) return true;
+        removeUnitMarkerByIdentifier(u && u.identifier);
+        return false;
+    });
+}
+
 // ===============================
 // ROUTES (POLYLINES)
 // ===============================
@@ -1247,7 +1268,7 @@ function loadDispatchedUnits() {
         .then(r => r.json())
         .then(res => {
             if (!res.ok) return;
-            const items = res.items || [];
+            const items = onlineResponderUnits(res.items || []);
             indexDispatchedUnits(items);
             renderUnitCards(items);
             syncUnitMarkers(items);
@@ -1353,6 +1374,10 @@ function renderUnitCards(items) {
 function syncUnitMarkers(items) {
     items.forEach(u => {
         const id = u.identifier;
+        if (!isResponderUnitOnline(u)) {
+            removeUnitMarkerByIdentifier(id);
+            return;
+        }
         const type = u.unit_type || 'other';
         const lat = parseFloat(u.latitude);
         const lng = parseFloat(u.longitude);
@@ -1394,12 +1419,16 @@ function initFirebaseLiveTracking() {
 
             const key = String(r.unitCode || r.responderId || '').trim();
             if (!key) return;
+            const status = String(r.status || 'available').trim().toLowerCase();
+            if (['offline', 'logged_out', 'inactive'].includes(status)) {
+                removeUnitMarkerByIdentifier(key);
+                return;
+            }
             seenKeys.add(key);
 
             const label = `${key} — ${r.responderName || 'Responder'}`;
             const speedKph = typeof r.speed === 'number' ? r.speed * 3.6 : null;
 
-            const status = String(r.status || 'available');
             const isEnRoute = status === 'en_route';
             const dept = String(r.department || r.unitType || 'other').toLowerCase();
             const type = isEnRoute ? dept : `idle_${dept}`;
@@ -1436,6 +1465,10 @@ function initFirebaseLiveTracking() {
 function syncUnitMarkers(items) {
     items.forEach(u => {
         const id = u.identifier;
+        if (!isResponderUnitOnline(u)) {
+            removeUnitMarkerByIdentifier(id);
+            return;
+        }
         const type = u.unit_type || 'other';
         const lat = parseFloat(u.latitude);
         const lng = parseFloat(u.longitude);
@@ -1528,7 +1561,7 @@ function loadAvailableUnits() {
         .then(r => r.json())
         .then(res => {
             if (!res.ok) return;
-            const items = res.items || [];
+            const items = onlineResponderUnits(res.items || []);
             // Only add markers for real available units from the database
             if (!items.length) {
                 // No fallback sample markers
@@ -1536,6 +1569,10 @@ function loadAvailableUnits() {
             }
             items.forEach(u => {
                 const id = u.identifier;
+                if (!isResponderUnitOnline(u)) {
+                    removeUnitMarkerByIdentifier(id);
+                    return;
+                }
                 const type = u.unit_type || 'other';
                 const lat = parseFloat(u.latitude);
                 const lng = parseFloat(u.longitude);
@@ -1569,9 +1606,10 @@ function startLivePolling() {
             .then(r => r.json())
             .then(res => {
                 if (!res.ok) return;
-                const items = res.items || [];
+                const items = onlineResponderUnits(res.items || []);
                 indexDispatchedUnits(items);
                 syncUnitMarkers(items);
+                loadAvailableUnits();
             })
             .catch(() => {});
     }, 5000);

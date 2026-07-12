@@ -253,7 +253,7 @@ try {
             ]);
             exit;
         }
-        if (trim((string)($unitRow['operator_name'] ?? '')) === '') {
+        if ((int)($unitRow['assigned_user_id'] ?? 0) <= 0) {
             $pdo->rollBack();
             echo json_encode([
                 'ok' => false,
@@ -297,6 +297,7 @@ try {
         if ($responderName === '') {
             $responderName = $operatorName;
         }
+        $assignedResponderId = (int)($unitMeta['assigned_user_id'] ?? 0);
         $stmtOperatorRecord->execute([
             $incident_id,
             $operatorName,
@@ -307,18 +308,20 @@ try {
             $incidentRow['priority'] ?? null,
             $incidentRow['description'] ?? null,
             $dispatchTime,
-            (int)$unitMeta['assigned_user_id'],
+            $assignedResponderId,
             $responderName,
             (string)($unitMeta['identifier'] ?? ''),
             (string)($unitMeta['unit_type'] ?? ''),
             $dispatchTime,
         ]);
+        ers_update_responder_unit_status($pdo, $assignedResponderId, 'busy');
 
         $dispatchedUnits[] = [
             'dispatch_id' => $dispatchId,
             'id' => (int)$unitMeta['id'],
             'identifier' => (string)($unitMeta['identifier'] ?? ''),
             'unit_type' => (string)($unitMeta['unit_type'] ?? ''),
+            'responder_id' => $assignedResponderId,
         ];
     }
 

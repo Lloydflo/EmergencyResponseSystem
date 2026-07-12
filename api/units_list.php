@@ -6,6 +6,7 @@ header('Content-Type: application/json');
 
 require_once __DIR__ . '/../includes/db.php';
 require_once __DIR__ . '/../includes/vehicle_resource_units.php';
+require_once __DIR__ . '/../includes/user_presence.php';
 
 function ers_table_exists(PDO $pdo, string $table): bool
 {
@@ -61,7 +62,7 @@ $includeUnassigned = isset($_GET['include_unassigned'])
 // Map dispatcher-facing filter names to actual unit statuses.
 $statuses = [];
 if ($status === 'dispatched') {
-    $statuses = ['assigned', 'enroute', 'on_scene'];
+    $statuses = ['assigned', 'enroute', 'en_route', 'on_scene'];
 } elseif ($status !== '') {
     $statuses = [$status];
 }
@@ -76,6 +77,9 @@ if (!$hasUnitsTable) {
 $hasIncidentsTable = ers_table_exists($pdo, 'incidents');
 $hasCallsTable = ers_table_exists($pdo, 'calls');
 $hasUnitLocationsTable = ers_table_exists($pdo, 'unit_locations');
+if (ers_table_exists($pdo, 'users')) {
+    ensure_user_presence_table($pdo);
+}
 
 $hasCurrentIncidentId = ers_column_exists($pdo, 'units', 'current_incident_id');
 $hasUnitLatitude = ers_column_exists($pdo, 'units', 'latitude');
@@ -86,6 +90,8 @@ $hasCallLatitude = $hasCallsTable && ers_column_exists($pdo, 'calls', 'latitude'
 $hasCallLongitude = $hasCallsTable && ers_column_exists($pdo, 'calls', 'longitude');
 $hasSpeed = $hasUnitLocationsTable && ers_column_exists($pdo, 'unit_locations', 'speed_kph');
 $hasHeading = $hasUnitLocationsTable && ers_column_exists($pdo, 'unit_locations', 'heading_deg');
+$hasAccuracy = $hasUnitLocationsTable && ers_column_exists($pdo, 'unit_locations', 'accuracy_m');
+$hasSource = $hasUnitLocationsTable && ers_column_exists($pdo, 'unit_locations', 'source');
 $hasRecordedAt = $hasUnitLocationsTable && ers_column_exists($pdo, 'unit_locations', 'recorded_at');
 
 $unitLatExpr = $hasUnitLatitude ? 'u.latitude' : 'NULL';
@@ -128,13 +134,36 @@ if ($hasRecordedAt) {
                          LIMIT 1)";
 }
 
+$accuracyExpr = 'NULL';
+if ($hasAccuracy && $hasRecordedAt) {
+    $accuracyExpr = "(SELECT ul.accuracy_m
+                      FROM unit_locations ul
+                      WHERE ul.unit_id = u.id
+                      ORDER BY ul.recorded_at DESC
+                      LIMIT 1)";
+}
+
+$locationSourceExpr = 'NULL';
+if ($hasSource && $hasRecordedAt) {
+    $locationSourceExpr = "(SELECT ul.source
+                           FROM unit_locations ul
+                           WHERE ul.unit_id = u.id
+                           ORDER BY ul.recorded_at DESC
+                           LIMIT 1)";
+}
+
 $responderDriverExpr = 'NULL';
+$responderPresenceStatusExpr = "'offline'";
+$responderLastSeenExpr = 'NULL';
+$responderLoggedInExpr = 'NULL';
+$responderUserIdExpr = 'NULL';
 if (
     ers_table_exists($pdo, 'users') &&
     ers_column_exists($pdo, 'users', 'unit_code') &&
     ers_column_exists($pdo, 'users', 'name') &&
     ers_column_exists($pdo, 'users', 'role')
 ) {
+    $presenceStatusSql = user_presence_status_sql('up');
     $responderDriverExpr = "(SELECT usr.name
                              FROM users usr
                              WHERE LOWER(COALESCE(usr.role, '')) = 'responder'
@@ -142,6 +171,43 @@ if (
                                AND TRIM(COALESCE(usr.name, '')) <> ''
                              ORDER BY usr.id DESC
                              LIMIT 1)";
+    $responderPresenceStatusExpr = "COALESCE((SELECT {$presenceStatusSql}
+                                     FROM users usr
+                                     LEFT JOIN user_presence up ON up.user_id = usr.id
+                                     WHERE LOWER(COALESCE(usr.role, '')) = 'responder'
+                                       AND UPPER(TRIM(usr.unit_code)) = UPPER(TRIM(u.identifier))
+                                     ORDER BY usr.id DESC
+                                     LIMIT 1), 'offline')";
+    $responderLastSeenExpr = "(SELECT up.last_seen_at
+                              FROM users usr
+                              LEFT JOIN user_presence up ON up.user_id = usr.id
+                              WHERE LOWER(COALESCE(usr.role, '')) = 'responder'
+                                AND UPPER(TRIM(usr.unit_code)) = UPPER(TRIM(u.identifier))
+                              ORDER BY usr.id DESC
+                              LIMIT 1)";
+    $responderLoggedInExpr = "(SELECT up.logged_in_at
+                              FROM users usr
+                              LEFT JOIN user_presence up ON up.user_id = usr.id
+                              WHERE LOWER(COALESCE(usr.role, '')) = 'responder'
+                                AND UPPER(TRIM(usr.unit_code)) = UPPER(TRIM(u.identifier))
+                              ORDER BY usr.id DESC
+                              LIMIT 1)";
+    $responderUserIdExpr = "(SELECT usr.id
+                            FROM users usr
+                            WHERE LOWER(COALESCE(usr.role, '')) = 'responder'
+                              AND UPPER(TRIM(usr.unit_code)) = UPPER(TRIM(u.identifier))
+                            ORDER BY usr.id DESC
+                            LIMIT 1)";
+}
+
+$locationCurrentExpr = '0';
+if ($hasRecordedAt) {
+    $locationCurrentExpr = "CASE
+        WHEN {$lastRecordedExpr} IS NOT NULL
+         AND ({$responderLoggedInExpr} IS NULL OR {$lastRecordedExpr} >= {$responderLoggedInExpr})
+        THEN 1
+        ELSE 0
+    END";
 }
 
 $resourceJoin = '';
@@ -180,6 +246,13 @@ $sql = "SELECT
             COALESCE(i.longitude, {$callLngExpr}) AS incident_longitude,
             {$speedExpr} AS speed_kph,
             {$headingExpr} AS heading_deg,
+            {$accuracyExpr} AS accuracy_m,
+            {$locationSourceExpr} AS location_source,
+            {$responderPresenceStatusExpr} AS presence_status,
+            {$responderLastSeenExpr} AS responder_last_seen_at,
+            {$responderLoggedInExpr} AS responder_logged_in_at,
+            {$responderUserIdExpr} AS responder_user_id,
+            {$locationCurrentExpr} AS location_current,
             {$lastRecordedExpr} AS last_recorded_at
         FROM units u
         {$resourceJoin}

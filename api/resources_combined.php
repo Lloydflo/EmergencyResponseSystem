@@ -212,7 +212,7 @@ function load_shared_resource_records(PDO $pdo, string $tableName): array {
             'name' => (string)($row['name'] ?? ''),
             'identifier' => $category === 'vehicles' ? $code : '',
             'status' => map_admin_resource_status((string)($row['status'] ?? 'available')),
-            'location' => (string)($row['location'] ?? ''),
+            'location' => $category === 'vehicles' ? 'Responder GPS' : (string)($row['location'] ?? ''),
             'details' => build_admin_details($row),
             'notes' => (string)($row['notes'] ?? ''),
             'assignment' => (string)($row['assignment'] ?? ''),

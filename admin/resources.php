@@ -1564,6 +1564,9 @@ $pageTitle = 'Resources Status';
         const locationInput = document.getElementById('locationInput');
         const latitudeInput = document.getElementById('latitudeInput');
         const longitudeInput = document.getElementById('longitudeInput');
+        const locationGroup = locationInput ? locationInput.closest('.form-group') : null;
+        const latitudeGroup = latitudeInput ? latitudeInput.closest('.form-group') : null;
+        const longitudeGroup = longitudeInput ? longitudeInput.closest('.form-group') : null;
         const resourceLocationSuggestions = document.getElementById('resourceLocationSuggestions');
         const plateNumberGroup = document.getElementById('plateNumberGroup');
         const plateNumberInput = document.getElementById('plateNumberInput');
@@ -1923,6 +1926,13 @@ $pageTitle = 'Resources Status';
             return item.notes || '';
         }
 
+        function formatResourceLocation(item) {
+            if (item && item.category === 'vehicles') {
+                return 'Responder GPS';
+            }
+            return item && item.location ? item.location : 'N/A';
+        }
+
         function formatAssignmentDisplay(item) {
             if (item.category === 'vehicles') {
                 const parts = [];
@@ -2074,7 +2084,7 @@ $pageTitle = 'Resources Status';
                             <span>${escapeHtml(detailLine)}</span>
                         </td>
                         <td>${escapeHtml(formatCategory(item.category))}</td>
-                        <td>${escapeHtml(item.location || 'N/A')}</td>
+                        <td>${escapeHtml(formatResourceLocation(item))}</td>
                         <td>
                             <button type="button" class="request-pick-btn ${isSelected ? 'selected' : ''}" data-backup-resource-id="${item.id}" aria-label="${isSelected ? 'Remove resource' : 'Add resource'}">
                                 <i class="fas ${isSelected ? 'fa-check' : 'fa-plus'}"></i>
@@ -2175,6 +2185,10 @@ $pageTitle = 'Resources Status';
             assignmentGroup.hidden = isPersonnel;
             equipmentQuantityGroup.hidden = !isEquipment;
             equipmentQuantityInput.required = isEquipment;
+            if (locationGroup) locationGroup.hidden = isVehicle;
+            if (latitudeGroup) latitudeGroup.hidden = isVehicle;
+            if (longitudeGroup) longitudeGroup.hidden = isVehicle;
+            locationInput.required = !isVehicle;
 
             assignmentLabel.textContent = isVehicle ? 'Assignment / Details' : 'Assignment / Details';
             assignmentInput.placeholder = isVehicle ? 'e.g. On standby' : 'e.g. Stock monitoring';
@@ -2192,6 +2206,10 @@ $pageTitle = 'Resources Status';
                 if (!isEquipment) {
                     equipmentQuantityInput.value = '1';
                 }
+                if (isVehicle) {
+                    locationInput.value = '';
+                    clearLocationMetadata();
+                }
             }
         }
 
@@ -2204,7 +2222,8 @@ $pageTitle = 'Resources Status';
             }
             if (category === 'vehicles') {
                 if (!resourceNameInput.value.trim()) resourceNameInput.value = 'New Vehicle Unit';
-                if (!locationInput.value.trim()) locationInput.value = 'Central Garage';
+                locationInput.value = '';
+                clearLocationMetadata();
                 if (!plateNumberInput.value.trim()) plateNumberInput.value = '';
                 if (!assignmentInput.value.trim()) assignmentInput.value = 'Ready for dispatch';
                 if (!notesInput.value.trim()) notesInput.value = 'Vehicle checklist completed.';
@@ -2297,7 +2316,7 @@ $pageTitle = 'Resources Status';
                         <td>
                             <span class="status-chip status-${escapeHtml(item.status)}">${escapeHtml(formatStatus(item.status))}</span>
                         </td>
-                        <td>${escapeHtml(item.location)} <br><span class="resource-meta-note">${escapeHtml(formatAssignmentDisplay(item))}</span></td>
+                        <td>${escapeHtml(formatResourceLocation(item))} <br><span class="resource-meta-note">${escapeHtml(formatAssignmentDisplay(item))}</span></td>
                         <td>${escapeHtml(formatDate(item.updatedAt))}</td>
                         <td class="actions-cell">
                             <button type="button" class="action-btn" title="Edit" data-action="edit" data-id="${item.id}">
@@ -2329,7 +2348,7 @@ $pageTitle = 'Resources Status';
                             <span>${escapeHtml(detailLine || item.notes || 'No details')}</span>
                         </td>
                         <td>${escapeHtml(formatCategory(item.category))}</td>
-                        <td>${escapeHtml(item.location || 'N/A')}<br><span class="resource-meta-note">${escapeHtml(formatAssignmentDisplay(item))}</span></td>
+                        <td>${escapeHtml(formatResourceLocation(item))}<br><span class="resource-meta-note">${escapeHtml(formatAssignmentDisplay(item))}</span></td>
                         <td>${escapeHtml(formatDate(item.deletedAt))}</td>
                         <td>
                             ${escapeHtml(formatDate(item.purgeAt))}<br>
@@ -2610,6 +2629,7 @@ $pageTitle = 'Resources Status';
 
         resourceForm.addEventListener('submit', async (event) => {
             event.preventDefault();
+            const isVehicle = categoryInput.value === 'vehicles';
             const manualLatitude = readCoordinateInput(latitudeInput, -90, 90);
             const manualLongitude = readCoordinateInput(longitudeInput, -180, 180);
             const hasLatitudeText = String(latitudeInput && latitudeInput.value ? latitudeInput.value : '').trim() !== '';
@@ -2620,9 +2640,9 @@ $pageTitle = 'Resources Status';
                 name: resourceNameInput.value.trim(),
                 category: categoryInput.value,
                 status: statusInput.value,
-                location: locationInput.value.trim(),
-                latitude: manualLatitude !== null ? manualLatitude : (locationInput.dataset.lat || null),
-                longitude: manualLongitude !== null ? manualLongitude : (locationInput.dataset.lon || null),
+                location: isVehicle ? '' : locationInput.value.trim(),
+                latitude: isVehicle ? null : (manualLatitude !== null ? manualLatitude : (locationInput.dataset.lat || null)),
+                longitude: isVehicle ? null : (manualLongitude !== null ? manualLongitude : (locationInput.dataset.lon || null)),
                 plateNumber: plateNumberInput.value.trim().toUpperCase(),
                 positionTitle: positionTitleInput.value.trim(),
                 assignment: assignmentInput.value.trim(),
@@ -2630,11 +2650,11 @@ $pageTitle = 'Resources Status';
                 notes: notesInput.value.trim()
             };
 
-            if (!payload.code || !payload.name || !payload.location) {
+            if (!payload.code || !payload.name || (!isVehicle && !payload.location)) {
                 showToast('Please complete required fields.');
                 return;
             }
-            if ((hasLatitudeText || hasLongitudeText) && (manualLatitude === null || manualLongitude === null)) {
+            if (!isVehicle && (hasLatitudeText || hasLongitudeText) && (manualLatitude === null || manualLongitude === null)) {
                 showToast('Enter valid latitude and longitude, or leave both blank.');
                 return;
             }

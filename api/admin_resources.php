@@ -232,8 +232,15 @@ function normalize_payload(array $payload): array {
     if ($name === '' || strlen($name) > 200) {
         throw new InvalidArgumentException('Resource name is required and must be 200 chars or less');
     }
-    if ($location === '' || strlen($location) > 255) {
+    if ($category === 'vehicles') {
+        $location = '';
+        $latitude = null;
+        $longitude = null;
+    } elseif ($location === '' || strlen($location) > 255) {
         throw new InvalidArgumentException('Location is required and must be 255 chars or less');
+    }
+    if (strlen($location) > 255) {
+        throw new InvalidArgumentException('Location must be 255 chars or less');
     }
     if (strlen($assignment) > 255) {
         throw new InvalidArgumentException('Assignment must be 255 chars or less');
@@ -254,7 +261,7 @@ function normalize_payload(array $payload): array {
         throw new InvalidArgumentException('Notes must be 2000 chars or less');
     }
 
-    if (($latitude === null || $longitude === null) && $location !== '') {
+    if ($category !== 'vehicles' && ($latitude === null || $longitude === null) && $location !== '') {
         $geocoded = ers_geocode_location_to_coordinates($location);
         if ($geocoded !== null) {
             $latitude = (float)$geocoded[0];
@@ -523,11 +530,8 @@ function sync_vehicle_resource_unit(PDO $pdo, array $resource, ?string $previous
     $existingUnit = find_unit_by_identifiers($pdo, [$identifier, $previousCode]);
     $unitType = infer_vehicle_unit_type($resource);
     $unitStatus = map_vehicle_resource_status_to_unit_status((string)($resource['status'] ?? 'available'));
-    [$latitude, $longitude, $coordinateSource] = vehicle_resource_coordinates($resource, $unitType);
     $hasLastStatusAt = unit_column_exists($pdo, 'last_status_at');
     $hasCurrentIncidentId = unit_column_exists($pdo, 'current_incident_id');
-    $hasLatitude = unit_column_exists($pdo, 'latitude');
-    $hasLongitude = unit_column_exists($pdo, 'longitude');
 
     if ($existingUnit) {
         $fields = ['identifier = ?', 'unit_type = ?', 'status = ?'];
@@ -537,18 +541,6 @@ function sync_vehicle_resource_unit(PDO $pdo, array $resource, ?string $previous
         }
         if ($hasCurrentIncidentId && $unitStatus === 'available') {
             $fields[] = 'current_incident_id = NULL';
-        }
-        $hasMissingCoordinates = ($existingUnit['latitude'] ?? null) === null || ($existingUnit['longitude'] ?? null) === null;
-        $hasDefaultCoordinates = vehicle_resource_is_default_coordinate($existingUnit['latitude'] ?? null, $existingUnit['longitude'] ?? null);
-        $shouldUpdateCoordinates = $hasMissingCoordinates
-            || $coordinateSource === 'explicit'
-            || ($unitStatus === 'available' && ($coordinateSource === 'geocoded' || $hasDefaultCoordinates));
-
-        if ($hasLatitude && $hasLongitude && $shouldUpdateCoordinates) {
-            $fields[] = 'latitude = ?';
-            $fields[] = 'longitude = ?';
-            $params[] = $latitude;
-            $params[] = $longitude;
         }
         $params[] = (int)$existingUnit['id'];
         $stmt = $pdo->prepare("UPDATE `units` SET " . implode(', ', $fields) . " WHERE id = ?");
@@ -570,10 +562,8 @@ function sync_vehicle_resource_unit(PDO $pdo, array $resource, ?string $previous
     if (unit_column_exists($pdo, 'latitude') && unit_column_exists($pdo, 'longitude')) {
         $columns[] = 'latitude';
         $columns[] = 'longitude';
-        $values[] = '?';
-        $values[] = '?';
-        $params[] = $latitude;
-        $params[] = $longitude;
+        $values[] = 'NULL';
+        $values[] = 'NULL';
     }
 
     $stmt = $pdo->prepare(

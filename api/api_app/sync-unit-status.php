@@ -1,6 +1,7 @@
 <?php
 header("Content-Type: application/json");
 require __DIR__ . "/connect.php";
+require_once __DIR__ . "/../../includes/vehicle_resource_units.php";
 
 $responder_id = intval($_POST["responder_id"] ?? 0);
 
@@ -16,22 +17,22 @@ try {
         SELECT status
         FROM dispatch_operator_records
         WHERE assigned_to = ?
-        AND status IN ('assigned','received','en_route','on_scene')
+        AND status IN ('pending','assigned','received','accepted','acknowledged','busy','in_use','enroute','en_route','on_scene')
         ORDER BY assigned_at DESC, id DESC
         LIMIT 1
     ");
     $q->execute([$responder_id]);
 
-    $latestStatus = $q->fetchColumn();
+    $latestStatus = strtolower(trim((string)$q->fetchColumn()));
 
-    $unitStatus = $latestStatus ?: "available";
+    $unitStatus = match ($latestStatus) {
+        "pending", "assigned", "received", "accepted", "acknowledged", "busy", "in_use" => "busy",
+        "enroute", "en_route" => "en_route",
+        "on_scene" => "on_scene",
+        default => "available",
+    };
 
-    $u = $pdo->prepare("
-        UPDATE users
-        SET unit_status = ?
-        WHERE id = ?
-    ");
-    $u->execute([$unitStatus, $responder_id]);
+    ers_update_responder_unit_status($pdo, $responder_id, $unitStatus);
 
     echo json_encode([
         "success" => true,

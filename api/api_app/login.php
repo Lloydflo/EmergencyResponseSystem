@@ -3,6 +3,7 @@ header("Content-Type: application/json");
 
 require_once __DIR__ . '/../../includes/db.php';
 require_once __DIR__ . '/../../includes/user_presence.php';
+require_once __DIR__ . '/../../includes/unit_location_tracking.php';
 
 $input = json_decode(file_get_contents("php://input"), true);
 if (!is_array($input)) {
@@ -33,8 +34,14 @@ if (!$pdo) {
 }
 
 try {
+    $unitCodeSelect = ers_unit_location_column_exists($pdo, 'users', 'unit_code') ? 'unit_code' : 'NULL AS unit_code';
+    $unitTypeSelect = ers_unit_location_column_exists($pdo, 'users', 'unit_type') ? 'unit_type' : 'NULL AS unit_type';
+    $unitStatusSelect = ers_unit_location_column_exists($pdo, 'users', 'unit_status') ? 'unit_status' : 'NULL AS unit_status';
+    $vehiclePlateSelect = ers_unit_location_column_exists($pdo, 'users', 'vehicle_plate') ? 'vehicle_plate' : 'NULL AS vehicle_plate';
+
      $stmt = $pdo->prepare("
-        SELECT id, email, password, name, role, status, department, profile_image_path
+        SELECT id, email, password, name, role, status, department, profile_image_path,
+               {$unitCodeSelect}, {$unitTypeSelect}, {$unitStatusSelect}, {$vehiclePlateSelect}
         FROM users
         WHERE email = ?
         ORDER BY id DESC
@@ -85,6 +92,30 @@ try {
     $upd->execute([(int)$user["id"]]);
     mark_user_online($pdo, (int)$user["id"]);
 
+    $locationUpdate = null;
+    $hasLocationPayload = array_key_exists('latitude', $input)
+        || array_key_exists('lat', $input)
+        || array_key_exists('longitude', $input)
+        || array_key_exists('lng', $input)
+        || array_key_exists('lon', $input);
+    if ($hasLocationPayload) {
+        $locationPayload = $input;
+        $locationPayload['responder_id'] = (int)$user['id'];
+        $locationPayload['unit_code'] = (string)($user['unit_code'] ?? '');
+        $locationPayload['source'] = $locationPayload['source'] ?? 'responder_login';
+        try {
+            $locationUpdate = ers_unit_location_update($pdo, $locationPayload);
+        } catch (Throwable $e) {
+            error_log('responder login location update skipped: ' . $e->getMessage());
+            $locationUpdate = ['ok' => false, 'error' => 'Location update skipped'];
+        }
+    }
+
+    $unit = ers_unit_location_resolve_unit($pdo, [
+        'responder_id' => (int)$user['id'],
+        'unit_code' => (string)($user['unit_code'] ?? ''),
+    ]);
+
     echo json_encode([
         "success" => true,
         "message" => "Login successful",
@@ -94,7 +125,18 @@ try {
             "email" => (string)$user["email"],
             "role" => (string)$user["role"],
             "department" => (string)($user["department"] ?? ""),
+            "unit_id" => $unit ? (int)$unit["id"] : null,
+            "unit_code" => (string)($user["unit_code"] ?? ($unit["identifier"] ?? "")),
+            "unit_type" => (string)($user["unit_type"] ?? ($unit["unit_type"] ?? "")),
+            "unit_status" => (string)($user["unit_status"] ?? ($unit["status"] ?? "available")),
+            "vehicle_plate" => (string)($user["vehicle_plate"] ?? ""),
             "profile_image_path" => (string)($user["profile_image_path"] ?? ""),
+        ],
+        "location_update" => $locationUpdate,
+        "location_tracking" => [
+            "enabled" => $unit !== null,
+            "endpoint" => "api/unit_location_update.php",
+            "api_app_endpoint" => "api/api_app/update-location.php"
         ]
     ]);
 } catch (Throwable $e) {

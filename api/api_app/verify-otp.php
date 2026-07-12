@@ -1,6 +1,7 @@
 <?php
 header("Content-Type: application/json");
 require __DIR__ . "/connect.php";
+require_once __DIR__ . "/../../includes/unit_location_tracking.php";
 
 $raw = file_get_contents("php://input");
 
@@ -78,7 +79,33 @@ try {
     exit;
   }
 
-echo json_encode([
+  mark_user_online($pdo, (int)$responder["id"]);
+
+  $locationUpdate = null;
+  $hasLocationPayload = array_key_exists("latitude", $input)
+      || array_key_exists("lat", $input)
+      || array_key_exists("longitude", $input)
+      || array_key_exists("lng", $input)
+      || array_key_exists("lon", $input);
+  if ($hasLocationPayload) {
+    $locationPayload = $input;
+    $locationPayload["responder_id"] = (int)$responder["id"];
+    $locationPayload["unit_code"] = (string)($responder["unit_code"] ?? "");
+    $locationPayload["source"] = $locationPayload["source"] ?? "responder_otp_verify";
+    try {
+      $locationUpdate = ers_unit_location_update($pdo, $locationPayload);
+    } catch (Throwable $e) {
+      error_log("responder OTP location update skipped: " . $e->getMessage());
+      $locationUpdate = ["ok" => false, "error" => "Location update skipped"];
+    }
+  }
+
+  $unit = ers_unit_location_resolve_unit($pdo, [
+      "responder_id" => (int)$responder["id"],
+      "unit_code" => (string)($responder["unit_code"] ?? "")
+  ]);
+
+  echo json_encode([
     "success" => true,
     "message" => "OTP verified",
     "user" => [
@@ -87,11 +114,18 @@ echo json_encode([
     "email"       => (string)$responder["email"],
     "role"        => (string)($responder["role"] ?? ""),
     "department"  => (string)($responder["department"] ?? ""),
+    "unit_id"     => $unit ? (int)$unit["id"] : null,
     "unit_code"   => (string)($responder["unit_code"] ?? ""),
     "unit_type"   => (string)($responder["unit_type"] ?? ""),
     "unit_status" => (string)($responder["unit_status"] ?? "available"),
     "profile_image_path" => (string)($responder["profile_image_path"] ?? "")
-]
+],
+    "location_update" => $locationUpdate,
+    "location_tracking" => [
+      "enabled" => $unit !== null,
+      "endpoint" => "api/unit_location_update.php",
+      "api_app_endpoint" => "api/api_app/update-location.php"
+    ]
 ]);
 
 } catch (Throwable $e) {
