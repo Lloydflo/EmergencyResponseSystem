@@ -2,6 +2,7 @@
 header("Content-Type: application/json");
 
 require_once __DIR__ . "/connect.php";
+require_once __DIR__ . "/../../includes/unit_location_tracking.php";
 
 try {
     $pdo = db();
@@ -41,9 +42,24 @@ try {
         ":status"       => $status
     ]);
 
+    try {
+        $locationUpdate = ers_unit_location_update($pdo, [
+            "responder_id" => $responder_id,
+            "latitude" => $latitude,
+            "longitude" => $longitude,
+            "speed" => $speed,
+            "heading" => $heading,
+            "source" => "responder_route"
+        ]);
+    } catch (Throwable $e) {
+        error_log("route point unit location update skipped: " . $e->getMessage());
+        $locationUpdate = ["ok" => false, "error" => "Location update skipped"];
+    }
+
     echo json_encode([
         "success" => true,
-        "message" => "Route point saved"
+        "message" => "Route point saved",
+        "location_update" => $locationUpdate
     ]);
 
 } catch (Throwable $e) {

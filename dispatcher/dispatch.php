@@ -813,12 +813,16 @@ function initFirebaseLiveTracking() {
 
             const key = String(r.unitCode || r.responderId || '').trim();
             if (!key) return;
+            const status = String(r.status || 'available').trim().toLowerCase();
+            if (['offline', 'logged_out', 'inactive'].includes(status)) {
+                removeUnitMarkerByIdentifier(key);
+                return;
+            }
             seenKeys.add(key);
 
             const label = `${key} — ${r.responderName || 'Responder'}`;
             const speedKph = typeof r.speed === 'number' ? r.speed * 3.6 : null;
 
-            const status = String(r.status || 'available');
             const isEnRoute = status === 'en_route';
             const dept = String(r.department || r.unitType || 'other').toLowerCase();
             const type = isEnRoute ? dept : `idle_${dept}`;
@@ -935,6 +939,27 @@ function addIncidentMarker(id, lat, lng, label) {
     markers[id] = { marker, type: "incident" };
 }
 
+function removeUnitMarkerByIdentifier(identifier) {
+    const id = String(identifier || '').trim();
+    if (!id || !markers[id] || markers[id].type !== 'unit') return;
+    try { map.removeLayer(markers[id].marker); } catch (e) {}
+    delete markers[id];
+}
+
+function isResponderUnitOnline(unit) {
+    const online = String(unit && unit.presence_status ? unit.presence_status : '').trim().toLowerCase() === 'online';
+    const hasCurrentLocation = String(unit && unit.location_current !== undefined && unit.location_current !== null ? unit.location_current : '').trim() === '1';
+    return online && hasCurrentLocation;
+}
+
+function onlineResponderUnits(items) {
+    return (items || []).filter(u => {
+        if (isResponderUnitOnline(u)) return true;
+        removeUnitMarkerByIdentifier(u && u.identifier);
+        return false;
+    });
+}
+
 function updateMapVisibility() {
         Object.values(markers).forEach(item => {
             let visible = true;
@@ -951,7 +976,7 @@ function loadDispatchedUnits() {
         .then(r => r.json())
         .then(res => {
             if (!res.ok) return;
-            const items = res.items || [];
+            const items = onlineResponderUnits(res.items || []);
             syncUnitMarkers(items);
         })
         .catch(() => {});
@@ -960,6 +985,10 @@ function loadDispatchedUnits() {
 function syncUnitMarkers(items) {
     items.forEach(u => {
         const id = u.identifier;
+        if (!isResponderUnitOnline(u)) {
+            removeUnitMarkerByIdentifier(id);
+            return;
+        }
         if (markers[id] && markers[id].isLive) return;
         const type = u.unit_type || 'other';
         const lat = parseFloat(u.latitude);
@@ -988,12 +1017,16 @@ function syncUnitMarkers(items) {
 function fetchAvailableUnitsData() {
     return fetch('api/units_list.php?status=available', { cache: 'no-store' })
         .then(r => r.json())
-        .then(res => (res && res.ok && Array.isArray(res.items)) ? res.items : []);
+        .then(res => (res && res.ok && Array.isArray(res.items)) ? onlineResponderUnits(res.items) : []);
 }
 
 function syncAvailableUnitMarkers(items) {
     (items || []).forEach(u => {
         const id = u.identifier;
+        if (!isResponderUnitOnline(u)) {
+            removeUnitMarkerByIdentifier(id);
+            return;
+        }
         if (markers[id] && markers[id].isLive) return;
         const type = u.unit_type || 'other';
         const lat = parseFloat(u.latitude);

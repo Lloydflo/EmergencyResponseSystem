@@ -23,6 +23,31 @@ document.addEventListener("DOMContentLoaded", function () {
     messageBox.style.color = isError ? "#b91c1c" : "#065f46";
   }
 
+  function getCurrentLocation() {
+    return new Promise(function (resolve) {
+      if (!navigator.geolocation) {
+        resolve(null);
+        return;
+      }
+
+      navigator.geolocation.getCurrentPosition(function (position) {
+        resolve({
+          latitude: position.coords.latitude,
+          longitude: position.coords.longitude,
+          accuracy: position.coords.accuracy,
+          speed: position.coords.speed,
+          heading: position.coords.heading
+        });
+      }, function () {
+        resolve(null);
+      }, {
+        enableHighAccuracy: true,
+        timeout: 10000,
+        maximumAge: 0
+      });
+    });
+  }
+
   form.addEventListener("submit", async function (event) {
     event.preventDefault();
 
@@ -37,7 +62,8 @@ document.addEventListener("DOMContentLoaded", function () {
     if (submitButton) submitButton.disabled = true;
     setMessage("Signing in...", false);
 
-    var result = await window.LoginApi.login(email, password);
+    var location = await getCurrentLocation();
+    var result = await window.LoginApi.login(email, password, location);
 
     if (submitButton) submitButton.disabled = false;
 
