@@ -104,12 +104,6 @@ $pageTitle = 'Emergency Call Center';
 
             <div class="call-center-grid">
                 <section class="call-intake-column">
-                    <div class="call-demo-bar">
-                        <button type="button" class="submit-incident-btn simulate-btn demo-trigger-btn" onclick="simulateIncomingCall()">
-                            <i class="fas fa-bolt"></i> Simulate Incoming Call
-                        </button>
-                    </div>
-
                     <div class="incoming-call-alert" id="incomingCallAlert">
                         <div class="call-info">
                             <i class="fas fa-phone call-icon"></i>
@@ -153,14 +147,11 @@ $pageTitle = 'Emergency Call Center';
                                     <span></span><span></span><span></span><span></span>
                                 </div>
                                 <div>
-                                    <div class="voice-title">Voice Call Simulation</div>
+                                    <div class="voice-title">Voice Call Tools</div>
                                     <div class="voice-state" id="voiceCallState">Connected. Ready for caller audio and dictation.</div>
                                 </div>
                             </div>
                             <div class="voice-actions">
-                                <button type="button" class="voice-btn" id="playCallerVoiceBtn" onclick="playCallerVoice()">
-                                    <i class="fas fa-volume-up"></i> Caller Voice
-                                </button>
                                 <button type="button" class="voice-btn" id="speechToTextBtn" onclick="toggleSpeechToText()">
                                     <i class="fas fa-microphone"></i> Speak to Text
                                 </button>
@@ -267,9 +258,6 @@ $pageTitle = 'Emergency Call Center';
                                 <button type="submit" class="submit-incident-btn">
                                     <i class="fas fa-save"></i> Log Incident
                                 </button>
-                                <button type="button" class="submit-incident-btn simulate-btn" onclick="simulateIncomingCall()">
-                                    <i class="fas fa-redo"></i> New Simulated Call
-                                </button>
                             </div>
                         </form>
                     </div>
@@ -329,13 +317,9 @@ $pageTitle = 'Emergency Call Center';
     let filterDay = '';
     let filterMonth = '';
     const incidentGeocodeCache = {};
-    let callAudioContext = null;
-    let ringingOscillator = null;
-    let ringingGain = null;
     let speechRecognition = null;
     let speechListening = false;
     let finalTranscriptText = '';
-    let activeCallerScript = '';
     const SpeechRecognitionApi = window.SpeechRecognition || window.webkitSpeechRecognition || null;
 
     function getSharedCallSessionApi() {
@@ -421,30 +405,11 @@ $pageTitle = 'Emergency Call Center';
         });
     });
 
-    function simulateIncomingCall() {
-        const names = ['Juan Dela Cruz','Maria Santos','Jose Reyes','Ana Garcia','Roberto Tan'];
-        const name = names[Math.floor(Math.random() * names.length)];
-        const prefixes = ['917','905','906','915','918','920','921','922','923','925','926','927','928','929','930','938','939','946','947','948','949','995','996','997','998','999'];
-        const p = prefixes[Math.floor(Math.random() * prefixes.length)];
-        const block1 = String(Math.floor(100 + Math.random()*900)); // 3 digits
-        const block2 = String(Math.floor(1000 + Math.random()*9000)); // 4 digits
-        const phone = `+63 ${p} ${block1} ${block2}`; // +63 9xx xxx xxxx
-        document.getElementById('incomingCallerName').textContent = name;
-        document.getElementById('incomingCallerPhone').textContent = phone;
-        document.getElementById('incomingCallAlert').classList.add('active');
-        activeCallerScript = buildCallerScript(name);
-        startIncomingRingtone();
-    }
-
     function acceptCall() {
         const alert = document.getElementById('incomingCallAlert');
         const name = document.getElementById('incomingCallerName').textContent || 'Unknown';
         const phone = document.getElementById('incomingCallerPhone').textContent || '';
         alert.classList.remove('active');
-        stopIncomingRingtone();
-        if (!activeCallerScript) {
-            activeCallerScript = buildCallerScript(name);
-        }
         const sessionApi = getSharedCallSessionApi();
         if (sessionApi) {
             sessionApi.start({
@@ -458,16 +423,13 @@ $pageTitle = 'Emergency Call Center';
             activeCall = { name, phone, start: Date.now() };
         }
         renderActiveCallPanel(getSharedCallSession() || activeCall);
-        setTimeout(() => playCallerVoice(), 350);
     }
 
     function rejectCall() {
         document.getElementById('incomingCallAlert').classList.remove('active');
-        stopIncomingRingtone();
     }
 
     function endCall() {
-        stopIncomingRingtone();
         stopVoiceTools();
         const sessionApi = getSharedCallSessionApi();
         if (sessionApi) {
@@ -495,67 +457,6 @@ $pageTitle = 'Emergency Call Center';
         }
     }
 
-    function getCallAudioContext() {
-        const Ctx = window.AudioContext || window.webkitAudioContext;
-        if (!Ctx) return null;
-        if (!callAudioContext) {
-            callAudioContext = new Ctx();
-        }
-        if (callAudioContext.state === 'suspended') {
-            callAudioContext.resume().catch(() => {});
-        }
-        return callAudioContext;
-    }
-
-    function startIncomingRingtone() {
-        stopIncomingRingtone();
-        const ctx = getCallAudioContext();
-        if (!ctx) return;
-        ringingOscillator = ctx.createOscillator();
-        ringingGain = ctx.createGain();
-        ringingOscillator.type = 'sine';
-        ringingOscillator.frequency.setValueAtTime(880, ctx.currentTime);
-        ringingGain.gain.setValueAtTime(0.0001, ctx.currentTime);
-        ringingOscillator.connect(ringingGain);
-        ringingGain.connect(ctx.destination);
-        ringingOscillator.start();
-        const pulse = () => {
-            if (!ringingGain || !callAudioContext) return;
-            const now = callAudioContext.currentTime;
-            ringingGain.gain.cancelScheduledValues(now);
-            ringingGain.gain.setValueAtTime(0.0001, now);
-            ringingGain.gain.linearRampToValueAtTime(0.08, now + 0.04);
-            ringingGain.gain.linearRampToValueAtTime(0.0001, now + 0.45);
-        };
-        pulse();
-        ringingOscillator._ringInterval = setInterval(pulse, 900);
-    }
-
-    function stopIncomingRingtone() {
-        if (ringingOscillator) {
-            if (ringingOscillator._ringInterval) clearInterval(ringingOscillator._ringInterval);
-            try { ringingOscillator.stop(); } catch (e) {}
-            try { ringingOscillator.disconnect(); } catch (e) {}
-            ringingOscillator = null;
-        }
-        if (ringingGain) {
-            try { ringingGain.disconnect(); } catch (e) {}
-            ringingGain = null;
-        }
-    }
-
-    function buildCallerScript(name) {
-        const scripts = [
-            'Hello, this is an emergency. There is a person having difficulty breathing near Commonwealth Avenue. Please send medical help.',
-            'I need help. There was a traffic accident near Quezon Avenue and one person is injured.',
-            'There is smoke and fire coming from a house nearby. We need firefighters immediately.',
-            'Someone is unconscious and not responding. We are at the roadside and need an ambulance now.',
-            'There is a robbery in progress and people are panicking. Please send police assistance.'
-        ];
-        const selected = scripts[Math.floor(Math.random() * scripts.length)];
-        return `${name || 'Caller'} says: ${selected}`;
-    }
-
     function setVoiceState(text) {
         const el = document.getElementById('voiceCallState');
         if (el) el.textContent = text;
@@ -564,45 +465,6 @@ $pageTitle = 'Emergency Call Center';
     function setTranscript(text) {
         const el = document.getElementById('speechTranscript');
         if (el) el.textContent = text || 'No transcript yet.';
-    }
-
-    function applySimulatedCallerTranscript(reason) {
-        if (!activeCall) return;
-        const text = activeCallerScript || buildCallerScript(activeCall.name);
-        activeCallerScript = text;
-        setTranscript(text);
-        applyTranscriptToForm(text);
-        setVoiceState(reason || 'Using simulated caller transcript.');
-    }
-
-    function playCallerVoice() {
-        if (!activeCall) {
-            alert('Accept a call first.');
-            return;
-        }
-        if (!('speechSynthesis' in window)) {
-            setVoiceState('Caller voice is not supported in this browser.');
-            return;
-        }
-        window.speechSynthesis.cancel();
-        const text = activeCallerScript || buildCallerScript(activeCall.name);
-        const utterance = new SpeechSynthesisUtterance(text);
-        utterance.lang = 'en-US';
-        utterance.rate = 0.95;
-        utterance.pitch = 1;
-        utterance.onstart = () => {
-            setVoiceState('Playing simulated caller voice...');
-            document.getElementById('voiceMeter')?.classList.add('active');
-        };
-        utterance.onend = () => {
-            setVoiceState('Caller voice finished. Use Speak to Text for dispatcher notes.');
-            document.getElementById('voiceMeter')?.classList.remove('active');
-        };
-        utterance.onerror = () => {
-            setVoiceState('Caller voice playback failed.');
-            document.getElementById('voiceMeter')?.classList.remove('active');
-        };
-        window.speechSynthesis.speak(utterance);
     }
 
     function getSpeechRecognition() {
@@ -630,7 +492,7 @@ $pageTitle = 'Emergency Call Center';
             speechListening = false;
             updateSpeechButton();
             if (event.error === 'not-allowed' || event.error === 'service-not-allowed') {
-                applySimulatedCallerTranscript('Microphone permission was blocked. Simulated transcript was applied.');
+                setVoiceState('Microphone permission was blocked.');
             } else {
                 setVoiceState('Speech-to-text stopped.');
             }
@@ -699,7 +561,7 @@ $pageTitle = 'Emergency Call Center';
         }
         const recognizer = getSpeechRecognition();
         if (!recognizer) {
-            applySimulatedCallerTranscript('Speech-to-text is not supported in this browser. Simulated transcript was applied.');
+            setVoiceState('Speech-to-text is not supported in this browser.');
             return;
         }
         if (speechListening) {
@@ -723,10 +585,6 @@ $pageTitle = 'Emergency Call Center';
     }
 
     function stopVoiceTools() {
-        stopIncomingRingtone();
-        if ('speechSynthesis' in window) {
-            window.speechSynthesis.cancel();
-        }
         if (speechRecognition && speechListening) {
             try { speechRecognition.stop(); } catch (e) {}
         }
