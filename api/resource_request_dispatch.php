@@ -296,7 +296,7 @@ try {
             ]);
             exit;
         }
-        if (trim((string)($unitRow['operator_name'] ?? '')) === '') {
+        if ((int)($unitRow['assigned_user_id'] ?? 0) <= 0) {
             $pdo->rollBack();
             http_response_code(400);
             echo json_encode([
@@ -338,6 +338,7 @@ try {
         if ($responderName === '') {
             $responderName = $operatorName;
         }
+        $assignedResponderId = (int)($unitMeta['assigned_user_id'] ?? 0);
 
         $operatorRecordInsert->execute([
             $incidentId,
@@ -349,17 +350,19 @@ try {
             $incidentRow['priority'] ?? null,
             $incidentRow['description'] ?? null,
             $dispatchTime,
-            (int)$unitMeta['assigned_user_id'],
+            $assignedResponderId,
             $responderName,
             (string)($unitMeta['identifier'] ?? ''),
             (string)($unitMeta['unit_type'] ?? ''),
             $dispatchTime,
         ]);
+        ers_update_responder_unit_status($pdo, $assignedResponderId, 'busy');
 
         $dispatchedUnits[] = [
             'id' => (int)$unitMeta['id'],
             'identifier' => (string)($unitMeta['identifier'] ?? ''),
             'unit_type' => (string)($unitMeta['unit_type'] ?? ''),
+            'responder_id' => $assignedResponderId,
         ];
     }
 

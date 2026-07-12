@@ -282,19 +282,14 @@ try {
     $stmt->execute([$status, $assignment_id, $responder_id]);
 
     $unit_status = match ($status) {
-        "received"  => "assigned",
+        "received"  => "busy",
         "en_route"  => "en_route",
         "on_scene"  => "on_scene",
         "completed" => "available",
-        default     => "assigned"
+        default     => "busy"
     };
 
-    $unit = $pdo->prepare("
-        UPDATE users
-        SET unit_status = ?
-        WHERE id = ?
-    ");
-    $unit->execute([$unit_status, $responder_id]);
+    ers_update_responder_unit_status($pdo, $responder_id, $unit_status);
 
     $incidentSync = ["resolved" => false, "incident_id" => null];
     if ($status === "completed") {

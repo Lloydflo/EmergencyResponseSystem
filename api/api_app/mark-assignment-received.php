@@ -1,6 +1,7 @@
 <?php
 header("Content-Type: application/json");
 require __DIR__ . "/connect.php";
+require_once __DIR__ . "/../../includes/vehicle_resource_units.php";
 
 $incident_id  = intval($_POST["incident_id"] ?? 0);
 $responder_id = intval($_POST["responder_id"] ?? 0);
@@ -24,6 +25,7 @@ try {
         AND status IN ('pending', 'assigned')
     ");
     $stmt->execute([$incident_id, $responder_id]);
+    ers_update_responder_unit_status($pdo, $responder_id, "busy");
 
     echo json_encode([
         "success" => true,

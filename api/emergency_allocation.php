@@ -305,7 +305,10 @@ function emergency_load_available_units(PDO $pdo): array
         FOR UPDATE
     ");
 
-    return $stmt ? $stmt->fetchAll(PDO::FETCH_ASSOC) : [];
+    $rows = $stmt ? $stmt->fetchAll(PDO::FETCH_ASSOC) : [];
+    return array_values(array_filter($rows, static function (array $unit): bool {
+        return (int)($unit['assigned_user_id'] ?? 0) > 0;
+    }));
 }
 
 function emergency_log_dispatch_notification(?int $userId, int $dispatchId, array $payload): void
@@ -372,6 +375,7 @@ try {
                 if ($responderName === '') {
                     $responderName = $operatorName;
                 }
+                $assignedResponderId = (int)($unit['assigned_user_id'] ?? 0);
 
                 $operatorInsert->execute([
                     (int)$incident['id'],
@@ -383,12 +387,13 @@ try {
                     $incident['priority'] ?? null,
                     $incident['description'] ?? null,
                     $dispatchTime,
-                    (int)($unit['assigned_user_id'] ?? 0),
+                    $assignedResponderId,
                     $responderName,
                     (string)($unit['identifier'] ?? ''),
                     (string)($unit['unit_type'] ?? ''),
                     $dispatchTime,
                 ]);
+                ers_update_responder_unit_status($pdo, $assignedResponderId, 'busy');
 
                 $payload = [
                     'dispatch_id' => $dispatchId,
@@ -402,6 +407,7 @@ try {
                     'location_address' => $incident['location_address'] ?? null,
                     'unit_identifier' => $unit['identifier'] ?? null,
                     'unit_type' => $unit['unit_type'] ?? null,
+                    'responder_id' => $assignedResponderId,
                 ];
 
                 $allocations[] = $payload;
@@ -436,6 +442,7 @@ try {
                 if ($responderName === '') {
                     $responderName = $operatorName;
                 }
+                $assignedResponderId = (int)($unit['assigned_user_id'] ?? 0);
 
                 $operatorInsert->execute([
                     (int)$incident['id'],
@@ -447,12 +454,13 @@ try {
                     $incident['priority'] ?? null,
                     $incident['description'] ?? null,
                     $dispatchTime,
-                    (int)($unit['assigned_user_id'] ?? 0),
+                    $assignedResponderId,
                     $responderName,
                     (string)($unit['identifier'] ?? ''),
                     (string)($unit['unit_type'] ?? ''),
                     $dispatchTime,
                 ]);
+                ers_update_responder_unit_status($pdo, $assignedResponderId, 'busy');
 
                 $allocations[] = [
                     'dispatch_id' => $dispatchId,
@@ -466,6 +474,7 @@ try {
                     'location_address' => $incident['location_address'] ?? null,
                     'unit_identifier' => $unit['identifier'] ?? null,
                     'unit_type' => $unit['unit_type'] ?? null,
+                    'responder_id' => $assignedResponderId,
                 ];
 
                 $extraSlots--;
