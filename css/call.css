@@ -254,15 +254,37 @@
     gap: 1rem;
 }
 
+.incoming-call-modal {
+    position: fixed;
+    inset: 0;
+    z-index: 1200;
+    display: none;
+    align-items: center;
+    justify-content: center;
+    padding: 1.25rem;
+    background: rgba(15, 23, 42, 0.58);
+    backdrop-filter: blur(10px);
+}
+
+.incoming-call-modal.active {
+    display: flex;
+}
+
+body.incoming-call-modal-open {
+    overflow: hidden;
+}
+
 .incoming-call-alert {
     display: none;
+    width: min(430px, 100%);
     padding: 1.4rem;
     color: #fff;
     background: linear-gradient(135deg, #b91c1c 0%, #dc2626 45%, #ef4444 100%);
     box-shadow: 0 18px 40px rgba(185, 28, 28, 0.22);
 }
 
-.incoming-call-alert.active {
+.incoming-call-alert.active,
+.incoming-call-modal.active .incoming-call-alert {
     display: block;
 }
 
@@ -1054,6 +1076,15 @@
     color: #e2e8f0 !important;
 }
 
+[data-theme="dark"] .incoming-call-modal {
+    background: rgba(2, 6, 23, 0.74);
+}
+
+[data-theme="dark"] .incoming-call-alert {
+    border-color: rgba(248, 113, 113, 0.34);
+    box-shadow: 0 24px 60px rgba(0, 0, 0, 0.46);
+}
+
 [data-theme="dark"] .stat-value,
 [data-theme="dark"] .section-title,
 [data-theme="dark"] .sidebar-header h3,
@@ -1173,6 +1204,11 @@
     .call-session-tools {
         flex-direction: column;
         align-items: flex-start;
+    }
+
+    .incoming-call-modal {
+        align-items: flex-end;
+        padding: 0.85rem;
     }
 
     .call-btn,

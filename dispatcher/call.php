@@ -104,22 +104,24 @@ $pageTitle = 'Emergency Call Center';
 
             <div class="call-center-grid">
                 <section class="call-intake-column">
-                    <div class="incoming-call-alert" id="incomingCallAlert">
-                        <div class="call-info">
-                            <i class="fas fa-phone call-icon"></i>
-                            <div class="caller-details">
-                                <div class="panel-eyebrow call-alert-eyebrow">Incoming Channel</div>
-                                <h2 id="incomingCallerName">Incoming Call</h2>
-                                <p id="incomingCallerPhone"></p>
+                    <div class="incoming-call-modal" id="incomingCallModal" aria-hidden="true">
+                        <div class="incoming-call-alert" id="incomingCallAlert" role="dialog" aria-modal="true" aria-labelledby="incomingCallerName">
+                            <div class="call-info">
+                                <i class="fas fa-phone call-icon"></i>
+                                <div class="caller-details">
+                                    <div class="panel-eyebrow call-alert-eyebrow">Incoming Call</div>
+                                    <h2 id="incomingCallerName">Incoming Call</h2>
+                                    <p id="incomingCallerPhone"></p>
+                                </div>
                             </div>
-                        </div>
-                        <div class="call-actions">
-                            <button class="call-btn accept-btn" onclick="acceptCall()">
-                                <i class="fas fa-check"></i> Accept
-                            </button>
-                            <button class="call-btn reject-btn" onclick="rejectCall()">
-                                <i class="fas fa-times"></i> Reject
-                            </button>
+                            <div class="call-actions">
+                                <button class="call-btn accept-btn" id="acceptIncomingCallBtn" onclick="acceptCall()">
+                                    <i class="fas fa-check"></i> Accept
+                                </button>
+                                <button class="call-btn reject-btn" onclick="rejectCall()">
+                                    <i class="fas fa-times"></i> Decline
+                                </button>
+                            </div>
                         </div>
                     </div>
 
@@ -320,6 +322,7 @@ $pageTitle = 'Emergency Call Center';
     let speechRecognition = null;
     let speechListening = false;
     let finalTranscriptText = '';
+    let pendingIncomingCall = null;
     const SpeechRecognitionApi = window.SpeechRecognition || window.webkitSpeechRecognition || null;
 
     function getSharedCallSessionApi() {
@@ -403,30 +406,77 @@ $pageTitle = 'Emergency Call Center';
         document.addEventListener('ers:call-session-change', (event) => {
             renderActiveCallPanel(event.detail ? event.detail.session : getSharedCallSession());
         });
+        document.addEventListener('ers:incoming-call', (event) => {
+            showIncomingCallModal(event.detail || {});
+        });
     });
 
-    function acceptCall() {
+    function showIncomingCallModal(call) {
+        const modal = document.getElementById('incomingCallModal');
         const alert = document.getElementById('incomingCallAlert');
-        const name = document.getElementById('incomingCallerName').textContent || 'Unknown';
-        const phone = document.getElementById('incomingCallerPhone').textContent || '';
-        alert.classList.remove('active');
+        if (!modal || !alert) return;
+
+        const nameValue = call && (call.name || call.caller_name || call.callerName);
+        const phoneValue = call && (call.phone || call.caller_phone || call.callerPhone);
+        const startValue = call && (call.start || call.received_at || call.created_at);
+        const parsedStart = startValue ? Date.parse(startValue) : NaN;
+        const name = String(nameValue || 'Incoming Call').trim();
+        const phone = String(phoneValue || '').trim();
+        pendingIncomingCall = {
+            name: name || 'Incoming Call',
+            phone: phone,
+            start: Number(call && call.start) > 0 ? Number(call.start) : (Number.isFinite(parsedStart) ? parsedStart : Date.now())
+        };
+
+        document.getElementById('incomingCallerName').textContent = pendingIncomingCall.name;
+        document.getElementById('incomingCallerPhone').textContent = pendingIncomingCall.phone || 'Unknown number';
+        modal.classList.add('active');
+        alert.classList.add('active');
+        modal.setAttribute('aria-hidden', 'false');
+        document.body.classList.add('incoming-call-modal-open');
+        document.getElementById('acceptIncomingCallBtn')?.focus();
+    }
+
+    window.showIncomingCallModal = showIncomingCallModal;
+
+    function hideIncomingCallModal() {
+        const modal = document.getElementById('incomingCallModal');
+        const alert = document.getElementById('incomingCallAlert');
+        if (modal) {
+            modal.classList.remove('active');
+            modal.setAttribute('aria-hidden', 'true');
+        }
+        if (alert) {
+            alert.classList.remove('active');
+        }
+        document.body.classList.remove('incoming-call-modal-open');
+    }
+
+    function acceptCall() {
+        const incomingCall = pendingIncomingCall || {};
+        const name = incomingCall.name || document.getElementById('incomingCallerName').textContent || 'Unknown';
+        const phone = incomingCall.phone || '';
+        const start = incomingCall.start || Date.now();
+        hideIncomingCallModal();
+        pendingIncomingCall = null;
         const sessionApi = getSharedCallSessionApi();
         if (sessionApi) {
             sessionApi.start({
                 name: name,
                 phone: phone,
-                start: Date.now(),
+                start: start,
                 muted: false,
                 speaker: false
             });
         } else {
-            activeCall = { name, phone, start: Date.now() };
+            activeCall = { name, phone, start };
         }
         renderActiveCallPanel(getSharedCallSession() || activeCall);
     }
 
     function rejectCall() {
-        document.getElementById('incomingCallAlert').classList.remove('active');
+        pendingIncomingCall = null;
+        hideIncomingCallModal();
     }
 
     function endCall() {
