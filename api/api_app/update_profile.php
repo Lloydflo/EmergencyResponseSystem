@@ -3,6 +3,8 @@
 header('Content-Type: application/json');
 require __DIR__ . "/connect.php";
 
+$pdo = db();   // ← this line was missing
+
 $user_id   = $_POST['user_id'] ?? null;
 $full_name = trim($_POST['full_name'] ?? '');
 $username  = trim($_POST['username'] ?? '');
