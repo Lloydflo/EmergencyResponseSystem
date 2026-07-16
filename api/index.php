@@ -490,7 +490,7 @@ function ers_api_create_incoming_transfer(PDO $pdo, array $auth): array
         120
     );
     $transferId = ers_external_clean(
-        $input['transfer_id'] ?? $input['external_transfer_id'] ?? $call['transfer_id'] ?? $call['callId'] ?? $call['call_id'] ?? $call['reference_no'] ?? '',
+        $input['transfer_id'] ?? $input['external_transfer_id'] ?? $call['transfer_id'] ?? $call['callId'] ?? $call['call_id'] ?? $call['conversationId'] ?? $call['conversation_id'] ?? $call['reference_no'] ?? '',
         120
     );
     $type = ers_external_normalize_type($call['emergencyType'] ?? $call['emergency_type'] ?? $call['incident_type'] ?? $call['type'] ?? $call['department'] ?? 'other');
@@ -506,6 +506,10 @@ function ers_api_create_incoming_transfer(PDO $pdo, array $auth): array
     $description = ers_external_clean($call['description'] ?? $call['notes'] ?? $call['message'] ?? $call['summary'] ?? '', 0);
     if ($description === '' && isset($call['conversation'])) {
         $description = ers_api_transfer_conversation_text($call['conversation']);
+    }
+    $messagesText = ers_api_transfer_messages_text($call['messages'] ?? $input['messages'] ?? null);
+    if ($messagesText !== '') {
+        $description = trim($description . "\n\nMessages:\n" . $messagesText);
     }
     if ($description === '') {
         $description = 'Incoming transferred call from ' . ($sourceSystem !== '' ? $sourceSystem : 'external system') . '.';
@@ -560,6 +564,8 @@ function ers_api_create_incoming_transfer(PDO $pdo, array $auth): array
     $socketUrl = ers_external_clean($call['socketUrl'] ?? $call['socket_url'] ?? $input['socketUrl'] ?? $input['socket_url'] ?? 'https://emergency-comm.alertaraqc.com', 255);
     $socketPath = ers_external_clean($call['socketPath'] ?? $call['socket_path'] ?? $input['socketPath'] ?? $input['socket_path'] ?? '/socket.io', 100);
     $conversationId = ers_external_clean($call['conversationId'] ?? $call['conversation_id'] ?? $input['conversationId'] ?? $input['conversation_id'] ?? '', 80);
+    $externalCallId = ers_external_clean($call['callId'] ?? $call['call_id'] ?? '', 120);
+    $isLiveCallTransfer = $externalCallId !== '' && $room !== '';
 
     $pdo->beginTransaction();
     $callId = ers_external_insert_call($pdo, [
@@ -603,8 +609,9 @@ function ers_api_create_incoming_transfer(PDO $pdo, array $auth): array
         'success' => true,
         'message' => 'Incoming transfer call recorded successfully.',
         'event' => ers_external_clean($call['event'] ?? $input['event'] ?? 'incoming-transfer', 80),
+        'transfer_type' => $isLiveCallTransfer ? 'live_call' : 'report',
         'transfer_id' => $transferId,
-        'call_id_external' => ers_external_clean($call['callId'] ?? $call['call_id'] ?? $transferId, 120),
+        'call_id_external' => $externalCallId,
         'conversation_id' => $conversationId,
         'room' => $room,
         'socket_url' => $socketUrl,
@@ -643,6 +650,38 @@ function ers_api_transfer_conversation_text($conversation): string
             $text = ers_external_clean((string)$entry, 0);
             if ($text !== '') {
                 $lines[] = $text;
+            }
+        }
+    }
+
+    return implode("\n", $lines);
+}
+
+function ers_api_transfer_messages_text($messages): string
+{
+    if (is_string($messages)) {
+        $decoded = json_decode($messages, true);
+        if (is_array($decoded)) {
+            $messages = $decoded;
+        } else {
+            return ers_external_clean($messages, 0);
+        }
+    }
+
+    if (!is_array($messages)) {
+        return '';
+    }
+
+    $lines = [];
+    foreach ($messages as $message) {
+        if (is_array($message)) {
+            $sender = ers_external_clean($message['sender_name'] ?? $message['sender'] ?? $message['sender_type'] ?? '', 100);
+            $text = ers_external_clean($message['message_text'] ?? $message['text'] ?? $message['message'] ?? $message['content'] ?? '', 0);
+            $createdAt = ers_external_clean($message['created_at'] ?? $message['timestamp'] ?? '', 50);
+            if ($text !== '') {
+                $prefix = $sender !== '' ? $sender . ': ' : '';
+                $suffix = $createdAt !== '' ? ' (' . $createdAt . ')' : '';
+                $lines[] = $prefix . $text . $suffix;
             }
         }
     }
