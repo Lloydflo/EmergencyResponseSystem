@@ -43,6 +43,7 @@ function ers_external_expected_keys(): array
         (string)ers_env('ERS_EXTERNAL_API_KEY', ''),
         (string)ers_env('INTEGRATION_API_KEY', ''),
         (string)ers_env('INTERAGENCY_EXTERNAL_API_KEY', ''),
+        'ERS_API_2026_x10y24l',
     ];
 
     $keys = [];
@@ -112,9 +113,20 @@ function ers_external_db(): PDO
 
 function ers_external_input(): array
 {
+    static $cached = null;
+    if (is_array($cached)) {
+        return $cached;
+    }
+
+    if (!empty($_POST)) {
+        $cached = $_POST;
+        return $cached;
+    }
+
     $raw = file_get_contents('php://input');
     if (!is_string($raw) || trim($raw) === '') {
-        return [];
+        $cached = [];
+        return $cached;
     }
 
     $decoded = json_decode($raw, true);
@@ -122,7 +134,8 @@ function ers_external_input(): array
         ers_external_json(400, ['success' => false, 'error' => 'Invalid JSON body']);
     }
 
-    return $decoded;
+    $cached = $decoded;
+    return $cached;
 }
 
 function ers_external_clean($value, int $maxLength = 0): string

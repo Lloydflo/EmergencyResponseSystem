@@ -40,7 +40,14 @@ try {
     }
 
     if ($method === 'POST' && in_array($action, ['overview', 'create_incident', 'incident'], true)) {
+        if (ers_api_is_incoming_transfer_payload()) {
+            ers_external_json(201, ers_api_create_incoming_transfer($pdo, $auth));
+        }
         ers_external_json(201, ers_api_create_incident($pdo, $auth));
+    }
+
+    if ($method === 'POST' && in_array($action, ['incoming-transfer', 'incoming_transfer', 'transfer_call'], true)) {
+        ers_external_json(201, ers_api_create_incoming_transfer($pdo, $auth));
     }
 
     if (in_array($method, ['POST', 'PATCH'], true) && in_array($action, ['status', 'incident_status'], true)) {
@@ -80,6 +87,7 @@ function ers_api_overview(PDO $pdo): array
             'incidents' => 'GET /ERS/api/?action=incidents&api_key=KEY',
             'resources' => 'GET /ERS/api/?action=resources&api_key=KEY',
             'create_incident' => 'POST /ERS/api/?action=create_incident',
+            'incoming_transfer' => 'POST /ERS/api/?action=incoming-transfer',
             'incident_status' => 'PATCH /ERS/api/?action=incident_status',
         ],
     ];
@@ -323,6 +331,18 @@ function ers_api_resource_table(PDO $pdo): ?string
     return null;
 }
 
+function ers_api_is_incoming_transfer_payload(): bool
+{
+    $input = ers_external_input();
+    $call = isset($input['call']) && is_array($input['call']) ? $input['call'] : $input;
+    foreach (['event', 'callId', 'call_id', 'room', 'socketUrl', 'socket_url', 'socketPath', 'socket_path', 'conversation', 'transfer_id'] as $key) {
+        if (array_key_exists($key, $call) || array_key_exists($key, $input)) {
+            return true;
+        }
+    }
+    return false;
+}
+
 function ers_api_create_incident(PDO $pdo, array $auth): array
 {
     $input = ers_external_input();
@@ -446,6 +466,173 @@ function ers_api_create_incident(PDO $pdo, array $auth): array
         'status' => $created['status'],
         'incident_card_messages' => $cardMessages,
     ];
+}
+
+function ers_api_create_incoming_transfer(PDO $pdo, array $auth): array
+{
+    $input = ers_external_input();
+    $call = isset($input['call']) && is_array($input['call']) ? $input['call'] : $input;
+
+    $sourceSystem = ers_external_clean(
+        $input['source_system'] ?? $input['system_name'] ?? $input['from_system'] ?? $input['from_agency'] ?? $auth['client'] ?? 'AlertaraQC Emergency Communication',
+        120
+    );
+    $transferId = ers_external_clean(
+        $input['transfer_id'] ?? $input['external_transfer_id'] ?? $call['transfer_id'] ?? $call['callId'] ?? $call['call_id'] ?? $call['reference_no'] ?? '',
+        120
+    );
+    $type = ers_external_normalize_type($call['type'] ?? $call['incident_type'] ?? $call['department'] ?? 'other');
+    if ($type === '') {
+        $type = 'other';
+    }
+
+    $priority = ers_external_normalize_priority($call['priority'] ?? $input['priority'] ?? 'medium');
+    $location = ers_external_clean($call['location_address'] ?? $call['location'] ?? $call['address'] ?? '', 255);
+    if ($location === '') {
+        $location = 'Location pending from transferred call';
+    }
+    $description = ers_external_clean($call['description'] ?? $call['notes'] ?? $call['message'] ?? $call['summary'] ?? '', 0);
+    if ($description === '' && isset($call['conversation'])) {
+        $description = ers_api_transfer_conversation_text($call['conversation']);
+    }
+    if ($description === '') {
+        $description = 'Incoming transferred call from ' . ($sourceSystem !== '' ? $sourceSystem : 'external system') . '.';
+    }
+
+    $latitude = isset($call['latitude']) && $call['latitude'] !== '' ? (float)$call['latitude'] : null;
+    $longitude = isset($call['longitude']) && $call['longitude'] !== '' ? (float)$call['longitude'] : null;
+    if (($latitude !== null && ($latitude < -90 || $latitude > 90)) || ($longitude !== null && ($longitude < -180 || $longitude > 180))) {
+        $latitude = null;
+        $longitude = null;
+    }
+    if (($latitude === null) xor ($longitude === null)) {
+        $latitude = null;
+        $longitude = null;
+    }
+
+    ers_external_ensure_identity($pdo, 'calls');
+    ers_external_ensure_identity($pdo, 'incidents');
+    ers_external_ensure_link_table($pdo);
+
+    if ($sourceSystem !== '' && $transferId !== '') {
+        $existing = $pdo->prepare(
+            "SELECT i.id, i.reference_no, i.status
+             FROM external_incident_links l
+             INNER JOIN incidents i ON i.id = l.incident_id
+             WHERE l.source_system = ? AND l.external_incident_id = ?
+             LIMIT 1"
+        );
+        $existing->execute([$sourceSystem, $transferId]);
+        $row = $existing->fetch(PDO::FETCH_ASSOC);
+        if ($row) {
+            return [
+                'success' => true,
+                'duplicate' => true,
+                'transfer_id' => $transferId,
+                'incident_id' => (int)$row['id'],
+                'reference_no' => $row['reference_no'],
+                'status' => $row['status'],
+            ];
+        }
+    }
+
+    $referenceNo = ers_external_clean($call['reference_no'] ?? '', 50);
+    if ($referenceNo === '') {
+        $referenceNo = 'TRN-' . date('YmdHis') . '-' . str_pad((string)random_int(0, 9999), 4, '0', STR_PAD_LEFT);
+    }
+
+    $title = ers_external_clean($call['title'] ?? ('Transferred call from ' . $sourceSystem), 200);
+    $callerName = ers_external_clean($call['caller_name'] ?? $call['name'] ?? 'Transferred Caller', 150);
+    $callerPhone = ers_external_clean($call['caller_phone'] ?? $call['phone'] ?? $call['contact_number'] ?? $call['contact'] ?? 'N/A', 50);
+    $room = ers_external_clean($call['room'] ?? $input['room'] ?? '', 150);
+    $socketUrl = ers_external_clean($call['socketUrl'] ?? $call['socket_url'] ?? $input['socketUrl'] ?? $input['socket_url'] ?? 'https://emergency-comm.alertaraqc.com', 255);
+    $socketPath = ers_external_clean($call['socketPath'] ?? $call['socket_path'] ?? $input['socketPath'] ?? $input['socket_path'] ?? '/socket.io', 100);
+
+    $pdo->beginTransaction();
+    $callId = ers_external_insert_call($pdo, [
+        ':reference_no' => $referenceNo,
+        ':caller_name' => $callerName,
+        ':caller_phone' => $callerPhone,
+        ':caller_email' => ers_external_clean($call['caller_email'] ?? $call['email'] ?? '', 150) ?: null,
+        ':location_address' => $location,
+        ':latitude' => $latitude,
+        ':longitude' => $longitude,
+        ':incident_type' => $type,
+        ':priority' => $priority,
+        ':description' => $description,
+    ]);
+
+    $lookup = $pdo->prepare('SELECT id, reference_no, status FROM incidents WHERE reported_by_call_id = ? LIMIT 1');
+    $lookup->execute([$callId]);
+    $created = $lookup->fetch(PDO::FETCH_ASSOC);
+    if ($created) {
+        $update = $pdo->prepare('UPDATE incidents SET title = ?, updated_at = NOW() WHERE id = ?');
+        $update->execute([$title, (int)$created['id']]);
+    } else {
+        $incidentId = ers_external_insert_incident($pdo, [
+            ':reference_no' => $referenceNo,
+            ':type' => $type,
+            ':priority' => $priority,
+            ':title' => $title,
+            ':description' => $description,
+            ':location_address' => $location,
+            ':latitude' => $latitude,
+            ':longitude' => $longitude,
+            ':reported_by_call_id' => $callId,
+        ]);
+        $created = ['id' => $incidentId, 'reference_no' => $referenceNo, 'status' => 'pending'];
+    }
+
+    ers_external_link_incident($pdo, $sourceSystem, $transferId, (int)$created['id'], $input);
+    $pdo->commit();
+
+    return [
+        'success' => true,
+        'message' => 'Incoming transfer call recorded successfully.',
+        'event' => ers_external_clean($call['event'] ?? $input['event'] ?? 'incoming-transfer', 80),
+        'transfer_id' => $transferId,
+        'room' => $room,
+        'socket_url' => $socketUrl,
+        'socket_path' => $socketPath,
+        'call_id' => $callId,
+        'incident_id' => (int)$created['id'],
+        'reference_no' => $created['reference_no'],
+        'status' => $created['status'],
+    ];
+}
+
+function ers_api_transfer_conversation_text($conversation): string
+{
+    if (is_string($conversation)) {
+        $decoded = json_decode($conversation, true);
+        if (is_array($decoded)) {
+            $conversation = $decoded;
+        } else {
+            return ers_external_clean($conversation, 0);
+        }
+    }
+
+    if (!is_array($conversation)) {
+        return '';
+    }
+
+    $lines = [];
+    foreach ($conversation as $entry) {
+        if (is_array($entry)) {
+            $speaker = ers_external_clean($entry['speaker'] ?? $entry['role'] ?? $entry['from'] ?? '', 80);
+            $text = ers_external_clean($entry['text'] ?? $entry['message'] ?? $entry['content'] ?? '', 0);
+            if ($text !== '') {
+                $lines[] = ($speaker !== '' ? $speaker . ': ' : '') . $text;
+            }
+        } elseif (is_scalar($entry)) {
+            $text = ers_external_clean((string)$entry, 0);
+            if ($text !== '') {
+                $lines[] = $text;
+            }
+        }
+    }
+
+    return implode("\n", $lines);
 }
 
 function ers_api_create_incident_card_messages(PDO $pdo, array $card, array $input): array
