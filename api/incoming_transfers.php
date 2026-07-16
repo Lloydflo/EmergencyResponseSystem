@@ -56,13 +56,22 @@ try {
         if (!is_array($payload)) {
             $payload = [];
         }
+        if (isset($payload['payload_json']) && is_string($payload['payload_json'])) {
+            $decodedPayload = json_decode($payload['payload_json'], true);
+            if (is_array($decodedPayload)) {
+                $payload = array_replace($payload, $decodedPayload);
+            }
+        }
         $call = isset($payload['call']) && is_array($payload['call']) ? $payload['call'] : $payload;
+        $externalCallId = (string)($call['callId'] ?? $call['call_id'] ?? $row['transfer_id'] ?? '');
 
         $transfers[] = [
             'transfer_log_id' => (int)($row['transfer_log_id'] ?? 0),
             'source_system' => (string)($row['source_system'] ?? ''),
             'event' => (string)($call['event'] ?? $payload['event'] ?? 'incoming-transfer'),
             'transfer_id' => (string)($row['transfer_id'] ?? $call['callId'] ?? $call['call_id'] ?? ''),
+            'call_id_external' => $externalCallId,
+            'conversation_id' => (string)($call['conversationId'] ?? $call['conversation_id'] ?? $payload['conversationId'] ?? $payload['conversation_id'] ?? ''),
             'room' => (string)($call['room'] ?? $payload['room'] ?? ''),
             'socket_url' => (string)($call['socketUrl'] ?? $call['socket_url'] ?? $payload['socketUrl'] ?? $payload['socket_url'] ?? 'https://emergency-comm.alertaraqc.com'),
             'socket_path' => (string)($call['socketPath'] ?? $call['socket_path'] ?? $payload['socketPath'] ?? $payload['socket_path'] ?? '/socket.io'),
@@ -77,7 +86,7 @@ try {
             'priority' => (string)($row['priority'] ?? ''),
             'location' => (string)($row['location_address'] ?? ''),
             'description' => (string)($row['description'] ?? ''),
-            'transferred_at' => (string)($row['transferred_at'] ?? ''),
+            'transferred_at' => (string)($call['transferred_at'] ?? $payload['transferred_at'] ?? $row['transferred_at'] ?? ''),
         ];
     }
 

@@ -99,7 +99,16 @@ X-ERS-Client: emergency-comm-alertaraqc
 
 The endpoint accepts JSON or form-data. Transfer payload fields such as `event`,
 `callId`, `call_id`, `room`, `socketUrl`, `socket_url`, `socketPath`,
-`socket_path`, and `conversation` are detected as incoming transferred calls.
+`socket_path`, `conversationId`, `conversation_id`, `emergencyType`,
+`emergency_type`, `incident_type`, `type`, `priority`, `status`, `title`,
+`description`, `caller_name`, `caller_phone`, `caller_address`,
+`location_address`, `latitude`, `longitude`, `transferred_at`, and
+`payload_json` are detected as incoming transferred calls.
+
 The dispatcher call screen polls `api/incoming_transfers.php`, opens the
 transferred-call modal, plays an alert tone when the browser allows audio, and
 uses the transfer `room` with Socket.IO polling at `https://emergency-comm.alertaraqc.com/socket.io`.
+When the dispatcher accepts the call, the browser joins `payload.room`, listens
+for `offer`, answers with local microphone audio through WebRTC, and exchanges
+ICE `candidate` events in the same room. Do not hardcode a room name; each call
+uses its own `emergency-call-{callId}` room from the payload.

@@ -334,8 +334,14 @@ function ers_api_resource_table(PDO $pdo): ?string
 function ers_api_is_incoming_transfer_payload(): bool
 {
     $input = ers_external_input();
+    if (isset($input['payload_json']) && is_string($input['payload_json'])) {
+        $decoded = json_decode($input['payload_json'], true);
+        if (is_array($decoded)) {
+            $input = array_replace($input, $decoded);
+        }
+    }
     $call = isset($input['call']) && is_array($input['call']) ? $input['call'] : $input;
-    foreach (['event', 'callId', 'call_id', 'room', 'socketUrl', 'socket_url', 'socketPath', 'socket_path', 'conversation', 'transfer_id'] as $key) {
+    foreach (['event', 'callId', 'call_id', 'room', 'socketUrl', 'socket_url', 'socketPath', 'socket_path', 'conversation', 'conversationId', 'conversation_id', 'transfer_id'] as $key) {
         if (array_key_exists($key, $call) || array_key_exists($key, $input)) {
             return true;
         }
@@ -471,6 +477,12 @@ function ers_api_create_incident(PDO $pdo, array $auth): array
 function ers_api_create_incoming_transfer(PDO $pdo, array $auth): array
 {
     $input = ers_external_input();
+    if (isset($input['payload_json']) && is_string($input['payload_json'])) {
+        $decodedPayload = json_decode($input['payload_json'], true);
+        if (is_array($decodedPayload)) {
+            $input = array_replace($input, $decodedPayload);
+        }
+    }
     $call = isset($input['call']) && is_array($input['call']) ? $input['call'] : $input;
 
     $sourceSystem = ers_external_clean(
@@ -481,13 +493,13 @@ function ers_api_create_incoming_transfer(PDO $pdo, array $auth): array
         $input['transfer_id'] ?? $input['external_transfer_id'] ?? $call['transfer_id'] ?? $call['callId'] ?? $call['call_id'] ?? $call['reference_no'] ?? '',
         120
     );
-    $type = ers_external_normalize_type($call['type'] ?? $call['incident_type'] ?? $call['department'] ?? 'other');
+    $type = ers_external_normalize_type($call['emergencyType'] ?? $call['emergency_type'] ?? $call['incident_type'] ?? $call['type'] ?? $call['department'] ?? 'other');
     if ($type === '') {
         $type = 'other';
     }
 
     $priority = ers_external_normalize_priority($call['priority'] ?? $input['priority'] ?? 'medium');
-    $location = ers_external_clean($call['location_address'] ?? $call['location'] ?? $call['address'] ?? '', 255);
+    $location = ers_external_clean($call['location_address'] ?? $call['caller_address'] ?? $call['location'] ?? $call['address'] ?? '', 255);
     if ($location === '') {
         $location = 'Location pending from transferred call';
     }
@@ -547,6 +559,7 @@ function ers_api_create_incoming_transfer(PDO $pdo, array $auth): array
     $room = ers_external_clean($call['room'] ?? $input['room'] ?? '', 150);
     $socketUrl = ers_external_clean($call['socketUrl'] ?? $call['socket_url'] ?? $input['socketUrl'] ?? $input['socket_url'] ?? 'https://emergency-comm.alertaraqc.com', 255);
     $socketPath = ers_external_clean($call['socketPath'] ?? $call['socket_path'] ?? $input['socketPath'] ?? $input['socket_path'] ?? '/socket.io', 100);
+    $conversationId = ers_external_clean($call['conversationId'] ?? $call['conversation_id'] ?? $input['conversationId'] ?? $input['conversation_id'] ?? '', 80);
 
     $pdo->beginTransaction();
     $callId = ers_external_insert_call($pdo, [
@@ -591,6 +604,8 @@ function ers_api_create_incoming_transfer(PDO $pdo, array $auth): array
         'message' => 'Incoming transfer call recorded successfully.',
         'event' => ers_external_clean($call['event'] ?? $input['event'] ?? 'incoming-transfer', 80),
         'transfer_id' => $transferId,
+        'call_id_external' => ers_external_clean($call['callId'] ?? $call['call_id'] ?? $transferId, 120),
+        'conversation_id' => $conversationId,
         'room' => $room,
         'socket_url' => $socketUrl,
         'socket_path' => $socketPath,
