@@ -71,11 +71,19 @@ Incoming transfer call body. This saves the transferred call and creates the pai
   "source_system": "Partner Dispatch",
   "transfer_id": "CALL-2026-001",
   "call": {
+    "callId": "CALL-2026-001",
+    "room": "emergency-call-CALL-2026-001",
+    "socketUrl": "https://emergency-comm.alertaraqc.com",
+    "socketPath": "/socket.io",
     "caller_name": "Maria Santos",
-    "caller_phone": "09171234567",
+    "caller_phone": "09171234567"
+  },
+  "incident": {
     "incident_type": "medical",
     "priority": "high",
     "location": "Quezon City Hall",
+    "latitude": 14.6507,
+    "longitude": 121.0494,
     "description": "Caller reports chest pain near the main entrance."
   }
 }
@@ -114,6 +122,9 @@ Transfer payload fields such as `event`, `callId`, `call_id`, `room`,
 The dispatcher call screen polls `api/incoming_transfers.php`, opens the
 transferred-call modal, plays an alert tone when the browser allows audio, and
 uses the transfer `room` with Socket.IO polling at `https://emergency-comm.alertaraqc.com/socket.io`.
+Caller name, phone number, incident type, priority, location, coordinates, and
+description from the transfer payload are automatically filled into the call
+logging form after the dispatcher accepts the call.
 When the dispatcher accepts the call, the browser joins `payload.room`, listens
 for `offer`, answers with local microphone audio through WebRTC, and exchanges
 ICE `candidate` events in the same room. Do not hardcode a room name; each call

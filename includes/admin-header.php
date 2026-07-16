@@ -264,7 +264,25 @@ $avatar_source = $user_avatar !== ''
             </div>
         </div>
         <div class="modal-footer">
-            <a href="<?php echo htmlspecialchars($interagency_page); ?>" class="view-all-link" data-open-interagency="1">Open Interagency</a>
+            <button type="button" class="view-all-link" data-show-all-notifications="1">Show All</button>
+        </div>
+    </div>
+</div>
+
+<!-- All Notifications Modal -->
+<div class="notification-modal all-notifications-modal" id="allNotificationsModal">
+    <div class="modal-content">
+        <div class="modal-header">
+            <h3>All Notifications</h3>
+            <button class="modal-close" onclick="closeModal('allNotificationsModal')">
+                <i class="fas fa-times"></i>
+            </button>
+        </div>
+        <div class="modal-body all-notifications-body" id="allNotificationsList">
+            <div class="header-empty-state">
+                <i class="fas fa-bell-slash"></i>
+                <span>No notifications yet.</span>
+            </div>
         </div>
     </div>
 </div>
@@ -335,9 +353,11 @@ document.addEventListener('DOMContentLoaded', function() {
     const notificationBadge = document.getElementById('headerNotificationBadge');
     const messageBadge = document.getElementById('headerMessageBadge');
     const notificationModal = document.getElementById('notificationModal');
+    const allNotificationsModal = document.getElementById('allNotificationsModal');
     const messageModal = document.getElementById('messageModal');
     const messageContentModal = document.getElementById('messageContentModal');
     const notificationList = document.getElementById('headerNotificationList');
+    const allNotificationsList = document.getElementById('allNotificationsList');
     const messageList = document.getElementById('headerMessageList');
     const userProfileBtn = document.getElementById('userProfileBtn');
     const userProfileDropdown = document.getElementById('userProfileDropdown');
@@ -580,6 +600,123 @@ document.addEventListener('DOMContentLoaded', function() {
         notificationList.innerHTML = parts.join('');
     }
 
+    function backupRequestLabel(item) {
+        if (!item) return 'Incident';
+        if (item.incident_code) {
+            return item.incident_code + (item.incident_id ? ' (#' + item.incident_id + ')' : '');
+        }
+        return item.incident_id ? ('Incident #' + item.incident_id) : 'Incident';
+    }
+
+    function backupRequestText(item) {
+        if (!item) return 'Resource request needs review.';
+        if (userRole === 'dispatcher') {
+            return (item.resource_name || 'Backup request') + ' for ' + backupRequestLabel(item);
+        }
+        return (item.requestor || 'Responder') + ' requested ' + (item.resource_name || 'resources');
+    }
+
+    function notificationSortTime(value) {
+        const date = parseDate(value);
+        return date ? date.getTime() : 0;
+    }
+
+    function collectAllNotifications() {
+        const entries = [];
+
+        (Array.isArray(state.incidentCardNotifications) ? state.incidentCardNotifications : []).forEach(function(item) {
+            const label = incidentCardLabel(item);
+            const isUnread = Number(item.notification_id || 0) > state.incidentCardSeenId;
+            entries.push({
+                kind: 'incident-card',
+                hrefAttr: 'data-open-interagency="1" data-incident-card-notification="1"',
+                icon: isUnread ? 'fa-triangle-exclamation' : 'fa-clipboard-list',
+                title: isUnread ? 'Incident card sent' : 'Incident card',
+                text: incidentCardText(item),
+                meta: label + ' - ' + relativeTime(item.notified_at),
+                time: item.notified_at,
+                id: Number(item.notification_id || 0)
+            });
+        });
+
+        (Array.isArray(state.resolvedNotifications) ? state.resolvedNotifications : []).forEach(function(item) {
+            const incident = item && item.incident ? item.incident : {};
+            const incidentLabel = incident.label || incident.reference_no || (incident.id ? ('#' + incident.id) : 'Incident');
+            const detailText = item.details || (incidentLabel + ' has been resolved.');
+            const isUnread = Number(item.notification_id || 0) > state.resolvedSeenId;
+            const time = item.notified_at || incident.resolved_at;
+            entries.push({
+                kind: 'resolved',
+                hrefAttr: 'data-open-review="1"',
+                icon: isUnread ? 'fa-circle-check' : 'fa-check',
+                title: isUnread ? 'Incident resolved' : 'Resolved incident',
+                text: detailText,
+                meta: relativeTime(time),
+                time: time,
+                id: Number(item.notification_id || 0)
+            });
+        });
+
+        (Array.isArray(state.backupRequests) ? state.backupRequests : []).forEach(function(item) {
+            entries.push({
+                kind: 'resource',
+                hrefAttr: 'data-open-resources="1"',
+                icon: userRole === 'dispatcher' ? 'fa-truck-medical' : 'fa-hand-holding-medical',
+                title: userRole === 'dispatcher' ? 'Pending backup request' : 'Pending resource request',
+                text: backupRequestText(item),
+                meta: relativeTime(item.date_requested),
+                time: item.date_requested,
+                id: Number(item.id || 0)
+            });
+        });
+
+        (Array.isArray(state.unreadThreads) ? state.unreadThreads : []).forEach(function(item) {
+            const unread = Math.max(0, Number(item.unread) || 0);
+            entries.push({
+                kind: 'message',
+                hrefAttr: 'data-open-interagency="1"',
+                icon: 'fa-envelope',
+                title: unreadText(unread),
+                text: threadTitle(item) + ': ' + previewText(item),
+                meta: relativeTime(item.last_at),
+                time: item.last_at,
+                id: unread
+            });
+        });
+
+        entries.sort(function(a, b) {
+            const timeDiff = notificationSortTime(b.time) - notificationSortTime(a.time);
+            if (timeDiff !== 0) return timeDiff;
+            return (Number(b.id) || 0) - (Number(a.id) || 0);
+        });
+
+        return entries;
+    }
+
+    function renderAllNotificationsList() {
+        if (!allNotificationsList) return;
+        const entries = collectAllNotifications();
+        if (!entries.length) {
+            allNotificationsList.innerHTML = emptyState('fa-bell-slash', 'No notifications yet.');
+            return;
+        }
+
+        allNotificationsList.innerHTML = entries.map(function(item) {
+            return `
+                <button type="button" class="notification-item header-reset-button all-notification-item" ${item.hrefAttr}>
+                    <div class="notification-icon">
+                        <i class="fas ${escapeHtml(item.icon)}"></i>
+                    </div>
+                    <div class="notification-details">
+                        <div class="notification-title">${escapeHtml(item.title)}</div>
+                        <div class="notification-text">${escapeHtml(item.text)}</div>
+                        <div class="notification-time">${escapeHtml(item.meta)}</div>
+                    </div>
+                </button>
+            `;
+        }).join('');
+    }
+
     function renderMessageList() {
         if (!messageList) return;
         const items = state.recentThreads.slice(0, 6);
@@ -677,6 +814,7 @@ document.addEventListener('DOMContentLoaded', function() {
         if (!modal) return;
         modal.classList.remove('show');
         if (modalId === 'notificationModal' && notificationBtn) notificationBtn.classList.remove('active');
+        if (modalId === 'allNotificationsModal' && notificationBtn) notificationBtn.classList.remove('active');
         if (modalId === 'messageModal' && messageBtn) messageBtn.classList.remove('active');
         document.body.style.overflow = '';
     }
@@ -696,9 +834,27 @@ document.addEventListener('DOMContentLoaded', function() {
         if (otherModal) otherModal.classList.remove('show');
         if (otherButton) otherButton.classList.remove('active');
         if (messageContentModal) messageContentModal.classList.remove('show');
+        if (allNotificationsModal) allNotificationsModal.classList.remove('show');
         modal.classList.toggle('show', willShow);
         button.classList.toggle('active', willShow);
         document.body.style.overflow = '';
+    }
+
+    async function openAllNotifications() {
+        await loadHeaderSummary(50);
+        markResolvedNotificationsSeen();
+        markIncidentCardNotificationsSeen();
+        const unreadCount = Math.max(0, Number(state.lastUnreadCount) || 0);
+        const backupCount = Array.isArray(state.backupRequests) ? state.backupRequests.length : 0;
+        setBadge(notificationBadge, unreadCount + backupCount + state.resolvedUnreadCount + state.incidentCardUnreadCount);
+        renderNotificationList(unreadCount);
+        renderAllNotificationsList();
+        if (notificationModal) notificationModal.classList.remove('show');
+        if (messageModal) messageModal.classList.remove('show');
+        if (messageBtn) messageBtn.classList.remove('active');
+        if (userProfileDropdown) userProfileDropdown.classList.remove('show');
+        if (allNotificationsModal) allNotificationsModal.classList.add('show');
+        if (notificationBtn) notificationBtn.classList.add('active');
     }
 
     function openInteragency() {
@@ -735,7 +891,7 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     }
 
-    async function loadBackupRequestSummary() {
+    async function loadBackupRequestSummary(limit) {
         if (!['dispatcher', 'admin'].includes(userRole)) {
             state.backupRequests = [];
             state.lastBackupCount = 0;
@@ -743,9 +899,10 @@ document.addEventListener('DOMContentLoaded', function() {
         }
 
         try {
+            const requestLimit = Math.max(1, Math.min(100, Number(limit) || 10));
             const endpoint = userRole === 'dispatcher'
-                ? 'api/dispatcher_backup_requests.php?limit=10'
-                : 'api/admin_resource_requests.php?limit=10';
+                ? 'api/dispatcher_backup_requests.php?limit=' + requestLimit
+                : 'api/admin_resource_requests.php?limit=' + requestLimit;
             const response = await fetch(endpoint, {
                 cache: 'no-store',
                 credentials: 'same-origin'
@@ -766,9 +923,10 @@ document.addEventListener('DOMContentLoaded', function() {
         } catch (_) {}
     }
 
-    async function loadResolvedIncidentSummary() {
+    async function loadResolvedIncidentSummary(limit) {
         try {
-            const response = await fetch('api/resolved_incident_notifications.php?limit=10', {
+            const requestLimit = Math.max(1, Math.min(50, Number(limit) || 10));
+            const response = await fetch('api/resolved_incident_notifications.php?limit=' + requestLimit, {
                 cache: 'no-store',
                 credentials: 'same-origin'
             });
@@ -797,7 +955,7 @@ document.addEventListener('DOMContentLoaded', function() {
         } catch (_) {}
     }
 
-    async function loadIncidentCardSummary() {
+    async function loadIncidentCardSummary(limit) {
         if (userRole !== 'admin') {
             state.incidentCardNotifications = [];
             state.incidentCardUnreadCount = 0;
@@ -806,7 +964,8 @@ document.addEventListener('DOMContentLoaded', function() {
         }
 
         try {
-            const response = await fetch('api/interagency_incident_card_notifications.php?limit=10', {
+            const requestLimit = Math.max(1, Math.min(50, Number(limit) || 10));
+            const response = await fetch('api/interagency_incident_card_notifications.php?limit=' + requestLimit, {
                 cache: 'no-store',
                 credentials: 'same-origin'
             });
@@ -875,10 +1034,10 @@ document.addEventListener('DOMContentLoaded', function() {
         } catch (_) {}
     }
 
-    async function loadHeaderSummary() {
-        await loadBackupRequestSummary();
-        await loadResolvedIncidentSummary();
-        await loadIncidentCardSummary();
+    async function loadHeaderSummary(limit) {
+        await loadBackupRequestSummary(limit);
+        await loadResolvedIncidentSummary(limit);
+        await loadIncidentCardSummary(limit);
         await loadInteragencySummary();
     }
 
@@ -926,6 +1085,14 @@ document.addEventListener('DOMContentLoaded', function() {
     }
 
     document.addEventListener('click', function(event) {
+        const showAllTrigger = event.target.closest('[data-show-all-notifications]');
+        if (showAllTrigger) {
+            event.preventDefault();
+            event.stopPropagation();
+            openAllNotifications();
+            return;
+        }
+
         const trigger = event.target.closest('[data-open-interagency]');
         if (trigger) {
             event.preventDefault();
@@ -960,6 +1127,12 @@ document.addEventListener('DOMContentLoaded', function() {
         if (messageModal && messageModal.classList.contains('show')) {
             if (!messageModal.contains(event.target) && !event.target.closest('#headerMessageBtn')) {
                 closeModal('messageModal');
+            }
+        }
+
+        if (allNotificationsModal && allNotificationsModal.classList.contains('show')) {
+            if (!allNotificationsModal.contains(event.target) && !event.target.closest('#headerNotificationBtn')) {
+                closeModal('allNotificationsModal');
             }
         }
 

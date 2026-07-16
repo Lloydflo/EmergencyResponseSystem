@@ -14,6 +14,35 @@ $afterId = isset($_GET['after_id']) ? max(0, (int)$_GET['after_id']) : 0;
 $limit = isset($_GET['limit']) ? max(1, min(25, (int)$_GET['limit'])) : 10;
 $latestOnly = isset($_GET['latest']) && (string)$_GET['latest'] === '1';
 
+function incoming_transfer_pick(array $sources, array $keys, string $default = ''): string
+{
+    foreach ($sources as $source) {
+        if (!is_array($source)) {
+            continue;
+        }
+        foreach ($keys as $key) {
+            if (!array_key_exists($key, $source) || is_array($source[$key]) || is_object($source[$key])) {
+                continue;
+            }
+            $value = trim((string)$source[$key]);
+            if ($value !== '') {
+                return $value;
+            }
+        }
+    }
+    return $default;
+}
+
+function incoming_transfer_pick_float(array $sources, array $keys): ?float
+{
+    $value = incoming_transfer_pick($sources, $keys);
+    if ($value === '' || !is_numeric($value)) {
+        return null;
+    }
+    $number = (float)$value;
+    return is_finite($number) ? $number : null;
+}
+
 try {
     ers_external_ensure_link_table($pdo);
 
@@ -30,9 +59,17 @@ try {
             i.type,
             i.priority,
             i.location_address,
+            i.latitude,
+            i.longitude,
             c.id AS call_db_id,
             c.caller_name,
             c.caller_phone,
+            c.location_address AS call_location_address,
+            c.latitude AS call_latitude,
+            c.longitude AS call_longitude,
+            c.incident_type AS call_incident_type,
+            c.priority AS call_priority,
+            c.status AS call_status,
             c.description
          FROM external_incident_links l
          INNER JOIN incidents i ON i.id = l.incident_id
@@ -62,35 +99,42 @@ try {
             }
         }
         $call = isset($payload['call']) && is_array($payload['call']) ? $payload['call'] : $payload;
-        $externalCallId = (string)($call['callId'] ?? $call['call_id'] ?? $row['transfer_id'] ?? '');
-        $room = (string)($call['room'] ?? $payload['room'] ?? '');
+        $incident = isset($payload['incident']) && is_array($payload['incident']) ? $payload['incident'] : [];
+        $detailSources = [$row, $call, $incident, $payload];
+        $externalCallId = incoming_transfer_pick($detailSources, ['callId', 'call_id'], (string)($row['transfer_id'] ?? ''));
+        $room = incoming_transfer_pick([$call, $payload], ['room']);
         if (trim($externalCallId) === '' || trim($room) === '') {
             continue;
         }
 
+        $latitude = incoming_transfer_pick_float($detailSources, ['call_latitude', 'latitude', 'lat']);
+        $longitude = incoming_transfer_pick_float($detailSources, ['call_longitude', 'longitude', 'lng', 'lon']);
+
         $transfers[] = [
             'transfer_log_id' => (int)($row['transfer_log_id'] ?? 0),
             'source_system' => (string)($row['source_system'] ?? ''),
-            'event' => (string)($call['event'] ?? $payload['event'] ?? 'incoming-transfer'),
-            'transfer_id' => (string)($row['transfer_id'] ?? $call['callId'] ?? $call['call_id'] ?? ''),
+            'event' => incoming_transfer_pick([$call, $payload], ['event'], 'incoming-transfer'),
+            'transfer_id' => incoming_transfer_pick([$row, $call, $payload], ['transfer_id', 'callId', 'call_id']),
             'call_id_external' => $externalCallId,
-            'conversation_id' => (string)($call['conversationId'] ?? $call['conversation_id'] ?? $payload['conversationId'] ?? $payload['conversation_id'] ?? ''),
+            'conversation_id' => incoming_transfer_pick([$call, $payload], ['conversationId', 'conversation_id']),
             'transfer_type' => 'live_call',
             'room' => $room,
-            'socket_url' => (string)($call['socketUrl'] ?? $call['socket_url'] ?? $payload['socketUrl'] ?? $payload['socket_url'] ?? 'https://emergency-comm.alertaraqc.com'),
-            'socket_path' => (string)($call['socketPath'] ?? $call['socket_path'] ?? $payload['socketPath'] ?? $payload['socket_path'] ?? '/socket.io'),
+            'socket_url' => incoming_transfer_pick([$call, $payload], ['socketUrl', 'socket_url'], 'https://emergency-comm.alertaraqc.com'),
+            'socket_path' => incoming_transfer_pick([$call, $payload], ['socketPath', 'socket_path'], '/socket.io'),
             'transport' => 'polling',
             'call_id' => (int)($row['call_db_id'] ?? 0),
-            'caller_name' => (string)($row['caller_name'] ?? $call['caller_name'] ?? $call['name'] ?? 'Transferred Caller'),
-            'caller_phone' => (string)($row['caller_phone'] ?? $call['caller_phone'] ?? $call['phone'] ?? ''),
+            'caller_name' => incoming_transfer_pick($detailSources, ['caller_name', 'reporter_name', 'name'], 'Transferred Caller'),
+            'caller_phone' => incoming_transfer_pick($detailSources, ['caller_phone', 'phone', 'contact_number', 'contact']),
             'incident_id' => (int)($row['incident_id'] ?? 0),
             'reference_no' => (string)($row['reference_no'] ?? ''),
             'incident_status' => (string)($row['incident_status'] ?? ''),
-            'type' => (string)($row['type'] ?? ''),
-            'priority' => (string)($row['priority'] ?? ''),
-            'location' => (string)($row['location_address'] ?? ''),
-            'description' => (string)($row['description'] ?? ''),
-            'transferred_at' => (string)($call['transferred_at'] ?? $payload['transferred_at'] ?? $row['transferred_at'] ?? ''),
+            'type' => incoming_transfer_pick($detailSources, ['call_incident_type', 'type', 'incident_type', 'emergencyType', 'emergency_type', 'department']),
+            'priority' => incoming_transfer_pick($detailSources, ['call_priority', 'priority']),
+            'location' => incoming_transfer_pick($detailSources, ['call_location_address', 'location_address', 'caller_address', 'location', 'address']),
+            'latitude' => $latitude,
+            'longitude' => $longitude,
+            'description' => incoming_transfer_pick($detailSources, ['description', 'details', 'notes', 'message', 'summary']),
+            'transferred_at' => incoming_transfer_pick([$call, $payload, $row], ['transferred_at', 'created_at']),
         ];
     }
 

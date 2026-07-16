@@ -305,6 +305,25 @@ function normalize_account_status(?string $accountStatus): string {
     return $status === 'active' ? 'active' : 'inactive';
 }
 
+function derive_user_thread_status(?string $accountStatus, ?string $presenceStatus, ?string $unitStatus): string {
+    $accountStatus = strtolower(trim((string)$accountStatus));
+    if ($accountStatus !== 'active') {
+        return 'offline';
+    }
+
+    $presenceStatus = strtolower(trim((string)$presenceStatus));
+    if ($presenceStatus !== 'online') {
+        return 'offline';
+    }
+
+    $unitStatus = strtolower(trim((string)$unitStatus));
+    if (in_array($unitStatus, ['busy', 'in_use', 'assigned', 'acknowledged', 'enroute', 'en_route', 'on_scene', 'active', 'in_progress', 'dispatched'], true)) {
+        return 'busy';
+    }
+
+    return 'online';
+}
+
 $threadDefs = [
     4 => [
         'id' => 'coordinator',
@@ -529,10 +548,13 @@ try {
     if (count($counterpartIds) > 0) {
         sort($counterpartIds);
         $placeholders = implode(',', array_fill(0, count($counterpartIds), '?'));
+        $presenceStatusExpr = user_presence_status_sql('up');
         $usersStmt = $pdo->prepare(
-            "SELECT id, name, role, status
-             FROM users
-             WHERE id IN ($placeholders)"
+            "SELECT u.id, u.name, u.role, u.status, u.unit_status,
+                    {$presenceStatusExpr} AS presence_status
+             FROM users u
+             LEFT JOIN user_presence up ON up.user_id = u.id
+             WHERE u.id IN ($placeholders)"
         );
         $usersStmt->execute($counterpartIds);
         $rows = $usersStmt->fetchAll(PDO::FETCH_ASSOC);
@@ -592,6 +614,11 @@ try {
         $displayName = trim((string)($counterpart['name'] ?? ''));
         $displayRole = (string)($counterpart['role'] ?? 'user');
         $accountStatus = normalize_account_status(isset($counterpart['status']) ? (string)$counterpart['status'] : null);
+        $threadStatus = derive_user_thread_status(
+            $accountStatus,
+            isset($counterpart['presence_status']) ? (string)$counterpart['presence_status'] : null,
+            isset($counterpart['unit_status']) ? (string)$counterpart['unit_status'] : null
+        );
         $threadKey = build_thread_key('user', '', $targetUserId);
         $customTitle = $titleOverrides[$threadKey] ?? '';
         if ($customTitle !== '') {
@@ -617,7 +644,7 @@ try {
             'title' => ($displayName !== '' ? $displayName : ('User #' . $targetUserId)),
             'kind' => 'responder',
             'role' => strtolower($displayRole),
-            'status' => $accountStatus,
+            'status' => $threadStatus,
             'icon' => user_icon_by_role($displayRole),
             'tone' => 'responder',
             'last_message_id' => $latest ? (int)$latest['id'] : 0,
