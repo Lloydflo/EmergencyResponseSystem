@@ -97,13 +97,19 @@ X-ERS-API-Key: ${ERS_EXTERNAL_API_KEY}
 X-ERS-Client: emergency-comm-alertaraqc
 ```
 
-The endpoint accepts JSON or form-data. Transfer payload fields such as `event`,
-`callId`, `call_id`, `room`, `socketUrl`, `socket_url`, `socketPath`,
-`socket_path`, `conversationId`, `conversation_id`, `emergencyType`,
-`emergency_type`, `incident_type`, `type`, `priority`, `status`, `title`,
-`description`, `caller_name`, `caller_phone`, `caller_address`,
-`location_address`, `latitude`, `longitude`, `transferred_at`, and
-`payload_json` are detected as incoming transferred calls.
+The endpoint accepts JSON or form-data. It supports two transfer types:
+
+- Live call transfer: `callId`/`call_id` and `room` are present. The incident is
+  saved, then the dispatcher can answer through AlertaraQC Socket.IO/WebRTC.
+- Report/message transfer: `callId` and `room` are empty or missing. The
+  incident/report is saved only; no Socket.IO call modal is opened.
+
+Transfer payload fields such as `event`, `callId`, `call_id`, `room`,
+`socketUrl`, `socket_url`, `socketPath`, `socket_path`, `conversationId`,
+`conversation_id`, `emergencyType`, `emergency_type`, `incident_type`, `type`,
+`priority`, `status`, `title`, `description`, `caller_name`, `caller_phone`,
+`caller_address`, `location_address`, `latitude`, `longitude`, `messages`,
+`transferred_at`, and `payload_json` are detected as incoming transfers.
 
 The dispatcher call screen polls `api/incoming_transfers.php`, opens the
 transferred-call modal, plays an alert tone when the browser allows audio, and

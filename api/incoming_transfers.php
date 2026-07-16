@@ -39,11 +39,8 @@ try {
          LEFT JOIN calls c ON c.id = i.reported_by_call_id
          WHERE l.id > :after_id
            AND (
-                l.source_system = 'AlertaraQC Emergency Communication'
-                OR l.source_system = 'emergency-comm-alertaraqc'
-                OR l.payload_json LIKE '%\"room\"%'
-                OR l.payload_json LIKE '%\"callId\"%'
-                OR l.payload_json LIKE '%\"call_id\"%'
+                (l.payload_json LIKE '%\"room\"%' OR l.payload_json LIKE '%\"room\":%')
+                AND (l.payload_json LIKE '%\"callId\"%' OR l.payload_json LIKE '%\"call_id\"%')
            )
          ORDER BY l.id " . ($latestOnly ? 'DESC' : 'ASC') . "
          LIMIT {$limit}"
@@ -51,7 +48,9 @@ try {
     $stmt->execute([':after_id' => $afterId]);
 
     $transfers = [];
+    $maxSeenId = $afterId;
     foreach ($stmt->fetchAll(PDO::FETCH_ASSOC) as $row) {
+        $maxSeenId = max($maxSeenId, (int)($row['transfer_log_id'] ?? 0));
         $payload = json_decode((string)($row['payload_json'] ?? ''), true);
         if (!is_array($payload)) {
             $payload = [];
@@ -64,6 +63,10 @@ try {
         }
         $call = isset($payload['call']) && is_array($payload['call']) ? $payload['call'] : $payload;
         $externalCallId = (string)($call['callId'] ?? $call['call_id'] ?? $row['transfer_id'] ?? '');
+        $room = (string)($call['room'] ?? $payload['room'] ?? '');
+        if (trim($externalCallId) === '' || trim($room) === '') {
+            continue;
+        }
 
         $transfers[] = [
             'transfer_log_id' => (int)($row['transfer_log_id'] ?? 0),
@@ -72,7 +75,8 @@ try {
             'transfer_id' => (string)($row['transfer_id'] ?? $call['callId'] ?? $call['call_id'] ?? ''),
             'call_id_external' => $externalCallId,
             'conversation_id' => (string)($call['conversationId'] ?? $call['conversation_id'] ?? $payload['conversationId'] ?? $payload['conversation_id'] ?? ''),
-            'room' => (string)($call['room'] ?? $payload['room'] ?? ''),
+            'transfer_type' => 'live_call',
+            'room' => $room,
             'socket_url' => (string)($call['socketUrl'] ?? $call['socket_url'] ?? $payload['socketUrl'] ?? $payload['socket_url'] ?? 'https://emergency-comm.alertaraqc.com'),
             'socket_path' => (string)($call['socketPath'] ?? $call['socket_path'] ?? $payload['socketPath'] ?? $payload['socket_path'] ?? '/socket.io'),
             'transport' => 'polling',
@@ -92,7 +96,7 @@ try {
 
     echo json_encode([
         'ok' => true,
-        'latest_id' => count($transfers) ? max(array_column($transfers, 'transfer_log_id')) : $afterId,
+        'latest_id' => count($transfers) ? max(array_column($transfers, 'transfer_log_id')) : $maxSeenId,
         'transfers' => $transfers,
     ], JSON_UNESCAPED_SLASHES);
 } catch (Throwable $e) {

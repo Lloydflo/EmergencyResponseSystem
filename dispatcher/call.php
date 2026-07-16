@@ -783,6 +783,9 @@ $pageTitle = 'Emergency Call Center';
                 window.localStorage.setItem('ersLatestTransferLogId', String(latestTransferLogId));
             }
             data.transfers.forEach((transfer) => {
+                if (!transfer.room || !(transfer.call_id_external || transfer.transfer_id)) {
+                    return;
+                }
                 document.dispatchEvent(new CustomEvent('ers:incoming-call', {
                     detail: {
                         is_transfer: true,
