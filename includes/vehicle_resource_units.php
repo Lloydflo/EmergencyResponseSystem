@@ -370,6 +370,7 @@ if (!function_exists('ers_update_responder_unit_status')) {
             return false;
         }
 
+        $status = ers_normalize_responder_unit_status_for_schema($pdo, $status);
         $roleFilter = ers_vehicle_resource_column_exists($pdo, 'users', 'role')
             ? " AND LOWER(COALESCE(`role`, '')) = 'responder'"
             : '';
@@ -382,6 +383,73 @@ if (!function_exists('ers_update_responder_unit_status')) {
         $stmt->execute([$status, $responderId]);
 
         return $stmt->rowCount() > 0;
+    }
+}
+
+if (!function_exists('ers_column_enum_values')) {
+    function ers_column_enum_values(PDO $pdo, string $tableName, string $columnName): array
+    {
+        try {
+            $stmt = $pdo->prepare(
+                "SELECT COLUMN_TYPE
+                 FROM INFORMATION_SCHEMA.COLUMNS
+                 WHERE TABLE_SCHEMA = DATABASE()
+                   AND TABLE_NAME = ?
+                   AND COLUMN_NAME = ?
+                 LIMIT 1"
+            );
+            $stmt->execute([$tableName, $columnName]);
+            $columnType = (string) $stmt->fetchColumn();
+        } catch (Throwable $e) {
+            return [];
+        }
+
+        if (!preg_match("/^enum\\((.*)\\)$/i", $columnType, $matches)) {
+            return [];
+        }
+
+        $values = str_getcsv($matches[1], ',', "'");
+        return array_values(array_filter(array_map(
+            static fn($value): string => strtolower(trim((string) $value)),
+            $values
+        )));
+    }
+}
+
+if (!function_exists('ers_normalize_responder_unit_status_for_schema')) {
+    function ers_normalize_responder_unit_status_for_schema(PDO $pdo, string $status): string
+    {
+        $status = strtolower(trim($status));
+        if ($status === '') {
+            $status = 'available';
+        }
+
+        $allowed = ers_column_enum_values($pdo, 'users', 'unit_status');
+        if ($allowed === [] || in_array($status, $allowed, true)) {
+            return $status;
+        }
+
+        $fallbacks = [
+            'offline' => ['offline', 'out_of_service', 'unavailable', 'maintenance'],
+            'unavailable' => ['unavailable', 'out_of_service', 'offline', 'maintenance'],
+            'out_of_service' => ['out_of_service', 'offline', 'unavailable', 'maintenance'],
+            'in_use' => ['busy', 'assigned', 'in_use'],
+            'assigned' => ['busy', 'assigned', 'in_use'],
+            'en_route' => ['en_route', 'enroute', 'busy'],
+            'enroute' => ['enroute', 'en_route', 'busy'],
+            'on_scene' => ['on_scene', 'busy'],
+            'available' => ['available'],
+            'busy' => ['busy'],
+            'maintenance' => ['maintenance'],
+        ];
+
+        foreach ($fallbacks[$status] ?? [$status, 'available'] as $candidate) {
+            if (in_array($candidate, $allowed, true)) {
+                return $candidate;
+            }
+        }
+
+        return $allowed[0] ?? 'available';
     }
 }
 
@@ -574,6 +642,7 @@ if (!function_exists('ers_vehicle_resource_responder_presence_map')) {
             $stmt = $pdo->query(
                 "SELECT
                     UPPER(TRIM(u.unit_code)) AS unit_code,
+                    u.id AS responder_id,
                     u.name AS responder_name,
                     {$presenceStatusSql} AS presence_status
                  FROM `users` u
@@ -594,6 +663,7 @@ if (!function_exists('ers_vehicle_resource_responder_presence_map')) {
                 continue;
             }
             $presenceMap[$unitCode] = [
+                'responder_id' => (int) ($row['responder_id'] ?? 0),
                 'presence_status' => strtolower(trim((string) ($row['presence_status'] ?? 'offline'))) ?: 'offline',
                 'responder_name' => trim((string) ($row['responder_name'] ?? '')),
             ];
@@ -617,6 +687,29 @@ if (!function_exists('ers_apply_responder_presence_to_vehicle_resource_row')) {
         }
 
         return $row;
+    }
+}
+
+if (!function_exists('ers_sync_offline_responder_vehicle_resources')) {
+    function ers_sync_offline_responder_vehicle_resources(PDO $pdo): int
+    {
+        $synced = 0;
+        foreach (ers_vehicle_resource_responder_presence_map($pdo) as $presence) {
+            if (($presence['presence_status'] ?? 'offline') !== 'offline') {
+                continue;
+            }
+
+            $responderId = (int) ($presence['responder_id'] ?? 0);
+            if ($responderId <= 0) {
+                continue;
+            }
+
+            if (ers_sync_vehicle_resource_status_for_responder($pdo, $responderId, 'offline')) {
+                $synced++;
+            }
+        }
+
+        return $synced;
     }
 }
 

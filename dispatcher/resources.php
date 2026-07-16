@@ -79,9 +79,11 @@ if (!function_exists('dispatcher_count_shared_resources')) {
 // Fetch resource data from database
 try {
     require_once $rootDir . '/includes/db.php';
+    require_once $rootDir . '/includes/vehicle_resource_units.php';
     $pdo = get_db_connection();
 
     if ($pdo) {
+        ers_sync_offline_responder_vehicle_resources($pdo);
         $activeIncidents = (int)$pdo->query("SELECT COUNT(*) AS c FROM incidents WHERE status IN ('pending','dispatched','active','in_progress')")->fetch()['c'];
 
         $pendingRows = [];

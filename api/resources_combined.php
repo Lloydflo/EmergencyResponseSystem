@@ -243,6 +243,7 @@ try {
     }
 
     if ($sharedTable !== null) {
+        ers_sync_offline_responder_vehicle_resources($pdo);
         echo json_encode(['ok' => true, 'items' => load_shared_resource_records($pdo, $sharedTable)]);
         exit;
     }
