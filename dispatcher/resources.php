@@ -83,7 +83,7 @@ try {
     $pdo = get_db_connection();
 
     if ($pdo) {
-        ers_sync_offline_responder_vehicle_resources($pdo);
+        ers_sync_responder_vehicle_resources($pdo);
         $activeIncidents = (int)$pdo->query("SELECT COUNT(*) AS c FROM incidents WHERE status IN ('pending','dispatched','active','in_progress')")->fetch()['c'];
 
         $pendingRows = [];

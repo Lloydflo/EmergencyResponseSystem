@@ -607,7 +607,7 @@ try {
 
     $method = strtoupper((string)($_SERVER['REQUEST_METHOD'] ?? 'GET'));
     if ($method === 'GET') {
-        ers_sync_offline_responder_vehicle_resources($pdo);
+        ers_sync_responder_vehicle_resources($pdo);
         $archived = isset($_GET['archived']) && (string)$_GET['archived'] === '1';
         if ($archived) {
             $stmt = $pdo->query(
