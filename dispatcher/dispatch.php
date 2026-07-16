@@ -948,9 +948,11 @@ function removeUnitMarkerByIdentifier(identifier) {
 }
 
 function isResponderUnitOnline(unit) {
-    const online = String(unit && unit.presence_status ? unit.presence_status : '').trim().toLowerCase() === 'online';
-    const hasCurrentLocation = String(unit && unit.location_current !== undefined && unit.location_current !== null ? unit.location_current : '').trim() === '1';
-    return online && hasCurrentLocation;
+    return String(unit && unit.presence_status ? unit.presence_status : '').trim().toLowerCase() === 'online';
+}
+
+function hasCurrentResponderLocation(unit) {
+    return String(unit && unit.location_current !== undefined && unit.location_current !== null ? unit.location_current : '').trim() === '1';
 }
 
 function onlineResponderUnits(items) {
@@ -1024,7 +1026,7 @@ function fetchAvailableUnitsData() {
 function syncAvailableUnitMarkers(items) {
     (items || []).forEach(u => {
         const id = u.identifier;
-        if (!isResponderUnitOnline(u)) {
+        if (!isResponderUnitOnline(u) || !hasCurrentResponderLocation(u)) {
             removeUnitMarkerByIdentifier(id);
             return;
         }
