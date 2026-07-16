@@ -1211,6 +1211,9 @@ $adminName = $_SESSION['user_name'] ?? 'Admin';
         function displayUnitValue(value) {
             const raw = String(value || '').replace(/_/g, ' ').trim();
             if (!raw) return 'N/A';
+            if (['offline', 'unavailable', 'out of service', 'off duty', 'leave'].includes(raw.toLowerCase())) {
+                return 'Offline';
+            }
             return raw.charAt(0).toUpperCase() + raw.slice(1);
         }
 
