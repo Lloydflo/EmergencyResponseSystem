@@ -43,7 +43,7 @@ function ers_external_expected_keys(): array
         (string)ers_env('ERS_EXTERNAL_API_KEY', ''),
         (string)ers_env('INTEGRATION_API_KEY', ''),
         (string)ers_env('INTERAGENCY_EXTERNAL_API_KEY', ''),
-        'ERS_API_2026_x10y24l',
+        (string)ers_env('ALERTARA_TRANSFER_API_KEY', ''),
     ];
 
     $keys = [];
