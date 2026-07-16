@@ -1,5 +1,7 @@
 <?php
 
+require_once __DIR__ . '/vehicle_resource_units.php';
+
 const USER_PRESENCE_ONLINE_WINDOW_SECONDS = 180;
 
 function ensure_user_presence_table(PDO $pdo): void {
@@ -41,6 +43,7 @@ function mark_user_online(PDO $pdo, int $userId): void {
             logged_out_at = NULL"
     );
     $stmt->execute([$userId, user_presence_session_id()]);
+    ers_sync_online_vehicle_resource_status_for_responder($pdo, $userId);
 }
 
 function touch_user_presence(PDO $pdo, int $userId): void {
@@ -58,6 +61,7 @@ function touch_user_presence(PDO $pdo, int $userId): void {
             logged_out_at = NULL"
     );
     $stmt->execute([$userId, user_presence_session_id()]);
+    ers_sync_vehicle_resource_record_status_for_responder($pdo, $userId);
 }
 
 function mark_user_offline(PDO $pdo, int $userId): void {
@@ -74,6 +78,7 @@ function mark_user_offline(PDO $pdo, int $userId): void {
             logged_out_at = NOW()"
     );
     $stmt->execute([$userId, user_presence_session_id()]);
+    ers_sync_vehicle_resource_status_for_responder($pdo, $userId, 'offline');
 }
 
 function user_presence_status_sql(string $alias = 'up'): string {
