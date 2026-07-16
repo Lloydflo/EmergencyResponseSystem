@@ -26,6 +26,19 @@
     transform: translateY(0);
 }
 
+.notification-modal.all-notifications-modal {
+    top: 50%;
+    right: auto;
+    left: 50%;
+    width: min(640px, calc(100vw - 2rem));
+    max-height: min(680px, calc(100vh - 2rem));
+    transform: translate(-50%, calc(-50% - 10px));
+}
+
+.notification-modal.all-notifications-modal.show {
+    transform: translate(-50%, -50%);
+}
+
 .notification-modal .modal-content {
     display: flex;
     flex-direction: column;
@@ -78,6 +91,11 @@
     max-height: 320px;
 }
 
+.notification-modal .all-notifications-body {
+    max-height: min(560px, calc(100vh - 8rem));
+    padding: 0.75rem;
+}
+
 /* Modal Footer */
 .notification-modal .modal-footer {
     padding: 0.75rem 1.25rem;
@@ -87,14 +105,18 @@
 }
 
 .notification-modal .view-all-link {
+    border: 0;
+    background: transparent;
     color: var(--primary-color-1);
     text-decoration: none;
     font-size: 0.875rem;
     font-weight: 500;
+    font-family: inherit;
     padding: 0.5rem 1rem;
     border-radius: 0.375rem;
     transition: all 0.2s ease;
     display: inline-block;
+    cursor: pointer;
 }
 
 .notification-modal .view-all-link:hover {
@@ -116,6 +138,15 @@
 
 .notification-modal .notification-item:hover {
     background-color: var(--sidebar-hover-bg-1);
+}
+
+.notification-modal .all-notification-item {
+    border-bottom: 1px solid var(--border-color-1);
+    border-radius: 0;
+}
+
+.notification-modal .all-notification-item:last-child {
+    border-bottom: 0;
 }
 
 .notification-icon {
@@ -183,6 +214,19 @@
         width: auto;
         max-height: 400px;
     }
+
+    .notification-modal.all-notifications-modal {
+        top: 60px;
+        right: 1rem;
+        left: 1rem;
+        width: auto;
+        max-height: calc(100vh - 5rem);
+        transform: translateY(-10px);
+    }
+
+    .notification-modal.all-notifications-modal.show {
+        transform: translateY(0);
+    }
     
     .notification-modal .modal-header {
         padding: 0.75rem 1rem;
@@ -195,6 +239,11 @@
     .notification-modal .modal-body {
         padding: 0.375rem;
         max-height: 280px;
+    }
+
+    .notification-modal .all-notifications-body {
+        max-height: calc(100vh - 10rem);
+        padding: 0.5rem;
     }
     
     .notification-modal .modal-footer {
@@ -222,6 +271,13 @@
         right: 0.75rem;
         left: 0.75rem;
         max-height: 360px;
+    }
+
+    .notification-modal.all-notifications-modal {
+        top: 56px;
+        right: 0.75rem;
+        left: 0.75rem;
+        max-height: calc(100vh - 4.5rem);
     }
     
     .notification-modal .modal-header {

@@ -463,6 +463,8 @@ $pageTitle = 'Emergency Call Center';
             incidentType: call.type || '',
             priority: call.priority || '',
             location: call.location || '',
+            latitude: call.latitude || call.lat || null,
+            longitude: call.longitude || call.lng || call.lon || null,
             description: call.description || ''
         };
 
@@ -572,15 +574,35 @@ $pageTitle = 'Emergency Call Center';
         const locationEl = document.getElementById('incidentLocation');
         const descriptionEl = document.getElementById('incidentDescription');
         const priorityEl = document.getElementById('incidentPriority');
+        const statusEl = document.getElementById('status');
+        const notesEl = document.getElementById('callNotes');
         if (nameEl && call.name) nameEl.value = call.name;
         if (phoneEl && call.phone) phoneEl.value = call.phone;
-        if (locationEl && call.location) locationEl.value = call.location;
+        if (locationEl) {
+            if (call.location) {
+                locationEl.value = call.location;
+            }
+            if (Number.isFinite(Number(call.latitude)) && Number.isFinite(Number(call.longitude))) {
+                locationEl.dataset.lat = String(call.latitude);
+                locationEl.dataset.lon = String(call.longitude);
+            }
+        }
         if (descriptionEl && call.description) descriptionEl.value = call.description;
         if (priorityEl && call.priority) {
-            priorityEl.value = call.priority;
+            const priority = String(call.priority).toLowerCase();
+            priorityEl.value = priority;
             document.querySelectorAll('#prioritySelect .priority-option').forEach((option) => {
-                option.classList.toggle('active', option.dataset.value === call.priority);
+                option.classList.toggle('active', option.dataset.value === priority);
             });
+        }
+        if (statusEl && call.incidentStatus) {
+            const status = String(call.incidentStatus).toLowerCase();
+            if (Array.from(statusEl.options).some((option) => option.value === status)) {
+                statusEl.value = status;
+            }
+        }
+        if (notesEl && !notesEl.value && call.sourceSystem) {
+            notesEl.value = 'Transferred from ' + call.sourceSystem;
         }
         if (call.incidentType) {
             setIncidentTypesFromTransfer(call.incidentType);
@@ -909,6 +931,8 @@ $pageTitle = 'Emergency Call Center';
                         type: transfer.type || '',
                         priority: transfer.priority || '',
                         location: transfer.location || '',
+                        latitude: transfer.latitude ?? null,
+                        longitude: transfer.longitude ?? null,
                         description: transfer.description || ''
                     }
                 }));

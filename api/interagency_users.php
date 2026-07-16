@@ -165,6 +165,10 @@ try {
 
     $items = array_map(static function (array $row) use ($activeAssignments): array {
         $availabilityStatus = interagency_users_availability_status($row, $activeAssignments);
+        $unitStatus = strtolower((string)($row['unit_status'] ?? ''));
+        if ($availabilityStatus === 'offline') {
+            $unitStatus = 'offline';
+        }
         return [
             'id' => (int)$row['id'],
             'name' => (string)$row['name'],
@@ -175,7 +179,7 @@ try {
             'presence_status' => strtolower((string)($row['presence_status'] ?? 'offline')),
             'availability_status' => $availabilityStatus,
             'user_status' => $availabilityStatus,
-            'unit_status' => strtolower((string)($row['unit_status'] ?? '')),
+            'unit_status' => $unitStatus,
             'last_seen_at' => $row['last_seen_at'] !== null ? (string)$row['last_seen_at'] : null,
             'has_thread' => ((int)$row['has_thread']) === 1
         ];

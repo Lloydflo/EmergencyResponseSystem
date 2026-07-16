@@ -3183,6 +3183,13 @@ $pageTitle = 'Inter-Agency Coordination';
             }
 
             function userOnlineState(user) {
+                const presenceStatus = String((user && user.presence_status) || '').trim().toLowerCase();
+                if (presenceStatus === 'offline') {
+                    return {
+                        key: 'offline',
+                        label: 'Offline'
+                    };
+                }
                 const rawStatus = String((user && (user.availability_status || user.user_status || user.presence_status)) || '').trim().toLowerCase();
                 const normalized = rawStatus === 'online' ? 'available' : rawStatus;
                 const labels = {

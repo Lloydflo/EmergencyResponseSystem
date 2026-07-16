@@ -484,6 +484,8 @@ function ers_api_create_incoming_transfer(PDO $pdo, array $auth): array
         }
     }
     $call = isset($input['call']) && is_array($input['call']) ? $input['call'] : $input;
+    $incident = isset($input['incident']) && is_array($input['incident']) ? $input['incident'] : [];
+    $details = array_replace($incident, $call);
 
     $sourceSystem = ers_external_clean(
         $input['source_system'] ?? $input['system_name'] ?? $input['from_system'] ?? $input['from_agency'] ?? $auth['client'] ?? 'AlertaraQC Emergency Communication',
@@ -493,21 +495,25 @@ function ers_api_create_incoming_transfer(PDO $pdo, array $auth): array
         $input['transfer_id'] ?? $input['external_transfer_id'] ?? $call['transfer_id'] ?? $call['callId'] ?? $call['call_id'] ?? $call['conversationId'] ?? $call['conversation_id'] ?? $call['reference_no'] ?? '',
         120
     );
-    $type = ers_external_normalize_type($call['emergencyType'] ?? $call['emergency_type'] ?? $call['incident_type'] ?? $call['type'] ?? $call['department'] ?? 'other');
+    $type = ers_external_normalize_type($details['emergencyType'] ?? $details['emergency_type'] ?? $details['incident_type'] ?? $details['type'] ?? $details['department'] ?? 'other');
     if ($type === '') {
         $type = 'other';
     }
 
-    $priority = ers_external_normalize_priority($call['priority'] ?? $input['priority'] ?? 'medium');
-    $location = ers_external_clean($call['location_address'] ?? $call['caller_address'] ?? $call['location'] ?? $call['address'] ?? '', 255);
+    $priority = ers_external_normalize_priority($details['priority'] ?? $input['priority'] ?? 'medium');
+    $location = ers_external_clean($details['location_address'] ?? $details['caller_address'] ?? $details['location'] ?? $details['address'] ?? '', 255);
     if ($location === '') {
         $location = 'Location pending from transferred call';
     }
-    $description = ers_external_clean($call['description'] ?? $call['notes'] ?? $call['message'] ?? $call['summary'] ?? '', 0);
-    if ($description === '' && isset($call['conversation'])) {
-        $description = ers_api_transfer_conversation_text($call['conversation']);
+    $description = ers_external_clean($details['description'] ?? $details['details'] ?? $details['notes'] ?? $details['message'] ?? $details['summary'] ?? '', 0);
+    $reasonForBackup = ers_external_clean($details['reason_for_police_backup'] ?? $details['reason_for_backup'] ?? $details['backup_reason'] ?? '', 0);
+    if ($reasonForBackup !== '' && stripos($description, $reasonForBackup) === false) {
+        $description = trim($description . "\nReason for backup: " . $reasonForBackup);
     }
-    $messagesText = ers_api_transfer_messages_text($call['messages'] ?? $input['messages'] ?? null);
+    if ($description === '' && isset($details['conversation'])) {
+        $description = ers_api_transfer_conversation_text($details['conversation']);
+    }
+    $messagesText = ers_api_transfer_messages_text($details['messages'] ?? $input['messages'] ?? null);
     if ($messagesText !== '') {
         $description = trim($description . "\n\nMessages:\n" . $messagesText);
     }
@@ -515,8 +521,8 @@ function ers_api_create_incoming_transfer(PDO $pdo, array $auth): array
         $description = 'Incoming transferred call from ' . ($sourceSystem !== '' ? $sourceSystem : 'external system') . '.';
     }
 
-    $latitude = isset($call['latitude']) && $call['latitude'] !== '' ? (float)$call['latitude'] : null;
-    $longitude = isset($call['longitude']) && $call['longitude'] !== '' ? (float)$call['longitude'] : null;
+    $latitude = isset($details['latitude']) && $details['latitude'] !== '' ? (float)$details['latitude'] : null;
+    $longitude = isset($details['longitude']) && $details['longitude'] !== '' ? (float)$details['longitude'] : null;
     if (($latitude !== null && ($latitude < -90 || $latitude > 90)) || ($longitude !== null && ($longitude < -180 || $longitude > 180))) {
         $latitude = null;
         $longitude = null;
@@ -552,14 +558,14 @@ function ers_api_create_incoming_transfer(PDO $pdo, array $auth): array
         }
     }
 
-    $referenceNo = ers_external_clean($call['reference_no'] ?? '', 50);
+    $referenceNo = ers_external_clean($details['reference_no'] ?? $details['tip_id'] ?? '', 50);
     if ($referenceNo === '') {
         $referenceNo = 'TRN-' . date('YmdHis') . '-' . str_pad((string)random_int(0, 9999), 4, '0', STR_PAD_LEFT);
     }
 
-    $title = ers_external_clean($call['title'] ?? ('Transferred call from ' . $sourceSystem), 200);
-    $callerName = ers_external_clean($call['caller_name'] ?? $call['name'] ?? 'Transferred Caller', 150);
-    $callerPhone = ers_external_clean($call['caller_phone'] ?? $call['phone'] ?? $call['contact_number'] ?? $call['contact'] ?? 'N/A', 50);
+    $title = ers_external_clean($details['title'] ?? ('Transferred call from ' . $sourceSystem), 200);
+    $callerName = ers_external_clean($details['caller_name'] ?? $details['reporter_name'] ?? $details['name'] ?? 'Transferred Caller', 150);
+    $callerPhone = ers_external_clean($details['caller_phone'] ?? $details['phone'] ?? $details['contact_number'] ?? $details['contact'] ?? 'N/A', 50);
     $room = ers_external_clean($call['room'] ?? $input['room'] ?? '', 150);
     $socketUrl = ers_external_clean($call['socketUrl'] ?? $call['socket_url'] ?? $input['socketUrl'] ?? $input['socket_url'] ?? 'https://emergency-comm.alertaraqc.com', 255);
     $socketPath = ers_external_clean($call['socketPath'] ?? $call['socket_path'] ?? $input['socketPath'] ?? $input['socket_path'] ?? '/socket.io', 100);
@@ -572,7 +578,7 @@ function ers_api_create_incoming_transfer(PDO $pdo, array $auth): array
         ':reference_no' => $referenceNo,
         ':caller_name' => $callerName,
         ':caller_phone' => $callerPhone,
-        ':caller_email' => ers_external_clean($call['caller_email'] ?? $call['email'] ?? '', 150) ?: null,
+        ':caller_email' => ers_external_clean($details['caller_email'] ?? $details['email'] ?? '', 150) ?: null,
         ':location_address' => $location,
         ':latitude' => $latitude,
         ':longitude' => $longitude,
