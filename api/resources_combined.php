@@ -4,6 +4,7 @@ declare(strict_types=1);
 header('Content-Type: application/json');
 
 require_once __DIR__ . '/../includes/db.php';
+require_once __DIR__ . '/../includes/vehicle_resource_units.php';
 
 if (!defined('RESOURCE_RECORDS_TABLE')) {
     define('RESOURCE_RECORDS_TABLE', 'resource_records');
@@ -188,6 +189,7 @@ function load_user_unit_assignment_map(PDO $pdo): array {
 
 function load_shared_resource_records(PDO $pdo, string $tableName): array {
     $userUnitAssignments = load_user_unit_assignment_map($pdo);
+    $responderPresenceMap = ers_vehicle_resource_responder_presence_map($pdo);
     $quantitySelect = table_column_exists($pdo, $tableName, 'quantity') ? ', quantity' : ', 1 AS quantity';
     $stmt = $pdo->query(
         "SELECT id, code, name, category, status, location, driver_name, plate_number, position_title, assignment, notes, updated_at" . $quantitySelect . "
@@ -199,6 +201,7 @@ function load_shared_resource_records(PDO $pdo, string $tableName): array {
     foreach ($stmt->fetchAll(PDO::FETCH_ASSOC) as $row) {
         $category = strtolower((string)($row['category'] ?? 'equipment'));
         $code = (string)($row['code'] ?? '');
+        $row = ers_apply_responder_presence_to_vehicle_resource_row($row, $responderPresenceMap);
         $userAssignment = $category === 'vehicles'
             ? ($userUnitAssignments[strtoupper(trim($code))] ?? null)
             : null;
@@ -240,6 +243,7 @@ try {
     }
 
     if ($sharedTable !== null) {
+        ers_sync_offline_responder_vehicle_resources($pdo);
         echo json_encode(['ok' => true, 'items' => load_shared_resource_records($pdo, $sharedTable)]);
         exit;
     }

@@ -5,6 +5,7 @@ header('Content-Type: application/json');
 
 require_once __DIR__ . '/../includes/db.php';
 require_once __DIR__ . '/../includes/geocode_helper.php';
+require_once __DIR__ . '/../includes/vehicle_resource_units.php';
 require_once __DIR__ . '/../includes/auth.php';
 
 if (!defined('RESOURCE_RECORDS_TABLE')) {
@@ -606,6 +607,7 @@ try {
 
     $method = strtoupper((string)($_SERVER['REQUEST_METHOD'] ?? 'GET'));
     if ($method === 'GET') {
+        ers_sync_offline_responder_vehicle_resources($pdo);
         $archived = isset($_GET['archived']) && (string)$_GET['archived'] === '1';
         if ($archived) {
             $stmt = $pdo->query(
@@ -625,6 +627,11 @@ try {
                  ORDER BY updated_at DESC, id DESC"
             );
             $rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
+            $presenceMap = ers_vehicle_resource_responder_presence_map($pdo);
+            $rows = array_map(
+                static fn(array $row): array => ers_apply_responder_presence_to_vehicle_resource_row($row, $presenceMap),
+                $rows
+            );
             $items = array_map('row_to_item', $rows);
         }
         echo json_encode(['ok' => true, 'items' => $items]);

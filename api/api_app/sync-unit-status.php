@@ -33,6 +33,8 @@ try {
     };
 
     ers_update_responder_unit_status($pdo, $responder_id, $unitStatus);
+    $resourceStatus = $unitStatus === "available" ? "available" : "in_use";
+    ers_sync_vehicle_resource_record_status_for_responder($pdo, $responder_id, $resourceStatus);
 
     echo json_encode([
         "success" => true,
