@@ -26,6 +26,7 @@ try {
     if ($pdo) {
         $vehicleResourceTable = ers_vehicle_resource_units_table($pdo);
         if ($vehicleResourceTable !== null) {
+            ers_sync_responder_vehicle_resources($pdo);
             ers_sync_all_vehicle_resource_units($pdo, $vehicleResourceTable);
         }
 

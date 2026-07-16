@@ -644,6 +644,8 @@ if (!function_exists('ers_vehicle_resource_responder_presence_map')) {
                     UPPER(TRIM(u.unit_code)) AS unit_code,
                     u.id AS responder_id,
                     u.name AS responder_name,
+                    COALESCE(u.status, '') AS account_status,
+                    COALESCE(u.unit_status, '') AS unit_status,
                     {$presenceStatusSql} AS presence_status
                  FROM `users` u
                  LEFT JOIN `user_presence` up ON up.user_id = u.id
@@ -664,12 +666,40 @@ if (!function_exists('ers_vehicle_resource_responder_presence_map')) {
             }
             $presenceMap[$unitCode] = [
                 'responder_id' => (int) ($row['responder_id'] ?? 0),
+                'account_status' => strtolower(trim((string) ($row['account_status'] ?? ''))),
+                'unit_status' => strtolower(trim((string) ($row['unit_status'] ?? ''))),
                 'presence_status' => strtolower(trim((string) ($row['presence_status'] ?? 'offline'))) ?: 'offline',
                 'responder_name' => trim((string) ($row['responder_name'] ?? '')),
             ];
         }
 
         return $presenceMap;
+    }
+}
+
+if (!function_exists('ers_vehicle_resource_status_from_responder_state')) {
+    function ers_vehicle_resource_status_from_responder_state(array $state): string
+    {
+        $accountStatus = strtolower(trim((string) ($state['account_status'] ?? '')));
+        if ($accountStatus === 'inactive') {
+            return 'offline';
+        }
+
+        $unitStatus = strtolower(trim((string) ($state['unit_status'] ?? '')));
+        if (in_array($unitStatus, ['available', 'ready', 'on_duty'], true)) {
+            return 'available';
+        }
+        if (in_array($unitStatus, ['busy', 'in_use', 'assigned', 'accepted', 'acknowledged', 'enroute', 'en_route', 'on_scene'], true)) {
+            return 'in_use';
+        }
+        if ($unitStatus === 'maintenance') {
+            return 'maintenance';
+        }
+        if (in_array($unitStatus, ['offline', 'unavailable', 'out_of_service', 'off_duty', 'leave'], true)) {
+            return 'offline';
+        }
+
+        return (($state['presence_status'] ?? 'offline') === 'offline') ? 'offline' : 'available';
     }
 }
 
@@ -682,34 +712,36 @@ if (!function_exists('ers_apply_responder_presence_to_vehicle_resource_row')) {
             return $row;
         }
 
-        if (($presenceMap[$code]['presence_status'] ?? 'offline') === 'offline') {
-            $row['status'] = 'offline';
-        }
+        $row['status'] = ers_vehicle_resource_status_from_responder_state($presenceMap[$code]);
 
         return $row;
+    }
+}
+
+if (!function_exists('ers_sync_responder_vehicle_resources')) {
+    function ers_sync_responder_vehicle_resources(PDO $pdo): int
+    {
+        $synced = 0;
+        foreach (ers_vehicle_resource_responder_presence_map($pdo) as $presence) {
+            $responderId = (int) ($presence['responder_id'] ?? 0);
+            if ($responderId <= 0) {
+                continue;
+            }
+
+            $resourceStatus = ers_vehicle_resource_status_from_responder_state($presence);
+            if (ers_sync_vehicle_resource_status_for_responder($pdo, $responderId, $resourceStatus)) {
+                $synced++;
+            }
+        }
+
+        return $synced;
     }
 }
 
 if (!function_exists('ers_sync_offline_responder_vehicle_resources')) {
     function ers_sync_offline_responder_vehicle_resources(PDO $pdo): int
     {
-        $synced = 0;
-        foreach (ers_vehicle_resource_responder_presence_map($pdo) as $presence) {
-            if (($presence['presence_status'] ?? 'offline') !== 'offline') {
-                continue;
-            }
-
-            $responderId = (int) ($presence['responder_id'] ?? 0);
-            if ($responderId <= 0) {
-                continue;
-            }
-
-            if (ers_sync_vehicle_resource_status_for_responder($pdo, $responderId, 'offline')) {
-                $synced++;
-            }
-        }
-
-        return $synced;
+        return ers_sync_responder_vehicle_resources($pdo);
     }
 }
 
