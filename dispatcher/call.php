@@ -629,7 +629,6 @@ $pageTitle = 'Emergency Call Center';
             transferSocket = window.io(call.socketUrl || ALERTARA_SOCKET_URL, {
                 path: call.socketPath || ALERTARA_SOCKET_PATH,
                 transports: ['polling'],
-                auth: { apiKey: 'ERS_API_2026_x10y24l' },
                 query: { room: call.room }
             });
             transferSocket.on('connect', () => {

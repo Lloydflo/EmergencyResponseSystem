@@ -90,10 +90,10 @@ POST /ERS/api/incoming-transfer.php
 AlertaraQC Emergency Communication integration:
 
 ```http
-POST /ERS/api/?action=create_incident&api_key=ERS_API_2026_x10y24l
-Authorization: Bearer ERS_API_2026_x10y24l
-X-API-Key: ERS_API_2026_x10y24l
-X-ERS-API-Key: ERS_API_2026_x10y24l
+POST /ERS/api/?action=create_incident&api_key=${ERS_EXTERNAL_API_KEY}
+Authorization: Bearer ${ERS_EXTERNAL_API_KEY}
+X-API-Key: ${ERS_EXTERNAL_API_KEY}
+X-ERS-API-Key: ${ERS_EXTERNAL_API_KEY}
 X-ERS-Client: emergency-comm-alertaraqc
 ```
 
