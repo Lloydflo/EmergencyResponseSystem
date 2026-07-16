@@ -26,12 +26,14 @@ if (!in_array($presence, ["online", "offline"], true)) {
 try {
     $pdo = db();
 
+    // Para malaman kung anong database talaga ang ginagamit
+    $databaseName = $pdo
+        ->query("SELECT DATABASE()")
+        ->fetchColumn();
+
     if ($presence === "offline") {
         $unitStatus = "offline";
     } else {
-        /*
-         * Kapag bumalik sa app, kunin ulit ang actual operational status.
-         */
         $q = $pdo->prepare("
             SELECT status
             FROM dispatch_operator_records
@@ -77,11 +79,11 @@ try {
     }
 
     $stmt = $pdo->prepare("
-    UPDATE users
-    SET
-        unit_status = ?,
-        updated_at = NOW()
-    WHERE id = ?
+        UPDATE users
+        SET
+            unit_status = ?,
+            updated_at = NOW()
+        WHERE id = ?
     ");
 
     $stmt->execute([
@@ -89,10 +91,25 @@ try {
         $responder_id
     ]);
 
+    // Basahin ulit ang na-save na status
+    $verifyStmt = $pdo->prepare("
+        SELECT unit_status
+        FROM users
+        WHERE id = ?
+        LIMIT 1
+    ");
+
+    $verifyStmt->execute([$responder_id]);
+
+    $savedStatus = $verifyStmt->fetchColumn();
+
     echo json_encode([
         "success" => true,
         "presence" => $presence,
-        "unit_status" => $unitStatus
+        "unit_status" => $unitStatus,
+        "saved_unit_status" => $savedStatus,
+        "affected_rows" => $stmt->rowCount(),
+        "database" => $databaseName
     ]);
 
 } catch (Throwable $e) {
