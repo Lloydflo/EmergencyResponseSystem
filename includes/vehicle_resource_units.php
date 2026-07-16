@@ -685,6 +685,11 @@ if (!function_exists('ers_vehicle_resource_status_from_responder_state')) {
             return 'offline';
         }
 
+        $presenceStatus = strtolower(trim((string) ($state['presence_status'] ?? 'offline')));
+        if ($presenceStatus === 'offline') {
+            return 'offline';
+        }
+
         $unitStatus = strtolower(trim((string) ($state['unit_status'] ?? '')));
         if (in_array($unitStatus, ['available', 'ready', 'on_duty'], true)) {
             return 'available';
@@ -699,7 +704,7 @@ if (!function_exists('ers_vehicle_resource_status_from_responder_state')) {
             return 'offline';
         }
 
-        return (($state['presence_status'] ?? 'offline') === 'offline') ? 'offline' : 'available';
+        return 'available';
     }
 }
 
