@@ -129,7 +129,7 @@ $pageTitle = 'Emergency Call Center';
                                     <i class="fas fa-check"></i> Accept
                                 </button>
                                 <button class="call-btn reject-btn" onclick="rejectCall()">
-                                    <i class="fas fa-times"></i> Decline
+                                    <i class="fas fa-times"></i> Reject
                                 </button>
                             </div>
                         </div>
@@ -342,6 +342,7 @@ $pageTitle = 'Emergency Call Center';
     let transferSocket = null;
     let transferPeerConnection = null;
     let transferLocalStream = null;
+    let transferLocalStreamPromise = null;
     let transferRemoteAudio = null;
     const SpeechRecognitionApi = window.SpeechRecognition || window.webkitSpeechRecognition || null;
 
@@ -519,11 +520,13 @@ $pageTitle = 'Emergency Call Center';
                 location: incomingCall.location || ''
             });
         } else {
-            activeCall = { name, phone, start };
+            activeCall = { active: true, name, phone, start };
         }
-        applyIncomingTransferToForm(incomingCall);
+        applyIncomingCallToForm(incomingCall);
         connectTransferSocket(incomingCall);
+        prepareTransferLocalAudio(incomingCall);
         renderActiveCallPanel(getSharedCallSession() || activeCall);
+        focusAcceptedCallForm();
     }
 
     function rejectCall() {
@@ -562,8 +565,8 @@ $pageTitle = 'Emergency Call Center';
         if (socket) socket.textContent = (call.socketUrl || ALERTARA_SOCKET_URL) + (call.socketPath || ALERTARA_SOCKET_PATH);
     }
 
-    function applyIncomingTransferToForm(call) {
-        if (!call || !call.isTransfer) return;
+    function applyIncomingCallToForm(call) {
+        if (!call) return;
         const nameEl = document.getElementById('callerName');
         const phoneEl = document.getElementById('callerPhone');
         const locationEl = document.getElementById('incidentLocation');
@@ -582,6 +585,25 @@ $pageTitle = 'Emergency Call Center';
         if (call.incidentType) {
             setIncidentTypesFromTransfer(call.incidentType);
         }
+    }
+
+    function focusAcceptedCallForm() {
+        const panel = document.getElementById('activeCallPanel');
+        const typeTrigger = document.getElementById('incidentTypeTrigger');
+        const locationEl = document.getElementById('incidentLocation');
+        if (panel) {
+            panel.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }
+        window.setTimeout(() => {
+            const typeInput = document.getElementById('incidentType');
+            if (typeTrigger && !(typeInput && typeInput.value)) {
+                typeTrigger.focus();
+                return;
+            }
+            if (locationEl) {
+                locationEl.focus();
+            }
+        }, 180);
     }
 
     function setIncidentTypesFromTransfer(typeText) {
@@ -640,14 +662,20 @@ $pageTitle = 'Emergency Call Center';
             });
             transferSocket.on('connect', () => {
                 transferSocket.emit('join', call.room);
-                setVoiceState('Connected to AlertaraQC transfer room ' + call.room + '.');
+                emitTransferAccepted(call);
+                setVoiceState('Connected to AlertaraQC transfer room ' + call.room + '. Waiting for caller audio.');
             });
             transferSocket.on('offer', async (offerPayload) => {
-                if (!transferPayloadMatchesCall(offerPayload, callId)) return;
-                await answerTransferOffer(call, offerPayload);
+                if (!transferPayloadMatchesCall(offerPayload, callId, call.room)) return;
+                try {
+                    await answerTransferOffer(call, offerPayload);
+                } catch (error) {
+                    console.warn('Unable to answer transfer offer:', error);
+                    setVoiceState('Could not connect the live caller audio.');
+                }
             });
             transferSocket.on('candidate', async (data) => {
-                if (!transferPayloadMatchesCall(data, callId)) return;
+                if (!transferPayloadMatchesCall(data, callId, call.room)) return;
                 if (data && data.candidate && transferPeerConnection) {
                     try {
                         await transferPeerConnection.addIceCandidate(data.candidate);
@@ -683,7 +711,11 @@ $pageTitle = 'Emergency Call Center';
             if (!stream) return;
             transferRemoteAudio = transferRemoteAudio || createTransferRemoteAudio();
             transferRemoteAudio.srcObject = stream;
-            transferRemoteAudio.play().catch(() => {});
+            transferRemoteAudio.muted = false;
+            transferRemoteAudio.volume = 1;
+            transferRemoteAudio.play()
+                .then(() => setVoiceState('Caller audio connected. Your microphone is sending.'))
+                .catch(() => setVoiceState('Caller audio is ready. Tap the page if the browser blocks playback.'));
         };
         pc.onconnectionstatechange = () => {
             if (!transferPeerConnection) return;
@@ -701,10 +733,79 @@ $pageTitle = 'Emergency Call Center';
         return audio;
     }
 
-    function transferPayloadMatchesCall(payload, callId) {
+    function transferPayloadMatchesCall(payload, callId, room) {
         if (!callId) return true;
-        return String(payload && payload.callId || '') === String(callId)
-            || String(payload && payload.call_id || '') === String(callId);
+        const payloadCallId = String(
+            (payload && (payload.callId || payload.call_id || payload.transferId || payload.transfer_id))
+            || ''
+        );
+        const payloadRoom = String((payload && payload.room) || '');
+        if (payloadCallId) {
+            return payloadCallId === String(callId);
+        }
+        if (payloadRoom && room) {
+            return payloadRoom === String(room);
+        }
+        return true;
+    }
+
+    async function prepareTransferLocalAudio(call) {
+        if (!call || !call.isTransfer || transferLocalStream) return transferLocalStream;
+        if (transferLocalStreamPromise) return transferLocalStreamPromise;
+        if (!navigator.mediaDevices || typeof navigator.mediaDevices.getUserMedia !== 'function') {
+            setVoiceState('Microphone access is not available in this browser.');
+            return null;
+        }
+        transferLocalStreamPromise = navigator.mediaDevices.getUserMedia({
+            audio: {
+                echoCancellation: true,
+                noiseSuppression: true,
+                autoGainControl: true
+            }
+        }).then((stream) => {
+            transferLocalStream = stream;
+            setVoiceState('Microphone connected. Waiting for caller audio.');
+            if (transferPeerConnection) {
+                addLocalAudioTracksToPeerConnection();
+            }
+            return transferLocalStream;
+        }).catch((error) => {
+            console.warn('Transfer microphone unavailable:', error);
+            setVoiceState('Microphone permission is required so the caller can hear you.');
+            return null;
+        }).finally(() => {
+            transferLocalStreamPromise = null;
+        });
+        return transferLocalStreamPromise;
+    }
+
+    function addLocalAudioTracksToPeerConnection() {
+        if (!transferPeerConnection || !transferLocalStream) return;
+        const existingTrackIds = transferPeerConnection.getSenders()
+            .map((sender) => sender.track ? sender.track.id : '')
+            .filter(Boolean);
+        transferLocalStream.getAudioTracks().forEach((track) => {
+            if (!existingTrackIds.includes(track.id)) {
+                transferPeerConnection.addTrack(track, transferLocalStream);
+            }
+        });
+    }
+
+    function emitTransferAccepted(call) {
+        if (!transferSocket || !call || !call.room) return;
+        const payload = {
+            callId: call.callId || call.transferId || '',
+            call_id: call.callId || call.transferId || '',
+            transferId: call.transferId || '',
+            transfer_id: call.transferId || '',
+            conversationId: call.conversationId || '',
+            conversation_id: call.conversationId || '',
+            room: call.room,
+            role: 'dispatcher'
+        };
+        ['dispatcher-ready', 'call-accepted', 'accepted'].forEach((eventName) => {
+            transferSocket.emit(eventName, payload, call.room);
+        });
     }
 
     async function answerTransferOffer(call, offerPayload) {
@@ -715,18 +816,20 @@ $pageTitle = 'Emergency Call Center';
             ? { type: 'offer', sdp: offerPayload.sdp }
             : offerPayload.sdp;
         await transferPeerConnection.setRemoteDescription(remoteDescription);
-        transferLocalStream = await navigator.mediaDevices.getUserMedia({ audio: true });
-        transferLocalStream.getTracks().forEach((track) => {
-            transferPeerConnection.addTrack(track, transferLocalStream);
-        });
+        await prepareTransferLocalAudio(call);
+        addLocalAudioTracksToPeerConnection();
         const answer = await transferPeerConnection.createAnswer();
         await transferPeerConnection.setLocalDescription(answer);
         transferSocket.emit('answer', {
             sdp: answer,
+            type: answer.type,
             callId: call.callId || call.transferId || '',
+            call_id: call.callId || call.transferId || '',
+            transferId: call.transferId || '',
+            transfer_id: call.transferId || '',
             room: call.room
         }, call.room);
-        setVoiceState('Answered AlertaraQC live call in room ' + call.room + '.');
+        setVoiceState('Answered AlertaraQC live call. Two-way audio is connecting.');
     }
 
     function disconnectTransferCall() {
@@ -734,6 +837,7 @@ $pageTitle = 'Emergency Call Center';
             transferSocket.disconnect();
         }
         transferSocket = null;
+        transferLocalStreamPromise = null;
         if (transferPeerConnection) {
             transferPeerConnection.close();
         }
