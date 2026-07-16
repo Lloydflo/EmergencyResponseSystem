@@ -59,6 +59,8 @@ if ($vehicleResourceTable !== null) {
 $status = isset($_GET['status']) ? trim((string) $_GET['status']) : '';
 $includeUnassigned = isset($_GET['include_unassigned'])
     && in_array(strtolower(trim((string) $_GET['include_unassigned'])), ['1', 'true', 'yes'], true);
+$onlyUnassignedResponders = isset($_GET['only_unassigned_responders'])
+    && in_array(strtolower(trim((string) $_GET['only_unassigned_responders'])), ['1', 'true', 'yes'], true);
 
 // Map dispatcher-facing filter names to actual unit statuses.
 $statuses = [];
@@ -265,6 +267,46 @@ if (!empty($statuses)) {
     $in = implode(',', array_fill(0, count($statuses), '?'));
     $sql .= " WHERE u.status IN ($in)";
     $params = $statuses;
+}
+
+if ($onlyUnassignedResponders) {
+    $unassignedClauses = [];
+
+    if (
+        ers_table_exists($pdo, 'users') &&
+        ers_column_exists($pdo, 'users', 'role') &&
+        ers_column_exists($pdo, 'users', 'unit_code')
+    ) {
+        $unassignedClauses[] = "NOT EXISTS (
+            SELECT 1
+            FROM `users` assigned_usr
+            WHERE LOWER(COALESCE(assigned_usr.role, '')) = 'responder'
+              AND assigned_usr.unit_code IS NOT NULL
+              AND TRIM(assigned_usr.unit_code) <> ''
+              AND UPPER(TRIM(assigned_usr.unit_code)) = UPPER(TRIM(u.identifier))
+            LIMIT 1
+        )";
+    }
+
+    if (
+        ers_table_exists($pdo, 'responders') &&
+        ers_column_exists($pdo, 'responders', 'assigned_unit_id')
+    ) {
+        $unassignedClauses[] = "NOT EXISTS (
+            SELECT 1
+            FROM `responders` assigned_responder
+            WHERE assigned_responder.assigned_unit_id = u.id
+            LIMIT 1
+        )";
+    }
+
+    if ($vehicleResourceTable !== null && ers_column_exists($pdo, $vehicleResourceTable, 'driver_name')) {
+        $unassignedClauses[] = "TRIM(COALESCE(rr.driver_name, '')) = ''";
+    }
+
+    if ($unassignedClauses !== []) {
+        $sql .= ($params === [] ? ' WHERE ' : ' AND ') . implode(' AND ', $unassignedClauses);
+    }
 }
 
 if (in_array('available', $statuses, true) && !$includeUnassigned) {

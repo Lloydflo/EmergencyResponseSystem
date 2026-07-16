@@ -237,6 +237,99 @@ function admin_users_available_unit_exists(PDO $pdo, int $unitId): bool
     return (bool)$stmt->fetchColumn();
 }
 
+function admin_users_unit_identifier(PDO $pdo, int $unitId): string
+{
+    if ($unitId <= 0 || !admin_users_table_exists($pdo, 'units')) {
+        return '';
+    }
+
+    $stmt = $pdo->prepare('SELECT COALESCE(`identifier`, \'\') FROM `units` WHERE `id` = ? LIMIT 1');
+    $stmt->execute([$unitId]);
+    return trim((string)$stmt->fetchColumn());
+}
+
+function admin_users_unit_has_other_responder_assignment(
+    PDO $pdo,
+    int $unitId,
+    ?int $currentUserId = null,
+    ?string $currentEmail = null
+): bool {
+    if ($unitId <= 0) {
+        return false;
+    }
+
+    $unitIdentifier = admin_users_unit_identifier($pdo, $unitId);
+    if (
+        $unitIdentifier !== '' &&
+        admin_users_table_exists($pdo, 'users') &&
+        admin_users_has_column($pdo, 'users', 'role') &&
+        admin_users_has_column($pdo, 'users', 'unit_code')
+    ) {
+        $params = [$unitIdentifier];
+        $currentUserFilter = '';
+        if ($currentUserId !== null && $currentUserId > 0 && admin_users_has_column($pdo, 'users', 'id')) {
+            $currentUserFilter = ' AND `id` <> ?';
+            $params[] = $currentUserId;
+        }
+
+        $stmt = $pdo->prepare(
+            "SELECT 1
+             FROM `users`
+             WHERE LOWER(COALESCE(`role`, '')) = 'responder'
+               AND `unit_code` IS NOT NULL
+               AND TRIM(`unit_code`) <> ''
+               AND UPPER(TRIM(`unit_code`)) = UPPER(TRIM(?))
+               {$currentUserFilter}
+             LIMIT 1"
+        );
+        $stmt->execute($params);
+        if ($stmt->fetchColumn()) {
+            return true;
+        }
+    }
+
+    if (
+        admin_users_table_exists($pdo, 'responders') &&
+        admin_users_has_column($pdo, 'responders', 'assigned_unit_id')
+    ) {
+        if (!admin_users_has_column($pdo, 'responders', 'email')) {
+            $stmt = $pdo->prepare('SELECT 1 FROM `responders` WHERE `assigned_unit_id` = ? LIMIT 1');
+            $stmt->execute([$unitId]);
+            return (bool)$stmt->fetchColumn();
+        }
+
+        $stmt = $pdo->prepare('SELECT COALESCE(`email`, \'\') AS `email` FROM `responders` WHERE `assigned_unit_id` = ?');
+        $stmt->execute([$unitId]);
+        $normalizedCurrentEmail = strtolower(trim((string)$currentEmail));
+        foreach ($stmt->fetchAll(PDO::FETCH_ASSOC) as $row) {
+            $email = strtolower(trim((string)($row['email'] ?? '')));
+            if ($normalizedCurrentEmail === '' || $email === '' || $email !== $normalizedCurrentEmail) {
+                return true;
+            }
+        }
+    }
+
+    return false;
+}
+
+function admin_users_unit_assignable_to_responder(
+    PDO $pdo,
+    int $unitId,
+    ?int $currentUserId = null,
+    ?string $currentEmail = null,
+    ?int $currentAssignedUnitId = null
+): bool {
+    if ($unitId <= 0 || admin_users_unit_has_other_responder_assignment($pdo, $unitId, $currentUserId, $currentEmail)) {
+        return false;
+    }
+
+    if ($currentAssignedUnitId !== null && $currentAssignedUnitId === $unitId) {
+        return true;
+    }
+
+    return admin_users_available_unit_exists($pdo, $unitId);
+}
+
 function admin_users_vehicle_resource_table(PDO $pdo): ?string
 {
     if (admin_users_table_exists($pdo, 'resource_records')) {
@@ -789,14 +882,24 @@ if ($method !== 'POST') {
                 $assignedUnitId = admin_users_normalize_assigned_unit_id($existing['assigned_unit_id'] ?? null);
             }
 
-            if ($assignedUnitIdProvided && $assignedUnitId !== null && !admin_users_available_unit_exists($pdo, $assignedUnitId)) {
+            $previousAssignedUnitId = admin_users_normalize_assigned_unit_id($existing['assigned_unit_id'] ?? null);
+            if (
+                $assignedUnitIdProvided &&
+                $assignedUnitId !== null &&
+                !admin_users_unit_assignable_to_responder(
+                    $pdo,
+                    $assignedUnitId,
+                    $id,
+                    (string)($existing['email'] ?? ''),
+                    $previousAssignedUnitId
+                )
+            ) {
                 admin_users_respond(422, [
                     'success' => false,
-                    'message' => 'Selected unit is no longer available.',
+                    'message' => 'Selected unit is already assigned to another responder or no longer available.',
                 ]);
             }
 
-            $previousAssignedUnitId = admin_users_normalize_assigned_unit_id($existing['assigned_unit_id'] ?? null);
             $shouldUpdateUserUnitFields = $role !== 'responder' || $assignedUnitIdProvided;
             $unitAssignment = $role === 'responder'
                 ? admin_users_apply_unit_assignment_overrides(
@@ -992,10 +1095,10 @@ if (!in_array($status, ['active', 'inactive'], true)) {
     ]);
 }
 
-if ($assignedUnitId !== null && !admin_users_available_unit_exists($pdo, $assignedUnitId)) {
+if ($assignedUnitId !== null && !admin_users_unit_assignable_to_responder($pdo, $assignedUnitId)) {
     admin_users_respond(422, [
         'success' => false,
-        'message' => 'Selected unit is no longer available.',
+        'message' => 'Selected unit is already assigned to another responder or no longer available.',
     ]);
 }
 

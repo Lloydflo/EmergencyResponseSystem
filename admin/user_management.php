@@ -832,7 +832,7 @@ $adminName = $_SESSION['user_name'] ?? 'Admin';
 
     <script>
         const adminUsersApiUrl = 'api/admin_users.php';
-        const availableUnitsApiUrl = 'api/units_list.php?status=available&include_unassigned=1';
+        const availableUnitsApiUrl = 'api/units_list.php?status=available&include_unassigned=1&only_unassigned_responders=1';
         const userRows = [];
         let availableUnits = [];
         let availableUnitsLoaded = false;
@@ -969,6 +969,22 @@ $adminName = $_SESSION['user_name'] ?? 'Admin';
             return String(unit.unit_type || '').trim().toLowerCase() === expectedType;
         }
 
+        function unitHasOtherResponderAssignment(unit) {
+            const unitId = Number(unit && unit.id) || 0;
+            if (unitId <= 0) return false;
+
+            const responderUserId = Number(unit.responder_user_id) || 0;
+            if (responderUserId > 0 && responderUserId !== editingId) {
+                return true;
+            }
+
+            return userRows.some((row) => {
+                if (!row || row.id === editingId) return false;
+                if (String(row.role || '').trim().toLowerCase() !== 'responder') return false;
+                return (Number(row.assigned_unit_id) || 0) === unitId;
+            });
+        }
+
         function getEditingRow() {
             return editingId !== null ? (userRows.find((row) => row.id === editingId) || null) : null;
         }
@@ -981,7 +997,8 @@ $adminName = $_SESSION['user_name'] ?? 'Admin';
                 unit_type: String(row.unit_type || '').trim(),
                 plate_number: String(row.vehicle_plate || '').trim(),
                 resource_name: '',
-                status: String(row.unit_status || '').trim()
+                status: String(row.unit_status || '').trim(),
+                responder_user_id: Number(row.id) || 0
             };
         }
 
@@ -1065,12 +1082,14 @@ $adminName = $_SESSION['user_name'] ?? 'Admin';
                 return;
             }
 
-            const filteredUnits = availableUnits.filter(unitMatchesSelectedDepartment);
+            const filteredUnits = availableUnits
+                .filter(unitMatchesSelectedDepartment)
+                .filter((unit) => !unitHasOtherResponderAssignment(unit));
             if (!filteredUnits.length) {
                 newUserAssignedUnit.innerHTML = '<option value="">No units for selected department</option>';
                 newUserAssignedUnit.disabled = true;
                 newUserAssignedUnit.required = false;
-                newUserUnitHint.textContent = 'No available units match the selected department.';
+                newUserUnitHint.textContent = 'No unassigned units match the selected department.';
                 updateResponderUnitDetails();
                 return;
             }
@@ -1088,8 +1107,8 @@ $adminName = $_SESSION['user_name'] ?? 'Admin';
             }
             delete newUserAssignedUnit.dataset.pendingValue;
             newUserUnitHint.textContent = editingId === null
-                ? 'Only units matching the selected department are listed.'
-                : 'Change the department or unit to update unit code, plate, type, and status.';
+                ? 'Only unassigned units matching the selected department are listed.'
+                : 'Only unassigned units are listed; the current assigned unit remains available for this account.';
             updateResponderUnitDetails();
         }
 
@@ -1117,7 +1136,8 @@ $adminName = $_SESSION['user_name'] ?? 'Admin';
                     unit_type: String(item.unit_type || '').trim(),
                     plate_number: String(item.plate_number || '').trim(),
                     resource_name: String(item.resource_name || '').trim(),
-                    status: String(item.status || '').trim()
+                    status: String(item.status || '').trim(),
+                    responder_user_id: Number(item.responder_user_id) || 0
                 })).filter((item) => item.id > 0);
                 availableUnitsLoaded = true;
             } catch (error) {
