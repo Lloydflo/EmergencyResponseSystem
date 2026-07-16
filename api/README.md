@@ -40,6 +40,7 @@ GET /ERS/api/?action=alerts
 GET /ERS/api/?action=calls
 GET /ERS/api/?action=conversations
 POST /ERS/api/?action=create_incident
+POST /ERS/api/?action=incoming-transfer
 PATCH /ERS/api/?action=incident_status
 ```
 
@@ -62,3 +63,58 @@ Create incident body. This saves the incident and sends it as an incident card i
   }
 }
 ```
+
+Incoming transfer call body. This saves the transferred call and creates the paired incident:
+
+```json
+{
+  "source_system": "Partner Dispatch",
+  "transfer_id": "CALL-2026-001",
+  "call": {
+    "caller_name": "Maria Santos",
+    "caller_phone": "09171234567",
+    "incident_type": "medical",
+    "priority": "high",
+    "location": "Quezon City Hall",
+    "description": "Caller reports chest pain near the main entrance."
+  }
+}
+```
+
+You can also post the same body to:
+
+```http
+POST /ERS/api/incoming-transfer.php
+```
+
+AlertaraQC Emergency Communication integration:
+
+```http
+POST /ERS/api/?action=create_incident&api_key=${ERS_EXTERNAL_API_KEY}
+Authorization: Bearer ${ERS_EXTERNAL_API_KEY}
+X-API-Key: ${ERS_EXTERNAL_API_KEY}
+X-ERS-API-Key: ${ERS_EXTERNAL_API_KEY}
+X-ERS-Client: emergency-comm-alertaraqc
+```
+
+The endpoint accepts JSON or form-data. It supports two transfer types:
+
+- Live call transfer: `callId`/`call_id` and `room` are present. The incident is
+  saved, then the dispatcher can answer through AlertaraQC Socket.IO/WebRTC.
+- Report/message transfer: `callId` and `room` are empty or missing. The
+  incident/report is saved only; no Socket.IO call modal is opened.
+
+Transfer payload fields such as `event`, `callId`, `call_id`, `room`,
+`socketUrl`, `socket_url`, `socketPath`, `socket_path`, `conversationId`,
+`conversation_id`, `emergencyType`, `emergency_type`, `incident_type`, `type`,
+`priority`, `status`, `title`, `description`, `caller_name`, `caller_phone`,
+`caller_address`, `location_address`, `latitude`, `longitude`, `messages`,
+`transferred_at`, and `payload_json` are detected as incoming transfers.
+
+The dispatcher call screen polls `api/incoming_transfers.php`, opens the
+transferred-call modal, plays an alert tone when the browser allows audio, and
+uses the transfer `room` with Socket.IO polling at `https://emergency-comm.alertaraqc.com/socket.io`.
+When the dispatcher accepts the call, the browser joins `payload.room`, listens
+for `offer`, answers with local microphone audio through WebRTC, and exchanges
+ICE `candidate` events in the same room. Do not hardcode a room name; each call
+uses its own `emergency-call-{callId}` room from the payload.

@@ -4,6 +4,7 @@ header('Content-Type: application/json');
 require_once __DIR__ . '/../includes/auth.php';
 require_once __DIR__ . '/../includes/db.php';
 require_once __DIR__ . '/../includes/user_account_cleanup.php';
+require_once __DIR__ . '/../includes/vehicle_resource_units.php';
 
 function admin_users_respond(int $statusCode, array $payload): void
 {
@@ -705,6 +706,7 @@ $method = strtoupper((string)($_SERVER['REQUEST_METHOD'] ?? 'GET'));
 
 if ($method === 'GET') {
     try {
+        ers_sync_responder_vehicle_resources($pdo);
         admin_users_respond(200, [
             'success' => true,
             'users' => admin_users_fetch_rows($pdo),

@@ -722,6 +722,128 @@ $pageTitle = 'Inter-Agency Conversations';
                 linear-gradient(to bottom, rgba(248, 250, 252, 0.9), rgba(241, 245, 249, 0.9));
         }
 
+        .ia-active-incident-wrap {
+            padding: 0.9rem 1rem 0;
+            background: linear-gradient(to bottom, #f8fbff 0%, #f1f5f9 100%);
+        }
+
+        .ia-active-incident-wrap[hidden] {
+            display: none;
+        }
+
+        .ia-active-incident-card {
+            position: relative;
+            border: 1px solid #334155;
+            border-radius: 14px;
+            background: #1f2933;
+            color: #f8fafc;
+            padding: 0.9rem 3rem 0.9rem 1rem;
+            box-shadow: 0 12px 24px rgba(15, 23, 42, 0.16);
+            min-height: 132px;
+        }
+
+        .ia-active-incident-kicker {
+            margin: 0 0 1rem;
+            display: inline-flex;
+            align-items: center;
+            gap: 0.45rem;
+            color: #ffffff;
+            font-size: 0.72rem;
+            font-weight: 900;
+            text-transform: uppercase;
+            letter-spacing: 0.08em;
+        }
+
+        .ia-active-incident-kicker i {
+            color: #fb7185;
+        }
+
+        .ia-active-incident-title {
+            margin: 0 0 0.25rem;
+            color: #ffffff;
+            font-size: 0.95rem;
+            font-weight: 900;
+            line-height: 1.25;
+            word-break: break-word;
+        }
+
+        .ia-active-incident-grid {
+            display: grid;
+            gap: 0.22rem;
+            color: #e2e8f0;
+            font-size: 0.78rem;
+            font-weight: 700;
+            line-height: 1.45;
+        }
+
+        .ia-active-incident-grid span {
+            color: #ffffff;
+            font-weight: 900;
+        }
+
+        .ia-active-incident-grid p {
+            margin: 0;
+        }
+
+        .ia-active-incident-status {
+            margin-top: 1.1rem;
+        }
+
+        .ia-active-incident-open {
+            position: absolute;
+            top: 0.8rem;
+            right: 0.8rem;
+            width: 30px;
+            height: 30px;
+            border: 1px solid rgba(226, 232, 240, 0.35);
+            border-radius: 9px;
+            background: rgba(15, 23, 42, 0.18);
+            color: #f8fafc;
+            cursor: pointer;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            transition: 0.2s ease;
+        }
+
+        .ia-active-incident-open:hover,
+        .ia-active-incident-open:focus-visible {
+            background: rgba(248, 250, 252, 0.14);
+            border-color: rgba(248, 250, 252, 0.7);
+            outline: none;
+        }
+
+        .ia-typing-indicator {
+            padding: 0.65rem 1rem 0;
+            background: #f1f5f9;
+        }
+
+        .ia-typing-indicator[hidden] {
+            display: none;
+        }
+
+        .ia-typing-pill {
+            min-height: 42px;
+            border: 1px solid #2f3a46;
+            border-radius: 999px;
+            background: #222426;
+            color: #ffffff;
+            padding: 0.68rem 3rem 0.68rem 1rem;
+            display: flex;
+            align-items: center;
+            position: relative;
+            font-size: 0.82rem;
+            font-weight: 800;
+            box-shadow: 0 8px 18px rgba(15, 23, 42, 0.12);
+        }
+
+        .ia-typing-pill i {
+            position: absolute;
+            right: 1rem;
+            color: #e5e7eb;
+            font-size: 0.95rem;
+        }
+
         .ia-message {
             margin-bottom: 0.78rem;
             display: flex;
@@ -1604,6 +1726,19 @@ $pageTitle = 'Inter-Agency Conversations';
                 height: 390px;
             }
 
+            .ia-active-incident-wrap {
+                padding: 0.75rem 0.75rem 0;
+            }
+
+            .ia-active-incident-card {
+                min-height: 0;
+                padding-right: 2.6rem;
+            }
+
+            .ia-typing-indicator {
+                padding: 0.6rem 0.75rem 0;
+            }
+
             .ia-tabs {
                 grid-template-columns: repeat(2, minmax(0, 1fr));
             }
@@ -1898,6 +2033,8 @@ $pageTitle = 'Inter-Agency Conversations';
 
                 <section class="ia-chat-panel">
                     <div class="ia-chat-head" id="chatHeader"></div>
+                    <div class="ia-active-incident-wrap" id="activeIncidentBanner" hidden></div>
+                    <div class="ia-typing-indicator" id="typingIndicator" hidden></div>
                     <div class="ia-chat-body" id="chatTimeline"></div>
                     <div class="ia-chat-compose">
                         <form id="chatForm">
@@ -2141,6 +2278,12 @@ $pageTitle = 'Inter-Agency Conversations';
                 userStatuses: [],
                 chatSettingsOpen: false,
                 poller: null,
+                activeIncident: null,
+                typingUsers: [],
+                typingTimer: null,
+                typingHeartbeat: null,
+                typingActive: false,
+                typingPayload: null,
                 incidentPickerItems: [],
                 incidentPickerQuery: '',
                 incidentPickerLoading: false
@@ -2149,6 +2292,8 @@ $pageTitle = 'Inter-Agency Conversations';
             const threadListEl = document.getElementById('threadList');
             const chatHeaderEl = document.getElementById('chatHeader');
             const chatTimelineEl = document.getElementById('chatTimeline');
+            const activeIncidentBannerEl = document.getElementById('activeIncidentBanner');
+            const typingIndicatorEl = document.getElementById('typingIndicator');
             const threadSearchInput = document.getElementById('threadSearchInput');
             const messageInput = document.getElementById('messageInput');
             const messagePriority = document.getElementById('messagePriority');
@@ -3291,6 +3436,120 @@ $pageTitle = 'Inter-Agency Conversations';
                 });
             }
 
+            function firstText(...values) {
+                for (const value of values) {
+                    const text = String(value || '').trim();
+                    if (text) return text;
+                }
+                return '';
+            }
+
+            function formatIncidentStatus(value) {
+                const raw = String(value || '').trim();
+                if (!raw) return 'Responding';
+                const normalized = raw.toLowerCase().replace(/[_-]+/g, ' ');
+                const labels = {
+                    pending: 'Pending',
+                    dispatched: 'Responding',
+                    assigned: 'Responding',
+                    acknowledged: 'Responding',
+                    enroute: 'En Route',
+                    'en route': 'En Route',
+                    'on scene': 'On Scene',
+                    resolved: 'Resolved',
+                    closed: 'Closed',
+                    cancelled: 'Cancelled'
+                };
+                return labels[normalized] || normalized.replace(/\b\w/g, (char) => char.toUpperCase());
+            }
+
+            function activeIncidentTitle(incident) {
+                const id = Number(incident && incident.id) || 0;
+                return firstText(
+                    incident && incident.title,
+                    incident && incident.type,
+                    incident && incident.incident_code,
+                    id > 0 ? `Incident #${id}` : 'Active Incident'
+                );
+            }
+
+            function activeIncidentStartedAt(incident) {
+                return firstText(
+                    incident && incident.assigned_at,
+                    incident && incident.acknowledged_at,
+                    incident && incident.enroute_at,
+                    incident && incident.on_scene_at,
+                    incident && incident.created_at
+                );
+            }
+
+            function activeIncidentTime(dateLike) {
+                const d = parsePhilippineDate(dateLike);
+                if (isNaN(d.getTime())) return 'Now';
+                return d.toLocaleString('en-PH', {
+                    timeZone: 'Asia/Manila',
+                    hour: 'numeric',
+                    minute: '2-digit'
+                });
+            }
+
+            function renderActiveIncidentBanner() {
+                if (!activeIncidentBannerEl) return;
+                const incident = state.activeIncident;
+                if (!incident) {
+                    activeIncidentBannerEl.hidden = true;
+                    activeIncidentBannerEl.innerHTML = '';
+                    return;
+                }
+
+                const id = Number(incident.id) || 0;
+                const priority = firstText(incident.priority, 'Routine');
+                const handler = firstText(
+                    incident.dispatcher_name,
+                    incident.dispatcher,
+                    incident.assigned_by,
+                    incident.operator_name,
+                    incident.assigned_unit,
+                    incident.vehicle_name,
+                    incident.driver_name,
+                    'Unassigned'
+                );
+                const status = formatIncidentStatus(firstText(incident.latest_dispatch_status, incident.dispatch_status, incident.status));
+                const startedAt = activeIncidentTime(activeIncidentStartedAt(incident));
+                const openButton = id > 0
+                    ? `<button type="button" class="ia-active-incident-open" data-active-incident-open="${escapeAttr(id)}" title="View active incident" aria-label="View active incident"><i class="fas fa-up-right-from-square"></i></button>`
+                    : '';
+
+                activeIncidentBannerEl.innerHTML = `
+                    <section class="ia-active-incident-card" aria-label="Active incident">
+                        <p class="ia-active-incident-kicker"><i class="fas fa-triangle-exclamation"></i> Active Incident</p>
+                        ${openButton}
+                        <h2 class="ia-active-incident-title">${escapeHtml(activeIncidentTitle(incident))}</h2>
+                        <div class="ia-active-incident-grid">
+                            <p><span>Priority:</span> ${escapeHtml(priority)}</p>
+                            <p><span>Handled by:</span> ${escapeHtml(handler)}</p>
+                            <p><span>Started:</span> ${escapeHtml(startedAt)}</p>
+                            <p class="ia-active-incident-status"><span>Status:</span> ${escapeHtml(status)}</p>
+                        </div>
+                    </section>
+                `;
+                activeIncidentBannerEl.hidden = false;
+            }
+
+            async function loadActiveIncidentBanner() {
+                if (!activeIncidentBannerEl) return;
+                try {
+                    const res = await fetch('api/incidents_list.php?status=active', { cache: 'no-store' });
+                    const data = await res.json();
+                    state.activeIncident = data && data.ok && Array.isArray(data.items) && data.items.length
+                        ? data.items[0]
+                        : null;
+                } catch (_) {
+                    state.activeIncident = null;
+                }
+                renderActiveIncidentBanner();
+            }
+
             function activeThread() {
                 return state.threads.find((item) => item.id === state.activeId) || null;
             }
@@ -3307,6 +3566,111 @@ $pageTitle = 'Inter-Agency Conversations';
                     return `user:${thread.user_id || thread.entity_id || 0}`;
                 }
                 return `dept:${thread.department || ''}`;
+            }
+
+            function typingThreadPayload(thread = activeThread()) {
+                if (!thread) return null;
+                const kind = String(thread.thread_kind || 'department');
+                if (kind === 'external') return null;
+                if (kind === 'group') {
+                    const groupId = Number(thread.group_id || thread.entity_id || 0);
+                    return groupId > 0 ? { thread_kind: 'group', group_id: groupId } : null;
+                }
+                if (kind === 'user') {
+                    const userId = Number(thread.user_id || thread.entity_id || 0);
+                    return userId > 0 ? { thread_kind: 'user', user_id: userId } : null;
+                }
+                const department = String(thread.department || '').trim().toLowerCase();
+                return department ? { thread_kind: 'department', department } : null;
+            }
+
+            function typingQuery(payload) {
+                const params = new URLSearchParams();
+                Object.entries(payload || {}).forEach(([key, value]) => {
+                    if (value !== null && value !== undefined && String(value) !== '') {
+                        params.set(key, String(value));
+                    }
+                });
+                return params;
+            }
+
+            function renderTypingIndicator() {
+                if (!typingIndicatorEl) return;
+                const names = (Array.isArray(state.typingUsers) ? state.typingUsers : [])
+                    .map((item) => String(item.name || 'Someone').trim())
+                    .filter(Boolean);
+                if (!names.length) {
+                    typingIndicatorEl.hidden = true;
+                    typingIndicatorEl.innerHTML = '';
+                    return;
+                }
+                const label = names.length === 1
+                    ? `${names[0]} is typing...`
+                    : (names.length === 2 ? `${names[0]} and ${names[1]} are typing...` : `${names[0]} and ${names.length - 1} others are typing...`);
+                typingIndicatorEl.innerHTML = `<div class="ia-typing-pill">${escapeHtml(label)}<i class="far fa-copy" aria-hidden="true"></i></div>`;
+                typingIndicatorEl.hidden = false;
+            }
+
+            async function loadTypingIndicator() {
+                const payload = typingThreadPayload();
+                if (!payload) {
+                    state.typingUsers = [];
+                    renderTypingIndicator();
+                    return;
+                }
+                try {
+                    const res = await fetch('api/interagency_typing.php?' + typingQuery(payload).toString(), { cache: 'no-store' });
+                    const data = await res.json();
+                    state.typingUsers = data && data.ok && Array.isArray(data.typing) ? data.typing : [];
+                } catch (_) {
+                    state.typingUsers = [];
+                }
+                renderTypingIndicator();
+            }
+
+            function postTypingStatus(isTyping, payload = null) {
+                const threadPayload = payload || (isTyping ? typingThreadPayload() : state.typingPayload);
+                if (!threadPayload) return;
+                fetch('api/interagency_typing.php', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ ...threadPayload, is_typing: !!isTyping })
+                }).catch(() => {});
+            }
+
+            function stopTypingStatus() {
+                if (state.typingTimer) {
+                    window.clearTimeout(state.typingTimer);
+                    state.typingTimer = null;
+                }
+                if (state.typingHeartbeat) {
+                    window.clearInterval(state.typingHeartbeat);
+                    state.typingHeartbeat = null;
+                }
+                if (state.typingActive || state.typingPayload) {
+                    postTypingStatus(false, state.typingPayload);
+                }
+                state.typingActive = false;
+                state.typingPayload = null;
+            }
+
+            function startTypingStatus() {
+                const payload = typingThreadPayload();
+                if (!payload) return;
+                state.typingPayload = payload;
+                if (!state.typingActive) {
+                    state.typingActive = true;
+                    postTypingStatus(true, payload);
+                }
+                if (!state.typingHeartbeat) {
+                    state.typingHeartbeat = window.setInterval(() => {
+                        if (state.typingActive && state.typingPayload) {
+                            postTypingStatus(true, state.typingPayload);
+                        }
+                    }, 4000);
+                }
+                if (state.typingTimer) window.clearTimeout(state.typingTimer);
+                state.typingTimer = window.setTimeout(stopTypingStatus, 2600);
             }
 
             function filteredThreads() {
@@ -3623,11 +3987,14 @@ $pageTitle = 'Inter-Agency Conversations';
             async function selectThread(threadId) {
                 const target = state.threads.find((item) => item.id === threadId);
                 if (!target) return;
+                stopTypingStatus();
                 state.activeId = target.id;
                 state.chatSettingsOpen = false;
                 state.lastIdByDept[threadKey(target)] = 0;
                 clearPendingFiles();
                 clearReplyTarget();
+                state.typingUsers = [];
+                renderTypingIndicator();
                 renderThreadList();
                 renderChatHeader();
                 chatTimelineEl.innerHTML = '';
@@ -3635,6 +4002,7 @@ $pageTitle = 'Inter-Agency Conversations';
                 closeMessageMenus();
                 try {
                     await loadMessages(true, true);
+                    await loadTypingIndicator();
                     await loadThreads();
                 } catch (err) {
                     const msg = (err && err.message) ? String(err.message) : 'Network error while sending message.';
@@ -4022,6 +4390,7 @@ $pageTitle = 'Inter-Agency Conversations';
                     }
                     const messageId = await sendChatPayload(payloadObj);
                     if (messageId <= 0) return;
+                    stopTypingStatus();
                     messageInput.value = '';
                     clearPendingFiles();
                     clearReplyTarget();
@@ -4303,6 +4672,19 @@ $pageTitle = 'Inter-Agency Conversations';
                     await handleChatSettingAction(String(actionBtn.getAttribute('data-chat-setting-action') || ''));
                 });
 
+                if (activeIncidentBannerEl) {
+                    activeIncidentBannerEl.addEventListener('click', async (event) => {
+                        const openBtn = event.target.closest('[data-active-incident-open]');
+                        if (!openBtn) return;
+                        event.preventDefault();
+                        event.stopPropagation();
+                        const incidentId = Number(openBtn.getAttribute('data-active-incident-open') || 0);
+                        if (incidentId > 0) {
+                            await openIncidentDetail(incidentId);
+                        }
+                    });
+                }
+
                 chatTimelineEl.addEventListener('click', async (event) => {
                     const viewBtn = event.target.closest('[data-incident-view]');
                     if (viewBtn) {
@@ -4355,6 +4737,19 @@ $pageTitle = 'Inter-Agency Conversations';
                 });
 
                 chatForm.addEventListener('submit', handleSendMessage);
+                if (messageInput) {
+                    messageInput.addEventListener('input', () => {
+                        if (messageInput.value.trim()) {
+                            startTypingStatus();
+                        } else {
+                            stopTypingStatus();
+                        }
+                    });
+                    messageInput.addEventListener('blur', () => {
+                        if (state.typingTimer) window.clearTimeout(state.typingTimer);
+                        state.typingTimer = window.setTimeout(stopTypingStatus, 900);
+                    });
+                }
                 if (attachFileBtn && messageFilesInput) {
                     attachFileBtn.addEventListener('click', () => messageFilesInput.click());
                     messageFilesInput.addEventListener('change', () => {
@@ -4614,14 +5009,17 @@ $pageTitle = 'Inter-Agency Conversations';
             document.addEventListener('DOMContentLoaded', async () => {
                 bindEvents();
                 try {
+                    await loadActiveIncidentBanner();
                     await loadThreads();
                     if (state.activeId) await selectThread(state.activeId);
                 } catch (_) {}
 
                 state.poller = setInterval(async () => {
                     try {
+                        await loadActiveIncidentBanner();
                         await loadThreads();
                         await loadMessages(false, false);
+                        await loadTypingIndicator();
                     } catch (_) {}
                 }, 5000);
             });

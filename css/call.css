@@ -334,6 +334,45 @@ body.incoming-call-modal-open {
     font-size: 0.96rem;
 }
 
+.transfer-meta {
+    display: flex;
+    gap: 0.45rem;
+    flex-wrap: wrap;
+    margin-top: 0.55rem;
+}
+
+.transfer-meta span,
+.transfer-summary {
+    color: rgba(255, 255, 255, 0.92);
+    background: rgba(255, 255, 255, 0.16);
+    border: 1px solid rgba(255, 255, 255, 0.2);
+}
+
+.transfer-meta span {
+    display: inline-flex;
+    align-items: center;
+    min-height: 28px;
+    padding: 0.28rem 0.55rem;
+    border-radius: 999px;
+    font-size: 0.76rem;
+    font-weight: 800;
+}
+
+.transfer-summary {
+    display: grid;
+    gap: 0.45rem;
+    padding: 0.8rem;
+    margin-bottom: 1rem;
+    border-radius: 8px;
+    font-size: 0.84rem;
+    overflow-wrap: anywhere;
+}
+
+.transfer-summary[hidden],
+.transfer-meta[hidden] {
+    display: none;
+}
+
 .call-actions {
     display: flex;
     gap: 0.7rem;
