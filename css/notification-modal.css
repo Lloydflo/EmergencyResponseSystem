@@ -158,22 +158,28 @@
     border-radius: 50%;
     flex-shrink: 0;
     font-size: 0.875rem;
+    background-color: #64748b;
 }
 
 .notification-icon i {
     color: white;
 }
 
-.notification-modal .notification-item:nth-child(1) .notification-icon {
-    background-color: #007bff;
+.notification-icon-incident-card {
+    background-color: #dc2626;
 }
 
-.notification-modal .notification-item:nth-child(2) .notification-icon {
-    background-color: #28a745;
+.notification-icon-resolved {
+    background-color: #16a34a;
 }
 
-.notification-modal .notification-item:nth-child(3) .notification-icon {
-    background-color: #ffc107;
+.notification-icon-resource,
+.notification-icon-resource-added {
+    background-color: #0f766e;
+}
+
+.notification-icon-message {
+    background-color: #2563eb;
 }
 
 .notification-details {
