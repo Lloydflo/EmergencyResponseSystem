@@ -120,8 +120,10 @@ $pageTitle = 'Emergency Call Center';
                                 </div>
                             </div>
                             <div class="transfer-summary" id="incomingTransferSummary" hidden>
+                                <div><strong>Emergency:</strong> <span id="incomingTransferType"></span></div>
                                 <div><strong>Location:</strong> <span id="incomingTransferLocation"></span></div>
                                 <div><strong>Priority:</strong> <span id="incomingTransferPriority"></span></div>
+                                <div><strong>Description:</strong> <span id="incomingTransferDescription"></span></div>
                                 <div><strong>Socket:</strong> <span id="incomingTransferSocket"></span></div>
                             </div>
                             <div class="call-actions">
@@ -134,6 +136,8 @@ $pageTitle = 'Emergency Call Center';
                             </div>
                         </div>
                     </div>
+
+                    <div class="transfer-report-stack" id="transferReportNotifications" aria-live="assertive" aria-label="Incoming transferred reports"></div>
 
                     <div class="active-call-panel" id="activeCallPanel">
                         <div class="call-header">
@@ -353,6 +357,7 @@ $pageTitle = 'Emergency Call Center';
     let pendingIncomingCall = null;
     let latestTransferLogId = Number(window.localStorage.getItem('ersLatestTransferLogId') || '0') || 0;
     let incomingTransferBaselineReady = latestTransferLogId > 0;
+    let incomingTransferPollInFlight = false;
     const shownIncomingTransferIds = new Set();
 
     function escapeHtml(value) {
@@ -584,8 +589,10 @@ $pageTitle = 'Emergency Call Center';
         const summary = document.getElementById('incomingTransferSummary');
         const source = document.getElementById('incomingTransferSource');
         const room = document.getElementById('incomingTransferRoom');
+        const type = document.getElementById('incomingTransferType');
         const location = document.getElementById('incomingTransferLocation');
         const priority = document.getElementById('incomingTransferPriority');
+        const description = document.getElementById('incomingTransferDescription');
         const socket = document.getElementById('incomingTransferSocket');
         const isTransfer = !!(call && call.isTransfer);
 
@@ -595,9 +602,86 @@ $pageTitle = 'Emergency Call Center';
 
         if (source) source.textContent = call.sourceSystem || 'AlertaraQC Emergency Communication';
         if (room) room.textContent = call.room ? 'Room ' + call.room : 'No live room - report transfer';
+        if (type) type.textContent = call.incidentType || 'Emergency';
         if (location) location.textContent = call.location || 'Not provided';
         if (priority) priority.textContent = call.priority || 'medium';
+        if (description) description.textContent = call.description || 'No description provided';
         if (socket) socket.textContent = (call.socketUrl || ALERTARA_SOCKET_URL) + (call.socketPath || ALERTARA_SOCKET_PATH);
+    }
+
+    function transferredIncidentItem(report) {
+        return {
+            id: Number(report.incident_id || 0),
+            incident_code: report.reference_no || ('Transferred report ' + (report.transfer_id || '')),
+            status: report.incident_status || 'pending',
+            type: report.type || 'other',
+            priority: report.priority || 'medium',
+            location: report.location || 'Not provided',
+            latitude: report.latitude ?? null,
+            longitude: report.longitude ?? null,
+            caller_name: report.caller_name || 'Transferred reporter',
+            caller_phone: report.caller_phone || '',
+            description: report.description || 'No description provided',
+            created_at: report.transferred_at || new Date().toISOString()
+        };
+    }
+
+    function showIncomingReportNotification(report) {
+        const stack = document.getElementById('transferReportNotifications');
+        if (!stack || !report) return;
+
+        const notificationId = String(report.transfer_log_id || report.transfer_id || report.incident_id || '');
+        if (notificationId && stack.querySelector('[data-transfer-notification="' + CSS.escape(notificationId) + '"]')) {
+            return;
+        }
+
+        const priorityValue = String(report.priority || 'medium').toLowerCase();
+        const priority = ['high', 'medium', 'low'].includes(priorityValue) ? priorityValue : 'medium';
+        const card = document.createElement('article');
+        card.className = 'transfer-report-notification priority-' + priority;
+        if (notificationId) card.dataset.transferNotification = notificationId;
+        card.innerHTML = [
+            '<div class="transfer-report-head">',
+                '<span class="transfer-report-icon" aria-hidden="true"><i class="fas fa-file-medical-alt"></i></span>',
+                '<div>',
+                    '<div class="transfer-report-eyebrow">Incoming Transferred Report</div>',
+                    '<strong class="transfer-report-title"></strong>',
+                '</div>',
+                '<button type="button" class="transfer-report-dismiss" title="Dismiss notification" aria-label="Dismiss report notification">',
+                    '<i class="fas fa-times"></i>',
+                '</button>',
+            '</div>',
+            '<div class="transfer-report-body">',
+                '<span class="transfer-report-priority"></span>',
+                '<p class="transfer-report-description"></p>',
+                '<div class="transfer-report-location"><i class="fas fa-map-marker-alt"></i><span></span></div>',
+            '</div>',
+            '<div class="transfer-report-actions">',
+                '<button type="button" class="transfer-report-open">',
+                    '<i class="fas fa-eye"></i> Open report',
+                '</button>',
+            '</div>'
+        ].join('');
+
+        card.querySelector('.transfer-report-title').textContent =
+            report.reference_no || report.type || 'Emergency report';
+        card.querySelector('.transfer-report-priority').textContent =
+            priority.toUpperCase() + ' PRIORITY';
+        card.querySelector('.transfer-report-description').textContent =
+            report.description || 'No description provided';
+        card.querySelector('.transfer-report-location span').textContent =
+            report.location || 'Location not provided';
+        card.querySelector('.transfer-report-dismiss').addEventListener('click', () => card.remove());
+        card.querySelector('.transfer-report-open').addEventListener('click', () => {
+            openIncidentModal(transferredIncidentItem(report));
+            card.remove();
+        });
+
+        stack.prepend(card);
+        while (stack.children.length > 4) {
+            stack.lastElementChild.remove();
+        }
+        playIncomingTransferAlert();
     }
 
     function applyIncomingCallToForm(call) {
@@ -909,33 +993,23 @@ $pageTitle = 'Emergency Call Center';
     }
 
     function startIncomingTransferPolling() {
-        pollIncomingTransfers();
+        pollIncomingTransfers(true);
         setInterval(pollIncomingTransfers, 5000);
     }
 
-    async function initializeIncomingTransferBaseline() {
-        if (incomingTransferBaselineReady) return;
+    async function pollIncomingTransfers(loadLatest = false) {
+        if (incomingTransferPollInFlight) return;
+        incomingTransferPollInFlight = true;
         try {
-            const response = await fetch(API_INCOMING_TRANSFERS_URL + '?latest=1&limit=1', { cache: 'no-store' });
-            const data = await response.json();
-            if (data && data.ok && Number(data.latest_id || 0) > 0) {
-                latestTransferLogId = Number(data.latest_id);
-                window.localStorage.setItem('ersLatestTransferLogId', String(latestTransferLogId));
-            }
-        } catch (error) {
-            console.warn('Incoming transfer baseline failed:', error);
-        } finally {
-            incomingTransferBaselineReady = true;
-        }
-    }
-
-    async function pollIncomingTransfers() {
-        try {
-            const url = API_INCOMING_TRANSFERS_URL + '?after_id=' + encodeURIComponent(String(latestTransferLogId)) + '&limit=10';
+            const url = loadLatest
+                ? API_INCOMING_TRANSFERS_URL + '?latest=1&limit=10'
+                : API_INCOMING_TRANSFERS_URL + '?after_id=' + encodeURIComponent(String(latestTransferLogId)) + '&limit=25';
             const response = await fetch(url, { cache: 'no-store' });
             const data = await response.json();
             if (!data || !data.ok || !Array.isArray(data.transfers)) return;
-            const transfers = data.transfers.slice();
+            const transfers = data.transfers.slice().sort((a, b) =>
+                Number(a.transfer_log_id || 0) - Number(b.transfer_log_id || 0)
+            );
             transfers.forEach((transfer) => {
                 const transferLogId = Number(transfer.transfer_log_id || 0);
                 if (transferLogId > 0 && shownIncomingTransferIds.has(transferLogId)) {
@@ -948,6 +1022,14 @@ $pageTitle = 'Emergency Call Center';
                 if (!(transfer.call_id_external || transfer.transfer_id)) {
                     return;
                 }
+                const incidentStatus = String(transfer.incident_status || '').toLowerCase();
+                if (['resolved', 'cancelled', 'closed', 'rejected'].includes(incidentStatus)) {
+                    return;
+                }
+                if (transfer.transfer_type === 'report' || !transfer.room) {
+                    showIncomingReportNotification(transfer);
+                    return;
+                }
                 document.dispatchEvent(new CustomEvent('ers:incoming-call', {
                     detail: {
                         is_transfer: true,
@@ -958,6 +1040,7 @@ $pageTitle = 'Emergency Call Center';
                         call_id_external: transfer.call_id_external || transfer.transfer_id || '',
                         conversation_id: transfer.conversation_id || '',
                         room: transfer.room || '',
+                        transfer_type: 'live_call',
                         socket_url: transfer.socket_url || ALERTARA_SOCKET_URL,
                         socket_path: transfer.socket_path || ALERTARA_SOCKET_PATH,
                         source_system: transfer.source_system || 'AlertaraQC Emergency Communication',
@@ -973,8 +1056,12 @@ $pageTitle = 'Emergency Call Center';
                     }
                 }));
             });
+            incomingTransferBaselineReady = true;
+            window.localStorage.setItem('ersLatestTransferLogId', String(latestTransferLogId));
         } catch (error) {
             console.warn('Incoming transfer polling failed:', error);
+        } finally {
+            incomingTransferPollInFlight = false;
         }
     }
 

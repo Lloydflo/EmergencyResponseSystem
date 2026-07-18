@@ -421,6 +421,177 @@ body.incoming-call-modal-open {
     background: rgba(255, 255, 255, 0.22);
 }
 
+.transfer-report-stack {
+    position: fixed;
+    top: 84px;
+    right: 20px;
+    z-index: 1190;
+    display: grid;
+    gap: 0.75rem;
+    width: min(390px, calc(100vw - 32px));
+    max-height: calc(100vh - 110px);
+    overflow-y: auto;
+    pointer-events: none;
+}
+
+.transfer-report-notification {
+    --report-accent: #0f766e;
+    overflow: hidden;
+    padding: 1rem;
+    background: #ffffff;
+    color: #172033;
+    border: 1px solid #d8e1ea;
+    border-left: 5px solid var(--report-accent);
+    border-radius: 8px;
+    box-shadow: 0 18px 38px rgba(15, 23, 42, 0.2);
+    pointer-events: auto;
+    animation: transfer-report-enter 0.24s ease-out;
+}
+
+.transfer-report-notification.priority-high {
+    --report-accent: #dc2626;
+}
+
+.transfer-report-notification.priority-medium {
+    --report-accent: #d97706;
+}
+
+.transfer-report-notification.priority-low {
+    --report-accent: #16803c;
+}
+
+@keyframes transfer-report-enter {
+    from {
+        opacity: 0;
+        transform: translateY(-10px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+.transfer-report-head {
+    display: grid;
+    grid-template-columns: 42px minmax(0, 1fr) 32px;
+    gap: 0.7rem;
+    align-items: center;
+}
+
+.transfer-report-icon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 42px;
+    height: 42px;
+    color: #ffffff;
+    background: var(--report-accent);
+    border-radius: 8px;
+    font-size: 1.05rem;
+}
+
+.transfer-report-eyebrow {
+    margin-bottom: 0.15rem;
+    color: #64748b;
+    font-size: 0.7rem;
+    font-weight: 800;
+    text-transform: uppercase;
+}
+
+.transfer-report-title {
+    display: block;
+    color: #172033;
+    font-size: 0.98rem;
+    overflow-wrap: anywhere;
+}
+
+.transfer-report-dismiss {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 32px;
+    height: 32px;
+    padding: 0;
+    color: #64748b;
+    background: transparent;
+    border: 0;
+    border-radius: 6px;
+    cursor: pointer;
+}
+
+.transfer-report-dismiss:hover {
+    color: #172033;
+    background: #eef2f7;
+}
+
+.transfer-report-body {
+    display: grid;
+    gap: 0.55rem;
+    margin-top: 0.85rem;
+}
+
+.transfer-report-priority {
+    width: fit-content;
+    padding: 0.22rem 0.48rem;
+    color: var(--report-accent);
+    background: #f1f5f9;
+    border-radius: 5px;
+    font-size: 0.68rem;
+    font-weight: 900;
+}
+
+.transfer-report-description {
+    display: -webkit-box;
+    margin: 0;
+    overflow: hidden;
+    color: #334155;
+    font-size: 0.86rem;
+    line-height: 1.45;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 3;
+}
+
+.transfer-report-location {
+    display: grid;
+    grid-template-columns: 14px minmax(0, 1fr);
+    gap: 0.4rem;
+    align-items: start;
+    color: #64748b;
+    font-size: 0.78rem;
+    overflow-wrap: anywhere;
+}
+
+.transfer-report-location i {
+    margin-top: 0.15rem;
+    color: var(--report-accent);
+}
+
+.transfer-report-actions {
+    display: flex;
+    justify-content: flex-end;
+    margin-top: 0.9rem;
+}
+
+.transfer-report-open {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.45rem;
+    min-height: 38px;
+    padding: 0.55rem 0.8rem;
+    color: #ffffff;
+    background: #176b68;
+    border: 0;
+    border-radius: 6px;
+    font-size: 0.8rem;
+    font-weight: 800;
+    cursor: pointer;
+}
+
+.transfer-report-open:hover {
+    background: #105754;
+}
+
 .active-call-panel,
 .recent-incidents {
     padding: 1.3rem;
@@ -1306,6 +1477,35 @@ body.incident-details-modal-open {
     box-shadow: 0 24px 60px rgba(0, 0, 0, 0.46);
 }
 
+[data-theme="dark"] .transfer-report-notification {
+    background: #0f172a;
+    color: #f8fafc;
+    border-color: #334155;
+    box-shadow: 0 20px 46px rgba(0, 0, 0, 0.48);
+}
+
+[data-theme="dark"] .transfer-report-title {
+    color: #f8fafc;
+}
+
+[data-theme="dark"] .transfer-report-eyebrow,
+[data-theme="dark"] .transfer-report-location {
+    color: #94a3b8;
+}
+
+[data-theme="dark"] .transfer-report-description {
+    color: #cbd5e1;
+}
+
+[data-theme="dark"] .transfer-report-priority,
+[data-theme="dark"] .transfer-report-dismiss:hover {
+    background: #1e293b;
+}
+
+[data-theme="dark"] .transfer-report-dismiss:hover {
+    color: #ffffff;
+}
+
 [data-theme="dark"] .stat-value,
 [data-theme="dark"] .section-title,
 [data-theme="dark"] .sidebar-header h3,
@@ -1430,6 +1630,14 @@ body.incident-details-modal-open {
     .incoming-call-modal {
         align-items: flex-end;
         padding: 0.85rem;
+    }
+
+    .transfer-report-stack {
+        top: auto;
+        right: 12px;
+        bottom: 12px;
+        width: calc(100vw - 24px);
+        max-height: min(70vh, 560px);
     }
 
     .call-btn,
