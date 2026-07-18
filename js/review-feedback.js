@@ -53,12 +53,14 @@
   const ratingInput = qs('#ratingInput');
   const ratingHelper = qs('#ratingHelper');
   const feedbackNoteInput = qs('#feedbackNoteInput');
+  const adminSubmissionStatus = qs('#adminSubmissionStatus');
   const feedbackSummary = qs('#feedbackSummary');
   const feedbackList = qs('#feedbackList');
   const proofGallery = qs('#proofGallery');
 
   let currentItems = [];
   let currentIncident = null;
+  let currentAdminSubmission = null;
   let selectedRating = 0;
   let searchDebounceTimer = null;
   let loadRequestSeq = 0;
@@ -147,6 +149,10 @@
       const ratingText = toNumber(item.avg_rating) !== null
         ? `${formatRating(item.avg_rating)} (${Number(item.rating_count || 0)})`
         : 'No ratings';
+      const adminReviewSent = Boolean(item.submitted_to_admin);
+      const adminReviewText = adminReviewSent
+        ? `Sent to admin${item.admin_review_sent_at ? ' ' + formatDate(item.admin_review_sent_at) : ''}`
+        : 'Not sent to admin';
       const driver = clean(item.driver_name) || 'Not recorded';
       const plate = clean(item.plate_number) || 'Not recorded';
       const vehicle = clean(item.vehicle_name) || clean(item.assigned_unit) || 'Not recorded';
@@ -188,6 +194,7 @@
             <div class="review-table-stack">
               <span><strong>Reported:</strong> ${escapeHtml(formatDate(item.created_at))}</span>
               <span><strong>Closed:</strong> ${escapeHtml(formatDate(closedAt))}</span>
+              <span><strong>Admin:</strong> ${escapeHtml(adminReviewText)}</span>
             </div>
           </td>
           <td class="review-table-actions">
@@ -308,6 +315,8 @@
 
     const summary = payload.summary || {};
     const notes = Array.isArray(payload.data) ? payload.data : [];
+    currentAdminSubmission = payload.admin_review || null;
+    renderAdminSubmissionStatus(currentAdminSubmission);
 
     const chips = [];
     chips.push(`<span class="feedback-summary-chip"><i class="fas fa-comments"></i> ${Number(summary.feedback_count || notes.length || 0)} feedback</span>`);
@@ -341,6 +350,31 @@
     }).join('');
   }
 
+  function renderAdminSubmissionStatus(submission) {
+    const submitted = Boolean(submission && submission.submitted);
+    if (adminSubmissionStatus) {
+      if (submitted) {
+        const sentAt = formatDate(submission.sent_at);
+        const sentBy = clean(submission.sent_by_name) || 'Dispatcher';
+        adminSubmissionStatus.innerHTML = `
+          <span class="admin-submission-chip sent"><i class="fas fa-circle-check"></i> Sent to Admin</span>
+          <span>${escapeHtml(sentBy)}${sentAt !== '--' ? ' - ' + escapeHtml(sentAt) : ''}</span>
+        `;
+      } else {
+        adminSubmissionStatus.innerHTML = `
+          <span class="admin-submission-chip pending"><i class="fas fa-clock"></i> Dispatcher Review Only</span>
+          <span>Hindi pa makikita ng admin hanggang hindi ito naipapadala.</span>
+        `;
+      }
+    }
+
+    if (saveFeedbackBtn) {
+      saveFeedbackBtn.innerHTML = submitted
+        ? '<i class="fas fa-rotate"></i> Update Admin Review'
+        : '<i class="fas fa-paper-plane"></i> Send to Admin';
+    }
+  }
+
   function renderProofs(payload) {
     if (!payload || !payload.ok) {
       proofGallery.innerHTML = '<div class="proof-empty">Unable to load proof images.</div>';
@@ -361,7 +395,7 @@
     `).join('');
   }
 
-  async function saveFeedback() {
+  async function submitReviewToAdmin() {
     const incidentId = parseInt(feedbackIncidentId.value || '', 10);
     const note = (feedbackNoteInput?.value || '').trim();
     const rating = selectedRating > 0 ? selectedRating : null;
@@ -371,32 +405,47 @@
       return;
     }
 
-    if (!note && rating === null) {
-      alert('Maglagay ng rating o feedback note bago i-save.');
-      return;
-    }
-
     saveFeedbackBtn.disabled = true;
+    const originalButtonHtml = saveFeedbackBtn.innerHTML;
+    saveFeedbackBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Sending...';
 
     try {
-      const response = await fetch('api/incident_feedback.php', {
+      if (note || rating !== null) {
+        const response = await fetch('api/incident_feedback.php', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            incident_id: incidentId,
+            author_name: reviewerName,
+            note,
+            rating
+          })
+        });
+
+        const data = await response.json();
+        if (!data.ok) {
+          throw new Error(data.error || 'Unable to save feedback');
+        }
+
+        feedbackNoteInput.value = '';
+        setSelectedRating(0);
+      }
+
+      const submitResponse = await fetch('api/incident_admin_review_submit.php', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           incident_id: incidentId,
-          author_name: reviewerName,
-          note,
-          rating
+          sender_name: reviewerName
         })
       });
-
-      const data = await response.json();
-      if (!data.ok) {
-        throw new Error(data.error || 'Unable to save feedback');
+      const submitData = await submitResponse.json();
+      if (!submitData.ok) {
+        throw new Error(submitData.error || 'Unable to send review to admin');
       }
 
-      feedbackNoteInput.value = '';
-      setSelectedRating(0);
+      currentAdminSubmission = submitData.admin_review || currentAdminSubmission;
+      renderAdminSubmissionStatus(currentAdminSubmission);
 
       await Promise.all([
         refreshFeedbackInModal(incidentId),
@@ -404,9 +453,14 @@
         loadIncidents()
       ]);
     } catch (error) {
-      alert('Failed to save feedback: ' + error.message);
+      alert('Failed to send review: ' + error.message);
     } finally {
       saveFeedbackBtn.disabled = false;
+      if (!currentAdminSubmission || !currentAdminSubmission.submitted) {
+        saveFeedbackBtn.innerHTML = originalButtonHtml;
+      } else {
+        renderAdminSubmissionStatus(currentAdminSubmission);
+      }
     }
   }
 
@@ -442,6 +496,7 @@
 
   function resetModalState() {
     currentIncident = null;
+    currentAdminSubmission = null;
     setSelectedRating(0);
     feedbackNoteInput.value = '';
     modalTitle.textContent = 'Closed Incident Details';
@@ -465,6 +520,7 @@
     modalStatusBadge.className = 'status-chip';
     modalPriorityBadge.className = 'priority-chip';
     feedbackSummary.innerHTML = '';
+    renderAdminSubmissionStatus(null);
     feedbackList.innerHTML = '<div class="feedback-empty">Loading feedback...</div>';
     proofGallery.innerHTML = '<div class="proof-empty">Loading proof gallery...</div>';
   }
@@ -725,7 +781,7 @@
   modalOverlay?.addEventListener('click', hideModal);
   modalClose?.addEventListener('click', hideModal);
   closeFeedbackBtn?.addEventListener('click', hideModal);
-  saveFeedbackBtn?.addEventListener('click', saveFeedback);
+  saveFeedbackBtn?.addEventListener('click', submitReviewToAdmin);
 
   document.addEventListener('keydown', event => {
     if (event.key === 'Escape' && modal && !modal.hidden) {

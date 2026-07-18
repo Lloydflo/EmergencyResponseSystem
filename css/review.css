@@ -790,6 +790,36 @@
     margin-top: 1rem;
 }
 
+.admin-submission-status {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    align-items: center;
+    margin-top: 0.85rem;
+    color: #64748b;
+    font-size: 0.9rem;
+}
+
+.admin-submission-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+    padding: 0.42rem 0.72rem;
+    border-radius: 999px;
+    font-size: 0.78rem;
+    font-weight: 800;
+}
+
+.admin-submission-chip.sent {
+    background: #dcfce7;
+    color: #166534;
+}
+
+.admin-submission-chip.pending {
+    background: #fef3c7;
+    color: #92400e;
+}
+
 .feedback-summary-chips {
     display: flex;
     flex-wrap: wrap;
@@ -1030,6 +1060,20 @@
 [data-theme="dark"] .feedback-summary-chip {
     background: rgba(30, 64, 175, 0.24) !important;
     color: #bfdbfe !important;
+}
+
+[data-theme="dark"] .admin-submission-status {
+    color: #cbd5e1 !important;
+}
+
+[data-theme="dark"] .admin-submission-chip.sent {
+    background: #052e16 !important;
+    color: #bbf7d0 !important;
+}
+
+[data-theme="dark"] .admin-submission-chip.pending {
+    background: #451a03 !important;
+    color: #fde68a !important;
 }
 
 [data-theme="dark"] .status-chip.status-resolved {

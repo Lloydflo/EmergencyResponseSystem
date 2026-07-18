@@ -369,7 +369,7 @@ document.addEventListener('DOMContentLoaded', function() {
     const resourcesUrl = <?php echo json_encode($resources_page); ?>;
     const reviewUrl = <?php echo json_encode($review_page); ?>;
     const userRole = <?php echo json_encode($normalized_user_role); ?>;
-    const resolvedSeenKey = 'ers.resolvedNotificationSeen.' + userRole;
+    const resolvedSeenKey = 'ers.adminReviewNotificationSeen.' + userRole;
     const incidentCardSeenKey = 'ers.interagencyIncidentCardSeen.' + userRole;
     const resourceAdditionSeenKey = 'ers.resourceAdditionSeen.' + userRole;
     const resourceRequestSeenKey = 'ers.resourceRequestSeen.' + userRole;
@@ -565,7 +565,7 @@ document.addEventListener('DOMContentLoaded', function() {
                         <i class="fas ${isUnread ? 'fa-circle-check' : 'fa-check'}"></i>
                     </div>
                     <div class="notification-details">
-                        <div class="notification-title">${escapeHtml(isUnread ? 'Incident resolved' : 'Resolved incident')}</div>
+                        <div class="notification-title">${escapeHtml(isUnread ? 'Resolved review sent' : 'Resolved review')}</div>
                         <div class="notification-text">${escapeHtml(detailText)}</div>
                         <div class="notification-time">${escapeHtml(relativeTime(item.notified_at || incident.resolved_at))}</div>
                     </div>
@@ -862,8 +862,8 @@ document.addEventListener('DOMContentLoaded', function() {
     function showResolvedToast(count) {
         if (!liveToast || count <= 0) return;
         if (liveToastIcon) liveToastIcon.className = 'fas fa-circle-check';
-        if (liveToastTitle) liveToastTitle.textContent = 'Incident Resolved';
-        if (liveToastText) liveToastText.textContent = count === 1 ? '1 incident has been resolved' : count + ' incidents have been resolved';
+        if (liveToastTitle) liveToastTitle.textContent = 'Resolved Review';
+        if (liveToastText) liveToastText.textContent = count === 1 ? '1 resolved review was sent to admin' : count + ' resolved reviews were sent to admin';
         liveToast.setAttribute('data-toast-target', 'review');
         liveToast.hidden = false;
         window.clearTimeout(state.toastTimer);

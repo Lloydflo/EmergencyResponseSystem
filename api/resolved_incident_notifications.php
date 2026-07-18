@@ -4,6 +4,13 @@ declare(strict_types=1);
 header('Content-Type: application/json');
 
 require_once __DIR__ . '/../includes/db.php';
+require_once __DIR__ . '/../includes/auth.php';
+require_once __DIR__ . '/../includes/incident_admin_review.php';
+
+if (current_session_role() !== 'admin') {
+    echo json_encode(['ok' => true, 'notifications' => [], 'latest_id' => 0]);
+    exit;
+}
 
 $pdo = get_db_connection();
 if (!$pdo) {
@@ -21,22 +28,27 @@ if ($limit > 50) {
 }
 
 try {
+    if (!ers_ensure_incident_admin_reviews($pdo)) {
+        echo json_encode(['ok' => true, 'notifications' => [], 'latest_id' => 0]);
+        exit;
+    }
+
     $stmt = $pdo->prepare("
         SELECT
-            a.id AS notification_id,
-            a.details,
-            a.created_at AS notified_at,
+            iar.id AS notification_id,
+            CONCAT('Incident ', COALESCE(NULLIF(i.reference_no, ''), CONCAT('#', i.id)), ' review was sent to admin.') AS details,
+            iar.sent_at AS notified_at,
+            iar.sent_by_name,
             i.id AS incident_id,
             i.reference_no,
             i.type,
             i.priority,
             i.location_address,
             i.resolved_at
-        FROM activity_log a
-        LEFT JOIN incidents i ON i.id = a.entity_id
-        WHERE a.action = 'incident_resolved'
-          AND a.entity_type = 'incident'
-        ORDER BY a.id DESC
+        FROM incident_admin_reviews iar
+        LEFT JOIN incidents i ON i.id = iar.incident_id
+        WHERE i.id IS NOT NULL
+        ORDER BY iar.id DESC
         LIMIT " . (int)$limit
     );
     $stmt->execute();
@@ -51,6 +63,7 @@ try {
             'notification_id' => (int)($row['notification_id'] ?? 0),
             'notified_at' => $row['notified_at'] ?? null,
             'details' => (string)($row['details'] ?? ''),
+            'sent_by_name' => $row['sent_by_name'] ?? null,
             'incident' => [
                 'id' => isset($row['incident_id']) ? (int)$row['incident_id'] : null,
                 'label' => $incidentLabel,

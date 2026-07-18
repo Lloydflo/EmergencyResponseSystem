@@ -4,6 +4,7 @@ declare(strict_types=1);
 header('Content-Type: application/json');
 
 require_once __DIR__ . '/../includes/db.php';
+require_once __DIR__ . '/../includes/incident_admin_review.php';
 
 $pdo = get_db_connection();
 if (!$pdo) {
@@ -144,6 +145,7 @@ function append_type_filter(array &$where, array &$params, string $column, array
 
 $priority = isset($_GET['priority']) ? trim((string)$_GET['priority']) : '';
 $status = isset($_GET['status']) ? trim((string)$_GET['status']) : '';
+$adminReview = isset($_GET['admin_review']) ? strtolower(trim((string)$_GET['admin_review'])) : '';
 $type = isset($_GET['type']) ? trim((string)$_GET['type']) : '';
 $search = isset($_GET['search']) ? trim((string)$_GET['search']) : '';
 $typeValues = normalized_type_values($type);
@@ -157,6 +159,7 @@ if (ers_table_exists($pdo, 'resource_records')) {
 }
 $hasIncidentNotes = ers_table_exists($pdo, 'incident_notes');
 $hasRatingColumn = $hasIncidentNotes && ers_column_exists($pdo, 'incident_notes', 'rating');
+$hasAdminReviewTable = ers_ensure_incident_admin_reviews($pdo);
 
 $resourceSelect = ', NULL AS vehicle_name, NULL AS driver_name, NULL AS plate_number';
 $resourceJoin = '';
@@ -176,6 +179,19 @@ if ($hasIncidentNotes && $hasRatingColumn) {
         (SELECT COUNT(*) FROM incident_notes n WHERE n.incident_id = i.id) AS feedback_count,
         NULL AS avg_rating,
         0 AS rating_count';
+}
+
+$adminReviewSelect = ',
+            NULL AS admin_review_sent_at,
+            NULL AS admin_review_sent_by_name,
+            NULL AS admin_review_sent_by_user_id';
+$adminReviewJoin = '';
+if ($hasAdminReviewTable) {
+    $adminReviewSelect = ',
+            iar.sent_at AS admin_review_sent_at,
+            iar.sent_by_name AS admin_review_sent_by_name,
+            iar.sent_by_user_id AS admin_review_sent_by_user_id';
+    $adminReviewJoin = ' LEFT JOIN incident_admin_reviews iar ON iar.incident_id = i.id ';
 }
 
 $sql = "SELECT
@@ -203,7 +219,8 @@ $sql = "SELECT
             u.identifier AS unit_identifier,
             u.unit_type AS unit_type
             {$resourceSelect}
-            {$feedbackSelect},
+            {$feedbackSelect}
+            {$adminReviewSelect},
             CASE
                 WHEN ld.assigned_at IS NOT NULL AND ld.on_scene_at IS NOT NULL
                     THEN TIMESTAMPDIFF(MINUTE, ld.assigned_at, ld.on_scene_at)
@@ -226,6 +243,7 @@ $sql = "SELECT
         ) ld ON ld.incident_id = i.id
         LEFT JOIN units u ON u.id = ld.unit_id
         {$resourceJoin}
+        {$adminReviewJoin}
         LEFT JOIN calls c ON c.id = i.reported_by_call_id";
 
 $where = [];
@@ -261,6 +279,12 @@ if ($status !== '') {
 }
 
 append_type_filter($where, $params, 'i.type', $typeValues, 'incident');
+
+if ($adminReview === 'sent') {
+    $where[] = $hasAdminReviewTable ? 'iar.incident_id IS NOT NULL' : '1 = 0';
+} elseif ($adminReview === 'unsent') {
+    $where[] = $hasAdminReviewTable ? 'iar.incident_id IS NULL' : '1 = 1';
+}
 
 if ($search !== '') {
     $where[] = "(
@@ -342,6 +366,10 @@ try {
             'feedback_count' => isset($row['feedback_count']) ? (int)$row['feedback_count'] : 0,
             'avg_rating' => isset($row['avg_rating']) && $row['avg_rating'] !== null ? (float)$row['avg_rating'] : null,
             'rating_count' => isset($row['rating_count']) ? (int)$row['rating_count'] : 0,
+            'submitted_to_admin' => !empty($row['admin_review_sent_at']),
+            'admin_review_sent_at' => $row['admin_review_sent_at'] ?? null,
+            'admin_review_sent_by_name' => $row['admin_review_sent_by_name'] ?? null,
+            'admin_review_sent_by_user_id' => isset($row['admin_review_sent_by_user_id']) && $row['admin_review_sent_by_user_id'] !== null ? (int)$row['admin_review_sent_by_user_id'] : null,
         ];
     }, $rows);
 

@@ -143,7 +143,7 @@ if ($adminName === '') {
             </section>
 
             <section class="ar-stats" aria-live="polite">
-                <article class="ar-stat"><span>Closed Incidents</span><strong id="statClosed">0</strong><p>Resolved and cancelled incidents currently loaded.</p></article>
+                <article class="ar-stat"><span>Submitted Reviews</span><strong id="statClosed">0</strong><p>Resolved and cancelled incidents sent by dispatcher.</p></article>
                 <article class="ar-stat"><span>With Feedback</span><strong id="statFeedback">0</strong><p>Incidents that already have dispatcher notes or ratings.</p></article>
                 <article class="ar-stat"><span>Average Rating</span><strong id="statRating">--</strong><p>Average score from dispatcher feedback entries.</p></article>
                 <article class="ar-stat"><span>Average Response</span><strong id="statResponse">--</strong><p>Average dispatch-to-scene timing for visible incidents.</p></article>
@@ -330,7 +330,7 @@ if ($adminName === '') {
             async function loadRows() {
                 tableBody.innerHTML = '<tr><td colspan="9" class="ar-empty">Loading dispatcher feedback queue...</td></tr>';
                 try {
-                    const response = await fetch('api/incidents_list.php?status=closed', { cache: 'no-store' });
+                    const response = await fetch('api/incidents_list.php?status=closed&admin_review=sent', { cache: 'no-store' });
                     const data = await response.json();
                     if (!data.ok) throw new Error(data.error || 'Failed to load incidents');
                     incidentRows = Array.isArray(data.items) ? data.items : [];
@@ -375,9 +375,9 @@ if ($adminName === '') {
             function renderTable() {
                 const rows = getFilteredRows();
                 countBadge.textContent = rows.length + ' incident(s)';
-                tableSubtitle.textContent = rows.length ? 'Closed incidents with dispatcher ratings and notes ready for admin review.' : 'No incidents matched the current filter.';
+                tableSubtitle.textContent = rows.length ? 'Incidents sent by dispatcher and ready for admin review.' : 'No submitted incident reviews matched the current filter.';
                 if (!rows.length) {
-                    tableBody.innerHTML = '<tr><td colspan="9" class="ar-empty">No incidents match the current filter.</td></tr>';
+                    tableBody.innerHTML = '<tr><td colspan="9" class="ar-empty">No submitted incident reviews match the current filter.</td></tr>';
                     return;
                 }
                 tableBody.innerHTML = rows.map((row) => `

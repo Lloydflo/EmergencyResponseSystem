@@ -191,6 +191,8 @@ if ($reviewerName === '') {
                             <textarea id="feedbackNoteInput" rows="5" placeholder="Share what went well, what was delayed, or what needs follow-up..."></textarea>
                         </div>
 
+                        <div id="adminSubmissionStatus" class="admin-submission-status" aria-live="polite"></div>
+
                         <div class="modal-actions">
                             <button id="closeFeedbackBtn" type="button" class="btn btn-secondary">Close</button>
                             <button id="saveFeedbackBtn" type="button" class="btn btn-success"><i class="fas fa-paper-plane"></i> Send to Admin</button>
