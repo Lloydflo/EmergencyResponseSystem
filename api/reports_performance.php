@@ -1,5 +1,7 @@
 <?php
 declare(strict_types=1);
+require_once __DIR__ . '/../includes/admin_api_auth.php';
+require_admin_api_access(false);
 require_once __DIR__ . '/../includes/db.php';
 
 $pdo = get_db_connection();

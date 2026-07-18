@@ -1,8 +1,10 @@
 <?php
 declare(strict_types=1);
-header('Content-Type: application/json');
+require_once __DIR__ . '/../includes/admin_api_auth.php';
+require_admin_api_access(true);
 require_once __DIR__ . '/../includes/db.php';
 
+header('Content-Type: application/json');
 $pdo = get_db_connection();
 if (!$pdo) {
     http_response_code(500);

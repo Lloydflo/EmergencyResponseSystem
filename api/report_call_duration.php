@@ -1,7 +1,10 @@
 <?php
 // API endpoint: api/report_call_duration.php
 // Returns average call duration per incident type for the current month
+require_once __DIR__ . '/../includes/admin_api_auth.php';
+require_admin_api_access(true);
 require_once __DIR__ . '/../includes/db.php';
+
 header('Content-Type: application/json');
 
 $pdo = get_db_connection();

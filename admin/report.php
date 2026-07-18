@@ -151,15 +151,15 @@ try {
             <!-- Key Metrics Overview -->
             <div class="analytics-grid">
                 <div class="analytics-card response-time">
-                    <div class="metric-label">SLA Response Average</div>
+                    <div class="metric-label">SLA Response Average (Hours)</div>
                     <div class="metric-display">
-                        <div class="metric-value" id="metricAvgResponse"><?php echo number_format($avgResponseTime, 1); ?></div>
+                        <div class="metric-value" id="metricAvgResponse"><?php echo number_format($avgResponseTime / 60, 1); ?> hr</div>
                         <div class="metric-change positive">
                             <i class="fas fa-arrow-down"></i>
                             
                         </div>
                     </div>
-                    <div style="color: #666; font-size: 0.9rem;">Admin target: &lt; 10m</div>
+                    <div style="color: #666; font-size: 0.9rem;">Admin target: &lt; 0.2 hr</div>
                 </div>
 
                 <div class="analytics-card incidents">
@@ -269,7 +269,7 @@ try {
             </div>
 
             <!-- AI-Powered Insights -->
-            <div class="ai-insights-section">
+            <div class="ai-insights-section" data-report-section="summary incident performance resource trend">
                 <div class="ai-insights-card">
                     <div class="ai-insights-header">
                         <h2><i class="fas fa-brain"></i> AI-Powered Insights</h2>
@@ -308,7 +308,7 @@ try {
             </div>
 
             <!-- Quick Reports -->
-            <div class="quick-reports">
+            <div class="quick-reports" data-report-section="summary trend">
                 <div class="report-card" onclick="generateIncidentReport()">
                     <div class="report-icon incident">
                         <i class="fas fa-exclamation-triangle"></i>
@@ -356,11 +356,52 @@ try {
                         </button>
                     </div>
                 </div>
+
+                <div class="report-card" onclick="generateTrendReport()">
+                    <div class="report-icon trend">
+                        <i class="fas fa-chart-line"></i>
+                    </div>
+                    <div class="report-title">Trend Monitoring Report</div>
+                    <div class="report-description">Daily incident trend report by service category for planning and forecasting.</div>
+                    <div class="report-actions">
+                        <button class="btn-report primary" onclick="generateTrendReport()">
+                            <i class="fas fa-file-pdf"></i> Generate
+                        </button>
+                        <button class="btn-report" onclick="viewTrendReport()">
+                            <i class="fas fa-eye"></i> View
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <div class="export-section" data-report-section="summary incident performance resource trend">
+                <h2 style="font-size: 1.25rem; font-weight: 700; color: #333; margin-bottom: 1rem; display: flex; align-items: center;">
+                    <i class="fas fa-file-export" style="margin-right: 0.5rem; color: #0f766e;"></i>
+                    Export Dashboard Data
+                </h2>
+                <div class="export-options">
+                    <button class="export-btn" type="button" onclick="exportPDF()">
+                        <i class="fas fa-file-pdf"></i>
+                        <span>PDF</span>
+                    </button>
+                    <button class="export-btn" type="button" onclick="exportExcel()">
+                        <i class="fas fa-file-excel"></i>
+                        <span>Excel</span>
+                    </button>
+                    <button class="export-btn" type="button" onclick="exportCSV()">
+                        <i class="fas fa-file-csv"></i>
+                        <span>CSV</span>
+                    </button>
+                    <button class="export-btn" type="button" onclick="exportJSON()">
+                        <i class="fas fa-code"></i>
+                        <span>JSON</span>
+                    </button>
+                </div>
             </div>
 
             <!-- Charts Section -->
             <div class="charts-grid">
-            <div class="chart-container">
+            <div class="chart-container" data-report-section="summary performance trend">
                 <div class="chart-header">
                     <h3 class="chart-title">Response Performance Trend</h3>
                     <div class="chart-controls">
@@ -378,7 +419,7 @@ try {
             </div>
 
 
-            <div class="chart-container">
+            <div class="chart-container" data-report-section="summary incident trend">
                 <div class="chart-header">
                     <h3 class="chart-title">Incident Mix by Type</h3>
                     <div class="chart-controls">
@@ -396,7 +437,7 @@ try {
             </div>
 
             <!-- Call Duration Graph -->
-            <div class="chart-container">
+            <div class="chart-container" data-report-section="summary incident">
                 <div class="chart-header">
                     <h3 class="chart-title">Priority Level Oversight</h3>
                     <div class="chart-controls">
@@ -413,7 +454,7 @@ try {
                 </div>
             </div>
 
-            <div class="chart-container">
+            <div class="chart-container" data-report-section="summary resource performance">
                 <div class="chart-header">
                     <h3 class="chart-title">Dispatch Load by Unit Type</h3>
                     <div class="chart-controls">
@@ -427,7 +468,7 @@ try {
             </div>
 
             <!-- Admin Performance Review Chart -->
-            <div class="chart-container">
+            <div class="chart-container" data-report-section="summary performance">
                 <div class="chart-header">
                     <h3 class="chart-title">Admin Performance Review</h3>
                     <div class="chart-controls">
@@ -441,7 +482,7 @@ try {
             </div>
 
             <!-- Resources Audit Report Chart -->
-            <div class="chart-container">
+            <div class="chart-container" data-report-section="summary resource">
                 <div class="chart-header">
                     <h3 class="chart-title">Resources Audit Report</h3>
                     <div class="chart-controls">
@@ -456,7 +497,7 @@ try {
             </div>
 
             <!-- Dispatch Breakdown Table -->
-            <div class="data-table">
+            <div class="data-table" data-report-section="summary resource performance">
                 <div class="table-header" style="display:flex; align-items:center; justify-content:space-between; gap:1rem;">
                     <h3 class="table-title">Top Dispatched Units</h3>
                     <button class="btn-report" type="button" onclick="showAllDispatchUnitsModal()">
@@ -480,7 +521,7 @@ try {
             </div>
 
             <!-- Recent Incidents Table -->
-            <div class="data-table">
+            <div class="data-table" data-report-section="summary incident">
                 <div class="table-header">
                     <h3 class="table-title">Recent Incidents</h3>
                 </div>
@@ -492,7 +533,7 @@ try {
                                 <th>Type</th>
                                 <th>Location</th>
                                 <th>Priority</th>
-                                <th>Response Time</th>
+                                <th>Response Time (Hours)</th>
                                 <th>Status</th>
                                 <th>Actions</th>
                             </tr>
@@ -505,7 +546,7 @@ try {
             </div>
 
             <!-- Performance Metrics Table -->
-            <div class="data-table">
+            <div class="data-table" data-report-section="summary performance">
                 <div class="table-header">
                     <h3 class="table-title">Performance Metrics</h3>
                 </div>
@@ -562,7 +603,7 @@ try {
             </div>
 
             <!-- System Alerts -->
-            <div class="alerts-section">
+            <div class="alerts-section" data-report-section="summary">
                 <div style="display:flex; align-items:center; justify-content:space-between; gap:1rem; margin-bottom:1.5rem;">
                     <h2 class="alerts-section-title" style="font-size: 1.25rem; font-weight: 700; margin: 0; display: flex; align-items: center;">
                         <i class="fas fa-bell" style="margin-right: 0.5rem; color: #ffc107;"></i>
@@ -775,6 +816,9 @@ try {
     <script>
         // Emergency Response Analytics & Reporting Functionality
         let currentFilters = {};
+        let lastReportMetrics = {};
+        let lastDispatchReport = {};
+        let lastRecentIncidents = [];
         const defaultReportFilters = {
             period: <?php echo json_encode($defaultPeriod); ?>,
             start: <?php echo json_encode($defaultStartDate); ?>,
@@ -788,6 +832,37 @@ try {
             const entries = Object.entries(params).filter(function(p){ return p[1] !== undefined && p[1] !== null && p[1] !== ''; });
             const qs = new URLSearchParams(entries).toString();
             return qs ? ('?' + qs) : '';
+        }
+        function escapeHtml(value) {
+            return String(value == null ? '' : value)
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;')
+                .replace(/"/g, '&quot;')
+                .replace(/'/g, '&#039;');
+        }
+        function minutesToHours(value) {
+            const minutes = Number(value || 0);
+            return minutes / 60;
+        }
+        function formatHours(value) {
+            return minutesToHours(value).toFixed(1) + ' hr';
+        }
+        function getReportView() {
+            return document.getElementById('report-type') ? document.getElementById('report-type').value : '';
+        }
+        function applyReportView() {
+            const view = getReportView();
+            document.querySelectorAll('[data-report-section]').forEach((section) => {
+                const sectionViews = String(section.getAttribute('data-report-section') || '').split(/\s+/).filter(Boolean);
+                section.hidden = view !== '' && !sectionViews.includes(view);
+            });
+
+            [responseChart, typesChart, callDurationChart, dispatchDailyChart, performanceChart, resourcesChart].forEach((chart) => {
+                if (chart && typeof chart.resize === 'function') {
+                    chart.resize();
+                }
+            });
         }
         function getFilters() {
             const reportType = document.getElementById('report-type') ? document.getElementById('report-type').value : '';
@@ -862,15 +937,15 @@ try {
                 if (container) {
                     container.innerHTML = '<div class="ai-loading"><i class="fas fa-spinner"></i> Refreshing insights…</div>';
                 }
-                const res = await fetch('api/ai_report_insights.php');
+                const res = await fetch('api/ai_report_insights.php' + buildQuery(currentFilters), { cache: 'no-store' });
                 const data = await res.json();
                 if (container) {
                     if (data.ok && data.text) {
-                        container.innerHTML = '<div class="ai-insight-text">' + (data.text || '').replace(/\n/g,'<br>') + '</div>';
+                        container.innerHTML = '<div class="ai-insight-text">' + escapeHtml(data.text || '').replace(/\n/g,'<br>') + '</div>';
                         showNotification('AI insights refreshed', 'success');
                     } else {
                         const msg = (data && data.error) ? String(data.error) : 'Unable to generate AI insights at this time.';
-                        container.innerHTML = '<div class="ai-error"><i class="fas fa-exclamation-triangle"></i> ' + msg.replace(/\n/g,'<br>') + '</div>';
+                        container.innerHTML = '<div class="ai-error"><i class="fas fa-exclamation-triangle"></i> ' + escapeHtml(msg).replace(/\n/g,'<br>') + '</div>';
                         showNotification('AI insights unavailable: ' + msg, 'error');
                     }
                 }
@@ -1003,10 +1078,12 @@ try {
                 return;
             }
             currentFilters = getFilters();
+            applyReportView();
             showNotification('Applying filters to reports...', 'info');
             refreshMetrics(currentFilters);
             refreshCharts(currentFilters);
             loadRecentIncidents(currentFilters);
+            refreshAIInsights();
             setTimeout(() => {
                 showNotification('Filters applied', 'success');
             }, 500);
@@ -1028,39 +1105,152 @@ try {
             if (endDate) endDate.value = defaultReportFilters.end;
 
             currentFilters = getFilters();
+            applyReportView();
             refreshMetrics(currentFilters);
             refreshCharts(currentFilters);
             loadRecentIncidents(currentFilters);
+            refreshAIInsights();
             showNotification('Filters cleared', 'success');
         }
 
         // Export functions
         function exportPDF() {
-            showNotification('Generating PDF report...', 'info');
-            setTimeout(() => {
-                showNotification('PDF report downloaded successfully', 'success');
-            }, 3000);
+            showNotification('Opening print dialog for PDF export...', 'info');
+            window.print();
         }
 
-        function exportExcel() {
-            showNotification('Exporting data to Excel...', 'info');
-            setTimeout(() => {
-                showNotification('Excel file downloaded successfully', 'success');
-            }, 2000);
+        function downloadTextFile(filename, content, mimeType) {
+            const blob = new Blob([content], { type: mimeType });
+            const url = URL.createObjectURL(blob);
+            const link = document.createElement('a');
+            link.href = url;
+            link.download = filename;
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+            URL.revokeObjectURL(url);
         }
 
-        function exportCSV() {
-            showNotification('Exporting data to CSV...', 'info');
-            setTimeout(() => {
-                showNotification('CSV file downloaded successfully', 'success');
-            }, 1500);
+        function csvCell(value) {
+            const text = String(value == null ? '' : value);
+            return /[",\n\r]/.test(text) ? '"' + text.replace(/"/g, '""') + '"' : text;
         }
 
-        function exportJSON() {
-            showNotification('Exporting data to JSON...', 'info');
-            setTimeout(() => {
-                showNotification('JSON file downloaded successfully', 'success');
-            }, 1000);
+        function reportDateStamp() {
+            return new Date().toISOString().slice(0, 19).replace(/[:T]/g, '-');
+        }
+
+        async function collectReportExportData() {
+            const qs = buildQuery(currentFilters);
+            const [metricsRes, dispatchRes, incidentsRes] = await Promise.all([
+                fetch('api/report_metrics.php' + qs, { cache: 'no-store' }),
+                fetch('api/reports_dispatch.php' + qs, { cache: 'no-store' }),
+                fetch('api/incidents_list.php' + qs, { cache: 'no-store' })
+            ]);
+            const [metricsData, dispatchData, incidentsData] = await Promise.all([
+                metricsRes.json(),
+                dispatchRes.json(),
+                incidentsRes.json()
+            ]);
+
+            return {
+                generated_at: new Date().toISOString(),
+                admin_view: getReportView() || 'executive_summary',
+                filters: Object.assign({}, currentFilters),
+                metrics: metricsData.ok ? (metricsData.metrics || {}) : {},
+                dispatch: dispatchData.ok ? {
+                    metrics: dispatchData.metrics || {},
+                    summary_by_service: dispatchData.summary_by_service || {},
+                    top_units: dispatchData.top_units || [],
+                    all_units: dispatchData.all_units || []
+                } : {},
+                recent_incidents: incidentsData.ok ? (incidentsData.items || []) : []
+            };
+        }
+
+        async function exportExcel() {
+            try {
+                showNotification('Exporting data to Excel...', 'info');
+                const data = await collectReportExportData();
+                const metricsRows = Object.entries(data.metrics || {}).map(([key, value]) => {
+                    const displayValue = typeof value === 'object' ? JSON.stringify(value) : value;
+                    return `<tr><td>${escapeHtml(key)}</td><td>${escapeHtml(displayValue)}</td></tr>`;
+                }).join('');
+                const incidentRows = (data.recent_incidents || []).map((item) => `
+                    <tr>
+                        <td>${escapeHtml(item.incident_code || item.id || '')}</td>
+                        <td>${escapeHtml(item.type || '')}</td>
+                        <td>${escapeHtml(item.priority || '')}</td>
+                        <td>${escapeHtml(item.status || '')}</td>
+                        <td>${escapeHtml(item.location || '')}</td>
+                        <td>${escapeHtml(item.response_time_min != null ? formatHours(item.response_time_min) : '')}</td>
+                    </tr>
+                `).join('');
+                const unitRows = ((data.dispatch && data.dispatch.all_units) || []).map((unit) => `
+                    <tr>
+                        <td>${escapeHtml(unit.identifier || '')}</td>
+                        <td>${escapeHtml(unit.unit_type || '')}</td>
+                        <td>${escapeHtml(unit.count || 0)}</td>
+                    </tr>
+                `).join('');
+                const html = `
+                    <html><head><meta charset="UTF-8"></head><body>
+                    <h1>ERS Report Analytics Export</h1>
+                    <p>Generated: ${escapeHtml(data.generated_at)}</p>
+                    <h2>Metrics</h2><table border="1"><tbody>${metricsRows}</tbody></table>
+                    <h2>Recent Incidents</h2><table border="1"><thead><tr><th>Incident</th><th>Type</th><th>Priority</th><th>Status</th><th>Location</th><th>Response Time (Hours)</th></tr></thead><tbody>${incidentRows}</tbody></table>
+                    <h2>Dispatch Units</h2><table border="1"><thead><tr><th>Unit</th><th>Type</th><th>Dispatches</th></tr></thead><tbody>${unitRows}</tbody></table>
+                    </body></html>
+                `;
+                downloadTextFile('ers-report-' + reportDateStamp() + '.xls', html, 'application/vnd.ms-excel;charset=utf-8');
+                showNotification('Excel export downloaded', 'success');
+            } catch (e) {
+                showNotification('Failed to export Excel file', 'error');
+            }
+        }
+
+        async function exportCSV() {
+            try {
+                showNotification('Exporting data to CSV...', 'info');
+                const data = await collectReportExportData();
+                const rows = [
+                    ['Section', 'Field', 'Value'],
+                    ...Object.entries(data.metrics || {}).map(([key, value]) => ['Metrics', key, typeof value === 'object' ? JSON.stringify(value) : value]),
+                    [],
+                    ['Incident ID', 'Type', 'Priority', 'Status', 'Location', 'Response Time (Hours)'],
+                    ...(data.recent_incidents || []).map((item) => [
+                        item.incident_code || item.id || '',
+                        item.type || '',
+                        item.priority || '',
+                        item.status || '',
+                        item.location || '',
+                        item.response_time_min != null ? formatHours(item.response_time_min) : ''
+                    ]),
+                    [],
+                    ['Unit', 'Unit Type', 'Dispatches'],
+                    ...(((data.dispatch && data.dispatch.all_units) || []).map((unit) => [
+                        unit.identifier || '',
+                        unit.unit_type || '',
+                        unit.count || 0
+                    ]))
+                ];
+                const csv = rows.map((row) => row.map(csvCell).join(',')).join('\r\n');
+                downloadTextFile('ers-report-' + reportDateStamp() + '.csv', csv, 'text/csv;charset=utf-8');
+                showNotification('CSV export downloaded', 'success');
+            } catch (e) {
+                showNotification('Failed to export CSV file', 'error');
+            }
+        }
+
+        async function exportJSON() {
+            try {
+                showNotification('Exporting data to JSON...', 'info');
+                const data = await collectReportExportData();
+                downloadTextFile('ers-report-' + reportDateStamp() + '.json', JSON.stringify(data, null, 2), 'application/json;charset=utf-8');
+                showNotification('JSON export downloaded', 'success');
+            } catch (e) {
+                showNotification('Failed to export JSON file', 'error');
+            }
         }
 
         function scheduleReport() {
@@ -1357,7 +1547,7 @@ try {
 
                 if (respData.ok) {
                     const labels = respData.labels || [];
-                    const data = respData.data || [];
+                    const data = (respData.data || []).map((value) => minutesToHours(value));
                     const ctx = document.getElementById('responseTimeChart');
                     if (ctx) {
                         if (responseChart) responseChart.destroy();
@@ -1367,7 +1557,7 @@ try {
                             data: {
                                 labels,
                                 datasets: [{
-                                    label: 'Avg Response Time (min)',
+                                    label: 'Avg Response Time (hr)',
                                     data,
                                     borderColor: '#2563eb',
                                     backgroundColor: createChartGradient(chartCtx, 'rgba(37, 99, 235, 0.28)', 'rgba(37, 99, 235, 0.04)'),
@@ -1378,8 +1568,8 @@ try {
                                     pointBackgroundColor: '#2563eb',
                                     pointBorderColor: '#ffffff'
                                 }, {
-                                    label: 'Admin Target',
-                                    data: labels.map(() => 10),
+                                    label: 'Admin Target (<0.2 hr)',
+                                    data: labels.map(() => minutesToHours(10)),
                                     borderColor: '#f59e0b',
                                     borderDash: [6, 6],
                                     pointRadius: 0,
@@ -1845,9 +2035,9 @@ try {
             if (avgResponseSamples > 0) {
                 const responseTone = avgResponse <= 10 ? 'good' : (avgResponse <= 15 ? 'warn' : 'bad');
                 const responseLabel = avgResponse <= 10 ? 'On Target' : (avgResponse <= 15 ? 'Watch' : 'Delayed');
-                updatePerformanceRow(rows[0], `${avgResponse.toFixed(1)} min`, '< 10 min', performanceTrend(avgResponse, previousAvgResponse, true), performanceStatus(responseLabel, responseTone));
+                updatePerformanceRow(rows[0], formatHours(avgResponse), '< 0.2 hr', performanceTrend(avgResponse, previousAvgResponse, true), performanceStatus(responseLabel, responseTone));
             } else {
-                updatePerformanceRow(rows[0], 'No completed dispatches', '< 10 min', { className: 'trend-neutral', icon: 'fa-minus', label: 'No data' }, performanceStatus('Unavailable', 'warn'));
+                updatePerformanceRow(rows[0], 'No completed dispatches', '< 0.2 hr', { className: 'trend-neutral', icon: 'fa-minus', label: 'No data' }, performanceStatus('Unavailable', 'warn'));
             }
 
             if (totalIncidents > 0) {
@@ -1873,13 +2063,14 @@ try {
                 const data = await res.json();
                 if (!data.ok) return;
                 const m = data.metrics || {};
+                lastReportMetrics = m;
                 const avgEl = document.getElementById('metricAvgResponse');
                 const monthEl = document.getElementById('metricIncidentsMonth');
                 const lastEl = document.getElementById('metricLastMonth');
                 const deltaEl = document.getElementById('metricIncidentsDelta');
                 const utilEl = document.getElementById('metricUtilization');
                 const successEl = document.getElementById('metricSuccess');
-                if (avgEl) avgEl.textContent = (m.avg_response_time_min ?? 0).toFixed(1);
+                if (avgEl) avgEl.textContent = formatHours(m.avg_response_time_min ?? 0);
                 if (monthEl) monthEl.textContent = m.total_incidents_month ?? 0;
                 if (lastEl) lastEl.textContent = m.total_incidents_last_month ?? 0;
                 if (deltaEl) deltaEl.textContent = Math.max(0, (m.total_incidents_month ?? 0) - (m.total_incidents_last_month ?? 0));
@@ -1894,8 +2085,8 @@ try {
                     const rows = perfTable.querySelectorAll('tr');
                     if (rows[0]) { // Average Response Time
                         const cells = rows[0].querySelectorAll('td');
-                        if (cells[1]) cells[1].textContent = `${(m.avg_response_time_min ?? 0).toFixed(1)} min`;
-                        if (cells[2]) cells[2].textContent = '< 10 min';
+                        if (cells[1]) cells[1].textContent = formatHours(m.avg_response_time_min ?? 0);
+                        if (cells[2]) cells[2].textContent = '< 0.2 hr';
                     }
                     if (rows[1]) { // Incident Resolution Rate
                         const cells = rows[1].querySelectorAll('td');
@@ -1925,6 +2116,7 @@ try {
                 const dispRes = await fetch('api/reports_dispatch.php' + qs, { cache: 'no-store' });
                 const disp = await dispRes.json();
                 if (disp.ok) {
+                    lastDispatchReport = disp;
                     const dm = disp.metrics || {};
                     const totalEl = document.getElementById('dispTotal');
                     const ackEl = document.getElementById('dispAck');
@@ -1947,11 +2139,13 @@ try {
                 const tbody = document.getElementById('recentIncidentsBody');
                 const showLoading = options.showLoading !== false;
                 if (tbody && showLoading) tbody.innerHTML = '<tr><td colspan="7" style="color:#6b7280">Loading incidents...</td></tr>';
-                const res = await fetch('api/incidents_list.php', { cache: 'no-store' });
+                const res = await fetch('api/incidents_list.php' + buildQuery(filters), { cache: 'no-store' });
                 const data = await res.json();
                 const items = data.ok ? (data.items || []) : [];
+                lastRecentIncidents = items;
                 renderRecentIncidents(items);
             } catch (e) {
+                lastRecentIncidents = [];
                 renderRecentIncidents([]);
             }
         }
@@ -1991,7 +2185,7 @@ try {
                     <td>${type}</td>
                     <td>${loc}</td>
                     <td>${pr || ''}</td>
-                    <td>${i.response_time_min != null ? i.response_time_min + ' min' : ''}</td>
+                    <td>${i.response_time_min != null ? formatHours(i.response_time_min) : ''}</td>
                     <td><span class="status-badge ${badgeClass}">${status || ''}</span></td>
                     <td>
                         <button class="btn-report" onclick="viewIncidentDetails(${id})"><i class="fas fa-eye"></i> Details</button>
@@ -2107,6 +2301,11 @@ try {
         // Initialize
         document.addEventListener('DOMContentLoaded', function() {
             currentFilters = getFilters();
+            const reportTypeSelect = document.getElementById('report-type');
+            if (reportTypeSelect) {
+                reportTypeSelect.addEventListener('change', applyReportView);
+            }
+            applyReportView();
             refreshMetrics(currentFilters);
             refreshCharts(currentFilters);
             loadRecentIncidents(currentFilters);
