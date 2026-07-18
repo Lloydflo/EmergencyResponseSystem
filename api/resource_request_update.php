@@ -1,6 +1,7 @@
 <?php
 // api/resource_request_update.php
 require_once '../includes/db.php';
+require_once '../includes/activity_log.php';
 header('Content-Type: application/json');
 
 if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
@@ -140,6 +141,23 @@ try {
     $upd->execute([$status, json_encode($details, JSON_UNESCAPED_UNICODE), $id]);
 
     $pdo->commit();
+    if ($provisionedNow) {
+        $quantity = isset($details['quantity']) ? max(1, (int)$details['quantity']) : 1;
+        log_activity_event(
+            null,
+            'resource_added',
+            'resource_request',
+            $id,
+            json_encode([
+                'code' => 'REQ-' . $id,
+                'name' => $resourceName,
+                'category' => (string)($details['provisioned_bucket'] ?? 'resource'),
+                'quantity' => $quantity,
+                'added_by' => 'Approved request',
+                'message' => $quantity . ' ' . $resourceName . ' provisioned from approved request',
+            ], JSON_UNESCAPED_UNICODE)
+        );
+    }
     echo json_encode(['success' => true, 'provisioned' => $provisionedNow]);
 } catch (Throwable $e) {
     if ($pdo->inTransaction()) {

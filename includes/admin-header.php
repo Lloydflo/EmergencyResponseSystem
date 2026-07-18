@@ -371,17 +371,23 @@ document.addEventListener('DOMContentLoaded', function() {
     const userRole = <?php echo json_encode($normalized_user_role); ?>;
     const resolvedSeenKey = 'ers.resolvedNotificationSeen.' + userRole;
     const incidentCardSeenKey = 'ers.interagencyIncidentCardSeen.' + userRole;
+    const resourceAdditionSeenKey = 'ers.resourceAdditionSeen.' + userRole;
     const state = {
         lastUnreadCount: null,
         lastBackupCount: null,
+        lastPendingRequestId: null,
+        lastResourceAdditionNotificationId: null,
         lastResolvedNotificationId: null,
         lastIncidentCardNotificationId: null,
         resolvedSeenId: Number(window.localStorage.getItem(resolvedSeenKey) || 0) || 0,
         incidentCardSeenId: Number(window.localStorage.getItem(incidentCardSeenKey) || 0) || 0,
+        resourceAdditionSeenId: Number(window.localStorage.getItem(resourceAdditionSeenKey) || 0) || 0,
         resolvedNotifications: [],
         resolvedUnreadCount: 0,
         incidentCardNotifications: [],
         incidentCardUnreadCount: 0,
+        resourceAdditionNotifications: [],
+        resourceAdditionUnreadCount: 0,
         recentThreads: [],
         unreadThreads: [],
         backupRequests: [],
@@ -430,14 +436,15 @@ document.addEventListener('DOMContentLoaded', function() {
     }
 
     function backupUnreadText(count) {
-        if (userRole === 'dispatcher') {
-            if (count <= 0) return 'No backup requests';
-            if (count === 1) return '1 pending backup request';
-            return count + ' pending backup requests';
-        }
         if (count <= 0) return 'No pending resource requests';
         if (count === 1) return '1 pending resource request';
         return count + ' pending resource requests';
+    }
+
+    function resourceAdditionUnreadText(count) {
+        if (count <= 0) return 'No new resources';
+        if (count === 1) return '1 new resource added';
+        return count + ' new resources added';
     }
 
     function incidentCardUnreadText(count) {
@@ -515,6 +522,7 @@ document.addEventListener('DOMContentLoaded', function() {
         const latest = state.unreadThreads[0] || state.recentThreads[0] || null;
         const backupCount = Array.isArray(state.backupRequests) ? state.backupRequests.length : 0;
         const latestBackup = backupCount > 0 ? state.backupRequests[0] : null;
+        const resourceAdditionItems = Array.isArray(state.resourceAdditionNotifications) ? state.resourceAdditionNotifications.slice(0, 3) : [];
         const resolvedItems = Array.isArray(state.resolvedNotifications) ? state.resolvedNotifications.slice(0, 3) : [];
         const incidentCardItems = Array.isArray(state.incidentCardNotifications) ? state.incidentCardNotifications.slice(0, 3) : [];
         const parts = [];
@@ -555,14 +563,25 @@ document.addEventListener('DOMContentLoaded', function() {
             `);
         });
 
+        resourceAdditionItems.forEach(function(item) {
+            const isUnread = Number(item.notification_id || 0) > state.resourceAdditionSeenId;
+            parts.push(`
+                <button type="button" class="notification-item header-reset-button" data-open-resources="1" data-resource-addition-notification="1">
+                    <div class="notification-icon">
+                        <i class="fas ${isUnread ? 'fa-circle-plus' : 'fa-box'}"></i>
+                    </div>
+                    <div class="notification-details">
+                        <div class="notification-title">${escapeHtml(isUnread ? 'Resource added' : 'Added resource')}</div>
+                        <div class="notification-text">${escapeHtml(resourceAdditionText(item))}</div>
+                        <div class="notification-time">${escapeHtml(relativeTime(item.notified_at))}</div>
+                    </div>
+                </button>
+            `);
+        });
+
         if (latestBackup) {
-            const incidentLabel = latestBackup.incident_code
-                ? `${latestBackup.incident_code}${latestBackup.incident_id ? ` (#${latestBackup.incident_id})` : ''}`
-                : `Incident #${latestBackup.incident_id || ''}`;
-            const notificationText = userRole === 'dispatcher'
-                ? `${latestBackup.resource_name || 'Backup request'} for ${incidentLabel}`
-                : `${latestBackup.requestor || 'Responder'} requested ${latestBackup.resource_name || 'resources'}`;
-            const iconClass = userRole === 'dispatcher' ? 'fa-truck-medical' : 'fa-hand-holding-medical';
+            const notificationText = backupRequestText(latestBackup);
+            const iconClass = latestBackup.request_kind === 'backup' ? 'fa-truck-medical' : 'fa-hand-holding-medical';
             parts.push(`
                 <button type="button" class="notification-item header-reset-button" data-open-resources="1">
                     <div class="notification-icon">
@@ -610,15 +629,36 @@ document.addEventListener('DOMContentLoaded', function() {
 
     function backupRequestText(item) {
         if (!item) return 'Resource request needs review.';
-        if (userRole === 'dispatcher') {
-            return (item.resource_name || 'Backup request') + ' for ' + backupRequestLabel(item);
+        const name = item.resource_name || 'resources';
+        const requestor = item.requestor || 'Responder';
+        if (item.request_kind === 'backup') {
+            return requestor + ' requested backup: ' + name + ' for ' + backupRequestLabel(item);
         }
-        return (item.requestor || 'Responder') + ' requested ' + (item.resource_name || 'resources');
+        return requestor + ' requested ' + name;
+    }
+
+    function resourceAdditionText(item) {
+        if (!item) return 'A resource was added.';
+        const code = String(item.resource_code || '').trim();
+        const name = String(item.resource_name || '').trim() || 'Resource';
+        const category = String(item.category || '').trim();
+        const addedBy = String(item.added_by || '').trim();
+        const label = code ? (code + ' - ' + name) : name;
+        const pieces = [];
+        if (category) pieces.push(category);
+        if (addedBy) pieces.push('Added by ' + addedBy);
+        return label + (pieces.length ? ' (' + pieces.join(', ') + ')' : '');
     }
 
     function notificationSortTime(value) {
         const date = parseDate(value);
         return date ? date.getTime() : 0;
+    }
+
+    function requestNotificationSortValue(item) {
+        const seconds = Math.floor(notificationSortTime(item && item.date_requested) / 1000);
+        const id = Math.max(0, Number(item && (item.notification_id || item.id)) || 0) % 1000000;
+        return (seconds * 1000000) + id;
     }
 
     function collectAllNotifications() {
@@ -657,16 +697,30 @@ document.addEventListener('DOMContentLoaded', function() {
             });
         });
 
+        (Array.isArray(state.resourceAdditionNotifications) ? state.resourceAdditionNotifications : []).forEach(function(item) {
+            const isUnread = Number(item.notification_id || 0) > state.resourceAdditionSeenId;
+            entries.push({
+                kind: 'resource-added',
+                hrefAttr: 'data-open-resources="1" data-resource-addition-notification="1"',
+                icon: isUnread ? 'fa-circle-plus' : 'fa-box',
+                title: isUnread ? 'Resource added' : 'Added resource',
+                text: resourceAdditionText(item),
+                meta: relativeTime(item.notified_at),
+                time: item.notified_at,
+                id: Number(item.notification_id || 0)
+            });
+        });
+
         (Array.isArray(state.backupRequests) ? state.backupRequests : []).forEach(function(item) {
             entries.push({
                 kind: 'resource',
                 hrefAttr: 'data-open-resources="1"',
-                icon: userRole === 'dispatcher' ? 'fa-truck-medical' : 'fa-hand-holding-medical',
-                title: userRole === 'dispatcher' ? 'Pending backup request' : 'Pending resource request',
+                icon: item.request_kind === 'backup' ? 'fa-truck-medical' : 'fa-hand-holding-medical',
+                title: item.request_kind === 'backup' ? 'Pending backup request' : 'Pending resource request',
                 text: backupRequestText(item),
                 meta: relativeTime(item.date_requested),
                 time: item.date_requested,
-                id: Number(item.id || 0)
+                id: Number(item.notification_id || item.id || 0)
             });
         });
 
@@ -770,8 +824,22 @@ document.addEventListener('DOMContentLoaded', function() {
     function showBackupToast(count) {
         if (!liveToast || count <= 0) return;
         if (liveToastIcon) liveToastIcon.className = 'fas fa-truck-medical';
-        if (liveToastTitle) liveToastTitle.textContent = userRole === 'dispatcher' ? 'Backup Requests' : 'Resource Requests';
+        if (liveToastTitle) liveToastTitle.textContent = 'Resource Requests';
         if (liveToastText) liveToastText.textContent = backupUnreadText(count);
+        liveToast.setAttribute('data-toast-target', 'resources');
+        liveToast.hidden = false;
+        window.clearTimeout(state.toastTimer);
+        window.requestAnimationFrame(function() {
+            liveToast.classList.add('show');
+        });
+        state.toastTimer = window.setTimeout(hideLiveToast, 4000);
+    }
+
+    function showResourceAdditionToast(count) {
+        if (!liveToast || count <= 0) return;
+        if (liveToastIcon) liveToastIcon.className = 'fas fa-circle-plus';
+        if (liveToastTitle) liveToastTitle.textContent = 'Resources';
+        if (liveToastText) liveToastText.textContent = resourceAdditionUnreadText(count);
         liveToast.setAttribute('data-toast-target', 'resources');
         liveToast.hidden = false;
         window.clearTimeout(state.toastTimer);
@@ -844,9 +912,10 @@ document.addEventListener('DOMContentLoaded', function() {
         await loadHeaderSummary(50);
         markResolvedNotificationsSeen();
         markIncidentCardNotificationsSeen();
+        markResourceAdditionNotificationsSeen();
         const unreadCount = Math.max(0, Number(state.lastUnreadCount) || 0);
         const backupCount = Array.isArray(state.backupRequests) ? state.backupRequests.length : 0;
-        setBadge(notificationBadge, unreadCount + backupCount + state.resolvedUnreadCount + state.incidentCardUnreadCount);
+        setBadge(notificationBadge, unreadCount + backupCount + state.resolvedUnreadCount + state.incidentCardUnreadCount + state.resourceAdditionUnreadCount);
         renderNotificationList(unreadCount);
         renderAllNotificationsList();
         if (notificationModal) notificationModal.classList.remove('show');
@@ -891,6 +960,17 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     }
 
+    function markResourceAdditionNotificationsSeen() {
+        const latestId = Math.max(0, ...state.resourceAdditionNotifications.map(function(item) {
+            return Number(item.notification_id || 0);
+        }));
+        if (latestId > state.resourceAdditionSeenId) {
+            state.resourceAdditionSeenId = latestId;
+            state.resourceAdditionUnreadCount = 0;
+            window.localStorage.setItem(resourceAdditionSeenKey, String(latestId));
+        }
+    }
+
     async function loadBackupRequestSummary(limit) {
         if (!['dispatcher', 'admin'].includes(userRole)) {
             state.backupRequests = [];
@@ -900,10 +980,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
         try {
             const requestLimit = Math.max(1, Math.min(100, Number(limit) || 10));
-            const endpoint = userRole === 'dispatcher'
-                ? 'api/dispatcher_backup_requests.php?limit=' + requestLimit
-                : 'api/admin_resource_requests.php?limit=' + requestLimit;
-            const response = await fetch(endpoint, {
+            const response = await fetch('api/resource_notifications.php?limit=' + requestLimit, {
                 cache: 'no-store',
                 credentials: 'same-origin'
             });
@@ -913,13 +990,38 @@ document.addEventListener('DOMContentLoaded', function() {
 
             const backupRequests = Array.isArray(data.requests) ? data.requests : [];
             const backupCount = backupRequests.length;
+            const latestRequestId = Math.max(0, ...backupRequests.map(function(item) {
+                return requestNotificationSortValue(item);
+            }));
+            const resourceAdditions = Array.isArray(data.resource_additions) ? data.resource_additions : [];
+            const latestResourceAdditionId = Math.max(0, ...resourceAdditions.map(function(item) {
+                return Number(item.notification_id || 0);
+            }));
 
-            if (state.lastBackupCount !== null && backupCount > state.lastBackupCount) {
+            if (state.lastPendingRequestId !== null && latestRequestId > state.lastPendingRequestId) {
+                const newCount = backupRequests.filter(function(item) {
+                    return requestNotificationSortValue(item) > state.lastPendingRequestId;
+                }).length;
+                showBackupToast(newCount);
+            } else if (state.lastBackupCount !== null && backupCount > state.lastBackupCount) {
                 showBackupToast(backupCount - state.lastBackupCount);
             }
 
+            if (state.lastResourceAdditionNotificationId !== null && latestResourceAdditionId > state.lastResourceAdditionNotificationId) {
+                const newCount = resourceAdditions.filter(function(item) {
+                    return Number(item.notification_id || 0) > state.lastResourceAdditionNotificationId;
+                }).length;
+                showResourceAdditionToast(newCount);
+            }
+
             state.lastBackupCount = backupCount;
+            state.lastPendingRequestId = latestRequestId;
+            state.lastResourceAdditionNotificationId = latestResourceAdditionId;
             state.backupRequests = backupRequests;
+            state.resourceAdditionNotifications = resourceAdditions;
+            state.resourceAdditionUnreadCount = resourceAdditions.filter(function(item) {
+                return Number(item.notification_id || 0) > state.resourceAdditionSeenId;
+            }).length;
         } catch (_) {}
     }
 
@@ -1027,7 +1129,7 @@ document.addEventListener('DOMContentLoaded', function() {
             state.unreadThreads = unreadThreads;
 
             const backupCount = Array.isArray(state.backupRequests) ? state.backupRequests.length : 0;
-            setBadge(notificationBadge, unreadCount + backupCount + state.resolvedUnreadCount + state.incidentCardUnreadCount);
+            setBadge(notificationBadge, unreadCount + backupCount + state.resolvedUnreadCount + state.incidentCardUnreadCount + state.resourceAdditionUnreadCount);
             setBadge(messageBadge, unreadCount);
             renderNotificationList(unreadCount);
             renderMessageList();
@@ -1056,9 +1158,10 @@ document.addEventListener('DOMContentLoaded', function() {
             await loadHeaderSummary();
             markResolvedNotificationsSeen();
             markIncidentCardNotificationsSeen();
+            markResourceAdditionNotificationsSeen();
             const unreadCount = Math.max(0, Number(state.lastUnreadCount) || 0);
             const backupCount = Array.isArray(state.backupRequests) ? state.backupRequests.length : 0;
-            setBadge(notificationBadge, unreadCount + backupCount + state.resolvedUnreadCount + state.incidentCardUnreadCount);
+            setBadge(notificationBadge, unreadCount + backupCount + state.resolvedUnreadCount + state.incidentCardUnreadCount + state.resourceAdditionUnreadCount);
             renderNotificationList(unreadCount);
             toggleModal(notificationModal, notificationBtn, messageModal, messageBtn);
         });
@@ -1106,6 +1209,9 @@ document.addEventListener('DOMContentLoaded', function() {
         const resourceTrigger = event.target.closest('[data-open-resources]');
         if (resourceTrigger) {
             event.preventDefault();
+            if (resourceTrigger.hasAttribute('data-resource-addition-notification')) {
+                markResourceAdditionNotificationsSeen();
+            }
             openResources();
             return;
         }

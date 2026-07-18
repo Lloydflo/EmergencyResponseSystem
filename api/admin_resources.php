@@ -7,6 +7,7 @@ require_once __DIR__ . '/../includes/db.php';
 require_once __DIR__ . '/../includes/geocode_helper.php';
 require_once __DIR__ . '/../includes/vehicle_resource_units.php';
 require_once __DIR__ . '/../includes/auth.php';
+require_once __DIR__ . '/../includes/activity_log.php';
 
 if (!defined('RESOURCE_RECORDS_TABLE')) {
     define('RESOURCE_RECORDS_TABLE', 'resource_records');
@@ -299,6 +300,27 @@ function normalize_coordinate($value, float $min, float $max): ?float {
         return null;
     }
     return $number;
+}
+
+function log_resource_added_notification(array $payload, int $resourceId, array $actor): void {
+    $actorName = trim((string)($actor['name'] ?? $actor['username'] ?? $actor['email'] ?? 'Admin'));
+    $details = [
+        'code' => (string)($payload['code'] ?? ''),
+        'name' => (string)($payload['name'] ?? ''),
+        'category' => (string)($payload['category'] ?? ''),
+        'status' => (string)($payload['status'] ?? ''),
+        'quantity' => max(1, (int)($payload['quantity'] ?? 1)),
+        'added_by' => $actorName,
+        'message' => trim(($actorName !== '' ? $actorName : 'Admin') . ' added ' . (string)($payload['name'] ?? 'a resource')),
+    ];
+
+    log_activity_event(
+        isset($actor['id']) ? (int)$actor['id'] : null,
+        'resource_added',
+        'resource',
+        $resourceId,
+        json_encode($details, JSON_UNESCAPED_UNICODE)
+    );
 }
 
 function build_incident_assignment_details(array $row): string {
@@ -894,6 +916,7 @@ try {
         ]);
         $id = (int)$pdo->lastInsertId();
         sync_vehicle_resource_unit($pdo, $payload);
+        log_resource_added_notification($payload, $id, is_array($actor) ? $actor : []);
         $item = fetch_item($pdo, $id);
         echo json_encode(['ok' => true, 'item' => $item]);
         exit;

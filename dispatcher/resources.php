@@ -353,12 +353,6 @@ try {
                         </select>
                     </div>
                     <div class="filter-group">
-                        <label for="location-filter">Location</label>
-                        <select id="location-filter">
-                            <option value="">All Locations</option>
-                        </select>
-                    </div>
-                    <div class="filter-group">
                         <label for="search-resource">Search</label>
                         <input type="text" id="search-resource" placeholder="Search resources...">
                     </div>
@@ -597,14 +591,12 @@ try {
                             ? data.items.map(normalizeDynamicResource)
                             : [];
                         resourcesLoadedOnce = true;
-                        refreshLocationFilterOptions();
                         updateOverviewCounts();
                         renderDynamicResources();
                     } catch (e) {
                         console.error(e);
                         if (resourcesLoadedOnce) return;
                         RESOURCES = [];
-                        refreshLocationFilterOptions();
                         updateOverviewCounts();
                         renderDynamicResources();
                     }
@@ -632,38 +624,17 @@ try {
                 // Filter elements
                 const typeFilter = document.getElementById('resource-type');
                 const statusFilter = document.getElementById('status-filter');
-                const locationFilter = document.getElementById('location-filter');
                 const searchInput = document.getElementById('search-resource');
-
-                function refreshLocationFilterOptions() {
-                    if (!locationFilter) return;
-
-                    const previousValue = locationFilter.value || '';
-                    const locations = Array.from(new Set(
-                        RESOURCES
-                            .map((item) => String(item.location || '').trim())
-                            .filter(Boolean)
-                    )).sort((a, b) => a.localeCompare(b));
-
-                    locationFilter.innerHTML = '<option value="">All Locations</option>' +
-                        locations.map((location) => `<option value="${escapeAttrValue(location)}">${escapeHtml(location)}</option>`).join('');
-
-                    if (previousValue && locations.includes(previousValue)) {
-                        locationFilter.value = previousValue;
-                    }
-                }
 
                 function passFilters(r) {
                     const typeValue = (typeFilter.value || '').toLowerCase();
                     const statusValue = (statusFilter.value || '').toLowerCase();
-                    const locationValue = (locationFilter.value || '').toLowerCase();
                     const searchValue = (searchInput.value || '').toLowerCase();
 
                     if (typeValue && (r.type || '').toLowerCase() !== typeValue) return false;
                     if (statusValue && (r.status || '').toLowerCase() !== statusValue) return false;
-                    if (locationValue && (r.location || '').toLowerCase() !== locationValue) return false;
                     if (searchValue) {
-                        const hay = [r.code, r.name, r.location, r.role, r.details, r.notes, r.assignment, r.assignmentDetails]
+                        const hay = [r.code, r.name, r.role, r.details, r.notes, r.assignment, r.assignmentDetails]
                             .map(v => (v || '').toString().toLowerCase()).join(' ');
                         if (!hay.includes(searchValue)) return false;
                     }
@@ -2109,7 +2080,6 @@ try {
         // Filter functionality
         document.getElementById('resource-type').addEventListener('change', applyFilters);
         document.getElementById('status-filter').addEventListener('change', applyFilters);
-        document.getElementById('location-filter').addEventListener('change', applyFilters);
         document.getElementById('search-resource').addEventListener('input', applyFilters);
 
         function applyFilters() {
@@ -2120,7 +2090,6 @@ try {
 
             const typeFilter = document.getElementById('resource-type').value;
             const statusFilter = document.getElementById('status-filter').value;
-            const locationFilter = document.getElementById('location-filter').value;
             const searchFilter = document.getElementById('search-resource').value.toLowerCase();
 
             document.querySelectorAll('.resource-card').forEach(card => {
@@ -2141,14 +2110,6 @@ try {
                 } else {
                     // If no filter, still hide maintenance items
                     if (card.dataset.status === 'maintenance') {
-                        showCard = false;
-                    }
-                }
-
-                // Location filter (simplified - would need more complex logic in real system)
-                if (locationFilter) {
-                    const location = card.querySelector('.detail-value').textContent.toLowerCase();
-                    if (!location.includes(locationFilter.replace('-', ' '))) {
                         showCard = false;
                     }
                 }

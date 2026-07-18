@@ -1224,7 +1224,7 @@ $pageTitle = 'Resources Status';
             </section>
 
             <section class="resource-controls">
-                <input type="text" id="searchInput" class="control-input" placeholder="Search resource name, id, or location...">
+                <input type="text" id="searchInput" class="control-input" placeholder="Search resource name or id...">
                 <select id="categoryFilter" class="control-select">
                     <option value="">All Categories</option>
                     <option value="vehicles">Vehicles</option>
@@ -2278,7 +2278,6 @@ $pageTitle = 'Resources Status';
                     item.name,
                     item.category,
                     item.status,
-                    item.location,
                     item.quantity,
                     item.assignment,
                     item.assignmentDetails,
