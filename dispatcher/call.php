@@ -1118,19 +1118,19 @@ $pageTitle = 'Emergency Call Center';
     }
 
     function transferPayloadMatchesCall(payload, callId, room) {
+        const payloadRoom = String((payload && payload.room) || '');
+        if (payloadRoom && room && payloadRoom === String(room)) {
+            return true;
+        }
         if (!callId) return true;
         const payloadCallId = String(
             (payload && (payload.callId || payload.call_id || payload.transferId || payload.transfer_id))
             || ''
         );
-        const payloadRoom = String((payload && payload.room) || '');
         if (payloadCallId) {
             return payloadCallId === String(callId);
         }
-        if (payloadRoom && room) {
-            return payloadRoom === String(room);
-        }
-        return true;
+        return !payloadRoom;
     }
 
     async function prepareTransferLocalAudio(call) {
