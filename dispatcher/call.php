@@ -292,7 +292,7 @@ $pageTitle = 'Emergency Call Center';
                         </div>
                     </div>
 
-                    <div class="transfer-queue-panel" id="transferQueuePanel" hidden>
+                    <div class="transfer-queue-panel" id="transferQueuePanel">
                         <div class="transfer-queue-head">
                             <div>
                                 <div class="panel-eyebrow">Transferred Queue</div>
@@ -300,6 +300,7 @@ $pageTitle = 'Emergency Call Center';
                             </div>
                             <span class="transfer-queue-count" id="transferQueueCount">0</span>
                         </div>
+                        <div class="transfer-queue-status" id="transferQueueStatus">Listening for transferred calls and reports...</div>
                         <div class="transfer-queue-list" id="transferQueueList" aria-live="polite"></div>
                     </div>
 
@@ -491,6 +492,7 @@ $pageTitle = 'Emergency Call Center';
         document.addEventListener('ers:incoming-call', (event) => {
             showIncomingCallModal(event.detail || {});
         });
+        renderTransferredQueue();
         startIncomingTransferPolling();
     });
 
@@ -776,12 +778,26 @@ $pageTitle = 'Emergency Call Center';
         const panel = document.getElementById('transferQueuePanel');
         const list = document.getElementById('transferQueueList');
         const count = document.getElementById('transferQueueCount');
+        const status = document.getElementById('transferQueueStatus');
         if (!panel || !list || !count) return;
         count.textContent = String(transferQueueItems.length);
-        panel.hidden = transferQueueItems.length === 0;
         if (!transferQueueItems.length) {
-            list.innerHTML = '';
+            if (status) {
+                status.textContent = 'Live queue is ready. No transferred calls or reports waiting right now.';
+                status.classList.remove('is-error', 'is-active');
+            }
+            list.innerHTML = `
+                <div class="transfer-queue-empty">
+                    <i class="fas fa-satellite-dish"></i>
+                    <span>Waiting for incoming transfers</span>
+                </div>
+            `;
             return;
+        }
+        if (status) {
+            status.textContent = 'Incoming transfers available in Call Receiving & Logs.';
+            status.classList.add('is-active');
+            status.classList.remove('is-error');
         }
         list.innerHTML = transferQueueItems.map(transferredQueueCardHtml).join('');
         list.querySelectorAll('[data-transfer-action]').forEach((button) => {
@@ -1200,6 +1216,7 @@ $pageTitle = 'Emergency Call Center';
     }
 
     function startIncomingTransferPolling() {
+        setTransferQueueStatus('Listening for transferred calls and reports...', 'active');
         pollIncomingTransfers(true);
         if (incomingTransferPollTimer) {
             window.clearInterval(incomingTransferPollTimer);
@@ -1222,7 +1239,10 @@ $pageTitle = 'Emergency Call Center';
                 : API_INCOMING_TRANSFERS_URL + '?after_id=' + encodeURIComponent(String(latestTransferLogId)) + '&limit=25';
             const response = await fetch(url, { cache: 'no-store' });
             const data = await response.json();
-            if (!data || !data.ok || !Array.isArray(data.transfers)) return;
+            if (!data || !data.ok || !Array.isArray(data.transfers)) {
+                setTransferQueueStatus('Transfer feed returned an invalid response.', 'error');
+                return;
+            }
             const transfers = data.transfers.slice().sort((a, b) =>
                 Number(a.transfer_log_id || 0) - Number(b.transfer_log_id || 0)
             );
@@ -1278,11 +1298,23 @@ $pageTitle = 'Emergency Call Center';
             });
             incomingTransferBaselineReady = true;
             window.localStorage.setItem('ersLatestTransferLogId', String(latestTransferLogId));
+            if (!transferQueueItems.length) {
+                renderTransferredQueue();
+            }
         } catch (error) {
             console.warn('Incoming transfer polling failed:', error);
+            setTransferQueueStatus('Transfer feed is not reachable. Check api/incoming_transfers.php.', 'error');
         } finally {
             incomingTransferPollInFlight = false;
         }
+    }
+
+    function setTransferQueueStatus(message, state = '') {
+        const status = document.getElementById('transferQueueStatus');
+        if (!status) return;
+        status.textContent = message;
+        status.classList.toggle('is-active', state === 'active');
+        status.classList.toggle('is-error', state === 'error');
     }
 
     function startTimer() {
