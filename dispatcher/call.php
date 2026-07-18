@@ -1190,6 +1190,10 @@ $pageTitle = 'Emergency Call Center';
         ['dispatcher-ready', 'call-accepted', 'accepted'].forEach((eventName) => {
             transferSocket.emit(eventName, payload, call.room);
         });
+        transferSocket.emit('request-transfer-offer', {
+            ...payload,
+            reason: 'response-team-ready'
+        }, call.room);
     }
 
     async function answerTransferOffer(call, offerPayload) {
