@@ -361,7 +361,10 @@ document.addEventListener('DOMContentLoaded', function() {
             incidentReferenceNo: String(session.incidentReferenceNo || ''),
             incidentStatus: String(session.incidentStatus || ''),
             incidentType: String(session.incidentType || ''),
-            location: String(session.location || '')
+            location: String(session.location || ''),
+            isTransfer: session.isTransfer === true,
+            transferId: String(session.transferId || ''),
+            room: String(session.room || '')
         };
     }
 
@@ -529,7 +532,10 @@ document.addEventListener('DOMContentLoaded', function() {
                 incidentReferenceNo: payload && Object.prototype.hasOwnProperty.call(payload, 'incidentReferenceNo') ? payload.incidentReferenceNo : current.incidentReferenceNo,
                 incidentStatus: payload && Object.prototype.hasOwnProperty.call(payload, 'incidentStatus') ? payload.incidentStatus : current.incidentStatus,
                 incidentType: payload && Object.prototype.hasOwnProperty.call(payload, 'incidentType') ? payload.incidentType : current.incidentType,
-                location: payload && Object.prototype.hasOwnProperty.call(payload, 'location') ? payload.location : current.location
+                location: payload && Object.prototype.hasOwnProperty.call(payload, 'location') ? payload.location : current.location,
+                isTransfer: payload && Object.prototype.hasOwnProperty.call(payload, 'isTransfer') ? payload.isTransfer === true : current.isTransfer === true,
+                transferId: payload && Object.prototype.hasOwnProperty.call(payload, 'transferId') ? payload.transferId : current.transferId,
+                room: payload && Object.prototype.hasOwnProperty.call(payload, 'room') ? payload.room : current.room
             });
         },
         update: function(payload) {

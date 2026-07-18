@@ -24,6 +24,11 @@ $pageTitle = 'Emergency Call Center';
     <link rel="stylesheet" href="css/cards.css">
     <link rel="stylesheet" href="css/call.css?v=<?php echo filemtime($rootDir . '/css/call.css'); ?>">
     <script src="node_modules/socket.io-client/dist/socket.io.min.js"></script>
+    <script>
+        if (typeof window.io !== 'function') {
+            document.write('<script src="https://cdn.socket.io/4.7.5/socket.io.min.js"><\/script>');
+        }
+    </script>
     <script src="js/place-autocomplete.js"></script>
 </head>
 <body>
@@ -371,6 +376,9 @@ $pageTitle = 'Emergency Call Center';
     let incomingTransferPollInFlight = false;
     const shownIncomingTransferIds = new Set();
     let transferQueueItems = [];
+    let activeTransferCall = null;
+    let incomingTransferPollTimer = null;
+    const INCOMING_TRANSFER_POLL_MS = 1500;
 
     function escapeHtml(value) {
         return String(value == null ? '' : value)
@@ -415,6 +423,7 @@ $pageTitle = 'Emergency Call Center';
             stopTimer();
             stopVoiceTools();
             activeCall = null;
+            activeTransferCall = null;
             updateStats();
             return;
         }
@@ -425,6 +434,9 @@ $pageTitle = 'Emergency Call Center';
             phone: session.phone || '',
             start: Number.isFinite(start) && start > 0 ? start : Date.now()
         };
+        if (session.isTransfer === true) {
+            activeTransferCall = session;
+        }
 
         panel.classList.add('active');
         document.getElementById('activeCallerName').textContent = 'Caller: ' + activeCall.name;
@@ -557,6 +569,7 @@ $pageTitle = 'Emergency Call Center';
         const start = incomingCall.start || Date.now();
         hideIncomingCallModal();
         pendingIncomingCall = null;
+        activeTransferCall = incomingCall.isTransfer ? incomingCall : null;
         const sessionApi = getSharedCallSessionApi();
         if (sessionApi) {
             sessionApi.start({
@@ -569,10 +582,13 @@ $pageTitle = 'Emergency Call Center';
                 incidentReferenceNo: incomingCall.incidentReferenceNo || '',
                 incidentStatus: incomingCall.incidentStatus || '',
                 incidentType: incomingCall.incidentType || '',
-                location: incomingCall.location || ''
+                location: incomingCall.location || '',
+                isTransfer: incomingCall.isTransfer === true,
+                transferId: incomingCall.transferId || '',
+                room: incomingCall.room || ''
             });
         } else {
-            activeCall = { active: true, name, phone, start };
+            activeCall = { active: true, name, phone, start, isTransfer: incomingCall.isTransfer === true };
         }
         applyIncomingCallToForm(incomingCall);
         connectTransferSocket(incomingCall);
@@ -593,6 +609,7 @@ $pageTitle = 'Emergency Call Center';
         if (sessionApi) {
             sessionApi.end();
         }
+        activeTransferCall = null;
         renderActiveCallPanel(null);
     }
 
@@ -856,8 +873,6 @@ $pageTitle = 'Emergency Call Center';
             return;
         }
         showIncomingCallModal(incomingCallDetailFromTransfer(item));
-        transferQueueItems = transferQueueItems.filter((queued) => queued.queue_key !== item.queue_key);
-        renderTransferredQueue();
         acceptCall();
     }
 
@@ -950,14 +965,14 @@ $pageTitle = 'Emergency Call Center';
                 alertAudioContext.resume().catch(() => {});
             }
             const now = alertAudioContext.currentTime;
-            [0, 0.32, 0.64].forEach((offset) => {
+            [0, 0.32, 0.64, 1.15, 1.47, 1.79].forEach((offset) => {
                 const oscillator = alertAudioContext.createOscillator();
                 const gain = alertAudioContext.createGain();
                 oscillator.type = 'sine';
-                oscillator.frequency.setValueAtTime(880, now + offset);
-                oscillator.frequency.setValueAtTime(660, now + offset + 0.12);
+                oscillator.frequency.setValueAtTime(920, now + offset);
+                oscillator.frequency.setValueAtTime(680, now + offset + 0.12);
                 gain.gain.setValueAtTime(0.0001, now + offset);
-                gain.gain.exponentialRampToValueAtTime(0.22, now + offset + 0.02);
+                gain.gain.exponentialRampToValueAtTime(0.32, now + offset + 0.02);
                 gain.gain.exponentialRampToValueAtTime(0.0001, now + offset + 0.22);
                 oscillator.connect(gain);
                 gain.connect(alertAudioContext.destination);
@@ -971,7 +986,11 @@ $pageTitle = 'Emergency Call Center';
 
     function connectTransferSocket(call) {
         disconnectTransferCall();
-        if (!call || !call.isTransfer || !call.room || typeof window.io !== 'function') {
+        if (!call || !call.isTransfer || !call.room) {
+            return;
+        }
+        if (typeof window.io !== 'function') {
+            setVoiceState('Socket.IO client is not loaded. The call cannot be answered on this page yet.');
             return;
         }
         try {
@@ -979,7 +998,7 @@ $pageTitle = 'Emergency Call Center';
             transferPeerConnection = createTransferPeerConnection(call);
             transferSocket = window.io(call.socketUrl || ALERTARA_SOCKET_URL, {
                 path: call.socketPath || ALERTARA_SOCKET_PATH,
-                transports: ['polling'],
+                transports: ['websocket', 'polling'],
                 query: { room: call.room }
             });
             transferSocket.on('connect', () => {
@@ -1009,8 +1028,13 @@ $pageTitle = 'Emergency Call Center';
             transferSocket.on('disconnect', () => {
                 setVoiceState('AlertaraQC transfer socket disconnected.');
             });
+            transferSocket.on('connect_error', (error) => {
+                console.warn('Transfer socket connection failed:', error);
+                setVoiceState('Could not reach the AlertaraQC live call socket.');
+            });
         } catch (error) {
             console.warn('Unable to connect transfer socket:', error);
+            setVoiceState('Unable to connect to the transferred live call.');
         }
     }
 
@@ -1177,7 +1201,16 @@ $pageTitle = 'Emergency Call Center';
 
     function startIncomingTransferPolling() {
         pollIncomingTransfers(true);
-        setInterval(pollIncomingTransfers, 5000);
+        if (incomingTransferPollTimer) {
+            window.clearInterval(incomingTransferPollTimer);
+        }
+        incomingTransferPollTimer = window.setInterval(pollIncomingTransfers, INCOMING_TRANSFER_POLL_MS);
+        document.addEventListener('visibilitychange', () => {
+            if (!document.hidden) {
+                pollIncomingTransfers();
+            }
+        });
+        window.addEventListener('focus', () => pollIncomingTransfers());
     }
 
     async function pollIncomingTransfers(loadLatest = false) {
@@ -1193,6 +1226,9 @@ $pageTitle = 'Emergency Call Center';
             const transfers = data.transfers.slice().sort((a, b) =>
                 Number(a.transfer_log_id || 0) - Number(b.transfer_log_id || 0)
             );
+            if (loadLatest) {
+                latestTransferLogId = 0;
+            }
             transfers.forEach((transfer) => {
                 const transferLogId = Number(transfer.transfer_log_id || 0);
                 if (transferLogId > 0 && shownIncomingTransferIds.has(transferLogId)) {
@@ -1801,7 +1837,8 @@ $pageTitle = 'Emergency Call Center';
                     location: payload.location
                 });
             }
-            showToast('Incident logged successfully. Redirecting to Dispatch Center...');
+            const wasTransferredCall = !!activeTransferCall;
+            showToast(wasTransferredCall ? 'Transferred incident logged in Call Receiving & Logs.' : 'Incident logged successfully.');
             e.target.reset();
             resetIncidentTypeChecklist();
             document.querySelectorAll('#prioritySelect .priority-option').forEach(o => o.classList.remove('active'));
@@ -1830,7 +1867,9 @@ $pageTitle = 'Emergency Call Center';
             } catch (e) {
                 console.warn('Activity log failed', e);
             }
-            redirectToDispatchCenter(data);
+            if (!wasTransferredCall) {
+                redirectToDispatchCenter(data);
+            }
         } catch (err) {
             console.warn('Submit failed:', err);
             alert('Error while logging incident.');
