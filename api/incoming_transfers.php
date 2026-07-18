@@ -100,6 +100,14 @@ function incoming_transfer_fallback_item(array $row): array
     $latitude = incoming_transfer_pick_float($detailSources, ['call_latitude', 'latitude']);
     $longitude = incoming_transfer_pick_float($detailSources, ['call_longitude', 'longitude']);
     $incidentId = (int)($row['incident_id'] ?? 0);
+    $fallbackText = strtolower(implode(' ', [
+        (string)($row['reference_no'] ?? ''),
+        (string)($row['description'] ?? ''),
+        (string)($row['call_description'] ?? ''),
+    ]));
+    $looksLikeCall = strpos($fallbackText, 'transferred call') !== false
+        || strpos($fallbackText, 'incoming transferred call') !== false
+        || strpos($fallbackText, 'call from external') !== false;
     return [
         'transfer_log_id' => 0,
         'source_system' => 'AlertaraQC Emergency Communication',
@@ -107,7 +115,7 @@ function incoming_transfer_fallback_item(array $row): array
         'transfer_id' => (string)($row['reference_no'] ?? ('incident-' . $incidentId)),
         'call_id_external' => '',
         'conversation_id' => '',
-        'transfer_type' => 'report',
+        'transfer_type' => $looksLikeCall ? 'live_call' : 'report',
         'room' => '',
         'socket_url' => 'https://emergency-comm.alertaraqc.com',
         'socket_path' => '/socket.io',

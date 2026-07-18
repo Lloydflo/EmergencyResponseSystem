@@ -596,6 +596,9 @@ $pageTitle = 'Emergency Call Center';
         connectTransferSocket(incomingCall);
         prepareTransferLocalAudio(incomingCall);
         renderActiveCallPanel(getSharedCallSession() || activeCall);
+        if (incomingCall.isTransfer && !incomingCall.room) {
+            setVoiceState('Transferred call opened, but no live room was included by Emergency-Com. Ask them to retry the transfer after deploying the live payload fix.');
+        }
         focusAcceptedCallForm();
     }
 
@@ -723,7 +726,7 @@ $pageTitle = 'Emergency Call Center';
         const key = transferQueueKey(transfer);
         if (!key) return null;
         const room = String(transfer.room || '').trim();
-        const transferType = (String(transfer.transfer_type || '').toLowerCase() === 'live_call' && room) ? 'live_call' : 'report';
+        const transferType = transferLooksLikeCall(transfer) ? 'live_call' : 'report';
         return {
             queue_key: key,
             transfer_log_id: Number(transfer.transfer_log_id || 0),
@@ -749,6 +752,21 @@ $pageTitle = 'Emergency Call Center';
             transferred_at: transfer.transferred_at || transfer.created_at || new Date().toISOString(),
             fallback_notice: transfer.fallback_notice || ''
         };
+    }
+
+    function transferLooksLikeCall(transfer) {
+        if (!transfer) return false;
+        const explicitType = String(transfer.transfer_type || '').toLowerCase();
+        if (explicitType === 'live_call') return true;
+        if (transfer.room || transfer.call_id_external || transfer.callId || transfer.call_id) return true;
+        const text = [
+            transfer.event,
+            transfer.description,
+            transfer.title,
+            transfer.reference_no,
+            transfer.fallback_notice
+        ].map((value) => String(value || '').toLowerCase()).join(' ');
+        return text.includes('transferred call') || text.includes('emergency_call_transfer') || text.includes('call transfer');
     }
 
     function upsertTransferredQueueItem(transfer) {
@@ -819,11 +837,12 @@ $pageTitle = 'Emergency Call Center';
     }
 
     function transferredQueueCardHtml(item) {
-        const isLiveCall = item.transfer_type === 'live_call' && item.room;
+        const isLiveCall = item.transfer_type === 'live_call';
+        const canAnswerAudio = !!item.room;
         const priorityValue = String(item.priority || 'medium').toLowerCase();
         const priorityClass = ['high', 'medium', 'low'].includes(priorityValue) ? priorityValue : 'medium';
         const title = item.reference_no || (isLiveCall ? 'Transferred live call' : 'Transferred report');
-        const actionText = isLiveCall ? 'Answer call' : 'Open report';
+        const actionText = isLiveCall ? (canAnswerAudio ? 'Answer call' : 'Open call') : 'Open report';
         const actionIcon = isLiveCall ? 'fa-phone-volume' : 'fa-eye';
         const actionName = isLiveCall ? 'answer' : 'open';
         return `
@@ -886,10 +905,6 @@ $pageTitle = 'Emergency Call Center';
     function answerTransferredQueueItem(key) {
         const item = findTransferredQueueItem(key);
         if (!item) return;
-        if (!item.room) {
-            alert('This transfer has no live call room. Open it as a report instead.');
-            return;
-        }
         showIncomingCallModal(incomingCallDetailFromTransfer(item));
         acceptCall();
     }
@@ -1268,7 +1283,7 @@ $pageTitle = 'Emergency Call Center';
                     return;
                 }
                 upsertTransferredQueueItem(transfer);
-                if (transfer.transfer_type === 'report' || !transfer.room) {
+                if (!transferLooksLikeCall(transfer)) {
                     showIncomingReportNotification(transfer);
                     return;
                 }
