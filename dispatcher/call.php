@@ -362,6 +362,7 @@ $pageTitle = 'Emergency Call Center';
     const API_INCOMING_TRANSFERS_URL = 'api/incoming_transfers.php';
     const ALERTARA_SOCKET_URL = 'https://emergency-comm.alertaraqc.com';
     const ALERTARA_SOCKET_PATH = '/socket.io';
+    const TRANSFER_INBOX_ROOM = 'ers-transfer-inbox';
     let priorityAuto = true; // auto-apply suggested priority until user overrides
     let prioritySuggestTimer = null; // debounce timer for suggestion updates
     let currentSearch = '';
@@ -377,6 +378,7 @@ $pageTitle = 'Emergency Call Center';
     let incomingTransferPollInFlight = false;
     const shownIncomingTransferIds = new Set();
     const notifiedIncomingTransferKeys = new Set();
+    const liveIncomingTransferKeys = new Set();
     let transferQueueItems = [];
     let activeTransferCall = null;
     let incomingTransferPollTimer = null;
@@ -403,6 +405,7 @@ $pageTitle = 'Emergency Call Center';
     let transferLocalStream = null;
     let transferLocalStreamPromise = null;
     let transferRemoteAudio = null;
+    let transferInboxSocket = null;
     const SpeechRecognitionApi = window.SpeechRecognition || window.webkitSpeechRecognition || null;
 
     function getSharedCallSessionApi() {
@@ -494,6 +497,7 @@ $pageTitle = 'Emergency Call Center';
             showIncomingCallModal(event.detail || {});
         });
         renderTransferredQueue();
+        startTransferInboxSocket();
         startIncomingTransferPolling();
     });
 
@@ -1231,6 +1235,136 @@ $pageTitle = 'Emergency Call Center';
             transferRemoteAudio.remove();
         }
         transferRemoteAudio = null;
+    }
+
+    function transferScalar(value) {
+        if (value === null || value === undefined || typeof value === 'object') return '';
+        return String(value).trim();
+    }
+
+    function pickTransferScalar(...values) {
+        for (const value of values) {
+            const scalar = transferScalar(value);
+            if (scalar !== '') return scalar;
+        }
+        return '';
+    }
+
+    function pickTransferObject(...values) {
+        for (const value of values) {
+            if (value && typeof value === 'object' && !Array.isArray(value)) return value;
+        }
+        return {};
+    }
+
+    function normalizeRealtimeTransferPayload(payload) {
+        const raw = payload && typeof payload === 'object' ? payload : {};
+        const transferEnvelope = raw.transfer && typeof raw.transfer === 'object' ? raw.transfer : {};
+        const transfer = transferEnvelope.data && typeof transferEnvelope.data === 'object'
+            ? transferEnvelope.data
+            : transferEnvelope;
+        const caller = pickTransferObject(transfer.caller, raw.caller);
+        const locationObj = pickTransferObject(transfer.locationData, transfer.location, raw.locationData, raw.location);
+        const priorityObj = pickTransferObject(transfer.incidentPriority, raw.incidentPriority);
+        const callId = pickTransferScalar(
+            raw.callId,
+            raw.call_id,
+            transfer.callId,
+            transfer.call_id,
+            transfer.call_id_external,
+            transfer.transferId,
+            transfer.transfer_id
+        );
+        const room = pickTransferScalar(raw.room, transfer.room);
+        let location = pickTransferScalar(
+            transfer.location,
+            raw.location,
+            transfer.location_address,
+            raw.location_address,
+            locationObj.address,
+            caller.address
+        );
+        if (!location && (locationObj.lat || locationObj.latitude) && (locationObj.lng || locationObj.longitude)) {
+            location = pickTransferScalar(locationObj.lat, locationObj.latitude) + ', ' + pickTransferScalar(locationObj.lng, locationObj.longitude);
+        }
+        if (!location) location = 'Location pending from transferred call';
+        const transferId = pickTransferScalar(
+            raw.transferId,
+            raw.transfer_id,
+            transfer.transferId,
+            transfer.transfer_id,
+            callId,
+            raw.conversationId,
+            transfer.conversationId
+        );
+        return {
+            transfer_log_id: 0,
+            source_system: pickTransferScalar(raw.source_system, transfer.source_system) || 'AlertaraQC Emergency Communication',
+            event: pickTransferScalar(raw.event, transfer.event) || 'emergency_call_transfer',
+            transfer_id: transferId,
+            call_id_external: callId,
+            conversation_id: pickTransferScalar(raw.conversationId, raw.conversation_id, transfer.conversationId, transfer.conversation_id),
+            transfer_type: 'live_call',
+            room,
+            socket_url: pickTransferScalar(raw.socketUrl, raw.socket_url, transfer.socketUrl, transfer.socket_url) || ALERTARA_SOCKET_URL,
+            socket_path: pickTransferScalar(raw.socketPath, raw.socket_path, transfer.socketPath, transfer.socket_path) || ALERTARA_SOCKET_PATH,
+            transport: 'websocket',
+            call_id: 0,
+            caller_name: pickTransferScalar(transfer.caller_name, raw.caller_name, caller.name) || 'Transferred Caller',
+            caller_phone: pickTransferScalar(transfer.caller_phone, raw.caller_phone, caller.phone),
+            incident_id: transfer.incident_id || null,
+            reference_no: pickTransferScalar(transfer.reference_no, raw.reference_no),
+            incident_status: pickTransferScalar(transfer.incident_status, raw.incident_status) || 'pending',
+            type: pickTransferScalar(transfer.emergencyType, transfer.emergency_type, transfer.type, raw.emergencyType, raw.type) || 'emergency',
+            priority: pickTransferScalar(transfer.priority, raw.priority, priorityObj.priority, priorityObj.level) || 'medium',
+            location,
+            latitude: locationObj.lat ?? locationObj.latitude ?? transfer.latitude ?? raw.latitude ?? null,
+            longitude: locationObj.lng ?? locationObj.longitude ?? transfer.longitude ?? raw.longitude ?? null,
+            description: pickTransferScalar(transfer.description, raw.description, transfer.latestMessage, raw.latestMessage) || 'Incoming transferred live call from Emergency-Com.',
+            transferred_at: pickTransferScalar(raw.transferredAt, raw.transferred_at, transfer.transferredAt, transfer.transferred_at) || new Date().toISOString(),
+            fallback_notice: room ? '' : 'Emergency-Com sent a live transfer notice without a room, so audio cannot connect until the transfer is retried with room data.'
+        };
+    }
+
+    function showRealtimeTransferNotice(payload) {
+        const transfer = normalizeRealtimeTransferPayload(payload);
+        const key = transferQueueKey(transfer) || ('live-' + Date.now());
+        if (liveIncomingTransferKeys.has(key)) return;
+        liveIncomingTransferKeys.add(key);
+        notifiedIncomingTransferKeys.add(key);
+        upsertTransferredQueueItem(transfer);
+        document.dispatchEvent(new CustomEvent('ers:incoming-call', {
+            detail: incomingCallDetailFromTransfer(normalizeTransferQueueItem(transfer) || transfer)
+        }));
+    }
+
+    function startTransferInboxSocket() {
+        if (transferInboxSocket || typeof window.io !== 'function') {
+            if (typeof window.io !== 'function') {
+                setTransferQueueStatus('Live socket unavailable. Falling back to transfer feed polling.', 'active');
+            }
+            return;
+        }
+        try {
+            transferInboxSocket = window.io(ALERTARA_SOCKET_URL, {
+                path: ALERTARA_SOCKET_PATH,
+                transports: ['websocket', 'polling'],
+                query: { role: 'ers-dispatcher', inbox: TRANSFER_INBOX_ROOM }
+            });
+            transferInboxSocket.on('connect', () => {
+                transferInboxSocket.emit('join', TRANSFER_INBOX_ROOM);
+                setTransferQueueStatus('Live transfer socket connected. Waiting for transferred calls and reports...', 'active');
+            });
+            transferInboxSocket.on('incoming-transfer', showRealtimeTransferNotice);
+            transferInboxSocket.on('ers-transfer-notify', showRealtimeTransferNotice);
+            transferInboxSocket.on('connect_error', (error) => {
+                console.warn('ERS transfer inbox socket failed:', error);
+                setTransferQueueStatus('Live socket not reachable. Backup feed polling is still running.', 'error');
+            });
+        } catch (error) {
+            console.warn('Unable to start ERS transfer inbox socket:', error);
+            setTransferQueueStatus('Live socket could not start. Backup feed polling is still running.', 'error');
+        }
     }
 
     function startIncomingTransferPolling() {
