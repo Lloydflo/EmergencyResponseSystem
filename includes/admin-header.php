@@ -372,6 +372,7 @@ document.addEventListener('DOMContentLoaded', function() {
     const resolvedSeenKey = 'ers.resolvedNotificationSeen.' + userRole;
     const incidentCardSeenKey = 'ers.interagencyIncidentCardSeen.' + userRole;
     const resourceAdditionSeenKey = 'ers.resourceAdditionSeen.' + userRole;
+    const resourceRequestSeenKey = 'ers.resourceRequestSeen.' + userRole;
     const state = {
         lastUnreadCount: null,
         lastBackupCount: null,
@@ -382,12 +383,14 @@ document.addEventListener('DOMContentLoaded', function() {
         resolvedSeenId: Number(window.localStorage.getItem(resolvedSeenKey) || 0) || 0,
         incidentCardSeenId: Number(window.localStorage.getItem(incidentCardSeenKey) || 0) || 0,
         resourceAdditionSeenId: Number(window.localStorage.getItem(resourceAdditionSeenKey) || 0) || 0,
+        resourceRequestSeenId: Number(window.localStorage.getItem(resourceRequestSeenKey) || 0) || 0,
         resolvedNotifications: [],
         resolvedUnreadCount: 0,
         incidentCardNotifications: [],
         incidentCardUnreadCount: 0,
         resourceAdditionNotifications: [],
         resourceAdditionUnreadCount: 0,
+        resourceRequestUnreadCount: 0,
         recentThreads: [],
         unreadThreads: [],
         backupRequests: [],
@@ -506,6 +509,13 @@ document.addEventListener('DOMContentLoaded', function() {
         const nextCount = Math.max(0, Number(count) || 0);
         el.hidden = nextCount <= 0;
         el.textContent = nextCount > 99 ? '99+' : String(nextCount);
+    }
+
+    function notificationBadgeTotal() {
+        return state.resourceRequestUnreadCount
+            + state.resolvedUnreadCount
+            + state.incidentCardUnreadCount
+            + state.resourceAdditionUnreadCount;
     }
 
     function emptyState(icon, text) {
@@ -913,9 +923,9 @@ document.addEventListener('DOMContentLoaded', function() {
         markResolvedNotificationsSeen();
         markIncidentCardNotificationsSeen();
         markResourceAdditionNotificationsSeen();
+        markResourceRequestNotificationsSeen();
         const unreadCount = Math.max(0, Number(state.lastUnreadCount) || 0);
-        const backupCount = Array.isArray(state.backupRequests) ? state.backupRequests.length : 0;
-        setBadge(notificationBadge, unreadCount + backupCount + state.resolvedUnreadCount + state.incidentCardUnreadCount + state.resourceAdditionUnreadCount);
+        setBadge(notificationBadge, notificationBadgeTotal());
         renderNotificationList(unreadCount);
         renderAllNotificationsList();
         if (notificationModal) notificationModal.classList.remove('show');
@@ -971,10 +981,22 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     }
 
+    function markResourceRequestNotificationsSeen() {
+        const latestId = Math.max(0, ...state.backupRequests.map(function(item) {
+            return requestNotificationSortValue(item);
+        }));
+        if (latestId > state.resourceRequestSeenId) {
+            state.resourceRequestSeenId = latestId;
+            state.resourceRequestUnreadCount = 0;
+            window.localStorage.setItem(resourceRequestSeenKey, String(latestId));
+        }
+    }
+
     async function loadBackupRequestSummary(limit) {
         if (!['dispatcher', 'admin'].includes(userRole)) {
             state.backupRequests = [];
             state.lastBackupCount = 0;
+            state.resourceRequestUnreadCount = 0;
             return;
         }
 
@@ -1018,6 +1040,9 @@ document.addEventListener('DOMContentLoaded', function() {
             state.lastPendingRequestId = latestRequestId;
             state.lastResourceAdditionNotificationId = latestResourceAdditionId;
             state.backupRequests = backupRequests;
+            state.resourceRequestUnreadCount = backupRequests.filter(function(item) {
+                return requestNotificationSortValue(item) > state.resourceRequestSeenId;
+            }).length;
             state.resourceAdditionNotifications = resourceAdditions;
             state.resourceAdditionUnreadCount = resourceAdditions.filter(function(item) {
                 return Number(item.notification_id || 0) > state.resourceAdditionSeenId;
@@ -1128,8 +1153,7 @@ document.addEventListener('DOMContentLoaded', function() {
             state.recentThreads = threads;
             state.unreadThreads = unreadThreads;
 
-            const backupCount = Array.isArray(state.backupRequests) ? state.backupRequests.length : 0;
-            setBadge(notificationBadge, unreadCount + backupCount + state.resolvedUnreadCount + state.incidentCardUnreadCount + state.resourceAdditionUnreadCount);
+            setBadge(notificationBadge, notificationBadgeTotal());
             setBadge(messageBadge, unreadCount);
             renderNotificationList(unreadCount);
             renderMessageList();
@@ -1159,9 +1183,9 @@ document.addEventListener('DOMContentLoaded', function() {
             markResolvedNotificationsSeen();
             markIncidentCardNotificationsSeen();
             markResourceAdditionNotificationsSeen();
+            markResourceRequestNotificationsSeen();
             const unreadCount = Math.max(0, Number(state.lastUnreadCount) || 0);
-            const backupCount = Array.isArray(state.backupRequests) ? state.backupRequests.length : 0;
-            setBadge(notificationBadge, unreadCount + backupCount + state.resolvedUnreadCount + state.incidentCardUnreadCount + state.resourceAdditionUnreadCount);
+            setBadge(notificationBadge, notificationBadgeTotal());
             renderNotificationList(unreadCount);
             toggleModal(notificationModal, notificationBtn, messageModal, messageBtn);
         });
@@ -1209,9 +1233,11 @@ document.addEventListener('DOMContentLoaded', function() {
         const resourceTrigger = event.target.closest('[data-open-resources]');
         if (resourceTrigger) {
             event.preventDefault();
+            markResourceRequestNotificationsSeen();
             if (resourceTrigger.hasAttribute('data-resource-addition-notification')) {
                 markResourceAdditionNotificationsSeen();
             }
+            setBadge(notificationBadge, notificationBadgeTotal());
             openResources();
             return;
         }
