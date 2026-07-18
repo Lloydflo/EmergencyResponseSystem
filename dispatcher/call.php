@@ -746,7 +746,8 @@ $pageTitle = 'Emergency Call Center';
             description: transfer.description || 'No description provided',
             caller_name: transfer.caller_name || transfer.name || 'Transferred Caller',
             caller_phone: transfer.caller_phone || transfer.phone || '',
-            transferred_at: transfer.transferred_at || transfer.created_at || new Date().toISOString()
+            transferred_at: transfer.transferred_at || transfer.created_at || new Date().toISOString(),
+            fallback_notice: transfer.fallback_notice || ''
         };
     }
 
@@ -843,6 +844,7 @@ $pageTitle = 'Emergency Call Center';
                     <span>${escapeHtml(formatDateTime(item.transferred_at))}</span>
                 </div>
                 <p>${escapeHtml(item.description)}</p>
+                ${item.fallback_notice ? `<div class="transfer-queue-warning"><i class="fas fa-triangle-exclamation"></i> ${escapeHtml(item.fallback_notice)}</div>` : ''}
                 <div class="transfer-queue-location"><i class="fas fa-map-marker-alt"></i> ${escapeHtml(item.location)}</div>
                 <button type="button" class="transfer-queue-action" data-transfer-action="${actionName}" data-transfer-key="${escapeHtml(item.queue_key)}">
                     <i class="fas ${actionIcon}"></i> ${actionText}

@@ -783,6 +783,20 @@ body.incoming-call-modal-open {
     line-height: 1.45;
 }
 
+.transfer-queue-warning {
+    display: flex;
+    align-items: flex-start;
+    gap: 0.45rem;
+    margin-top: 0.65rem;
+    padding: 0.55rem 0.65rem;
+    border-radius: 10px;
+    color: #92400e;
+    background: rgba(251, 191, 36, 0.16);
+    font-size: 0.76rem;
+    font-weight: 800;
+    line-height: 1.35;
+}
+
 .transfer-queue-location {
     display: flex;
     gap: 0.45rem;
@@ -1763,6 +1777,11 @@ body.incident-details-modal-open {
 [data-theme="dark"] .transfer-queue-card p,
 [data-theme="dark"] .transfer-queue-location {
     color: #cbd5e1;
+}
+
+[data-theme="dark"] .transfer-queue-warning {
+    color: #fde68a;
+    background: rgba(251, 191, 36, 0.12);
 }
 
 [data-theme="dark"] .transfer-queue-meta span {
