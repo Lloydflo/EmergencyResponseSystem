@@ -763,7 +763,8 @@ $pageTitle = 'Emergency Call Center';
         if (!transfer) return false;
         const explicitType = String(transfer.transfer_type || '').toLowerCase();
         if (explicitType === 'live_call') return true;
-        if (transfer.room || transfer.call_id_external || transfer.callId || transfer.call_id) return true;
+        if (explicitType === 'report' || explicitType === 'message' || explicitType === 'message_report') return false;
+        if (transfer.room) return true;
         const text = [
             transfer.event,
             transfer.description,

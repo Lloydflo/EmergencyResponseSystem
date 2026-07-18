@@ -191,9 +191,11 @@ try {
         $call = isset($payload['call']) && is_array($payload['call']) ? $payload['call'] : $payload;
         $incident = isset($payload['incident']) && is_array($payload['incident']) ? $payload['incident'] : [];
         $detailSources = [$row, $call, $incident, $payload];
+        $explicitTransferType = strtolower(incoming_transfer_pick($detailSources, ['transfer_type', 'transferType']));
         $externalCallId = incoming_transfer_pick($detailSources, ['callId', 'call_id'], (string)($row['transfer_id'] ?? ''));
         $room = incoming_transfer_pick([$call, $payload], ['room']);
-        $isLiveCall = trim($externalCallId) !== '' && trim($room) !== '';
+        $isLiveCall = $explicitTransferType === 'live_call'
+            || ($explicitTransferType !== 'report' && trim($externalCallId) !== '' && trim($room) !== '');
         if (trim($externalCallId) === '') {
             $externalCallId = (string)($row['transfer_id'] ?? '');
         }
@@ -205,7 +207,7 @@ try {
             'transfer_log_id' => (int)($row['transfer_log_id'] ?? 0),
             'source_system' => (string)($row['source_system'] ?? ''),
             'event' => incoming_transfer_pick([$call, $payload], ['event'], 'incoming-transfer'),
-            'transfer_id' => incoming_transfer_pick([$row, $call, $payload], ['transfer_id', 'callId', 'call_id']),
+            'transfer_id' => incoming_transfer_pick([$row, $call, $payload], ['transfer_id', 'transferId', 'callId', 'call_id']),
             'call_id_external' => $externalCallId,
             'conversation_id' => incoming_transfer_pick([$call, $payload], ['conversationId', 'conversation_id']),
             'transfer_type' => $isLiveCall ? 'live_call' : 'report',

@@ -499,7 +499,7 @@ function ers_api_create_incoming_transfer(PDO $pdo, array $auth): array
         120
     );
     $transferId = ers_external_clean(
-        $input['transfer_id'] ?? $input['external_transfer_id'] ?? $call['transfer_id'] ?? $call['callId'] ?? $call['call_id'] ?? $call['conversationId'] ?? $call['conversation_id'] ?? $call['reference_no'] ?? '',
+        $input['transfer_id'] ?? $input['transferId'] ?? $input['external_transfer_id'] ?? $call['transfer_id'] ?? $call['transferId'] ?? $call['callId'] ?? $call['call_id'] ?? $call['conversationId'] ?? $call['conversation_id'] ?? $call['reference_no'] ?? '',
         120
     );
     $type = ers_external_normalize_type($details['emergencyType'] ?? $details['emergency_type'] ?? $details['incident_type'] ?? $details['type'] ?? $details['department'] ?? 'other');
@@ -573,7 +573,9 @@ function ers_api_create_incoming_transfer(PDO $pdo, array $auth): array
         $row = $existing->fetch(PDO::FETCH_ASSOC);
         if ($row) {
             ers_external_link_incident($pdo, $sourceSystem, $transferId, (int)$row['id'], $input);
-            $isLiveDuplicate = $externalCallIdForDuplicate !== '' && $roomForDuplicate !== '';
+            $duplicateTransferType = strtolower(ers_external_clean($call['transfer_type'] ?? $call['transferType'] ?? $input['transfer_type'] ?? $input['transferType'] ?? $details['transfer_type'] ?? $details['transferType'] ?? '', 40));
+            $isLiveDuplicate = $duplicateTransferType === 'live_call'
+                || ($duplicateTransferType !== 'report' && $externalCallIdForDuplicate !== '' && $roomForDuplicate !== '');
             return [
                 'success' => true,
                 'duplicate' => true,
@@ -604,7 +606,9 @@ function ers_api_create_incoming_transfer(PDO $pdo, array $auth): array
     $socketPath = ers_external_clean($call['socketPath'] ?? $call['socket_path'] ?? $input['socketPath'] ?? $input['socket_path'] ?? $details['socketPath'] ?? $details['socket_path'] ?? '/socket.io', 100);
     $conversationId = ers_external_clean($call['conversationId'] ?? $call['conversation_id'] ?? $input['conversationId'] ?? $input['conversation_id'] ?? $details['conversationId'] ?? $details['conversation_id'] ?? '', 80);
     $externalCallId = ers_external_clean($call['callId'] ?? $call['call_id'] ?? $input['callId'] ?? $input['call_id'] ?? $details['callId'] ?? $details['call_id'] ?? '', 120);
-    $isLiveCallTransfer = $externalCallId !== '' && $room !== '';
+    $requestedTransferType = strtolower(ers_external_clean($call['transfer_type'] ?? $call['transferType'] ?? $input['transfer_type'] ?? $input['transferType'] ?? $details['transfer_type'] ?? $details['transferType'] ?? '', 40));
+    $isLiveCallTransfer = $requestedTransferType === 'live_call'
+        || ($requestedTransferType !== 'report' && $externalCallId !== '' && $room !== '');
 
     if ($transferId === '') {
         $transferId = $externalCallId !== ''
@@ -652,7 +656,7 @@ function ers_api_create_incoming_transfer(PDO $pdo, array $auth): array
 
     return [
         'success' => true,
-        'message' => 'Incoming transfer call recorded successfully.',
+        'message' => $isLiveCallTransfer ? 'Incoming transfer call recorded successfully.' : 'Incoming transferred report recorded successfully.',
         'event' => ers_external_clean($call['event'] ?? $input['event'] ?? 'incoming-transfer', 80),
         'transfer_type' => $isLiveCallTransfer ? 'live_call' : 'report',
         'transfer_id' => $transferId,
