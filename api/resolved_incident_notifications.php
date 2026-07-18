@@ -7,7 +7,8 @@ require_once __DIR__ . '/../includes/db.php';
 require_once __DIR__ . '/../includes/auth.php';
 require_once __DIR__ . '/../includes/incident_admin_review.php';
 
-if (current_session_role() !== 'admin') {
+$role = current_session_role();
+if (!in_array($role, ['admin', 'dispatcher'], true)) {
     echo json_encode(['ok' => true, 'notifications' => [], 'latest_id' => 0]);
     exit;
 }
@@ -28,29 +29,52 @@ if ($limit > 50) {
 }
 
 try {
-    if (!ers_ensure_incident_admin_reviews($pdo)) {
-        echo json_encode(['ok' => true, 'notifications' => [], 'latest_id' => 0]);
-        exit;
-    }
+    if ($role === 'admin') {
+        if (!ers_ensure_incident_admin_reviews($pdo)) {
+            echo json_encode(['ok' => true, 'notifications' => [], 'latest_id' => 0]);
+            exit;
+        }
 
-    $stmt = $pdo->prepare("
-        SELECT
-            iar.id AS notification_id,
-            CONCAT('Incident ', COALESCE(NULLIF(i.reference_no, ''), CONCAT('#', i.id)), ' review was sent to admin.') AS details,
-            iar.sent_at AS notified_at,
-            iar.sent_by_name,
-            i.id AS incident_id,
-            i.reference_no,
-            i.type,
-            i.priority,
-            i.location_address,
-            i.resolved_at
-        FROM incident_admin_reviews iar
-        LEFT JOIN incidents i ON i.id = iar.incident_id
-        WHERE i.id IS NOT NULL
-        ORDER BY iar.id DESC
-        LIMIT " . (int)$limit
-    );
+        $stmt = $pdo->prepare("
+            SELECT
+                iar.id AS notification_id,
+                CONCAT('Incident ', COALESCE(NULLIF(i.reference_no, ''), CONCAT('#', i.id)), ' review was sent to admin.') AS details,
+                iar.sent_at AS notified_at,
+                iar.sent_by_name,
+                i.id AS incident_id,
+                i.reference_no,
+                i.type,
+                i.priority,
+                i.location_address,
+                i.resolved_at
+            FROM incident_admin_reviews iar
+            LEFT JOIN incidents i ON i.id = iar.incident_id
+            WHERE i.id IS NOT NULL
+            ORDER BY iar.id DESC
+            LIMIT " . (int)$limit
+        );
+    } else {
+        $stmt = $pdo->prepare("
+            SELECT
+                a.id AS notification_id,
+                a.details,
+                a.created_at AS notified_at,
+                NULL AS sent_by_name,
+                i.id AS incident_id,
+                i.reference_no,
+                i.type,
+                i.priority,
+                i.location_address,
+                i.resolved_at
+            FROM activity_log a
+            LEFT JOIN incidents i ON i.id = a.entity_id
+            WHERE a.action = 'incident_resolved'
+              AND a.entity_type = 'incident'
+              AND i.id IS NOT NULL
+            ORDER BY a.id DESC
+            LIMIT " . (int)$limit
+        );
+    }
     $stmt->execute();
 
     $notifications = array_map(static function (array $row): array {

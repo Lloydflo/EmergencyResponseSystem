@@ -2,6 +2,7 @@
 header('Content-Type: application/json');
 
 require_once __DIR__ . '/../includes/db.php';
+require_once __DIR__ . '/../includes/activity_log.php';
 require_once __DIR__ . '/../includes/incident_admin_review.php';
 
 $pdo = get_db_connection();
@@ -153,6 +154,41 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
     try {
         insert_feedback_note($pdo, $incidentId, $authorName, $rating, $note, $hasRatingColumn);
+
+        $actorUserId = null;
+        if (session_status() === PHP_SESSION_NONE) {
+            @session_start();
+        }
+        if (isset($_SESSION['user_id']) && (int)$_SESSION['user_id'] > 0) {
+            $actorUserId = (int)$_SESSION['user_id'];
+        }
+
+        $reference = '#' . $incidentId;
+        try {
+            $incidentStmt = $pdo->prepare('SELECT reference_no FROM incidents WHERE id = ? LIMIT 1');
+            $incidentStmt->execute([$incidentId]);
+            $incidentRef = trim((string)$incidentStmt->fetchColumn());
+            if ($incidentRef !== '') {
+                $reference = $incidentRef;
+            }
+        } catch (Throwable $referenceError) {
+            $reference = '#' . $incidentId;
+        }
+
+        log_activity_event(
+            $actorUserId,
+            'incident_feedback_added',
+            'incident',
+            $incidentId,
+            json_encode([
+                'message' => 'Dispatcher feedback was added for incident ' . $reference . '.',
+                'actor_name' => $authorName,
+                'actor_role' => 'dispatcher',
+                'incident_reference' => $reference,
+                'rating' => $rating,
+                'has_note' => $note !== '',
+            ], JSON_UNESCAPED_UNICODE)
+        );
 
         echo json_encode(['ok' => true]);
         exit;

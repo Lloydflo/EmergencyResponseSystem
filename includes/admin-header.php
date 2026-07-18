@@ -529,6 +529,29 @@ document.addEventListener('DOMContentLoaded', function() {
 
     function renderNotificationList(unreadCount) {
         if (!notificationList) return;
+        var combinedNotificationParts = collectAllNotifications().map(function(item) {
+            return `
+                <button type="button" class="notification-item header-reset-button" ${item.hrefAttr}>
+                    <div class="notification-icon notification-icon-${escapeHtml(item.kind)}">
+                        <i class="fas ${escapeHtml(item.icon)}"></i>
+                    </div>
+                    <div class="notification-details">
+                        <div class="notification-title">${escapeHtml(item.title)}</div>
+                        <div class="notification-text">${escapeHtml(item.text)}</div>
+                        <div class="notification-time">${escapeHtml(item.meta)}</div>
+                    </div>
+                </button>
+            `;
+        });
+
+        if (!combinedNotificationParts.length) {
+            notificationList.innerHTML = emptyState('fa-bell-slash', 'No new notifications.');
+            return;
+        }
+
+        notificationList.innerHTML = combinedNotificationParts.join('');
+        return;
+
         const latest = state.unreadThreads[0] || state.recentThreads[0] || null;
         const backupCount = Array.isArray(state.backupRequests) ? state.backupRequests.length : 0;
         const latestBackup = backupCount > 0 ? state.backupRequests[0] : null;
@@ -695,11 +718,14 @@ document.addEventListener('DOMContentLoaded', function() {
             const detailText = item.details || (incidentLabel + ' has been resolved.');
             const isUnread = Number(item.notification_id || 0) > state.resolvedSeenId;
             const time = item.notified_at || incident.resolved_at;
+            const isAdminReviewNotification = userRole === 'admin';
             entries.push({
                 kind: 'resolved',
                 hrefAttr: 'data-open-review="1"',
                 icon: isUnread ? 'fa-circle-check' : 'fa-check',
-                title: isUnread ? 'Incident resolved' : 'Resolved incident',
+                title: isAdminReviewNotification
+                    ? (isUnread ? 'Resolved review sent' : 'Resolved review')
+                    : (isUnread ? 'Incident resolved' : 'Resolved incident'),
                 text: detailText,
                 meta: relativeTime(time),
                 time: time,
@@ -768,7 +794,7 @@ document.addEventListener('DOMContentLoaded', function() {
         allNotificationsList.innerHTML = entries.map(function(item) {
             return `
                 <button type="button" class="notification-item header-reset-button all-notification-item" ${item.hrefAttr}>
-                    <div class="notification-icon">
+                    <div class="notification-icon notification-icon-${escapeHtml(item.kind)}">
                         <i class="fas ${escapeHtml(item.icon)}"></i>
                     </div>
                     <div class="notification-details">
@@ -1179,7 +1205,7 @@ document.addEventListener('DOMContentLoaded', function() {
         notificationBtn.addEventListener('click', async function(event) {
             event.preventDefault();
             event.stopPropagation();
-            await loadHeaderSummary();
+            await loadHeaderSummary(100);
             markResolvedNotificationsSeen();
             markIncidentCardNotificationsSeen();
             markResourceAdditionNotificationsSeen();
