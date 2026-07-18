@@ -19,6 +19,7 @@ $pageTitle = 'Inter-Agency Conversations';
     <link rel="stylesheet" href="css/sidebar.css">
     <link rel="stylesheet" href="css/admin-header.css">
     <link rel="stylesheet" href="css/sidebar-footer.css">
+    <link rel="stylesheet" href="css/interagency-command.css">
     <style>
         :root {
             --ia-bg: #f4f7fb;
@@ -2005,6 +2006,8 @@ $pageTitle = 'Inter-Agency Conversations';
                     <div class="ia-stat-value" id="iaUnreadCount">0</div>
                 </article>
             </section>
+
+            <section class="ia-command-center" id="iaCommandCenter" aria-label="Inter-Agency Command Center"></section>
 
             <section class="ia-board">
                 <aside class="ia-list-panel">
@@ -5032,5 +5035,6 @@ $pageTitle = 'Inter-Agency Conversations';
             });
         })();
     </script>
+    <script src="js/interagency-command.js"></script>
 </body>
 </html>
