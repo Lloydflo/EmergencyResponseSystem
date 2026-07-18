@@ -24,6 +24,11 @@ $pageTitle = 'Emergency Call Center';
     <link rel="stylesheet" href="css/cards.css">
     <link rel="stylesheet" href="css/call.css?v=<?php echo filemtime($rootDir . '/css/call.css'); ?>">
     <script src="node_modules/socket.io-client/dist/socket.io.min.js"></script>
+    <script>
+        if (typeof window.io !== 'function') {
+            document.write('<script src="https://cdn.socket.io/4.7.5/socket.io.min.js"><\/script>');
+        }
+    </script>
     <script src="js/place-autocomplete.js"></script>
 </head>
 <body>
@@ -120,8 +125,10 @@ $pageTitle = 'Emergency Call Center';
                                 </div>
                             </div>
                             <div class="transfer-summary" id="incomingTransferSummary" hidden>
+                                <div><strong>Emergency:</strong> <span id="incomingTransferType"></span></div>
                                 <div><strong>Location:</strong> <span id="incomingTransferLocation"></span></div>
                                 <div><strong>Priority:</strong> <span id="incomingTransferPriority"></span></div>
+                                <div><strong>Description:</strong> <span id="incomingTransferDescription"></span></div>
                                 <div><strong>Socket:</strong> <span id="incomingTransferSocket"></span></div>
                             </div>
                             <div class="call-actions">
@@ -134,6 +141,8 @@ $pageTitle = 'Emergency Call Center';
                             </div>
                         </div>
                     </div>
+
+                    <div class="transfer-report-stack" id="transferReportNotifications" aria-live="assertive" aria-label="Incoming transferred reports"></div>
 
                     <div class="active-call-panel" id="activeCallPanel">
                         <div class="call-header">
@@ -283,6 +292,18 @@ $pageTitle = 'Emergency Call Center';
                         </div>
                     </div>
 
+                    <div class="transfer-queue-panel" id="transferQueuePanel">
+                        <div class="transfer-queue-head">
+                            <div>
+                                <div class="panel-eyebrow">Transferred Queue</div>
+                                <h4>Calls & Reports</h4>
+                            </div>
+                            <span class="transfer-queue-count" id="transferQueueCount">0</span>
+                        </div>
+                        <div class="transfer-queue-status" id="transferQueueStatus">Listening for transferred calls and reports...</div>
+                        <div class="transfer-queue-list" id="transferQueueList" aria-live="polite"></div>
+                    </div>
+
                     <div class="sidebar-controls">
                         <input type="search" id="incidentSearch" placeholder="Search Type of Emergency, Location...">
                         <div class="date-controls">
@@ -341,6 +362,7 @@ $pageTitle = 'Emergency Call Center';
     const API_INCOMING_TRANSFERS_URL = 'api/incoming_transfers.php';
     const ALERTARA_SOCKET_URL = 'https://emergency-comm.alertaraqc.com';
     const ALERTARA_SOCKET_PATH = '/socket.io';
+    const TRANSFER_INBOX_ROOM = 'ers-transfer-inbox';
     let priorityAuto = true; // auto-apply suggested priority until user overrides
     let prioritySuggestTimer = null; // debounce timer for suggestion updates
     let currentSearch = '';
@@ -353,7 +375,14 @@ $pageTitle = 'Emergency Call Center';
     let pendingIncomingCall = null;
     let latestTransferLogId = Number(window.localStorage.getItem('ersLatestTransferLogId') || '0') || 0;
     let incomingTransferBaselineReady = latestTransferLogId > 0;
+    let incomingTransferPollInFlight = false;
     const shownIncomingTransferIds = new Set();
+    const notifiedIncomingTransferKeys = new Set();
+    const liveIncomingTransferKeys = new Set();
+    let transferQueueItems = [];
+    let activeTransferCall = null;
+    let incomingTransferPollTimer = null;
+    const INCOMING_TRANSFER_POLL_MS = 1500;
 
     function escapeHtml(value) {
         return String(value == null ? '' : value)
@@ -376,6 +405,7 @@ $pageTitle = 'Emergency Call Center';
     let transferLocalStream = null;
     let transferLocalStreamPromise = null;
     let transferRemoteAudio = null;
+    let transferInboxSocket = null;
     const SpeechRecognitionApi = window.SpeechRecognition || window.webkitSpeechRecognition || null;
 
     function getSharedCallSessionApi() {
@@ -398,6 +428,7 @@ $pageTitle = 'Emergency Call Center';
             stopTimer();
             stopVoiceTools();
             activeCall = null;
+            activeTransferCall = null;
             updateStats();
             return;
         }
@@ -408,6 +439,9 @@ $pageTitle = 'Emergency Call Center';
             phone: session.phone || '',
             start: Number.isFinite(start) && start > 0 ? start : Date.now()
         };
+        if (session.isTransfer === true) {
+            activeTransferCall = session;
+        }
 
         panel.classList.add('active');
         document.getElementById('activeCallerName').textContent = 'Caller: ' + activeCall.name;
@@ -462,6 +496,8 @@ $pageTitle = 'Emergency Call Center';
         document.addEventListener('ers:incoming-call', (event) => {
             showIncomingCallModal(event.detail || {});
         });
+        renderTransferredQueue();
+        startTransferInboxSocket();
         startIncomingTransferPolling();
     });
 
@@ -540,6 +576,7 @@ $pageTitle = 'Emergency Call Center';
         const start = incomingCall.start || Date.now();
         hideIncomingCallModal();
         pendingIncomingCall = null;
+        activeTransferCall = incomingCall.isTransfer ? incomingCall : null;
         const sessionApi = getSharedCallSessionApi();
         if (sessionApi) {
             sessionApi.start({
@@ -552,15 +589,21 @@ $pageTitle = 'Emergency Call Center';
                 incidentReferenceNo: incomingCall.incidentReferenceNo || '',
                 incidentStatus: incomingCall.incidentStatus || '',
                 incidentType: incomingCall.incidentType || '',
-                location: incomingCall.location || ''
+                location: incomingCall.location || '',
+                isTransfer: incomingCall.isTransfer === true,
+                transferId: incomingCall.transferId || '',
+                room: incomingCall.room || ''
             });
         } else {
-            activeCall = { active: true, name, phone, start };
+            activeCall = { active: true, name, phone, start, isTransfer: incomingCall.isTransfer === true };
         }
         applyIncomingCallToForm(incomingCall);
         connectTransferSocket(incomingCall);
         prepareTransferLocalAudio(incomingCall);
         renderActiveCallPanel(getSharedCallSession() || activeCall);
+        if (incomingCall.isTransfer && !incomingCall.room) {
+            setVoiceState('Transferred call opened, but no live room was included by Emergency-Com. Ask them to retry the transfer after deploying the live payload fix.');
+        }
         focusAcceptedCallForm();
     }
 
@@ -576,6 +619,7 @@ $pageTitle = 'Emergency Call Center';
         if (sessionApi) {
             sessionApi.end();
         }
+        activeTransferCall = null;
         renderActiveCallPanel(null);
     }
 
@@ -584,8 +628,10 @@ $pageTitle = 'Emergency Call Center';
         const summary = document.getElementById('incomingTransferSummary');
         const source = document.getElementById('incomingTransferSource');
         const room = document.getElementById('incomingTransferRoom');
+        const type = document.getElementById('incomingTransferType');
         const location = document.getElementById('incomingTransferLocation');
         const priority = document.getElementById('incomingTransferPriority');
+        const description = document.getElementById('incomingTransferDescription');
         const socket = document.getElementById('incomingTransferSocket');
         const isTransfer = !!(call && call.isTransfer);
 
@@ -595,9 +641,284 @@ $pageTitle = 'Emergency Call Center';
 
         if (source) source.textContent = call.sourceSystem || 'AlertaraQC Emergency Communication';
         if (room) room.textContent = call.room ? 'Room ' + call.room : 'No live room - report transfer';
+        if (type) type.textContent = call.incidentType || 'Emergency';
         if (location) location.textContent = call.location || 'Not provided';
         if (priority) priority.textContent = call.priority || 'medium';
+        if (description) description.textContent = call.description || 'No description provided';
         if (socket) socket.textContent = (call.socketUrl || ALERTARA_SOCKET_URL) + (call.socketPath || ALERTARA_SOCKET_PATH);
+    }
+
+    function transferredIncidentItem(report) {
+        return {
+            id: Number(report.incident_id || 0),
+            incident_code: report.reference_no || ('Transferred report ' + (report.transfer_id || '')),
+            status: report.incident_status || 'pending',
+            type: report.type || 'other',
+            priority: report.priority || 'medium',
+            location: report.location || 'Not provided',
+            latitude: report.latitude ?? null,
+            longitude: report.longitude ?? null,
+            caller_name: report.caller_name || 'Transferred reporter',
+            caller_phone: report.caller_phone || '',
+            description: report.description || 'No description provided',
+            created_at: report.transferred_at || new Date().toISOString()
+        };
+    }
+
+    function showIncomingReportNotification(report) {
+        const stack = document.getElementById('transferReportNotifications');
+        if (!stack || !report) return;
+
+        const notificationId = String(report.transfer_log_id || report.transfer_id || report.incident_id || '');
+        if (notificationId && stack.querySelector('[data-transfer-notification="' + CSS.escape(notificationId) + '"]')) {
+            return;
+        }
+
+        const priorityValue = String(report.priority || 'medium').toLowerCase();
+        const priority = ['high', 'medium', 'low'].includes(priorityValue) ? priorityValue : 'medium';
+        const card = document.createElement('article');
+        card.className = 'transfer-report-notification priority-' + priority;
+        if (notificationId) card.dataset.transferNotification = notificationId;
+        card.innerHTML = [
+            '<div class="transfer-report-head">',
+                '<span class="transfer-report-icon" aria-hidden="true"><i class="fas fa-file-medical-alt"></i></span>',
+                '<div>',
+                    '<div class="transfer-report-eyebrow">Incoming Transferred Report</div>',
+                    '<strong class="transfer-report-title"></strong>',
+                '</div>',
+                '<button type="button" class="transfer-report-dismiss" title="Dismiss notification" aria-label="Dismiss report notification">',
+                    '<i class="fas fa-times"></i>',
+                '</button>',
+            '</div>',
+            '<div class="transfer-report-body">',
+                '<span class="transfer-report-priority"></span>',
+                '<p class="transfer-report-description"></p>',
+                '<div class="transfer-report-location"><i class="fas fa-map-marker-alt"></i><span></span></div>',
+            '</div>',
+            '<div class="transfer-report-actions">',
+                '<button type="button" class="transfer-report-open">',
+                    '<i class="fas fa-eye"></i> Open report',
+                '</button>',
+            '</div>'
+        ].join('');
+
+        card.querySelector('.transfer-report-title').textContent =
+            report.reference_no || report.type || 'Emergency report';
+        card.querySelector('.transfer-report-priority').textContent =
+            priority.toUpperCase() + ' PRIORITY';
+        card.querySelector('.transfer-report-description').textContent =
+            report.description || 'No description provided';
+        card.querySelector('.transfer-report-location span').textContent =
+            report.location || 'Location not provided';
+        card.querySelector('.transfer-report-dismiss').addEventListener('click', () => card.remove());
+        card.querySelector('.transfer-report-open').addEventListener('click', () => {
+            openIncidentModal(transferredIncidentItem(report));
+            card.remove();
+        });
+
+        stack.prepend(card);
+        while (stack.children.length > 4) {
+            stack.lastElementChild.remove();
+        }
+        playIncomingTransferAlert();
+    }
+
+    function transferQueueKey(transfer) {
+        return String(transfer.transfer_log_id || transfer.transfer_id || transfer.incident_id || transfer.call_id_external || '').trim();
+    }
+
+    function normalizeTransferQueueItem(transfer) {
+        const key = transferQueueKey(transfer);
+        if (!key) return null;
+        const room = String(transfer.room || '').trim();
+        const transferType = transferLooksLikeCall(transfer) ? 'live_call' : 'report';
+        return {
+            queue_key: key,
+            transfer_log_id: Number(transfer.transfer_log_id || 0),
+            transfer_id: transfer.transfer_id || '',
+            call_id_external: transfer.call_id_external || transfer.callId || transfer.call_id || transfer.transfer_id || '',
+            conversation_id: transfer.conversation_id || transfer.conversationId || '',
+            transfer_type: transferType,
+            room,
+            socket_url: transfer.socket_url || transfer.socketUrl || ALERTARA_SOCKET_URL,
+            socket_path: transfer.socket_path || transfer.socketPath || ALERTARA_SOCKET_PATH,
+            source_system: transfer.source_system || 'AlertaraQC Emergency Communication',
+            incident_id: transfer.incident_id || null,
+            reference_no: transfer.reference_no || '',
+            incident_status: transfer.incident_status || 'pending',
+            type: transfer.type || 'Emergency',
+            priority: transfer.priority || 'medium',
+            location: transfer.location || 'Location not provided',
+            latitude: transfer.latitude ?? null,
+            longitude: transfer.longitude ?? null,
+            description: transfer.description || 'No description provided',
+            caller_name: transfer.caller_name || transfer.name || 'Transferred Caller',
+            caller_phone: transfer.caller_phone || transfer.phone || '',
+            transferred_at: transfer.transferred_at || transfer.created_at || new Date().toISOString(),
+            fallback_notice: transfer.fallback_notice || ''
+        };
+    }
+
+    function transferLooksLikeCall(transfer) {
+        if (!transfer) return false;
+        const explicitType = String(transfer.transfer_type || '').toLowerCase();
+        if (explicitType === 'live_call') return true;
+        if (explicitType === 'report' || explicitType === 'message' || explicitType === 'message_report') return false;
+        if (transfer.room) return true;
+        const text = [
+            transfer.event,
+            transfer.description,
+            transfer.title,
+            transfer.reference_no,
+            transfer.fallback_notice
+        ].map((value) => String(value || '').toLowerCase()).join(' ');
+        return text.includes('transferred call') || text.includes('emergency_call_transfer') || text.includes('call transfer');
+    }
+
+    function upsertTransferredQueueItem(transfer) {
+        const item = normalizeTransferQueueItem(transfer);
+        if (!item) return;
+        const terminalStatus = String(item.incident_status || '').toLowerCase();
+        if (['resolved', 'cancelled', 'closed', 'rejected'].includes(terminalStatus)) {
+            transferQueueItems = transferQueueItems.filter((existing) => existing.queue_key !== item.queue_key);
+            renderTransferredQueue();
+            return;
+        }
+        const existingIndex = transferQueueItems.findIndex((existing) => existing.queue_key === item.queue_key);
+        if (existingIndex >= 0) {
+            transferQueueItems[existingIndex] = { ...transferQueueItems[existingIndex], ...item };
+        } else {
+            transferQueueItems.unshift(item);
+        }
+        transferQueueItems.sort((a, b) => {
+            const byLog = Number(b.transfer_log_id || 0) - Number(a.transfer_log_id || 0);
+            if (byLog !== 0) return byLog;
+            return Date.parse(b.transferred_at || '') - Date.parse(a.transferred_at || '');
+        });
+        transferQueueItems = transferQueueItems.slice(0, 20);
+        renderTransferredQueue();
+    }
+
+    function renderTransferredQueue() {
+        const panel = document.getElementById('transferQueuePanel');
+        const list = document.getElementById('transferQueueList');
+        const count = document.getElementById('transferQueueCount');
+        const status = document.getElementById('transferQueueStatus');
+        if (!panel || !list || !count) return;
+        count.textContent = String(transferQueueItems.length);
+        if (!transferQueueItems.length) {
+            if (status) {
+                status.textContent = 'Live queue is ready. No transferred calls or reports waiting right now.';
+                status.classList.remove('is-error', 'is-active');
+            }
+            list.innerHTML = `
+                <div class="transfer-queue-empty">
+                    <i class="fas fa-satellite-dish"></i>
+                    <span>Waiting for incoming transfers</span>
+                </div>
+            `;
+            return;
+        }
+        if (status) {
+            status.textContent = 'Incoming transfers available in Call Receiving & Logs.';
+            status.classList.add('is-active');
+            status.classList.remove('is-error');
+        }
+        list.innerHTML = transferQueueItems.map(transferredQueueCardHtml).join('');
+        list.querySelectorAll('[data-transfer-action]').forEach((button) => {
+            button.addEventListener('click', (event) => {
+                event.stopPropagation();
+                const action = button.dataset.transferAction || '';
+                const key = button.dataset.transferKey || '';
+                if (action === 'answer') {
+                    answerTransferredQueueItem(key);
+                } else if (action === 'open') {
+                    openTransferredReportQueueItem(key);
+                } else if (action === 'dismiss') {
+                    transferQueueItems = transferQueueItems.filter((item) => item.queue_key !== key);
+                    renderTransferredQueue();
+                }
+            });
+        });
+    }
+
+    function transferredQueueCardHtml(item) {
+        const isLiveCall = item.transfer_type === 'live_call';
+        const canAnswerAudio = !!item.room;
+        const priorityValue = String(item.priority || 'medium').toLowerCase();
+        const priorityClass = ['high', 'medium', 'low'].includes(priorityValue) ? priorityValue : 'medium';
+        const title = item.reference_no || (isLiveCall ? 'Transferred live call' : 'Transferred report');
+        const actionText = isLiveCall ? (canAnswerAudio ? 'Answer call' : 'Open call') : 'Open report';
+        const actionIcon = isLiveCall ? 'fa-phone-volume' : 'fa-eye';
+        const actionName = isLiveCall ? 'answer' : 'open';
+        return `
+            <article class="transfer-queue-card ${isLiveCall ? 'is-live' : 'is-report'} priority-${priorityClass}">
+                <div class="transfer-queue-card-head">
+                    <span class="transfer-queue-icon"><i class="fas ${isLiveCall ? 'fa-headset' : 'fa-file-medical-alt'}"></i></span>
+                    <div>
+                        <strong>${escapeHtml(title)}</strong>
+                        <span>${escapeHtml(isLiveCall ? 'Live call waiting' : 'Message/report waiting')}</span>
+                    </div>
+                    <button type="button" class="transfer-queue-dismiss" data-transfer-action="dismiss" data-transfer-key="${escapeHtml(item.queue_key)}" title="Dismiss from this queue" aria-label="Dismiss transfer">
+                        <i class="fas fa-times"></i>
+                    </button>
+                </div>
+                <div class="transfer-queue-meta">
+                    <span class="transfer-queue-priority">${escapeHtml(priorityClass.toUpperCase())}</span>
+                    <span>${escapeHtml(labelForType(item.type))}</span>
+                    <span>${escapeHtml(formatDateTime(item.transferred_at))}</span>
+                </div>
+                <p>${escapeHtml(item.description)}</p>
+                ${item.fallback_notice ? `<div class="transfer-queue-warning"><i class="fas fa-triangle-exclamation"></i> ${escapeHtml(item.fallback_notice)}</div>` : ''}
+                <div class="transfer-queue-location"><i class="fas fa-map-marker-alt"></i> ${escapeHtml(item.location)}</div>
+                <button type="button" class="transfer-queue-action" data-transfer-action="${actionName}" data-transfer-key="${escapeHtml(item.queue_key)}">
+                    <i class="fas ${actionIcon}"></i> ${actionText}
+                </button>
+            </article>
+        `;
+    }
+
+    function findTransferredQueueItem(key) {
+        return transferQueueItems.find((item) => item.queue_key === String(key));
+    }
+
+    function incomingCallDetailFromTransfer(item) {
+        return {
+            is_transfer: true,
+            name: item.caller_name || 'Transferred Caller',
+            phone: item.caller_phone || '',
+            start: Date.parse(item.transferred_at || '') || Date.now(),
+            transfer_id: item.transfer_id || '',
+            call_id_external: item.call_id_external || item.transfer_id || '',
+            conversation_id: item.conversation_id || '',
+            room: item.room || '',
+            transfer_type: 'live_call',
+            socket_url: item.socket_url || ALERTARA_SOCKET_URL,
+            socket_path: item.socket_path || ALERTARA_SOCKET_PATH,
+            source_system: item.source_system || 'AlertaraQC Emergency Communication',
+            incident_id: item.incident_id || null,
+            reference_no: item.reference_no || '',
+            incident_status: item.incident_status || '',
+            type: item.type || '',
+            priority: item.priority || '',
+            location: item.location || '',
+            latitude: item.latitude ?? null,
+            longitude: item.longitude ?? null,
+            description: item.description || ''
+        };
+    }
+
+    function answerTransferredQueueItem(key) {
+        const item = findTransferredQueueItem(key);
+        if (!item) return;
+        showIncomingCallModal(incomingCallDetailFromTransfer(item));
+        acceptCall();
+    }
+
+    function openTransferredReportQueueItem(key) {
+        const item = findTransferredQueueItem(key);
+        if (!item) return;
+        openIncidentModal(transferredIncidentItem(item));
     }
 
     function applyIncomingCallToForm(call) {
@@ -683,14 +1004,14 @@ $pageTitle = 'Emergency Call Center';
                 alertAudioContext.resume().catch(() => {});
             }
             const now = alertAudioContext.currentTime;
-            [0, 0.32, 0.64].forEach((offset) => {
+            [0, 0.32, 0.64, 1.15, 1.47, 1.79].forEach((offset) => {
                 const oscillator = alertAudioContext.createOscillator();
                 const gain = alertAudioContext.createGain();
                 oscillator.type = 'sine';
-                oscillator.frequency.setValueAtTime(880, now + offset);
-                oscillator.frequency.setValueAtTime(660, now + offset + 0.12);
+                oscillator.frequency.setValueAtTime(920, now + offset);
+                oscillator.frequency.setValueAtTime(680, now + offset + 0.12);
                 gain.gain.setValueAtTime(0.0001, now + offset);
-                gain.gain.exponentialRampToValueAtTime(0.22, now + offset + 0.02);
+                gain.gain.exponentialRampToValueAtTime(0.32, now + offset + 0.02);
                 gain.gain.exponentialRampToValueAtTime(0.0001, now + offset + 0.22);
                 oscillator.connect(gain);
                 gain.connect(alertAudioContext.destination);
@@ -704,7 +1025,11 @@ $pageTitle = 'Emergency Call Center';
 
     function connectTransferSocket(call) {
         disconnectTransferCall();
-        if (!call || !call.isTransfer || !call.room || typeof window.io !== 'function') {
+        if (!call || !call.isTransfer || !call.room) {
+            return;
+        }
+        if (typeof window.io !== 'function') {
+            setVoiceState('Socket.IO client is not loaded. The call cannot be answered on this page yet.');
             return;
         }
         try {
@@ -712,7 +1037,7 @@ $pageTitle = 'Emergency Call Center';
             transferPeerConnection = createTransferPeerConnection(call);
             transferSocket = window.io(call.socketUrl || ALERTARA_SOCKET_URL, {
                 path: call.socketPath || ALERTARA_SOCKET_PATH,
-                transports: ['polling'],
+                transports: ['websocket', 'polling'],
                 query: { room: call.room }
             });
             transferSocket.on('connect', () => {
@@ -742,8 +1067,13 @@ $pageTitle = 'Emergency Call Center';
             transferSocket.on('disconnect', () => {
                 setVoiceState('AlertaraQC transfer socket disconnected.');
             });
+            transferSocket.on('connect_error', (error) => {
+                console.warn('Transfer socket connection failed:', error);
+                setVoiceState('Could not reach the AlertaraQC live call socket.');
+            });
         } catch (error) {
             console.warn('Unable to connect transfer socket:', error);
+            setVoiceState('Unable to connect to the transferred live call.');
         }
     }
 
@@ -789,19 +1119,19 @@ $pageTitle = 'Emergency Call Center';
     }
 
     function transferPayloadMatchesCall(payload, callId, room) {
+        const payloadRoom = String((payload && payload.room) || '');
+        if (payloadRoom && room && payloadRoom === String(room)) {
+            return true;
+        }
         if (!callId) return true;
         const payloadCallId = String(
             (payload && (payload.callId || payload.call_id || payload.transferId || payload.transfer_id))
             || ''
         );
-        const payloadRoom = String((payload && payload.room) || '');
         if (payloadCallId) {
             return payloadCallId === String(callId);
         }
-        if (payloadRoom && room) {
-            return payloadRoom === String(room);
-        }
-        return true;
+        return !payloadRoom;
     }
 
     async function prepareTransferLocalAudio(call) {
@@ -861,6 +1191,10 @@ $pageTitle = 'Emergency Call Center';
         ['dispatcher-ready', 'call-accepted', 'accepted'].forEach((eventName) => {
             transferSocket.emit(eventName, payload, call.room);
         });
+        transferSocket.emit('request-transfer-offer', {
+            ...payload,
+            reason: 'response-team-ready'
+        }, call.room);
     }
 
     async function answerTransferOffer(call, offerPayload) {
@@ -908,44 +1242,226 @@ $pageTitle = 'Emergency Call Center';
         transferRemoteAudio = null;
     }
 
-    function startIncomingTransferPolling() {
-        pollIncomingTransfers();
-        setInterval(pollIncomingTransfers, 5000);
+    function transferScalar(value) {
+        if (value === null || value === undefined || typeof value === 'object') return '';
+        return String(value).trim();
     }
 
-    async function initializeIncomingTransferBaseline() {
-        if (incomingTransferBaselineReady) return;
-        try {
-            const response = await fetch(API_INCOMING_TRANSFERS_URL + '?latest=1&limit=1', { cache: 'no-store' });
-            const data = await response.json();
-            if (data && data.ok && Number(data.latest_id || 0) > 0) {
-                latestTransferLogId = Number(data.latest_id);
-                window.localStorage.setItem('ersLatestTransferLogId', String(latestTransferLogId));
+    function pickTransferScalar(...values) {
+        for (const value of values) {
+            const scalar = transferScalar(value);
+            if (scalar !== '') return scalar;
+        }
+        return '';
+    }
+
+    function pickTransferObject(...values) {
+        for (const value of values) {
+            if (value && typeof value === 'object' && !Array.isArray(value)) return value;
+        }
+        return {};
+    }
+
+    function normalizeRealtimeTransferPayload(payload) {
+        const raw = payload && typeof payload === 'object' ? payload : {};
+        const transferEnvelope = raw.transfer && typeof raw.transfer === 'object' ? raw.transfer : {};
+        const transfer = transferEnvelope.data && typeof transferEnvelope.data === 'object'
+            ? transferEnvelope.data
+            : transferEnvelope;
+        const caller = pickTransferObject(transfer.caller, raw.caller);
+        const locationObj = pickTransferObject(transfer.locationData, transfer.location, raw.locationData, raw.location);
+        const priorityObj = pickTransferObject(transfer.incidentPriority, raw.incidentPriority);
+        const explicitTransferType = pickTransferScalar(raw.transfer_type, raw.transferType, transfer.transfer_type, transfer.transferType).toLowerCase();
+        const callId = pickTransferScalar(
+            raw.callId,
+            raw.call_id,
+            transfer.callId,
+            transfer.call_id,
+            transfer.call_id_external
+        );
+        const room = pickTransferScalar(raw.room, transfer.room);
+        const isLiveCall = explicitTransferType === 'live_call'
+            || (explicitTransferType !== 'report' && room !== '' && callId !== '');
+        let location = pickTransferScalar(
+            transfer.location,
+            raw.location,
+            transfer.location_address,
+            raw.location_address,
+            locationObj.address,
+            caller.address
+        );
+        if (!location && (locationObj.lat || locationObj.latitude) && (locationObj.lng || locationObj.longitude)) {
+            location = pickTransferScalar(locationObj.lat, locationObj.latitude) + ', ' + pickTransferScalar(locationObj.lng, locationObj.longitude);
+        }
+        if (!location) location = 'Location pending from transferred call';
+        const transferId = pickTransferScalar(
+            raw.transferId,
+            raw.transfer_id,
+            transfer.transferId,
+            transfer.transfer_id,
+            callId,
+            raw.conversationId,
+            transfer.conversationId
+        );
+        return {
+            transfer_log_id: 0,
+            source_system: pickTransferScalar(raw.source_system, transfer.source_system) || 'AlertaraQC Emergency Communication',
+            event: pickTransferScalar(raw.event, transfer.event) || (isLiveCall ? 'emergency_call_transfer' : 'emergency_report_transfer'),
+            transfer_id: transferId,
+            call_id_external: isLiveCall ? callId : '',
+            conversation_id: pickTransferScalar(raw.conversationId, raw.conversation_id, transfer.conversationId, transfer.conversation_id),
+            transfer_type: isLiveCall ? 'live_call' : 'report',
+            room: isLiveCall ? room : '',
+            socket_url: isLiveCall ? (pickTransferScalar(raw.socketUrl, raw.socket_url, transfer.socketUrl, transfer.socket_url) || ALERTARA_SOCKET_URL) : '',
+            socket_path: isLiveCall ? (pickTransferScalar(raw.socketPath, raw.socket_path, transfer.socketPath, transfer.socket_path) || ALERTARA_SOCKET_PATH) : '',
+            transport: 'websocket',
+            call_id: 0,
+            caller_name: pickTransferScalar(transfer.caller_name, raw.caller_name, caller.name) || 'Transferred Caller',
+            caller_phone: pickTransferScalar(transfer.caller_phone, raw.caller_phone, caller.phone),
+            incident_id: transfer.incident_id || null,
+            reference_no: pickTransferScalar(transfer.reference_no, raw.reference_no),
+            incident_status: pickTransferScalar(transfer.incident_status, raw.incident_status) || 'pending',
+            type: pickTransferScalar(transfer.emergencyType, transfer.emergency_type, transfer.type, raw.emergencyType, raw.type) || 'emergency',
+            priority: pickTransferScalar(transfer.priority, raw.priority, priorityObj.priority, priorityObj.level) || 'medium',
+            location,
+            latitude: locationObj.lat ?? locationObj.latitude ?? transfer.latitude ?? raw.latitude ?? null,
+            longitude: locationObj.lng ?? locationObj.longitude ?? transfer.longitude ?? raw.longitude ?? null,
+            description: pickTransferScalar(transfer.description, raw.description, transfer.latestMessage, raw.latestMessage) || (isLiveCall ? 'Incoming transferred live call from Emergency-Com.' : 'Incoming transferred report from Emergency-Com.'),
+            transferred_at: pickTransferScalar(raw.transferredAt, raw.transferred_at, transfer.transferredAt, transfer.transferred_at) || new Date().toISOString(),
+            fallback_notice: isLiveCall && !room ? 'Emergency-Com sent a live transfer notice without a room, so audio cannot connect until the transfer is retried with room data.' : ''
+        };
+    }
+
+    function showRealtimeTransferNotice(payload) {
+        const transfer = normalizeRealtimeTransferPayload(payload);
+        const key = transferQueueKey(transfer) || ('live-' + Date.now());
+        if (liveIncomingTransferKeys.has(key)) return;
+        liveIncomingTransferKeys.add(key);
+        notifiedIncomingTransferKeys.add(key);
+        const item = normalizeTransferQueueItem(transfer) || transfer;
+        upsertTransferredQueueItem(item);
+        if (transferLooksLikeCall(item)) {
+            document.dispatchEvent(new CustomEvent('ers:incoming-call', {
+                detail: incomingCallDetailFromTransfer(item)
+            }));
+            return;
+        }
+        showIncomingReportNotification(item);
+    }
+
+    function startTransferInboxSocket() {
+        if (transferInboxSocket || typeof window.io !== 'function') {
+            if (typeof window.io !== 'function') {
+                setTransferQueueStatus('Live socket unavailable. Falling back to transfer feed polling.', 'active');
             }
+            return;
+        }
+        try {
+            transferInboxSocket = window.io(ALERTARA_SOCKET_URL, {
+                path: ALERTARA_SOCKET_PATH,
+                transports: ['websocket', 'polling'],
+                query: { role: 'ers-dispatcher', inbox: TRANSFER_INBOX_ROOM }
+            });
+            transferInboxSocket.on('connect', () => {
+                transferInboxSocket.emit('join', TRANSFER_INBOX_ROOM);
+                setTransferQueueStatus('Live transfer socket connected. Waiting for transferred calls and reports...', 'active');
+            });
+            transferInboxSocket.on('incoming-transfer', showRealtimeTransferNotice);
+            transferInboxSocket.on('ers-transfer-notify', showRealtimeTransferNotice);
+            transferInboxSocket.on('connect_error', (error) => {
+                console.warn('ERS transfer inbox socket failed:', error);
+                setTransferQueueStatus('Live socket not reachable. Backup feed polling is still running.', 'error');
+            });
         } catch (error) {
-            console.warn('Incoming transfer baseline failed:', error);
-        } finally {
-            incomingTransferBaselineReady = true;
+            console.warn('Unable to start ERS transfer inbox socket:', error);
+            setTransferQueueStatus('Live socket could not start. Backup feed polling is still running.', 'error');
         }
     }
 
-    async function pollIncomingTransfers() {
+    function startIncomingTransferPolling() {
+        setTransferQueueStatus('Listening for transferred calls and reports...', 'active');
+        pollIncomingTransfers(true);
+        if (incomingTransferPollTimer) {
+            window.clearInterval(incomingTransferPollTimer);
+        }
+        incomingTransferPollTimer = window.setInterval(pollIncomingTransfers, INCOMING_TRANSFER_POLL_MS);
+        document.addEventListener('visibilitychange', () => {
+            if (!document.hidden) {
+                pollIncomingTransfers();
+            }
+        });
+        window.addEventListener('focus', () => pollIncomingTransfers());
+    }
+
+    async function pollIncomingTransfers(loadLatest = false) {
+        if (incomingTransferPollInFlight) return;
+        incomingTransferPollInFlight = true;
         try {
-            const url = API_INCOMING_TRANSFERS_URL + '?after_id=' + encodeURIComponent(String(latestTransferLogId)) + '&limit=10';
+            const url = loadLatest
+                ? API_INCOMING_TRANSFERS_URL + '?latest=1&limit=10'
+                : API_INCOMING_TRANSFERS_URL + '?after_id=' + encodeURIComponent(String(latestTransferLogId)) + '&limit=25';
             const response = await fetch(url, { cache: 'no-store' });
             const data = await response.json();
-            if (!data || !data.ok || !Array.isArray(data.transfers)) return;
-            const transfers = data.transfers.slice();
+            if (!data || !data.ok || !Array.isArray(data.transfers)) {
+                setTransferQueueStatus('Transfer feed returned an invalid response.', 'error');
+                return;
+            }
+            const transfers = data.transfers.slice().sort((a, b) =>
+                Number(a.transfer_log_id || 0) - Number(b.transfer_log_id || 0)
+            );
+            if (loadLatest) {
+                transfers.forEach((transfer) => {
+                    const transferLogId = Number(transfer.transfer_log_id || 0);
+                    const transferKey = transferQueueKey(transfer) || String(transferLogId || '');
+                    if (transferLogId > 0) {
+                        shownIncomingTransferIds.add(transferLogId);
+                        latestTransferLogId = Math.max(latestTransferLogId, transferLogId);
+                    }
+                    if (transferKey) {
+                        notifiedIncomingTransferKeys.add(transferKey);
+                    }
+                    if (!(transfer.call_id_external || transfer.transfer_id)) {
+                        return;
+                    }
+                    const incidentStatus = String(transfer.incident_status || '').toLowerCase();
+                    if (['resolved', 'cancelled', 'closed', 'rejected'].includes(incidentStatus)) {
+                        return;
+                    }
+                    upsertTransferredQueueItem(transfer);
+                });
+                incomingTransferBaselineReady = true;
+                window.localStorage.setItem('ersLatestTransferLogId', String(latestTransferLogId));
+                if (!transferQueueItems.length) {
+                    renderTransferredQueue();
+                }
+                return;
+            }
             transfers.forEach((transfer) => {
                 const transferLogId = Number(transfer.transfer_log_id || 0);
+                const transferKey = transferQueueKey(transfer) || String(transferLogId || '');
                 if (transferLogId > 0 && shownIncomingTransferIds.has(transferLogId)) {
+                    return;
+                }
+                if (transferKey && notifiedIncomingTransferKeys.has(transferKey)) {
                     return;
                 }
                 if (transferLogId > 0) {
                     shownIncomingTransferIds.add(transferLogId);
                     latestTransferLogId = Math.max(latestTransferLogId, transferLogId);
                 }
+                if (transferKey) {
+                    notifiedIncomingTransferKeys.add(transferKey);
+                }
                 if (!(transfer.call_id_external || transfer.transfer_id)) {
+                    return;
+                }
+                const incidentStatus = String(transfer.incident_status || '').toLowerCase();
+                if (['resolved', 'cancelled', 'closed', 'rejected'].includes(incidentStatus)) {
+                    return;
+                }
+                upsertTransferredQueueItem(transfer);
+                if (!transferLooksLikeCall(transfer)) {
+                    showIncomingReportNotification(transfer);
                     return;
                 }
                 document.dispatchEvent(new CustomEvent('ers:incoming-call', {
@@ -958,6 +1474,7 @@ $pageTitle = 'Emergency Call Center';
                         call_id_external: transfer.call_id_external || transfer.transfer_id || '',
                         conversation_id: transfer.conversation_id || '',
                         room: transfer.room || '',
+                        transfer_type: 'live_call',
                         socket_url: transfer.socket_url || ALERTARA_SOCKET_URL,
                         socket_path: transfer.socket_path || ALERTARA_SOCKET_PATH,
                         source_system: transfer.source_system || 'AlertaraQC Emergency Communication',
@@ -973,9 +1490,25 @@ $pageTitle = 'Emergency Call Center';
                     }
                 }));
             });
+            incomingTransferBaselineReady = true;
+            window.localStorage.setItem('ersLatestTransferLogId', String(latestTransferLogId));
+            if (!transferQueueItems.length) {
+                renderTransferredQueue();
+            }
         } catch (error) {
             console.warn('Incoming transfer polling failed:', error);
+            setTransferQueueStatus('Transfer feed is not reachable. Check api/incoming_transfers.php.', 'error');
+        } finally {
+            incomingTransferPollInFlight = false;
         }
+    }
+
+    function setTransferQueueStatus(message, state = '') {
+        const status = document.getElementById('transferQueueStatus');
+        if (!status) return;
+        status.textContent = message;
+        status.classList.toggle('is-active', state === 'active');
+        status.classList.toggle('is-error', state === 'error');
     }
 
     function startTimer() {
@@ -1530,7 +2063,8 @@ $pageTitle = 'Emergency Call Center';
                     location: payload.location
                 });
             }
-            showToast('Incident logged successfully. Redirecting to Dispatch Center...');
+            const wasTransferredCall = !!activeTransferCall;
+            showToast(wasTransferredCall ? 'Transferred incident logged in Call Receiving & Logs.' : 'Incident logged successfully.');
             e.target.reset();
             resetIncidentTypeChecklist();
             document.querySelectorAll('#prioritySelect .priority-option').forEach(o => o.classList.remove('active'));
@@ -1559,7 +2093,9 @@ $pageTitle = 'Emergency Call Center';
             } catch (e) {
                 console.warn('Activity log failed', e);
             }
-            redirectToDispatchCenter(data);
+            if (!wasTransferredCall) {
+                redirectToDispatchCenter(data);
+            }
         } catch (err) {
             console.warn('Submit failed:', err);
             alert('Error while logging incident.');
