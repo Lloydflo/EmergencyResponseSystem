@@ -376,6 +376,7 @@ $pageTitle = 'Emergency Call Center';
     let incomingTransferBaselineReady = latestTransferLogId > 0;
     let incomingTransferPollInFlight = false;
     const shownIncomingTransferIds = new Set();
+    const notifiedIncomingTransferKeys = new Set();
     let transferQueueItems = [];
     let activeTransferCall = null;
     let incomingTransferPollTimer = null;
@@ -1264,16 +1265,47 @@ $pageTitle = 'Emergency Call Center';
                 Number(a.transfer_log_id || 0) - Number(b.transfer_log_id || 0)
             );
             if (loadLatest) {
-                latestTransferLogId = 0;
+                transfers.forEach((transfer) => {
+                    const transferLogId = Number(transfer.transfer_log_id || 0);
+                    const transferKey = transferQueueKey(transfer) || String(transferLogId || '');
+                    if (transferLogId > 0) {
+                        shownIncomingTransferIds.add(transferLogId);
+                        latestTransferLogId = Math.max(latestTransferLogId, transferLogId);
+                    }
+                    if (transferKey) {
+                        notifiedIncomingTransferKeys.add(transferKey);
+                    }
+                    if (!(transfer.call_id_external || transfer.transfer_id)) {
+                        return;
+                    }
+                    const incidentStatus = String(transfer.incident_status || '').toLowerCase();
+                    if (['resolved', 'cancelled', 'closed', 'rejected'].includes(incidentStatus)) {
+                        return;
+                    }
+                    upsertTransferredQueueItem(transfer);
+                });
+                incomingTransferBaselineReady = true;
+                window.localStorage.setItem('ersLatestTransferLogId', String(latestTransferLogId));
+                if (!transferQueueItems.length) {
+                    renderTransferredQueue();
+                }
+                return;
             }
             transfers.forEach((transfer) => {
                 const transferLogId = Number(transfer.transfer_log_id || 0);
+                const transferKey = transferQueueKey(transfer) || String(transferLogId || '');
                 if (transferLogId > 0 && shownIncomingTransferIds.has(transferLogId)) {
+                    return;
+                }
+                if (transferKey && notifiedIncomingTransferKeys.has(transferKey)) {
                     return;
                 }
                 if (transferLogId > 0) {
                     shownIncomingTransferIds.add(transferLogId);
                     latestTransferLogId = Math.max(latestTransferLogId, transferLogId);
+                }
+                if (transferKey) {
+                    notifiedIncomingTransferKeys.add(transferKey);
                 }
                 if (!(transfer.call_id_external || transfer.transfer_id)) {
                     return;
