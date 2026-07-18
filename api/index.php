@@ -486,6 +486,13 @@ function ers_api_create_incoming_transfer(PDO $pdo, array $auth): array
     $call = isset($input['call']) && is_array($input['call']) ? $input['call'] : $input;
     $incident = isset($input['incident']) && is_array($input['incident']) ? $input['incident'] : [];
     $details = array_replace($incident, $call);
+    $caller = isset($call['caller']) && is_array($call['caller'])
+        ? $call['caller']
+        : (isset($input['caller']) && is_array($input['caller']) ? $input['caller'] : []);
+    $locationPayload = isset($call['location']) && is_array($call['location'])
+        ? $call['location']
+        : (isset($input['location']) && is_array($input['location']) ? $input['location'] : []);
+    $locationText = is_array($call['location'] ?? null) ? '' : ($call['location'] ?? '');
 
     $sourceSystem = ers_external_clean(
         $input['source_system'] ?? $input['system_name'] ?? $input['from_system'] ?? $input['from_agency'] ?? $auth['client'] ?? 'AlertaraQC Emergency Communication',
@@ -500,12 +507,17 @@ function ers_api_create_incoming_transfer(PDO $pdo, array $auth): array
         $type = 'other';
     }
 
-    $priority = ers_external_normalize_priority($details['priority'] ?? $input['priority'] ?? 'medium');
-    $location = ers_external_clean($details['location_address'] ?? $details['caller_address'] ?? $details['location'] ?? $details['address'] ?? '', 255);
+    $priority = ers_external_normalize_priority(
+        $details['priority'] ?? $details['incident_priority'] ?? $details['incident_priority_level'] ?? $input['priority'] ?? $input['incident_priority'] ?? 'medium'
+    );
+    $location = ers_external_clean(
+        $details['location_address'] ?? $details['caller_address'] ?? $caller['address'] ?? $locationPayload['address'] ?? $locationText ?? $details['address'] ?? '',
+        255
+    );
     if ($location === '') {
         $location = 'Location pending from transferred call';
     }
-    $description = ers_external_clean($details['description'] ?? $details['details'] ?? $details['notes'] ?? $details['message'] ?? $details['summary'] ?? '', 0);
+    $description = ers_external_clean($details['description'] ?? $details['details'] ?? $details['latestMessage'] ?? $details['notes'] ?? $details['message'] ?? $details['summary'] ?? '', 0);
     $reasonForBackup = ers_external_clean($details['reason_for_police_backup'] ?? $details['reason_for_backup'] ?? $details['backup_reason'] ?? '', 0);
     if ($reasonForBackup !== '' && stripos($description, $reasonForBackup) === false) {
         $description = trim($description . "\nReason for backup: " . $reasonForBackup);
@@ -521,8 +533,10 @@ function ers_api_create_incoming_transfer(PDO $pdo, array $auth): array
         $description = 'Incoming transferred call from ' . ($sourceSystem !== '' ? $sourceSystem : 'external system') . '.';
     }
 
-    $latitude = isset($details['latitude']) && $details['latitude'] !== '' ? (float)$details['latitude'] : null;
-    $longitude = isset($details['longitude']) && $details['longitude'] !== '' ? (float)$details['longitude'] : null;
+    $latValue = $details['latitude'] ?? $details['lat'] ?? $locationPayload['latitude'] ?? $locationPayload['lat'] ?? null;
+    $lngValue = $details['longitude'] ?? $details['lng'] ?? $locationPayload['longitude'] ?? $locationPayload['lng'] ?? null;
+    $latitude = $latValue !== null && $latValue !== '' ? (float)$latValue : null;
+    $longitude = $lngValue !== null && $lngValue !== '' ? (float)$lngValue : null;
     if (($latitude !== null && ($latitude < -90 || $latitude > 90)) || ($longitude !== null && ($longitude < -180 || $longitude > 180))) {
         $latitude = null;
         $longitude = null;
@@ -564,8 +578,8 @@ function ers_api_create_incoming_transfer(PDO $pdo, array $auth): array
     }
 
     $title = ers_external_clean($details['title'] ?? ('Transferred call from ' . $sourceSystem), 200);
-    $callerName = ers_external_clean($details['caller_name'] ?? $details['reporter_name'] ?? $details['name'] ?? 'Transferred Caller', 150);
-    $callerPhone = ers_external_clean($details['caller_phone'] ?? $details['phone'] ?? $details['contact_number'] ?? $details['contact'] ?? 'N/A', 50);
+    $callerName = ers_external_clean($details['caller_name'] ?? $details['reporter_name'] ?? $caller['name'] ?? $details['name'] ?? 'Transferred Caller', 150);
+    $callerPhone = ers_external_clean($details['caller_phone'] ?? $caller['phone'] ?? $details['phone'] ?? $details['contact_number'] ?? $details['contact'] ?? 'N/A', 50);
     $room = ers_external_clean($call['room'] ?? $input['room'] ?? '', 150);
     $socketUrl = ers_external_clean($call['socketUrl'] ?? $call['socket_url'] ?? $input['socketUrl'] ?? $input['socket_url'] ?? 'https://emergency-comm.alertaraqc.com', 255);
     $socketPath = ers_external_clean($call['socketPath'] ?? $call['socket_path'] ?? $input['socketPath'] ?? $input['socket_path'] ?? '/socket.io', 100);

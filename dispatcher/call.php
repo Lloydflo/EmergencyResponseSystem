@@ -353,6 +353,7 @@ $pageTitle = 'Emergency Call Center';
     let pendingIncomingCall = null;
     let latestTransferLogId = Number(window.localStorage.getItem('ersLatestTransferLogId') || '0') || 0;
     let incomingTransferBaselineReady = latestTransferLogId > 0;
+    const shownIncomingTransferIds = new Set();
 
     function escapeHtml(value) {
         return String(value == null ? '' : value)
@@ -475,7 +476,7 @@ $pageTitle = 'Emergency Call Center';
         const parsedStart = startValue ? Date.parse(startValue) : NaN;
         const name = String(nameValue || 'Incoming Call').trim();
         const phone = String(phoneValue || '').trim();
-        const isTransfer = !!(call && (call.is_transfer || call.room || call.transfer_id));
+        const isTransfer = !!(call && (call.is_transfer || call.room || call.transfer_id || call.transfer_type));
         pendingIncomingCall = {
             name: name || 'Incoming Call',
             phone: phone,
@@ -485,6 +486,7 @@ $pageTitle = 'Emergency Call Center';
             callId: call.call_id_external || call.callId || call.call_id || call.transfer_id || '',
             conversationId: call.conversation_id || call.conversationId || '',
             room: call.room || '',
+            transferType: call.transfer_type || (call.room ? 'live_call' : 'report'),
             socketUrl: call.socket_url || call.socketUrl || ALERTARA_SOCKET_URL,
             socketPath: call.socket_path || call.socketPath || ALERTARA_SOCKET_PATH,
             sourceSystem: call.source_system || 'AlertaraQC Emergency Communication',
@@ -592,7 +594,7 @@ $pageTitle = 'Emergency Call Center';
         if (!isTransfer) return;
 
         if (source) source.textContent = call.sourceSystem || 'AlertaraQC Emergency Communication';
-        if (room) room.textContent = call.room ? 'Room ' + call.room : 'Room pending';
+        if (room) room.textContent = call.room ? 'Room ' + call.room : 'No live room - report transfer';
         if (location) location.textContent = call.location || 'Not provided';
         if (priority) priority.textContent = call.priority || 'medium';
         if (socket) socket.textContent = (call.socketUrl || ALERTARA_SOCKET_URL) + (call.socketPath || ALERTARA_SOCKET_PATH);
@@ -907,10 +909,8 @@ $pageTitle = 'Emergency Call Center';
     }
 
     function startIncomingTransferPolling() {
-        initializeIncomingTransferBaseline().finally(() => {
-            pollIncomingTransfers();
-            setInterval(pollIncomingTransfers, 5000);
-        });
+        pollIncomingTransfers();
+        setInterval(pollIncomingTransfers, 5000);
     }
 
     async function initializeIncomingTransferBaseline() {
@@ -935,12 +935,17 @@ $pageTitle = 'Emergency Call Center';
             const response = await fetch(url, { cache: 'no-store' });
             const data = await response.json();
             if (!data || !data.ok || !Array.isArray(data.transfers)) return;
-            if (Number(data.latest_id || 0) > latestTransferLogId) {
-                latestTransferLogId = Number(data.latest_id || latestTransferLogId);
-                window.localStorage.setItem('ersLatestTransferLogId', String(latestTransferLogId));
-            }
-            data.transfers.forEach((transfer) => {
-                if (!transfer.room || !(transfer.call_id_external || transfer.transfer_id)) {
+            const transfers = data.transfers.slice();
+            transfers.forEach((transfer) => {
+                const transferLogId = Number(transfer.transfer_log_id || 0);
+                if (transferLogId > 0 && shownIncomingTransferIds.has(transferLogId)) {
+                    return;
+                }
+                if (transferLogId > 0) {
+                    shownIncomingTransferIds.add(transferLogId);
+                    latestTransferLogId = Math.max(latestTransferLogId, transferLogId);
+                }
+                if (!(transfer.call_id_external || transfer.transfer_id)) {
                     return;
                 }
                 document.dispatchEvent(new CustomEvent('ers:incoming-call', {
