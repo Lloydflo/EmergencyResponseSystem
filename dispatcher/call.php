@@ -287,6 +287,17 @@ $pageTitle = 'Emergency Call Center';
                         </div>
                     </div>
 
+                    <div class="transfer-queue-panel" id="transferQueuePanel" hidden>
+                        <div class="transfer-queue-head">
+                            <div>
+                                <div class="panel-eyebrow">Transferred Queue</div>
+                                <h4>Calls & Reports</h4>
+                            </div>
+                            <span class="transfer-queue-count" id="transferQueueCount">0</span>
+                        </div>
+                        <div class="transfer-queue-list" id="transferQueueList" aria-live="polite"></div>
+                    </div>
+
                     <div class="sidebar-controls">
                         <input type="search" id="incidentSearch" placeholder="Search Type of Emergency, Location...">
                         <div class="date-controls">
@@ -359,6 +370,7 @@ $pageTitle = 'Emergency Call Center';
     let incomingTransferBaselineReady = latestTransferLogId > 0;
     let incomingTransferPollInFlight = false;
     const shownIncomingTransferIds = new Set();
+    let transferQueueItems = [];
 
     function escapeHtml(value) {
         return String(value == null ? '' : value)
@@ -682,6 +694,177 @@ $pageTitle = 'Emergency Call Center';
             stack.lastElementChild.remove();
         }
         playIncomingTransferAlert();
+    }
+
+    function transferQueueKey(transfer) {
+        return String(transfer.transfer_log_id || transfer.transfer_id || transfer.incident_id || transfer.call_id_external || '').trim();
+    }
+
+    function normalizeTransferQueueItem(transfer) {
+        const key = transferQueueKey(transfer);
+        if (!key) return null;
+        const room = String(transfer.room || '').trim();
+        const transferType = (String(transfer.transfer_type || '').toLowerCase() === 'live_call' && room) ? 'live_call' : 'report';
+        return {
+            queue_key: key,
+            transfer_log_id: Number(transfer.transfer_log_id || 0),
+            transfer_id: transfer.transfer_id || '',
+            call_id_external: transfer.call_id_external || transfer.callId || transfer.call_id || transfer.transfer_id || '',
+            conversation_id: transfer.conversation_id || transfer.conversationId || '',
+            transfer_type: transferType,
+            room,
+            socket_url: transfer.socket_url || transfer.socketUrl || ALERTARA_SOCKET_URL,
+            socket_path: transfer.socket_path || transfer.socketPath || ALERTARA_SOCKET_PATH,
+            source_system: transfer.source_system || 'AlertaraQC Emergency Communication',
+            incident_id: transfer.incident_id || null,
+            reference_no: transfer.reference_no || '',
+            incident_status: transfer.incident_status || 'pending',
+            type: transfer.type || 'Emergency',
+            priority: transfer.priority || 'medium',
+            location: transfer.location || 'Location not provided',
+            latitude: transfer.latitude ?? null,
+            longitude: transfer.longitude ?? null,
+            description: transfer.description || 'No description provided',
+            caller_name: transfer.caller_name || transfer.name || 'Transferred Caller',
+            caller_phone: transfer.caller_phone || transfer.phone || '',
+            transferred_at: transfer.transferred_at || transfer.created_at || new Date().toISOString()
+        };
+    }
+
+    function upsertTransferredQueueItem(transfer) {
+        const item = normalizeTransferQueueItem(transfer);
+        if (!item) return;
+        const terminalStatus = String(item.incident_status || '').toLowerCase();
+        if (['resolved', 'cancelled', 'closed', 'rejected'].includes(terminalStatus)) {
+            transferQueueItems = transferQueueItems.filter((existing) => existing.queue_key !== item.queue_key);
+            renderTransferredQueue();
+            return;
+        }
+        const existingIndex = transferQueueItems.findIndex((existing) => existing.queue_key === item.queue_key);
+        if (existingIndex >= 0) {
+            transferQueueItems[existingIndex] = { ...transferQueueItems[existingIndex], ...item };
+        } else {
+            transferQueueItems.unshift(item);
+        }
+        transferQueueItems.sort((a, b) => {
+            const byLog = Number(b.transfer_log_id || 0) - Number(a.transfer_log_id || 0);
+            if (byLog !== 0) return byLog;
+            return Date.parse(b.transferred_at || '') - Date.parse(a.transferred_at || '');
+        });
+        transferQueueItems = transferQueueItems.slice(0, 20);
+        renderTransferredQueue();
+    }
+
+    function renderTransferredQueue() {
+        const panel = document.getElementById('transferQueuePanel');
+        const list = document.getElementById('transferQueueList');
+        const count = document.getElementById('transferQueueCount');
+        if (!panel || !list || !count) return;
+        count.textContent = String(transferQueueItems.length);
+        panel.hidden = transferQueueItems.length === 0;
+        if (!transferQueueItems.length) {
+            list.innerHTML = '';
+            return;
+        }
+        list.innerHTML = transferQueueItems.map(transferredQueueCardHtml).join('');
+        list.querySelectorAll('[data-transfer-action]').forEach((button) => {
+            button.addEventListener('click', (event) => {
+                event.stopPropagation();
+                const action = button.dataset.transferAction || '';
+                const key = button.dataset.transferKey || '';
+                if (action === 'answer') {
+                    answerTransferredQueueItem(key);
+                } else if (action === 'open') {
+                    openTransferredReportQueueItem(key);
+                } else if (action === 'dismiss') {
+                    transferQueueItems = transferQueueItems.filter((item) => item.queue_key !== key);
+                    renderTransferredQueue();
+                }
+            });
+        });
+    }
+
+    function transferredQueueCardHtml(item) {
+        const isLiveCall = item.transfer_type === 'live_call' && item.room;
+        const priorityValue = String(item.priority || 'medium').toLowerCase();
+        const priorityClass = ['high', 'medium', 'low'].includes(priorityValue) ? priorityValue : 'medium';
+        const title = item.reference_no || (isLiveCall ? 'Transferred live call' : 'Transferred report');
+        const actionText = isLiveCall ? 'Answer call' : 'Open report';
+        const actionIcon = isLiveCall ? 'fa-phone-volume' : 'fa-eye';
+        const actionName = isLiveCall ? 'answer' : 'open';
+        return `
+            <article class="transfer-queue-card ${isLiveCall ? 'is-live' : 'is-report'} priority-${priorityClass}">
+                <div class="transfer-queue-card-head">
+                    <span class="transfer-queue-icon"><i class="fas ${isLiveCall ? 'fa-headset' : 'fa-file-medical-alt'}"></i></span>
+                    <div>
+                        <strong>${escapeHtml(title)}</strong>
+                        <span>${escapeHtml(isLiveCall ? 'Live call waiting' : 'Message/report waiting')}</span>
+                    </div>
+                    <button type="button" class="transfer-queue-dismiss" data-transfer-action="dismiss" data-transfer-key="${escapeHtml(item.queue_key)}" title="Dismiss from this queue" aria-label="Dismiss transfer">
+                        <i class="fas fa-times"></i>
+                    </button>
+                </div>
+                <div class="transfer-queue-meta">
+                    <span class="transfer-queue-priority">${escapeHtml(priorityClass.toUpperCase())}</span>
+                    <span>${escapeHtml(labelForType(item.type))}</span>
+                    <span>${escapeHtml(formatDateTime(item.transferred_at))}</span>
+                </div>
+                <p>${escapeHtml(item.description)}</p>
+                <div class="transfer-queue-location"><i class="fas fa-map-marker-alt"></i> ${escapeHtml(item.location)}</div>
+                <button type="button" class="transfer-queue-action" data-transfer-action="${actionName}" data-transfer-key="${escapeHtml(item.queue_key)}">
+                    <i class="fas ${actionIcon}"></i> ${actionText}
+                </button>
+            </article>
+        `;
+    }
+
+    function findTransferredQueueItem(key) {
+        return transferQueueItems.find((item) => item.queue_key === String(key));
+    }
+
+    function incomingCallDetailFromTransfer(item) {
+        return {
+            is_transfer: true,
+            name: item.caller_name || 'Transferred Caller',
+            phone: item.caller_phone || '',
+            start: Date.parse(item.transferred_at || '') || Date.now(),
+            transfer_id: item.transfer_id || '',
+            call_id_external: item.call_id_external || item.transfer_id || '',
+            conversation_id: item.conversation_id || '',
+            room: item.room || '',
+            transfer_type: 'live_call',
+            socket_url: item.socket_url || ALERTARA_SOCKET_URL,
+            socket_path: item.socket_path || ALERTARA_SOCKET_PATH,
+            source_system: item.source_system || 'AlertaraQC Emergency Communication',
+            incident_id: item.incident_id || null,
+            reference_no: item.reference_no || '',
+            incident_status: item.incident_status || '',
+            type: item.type || '',
+            priority: item.priority || '',
+            location: item.location || '',
+            latitude: item.latitude ?? null,
+            longitude: item.longitude ?? null,
+            description: item.description || ''
+        };
+    }
+
+    function answerTransferredQueueItem(key) {
+        const item = findTransferredQueueItem(key);
+        if (!item) return;
+        if (!item.room) {
+            alert('This transfer has no live call room. Open it as a report instead.');
+            return;
+        }
+        showIncomingCallModal(incomingCallDetailFromTransfer(item));
+        transferQueueItems = transferQueueItems.filter((queued) => queued.queue_key !== item.queue_key);
+        renderTransferredQueue();
+        acceptCall();
+    }
+
+    function openTransferredReportQueueItem(key) {
+        const item = findTransferredQueueItem(key);
+        if (!item) return;
+        openIncidentModal(transferredIncidentItem(item));
     }
 
     function applyIncomingCallToForm(call) {
@@ -1026,6 +1209,7 @@ $pageTitle = 'Emergency Call Center';
                 if (['resolved', 'cancelled', 'closed', 'rejected'].includes(incidentStatus)) {
                     return;
                 }
+                upsertTransferredQueueItem(transfer);
                 if (transfer.transfer_type === 'report' || !transfer.room) {
                     showIncomingReportNotification(transfer);
                     return;
