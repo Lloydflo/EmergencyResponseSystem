@@ -1249,7 +1249,7 @@ $pageTitle = 'Resources Status';
                             <th>Resource</th>
                             <th>Category</th>
                             <th>Status</th>
-                            <th>Location / Assignment</th>
+                            <th>Assignment</th>
                             <th>Last Updated</th>
                             <th>Actions</th>
                         </tr>
@@ -1752,6 +1752,9 @@ $pageTitle = 'Resources Status';
                 plateNumber: String(raw.plateNumber || '').trim(),
                 positionTitle: String(raw.positionTitle || '').trim(),
                 assignment: String(raw.assignment || '').trim(),
+                assignmentDetails: String(raw.assignmentDetails || '').trim(),
+                assignmentIncidentId: Number(raw.assignmentIncidentId) || 0,
+                assignmentIncidentCode: String(raw.assignmentIncidentCode || '').trim(),
                 quantity: Math.max(1, Number(raw.quantity) || 1),
                 notes: String(raw.notes || '').trim(),
                 updatedAt: String(raw.updatedAt || '')
@@ -1934,6 +1937,10 @@ $pageTitle = 'Resources Status';
         }
 
         function formatAssignmentDisplay(item) {
+            return item && item.assignmentDetails ? item.assignmentDetails : '';
+        }
+
+        function formatStoredAssignmentDisplay(item) {
             if (item.category === 'vehicles') {
                 const parts = [];
                 if (item.assignment) parts.push(item.assignment);
@@ -2274,6 +2281,7 @@ $pageTitle = 'Resources Status';
                     item.location,
                     item.quantity,
                     item.assignment,
+                    item.assignmentDetails,
                     item.notes
                 ].join(' ').toLowerCase();
 
@@ -2316,7 +2324,7 @@ $pageTitle = 'Resources Status';
                         <td>
                             <span class="status-chip status-${escapeHtml(item.status)}">${escapeHtml(formatStatus(item.status))}</span>
                         </td>
-                        <td>${escapeHtml(formatResourceLocation(item))} <br><span class="resource-meta-note">${escapeHtml(formatAssignmentDisplay(item))}</span></td>
+                        <td>${escapeHtml(formatAssignmentDisplay(item))}</td>
                         <td>${escapeHtml(formatDate(item.updatedAt))}</td>
                         <td class="actions-cell">
                             <button type="button" class="action-btn" title="Edit" data-action="edit" data-id="${item.id}">
@@ -2348,7 +2356,7 @@ $pageTitle = 'Resources Status';
                             <span>${escapeHtml(detailLine || item.notes || 'No details')}</span>
                         </td>
                         <td>${escapeHtml(formatCategory(item.category))}</td>
-                        <td>${escapeHtml(formatResourceLocation(item))}<br><span class="resource-meta-note">${escapeHtml(formatAssignmentDisplay(item))}</span></td>
+                        <td>${escapeHtml(formatResourceLocation(item))}<br><span class="resource-meta-note">${escapeHtml(formatStoredAssignmentDisplay(item))}</span></td>
                         <td>${escapeHtml(formatDate(item.deletedAt))}</td>
                         <td>
                             ${escapeHtml(formatDate(item.purgeAt))}<br>

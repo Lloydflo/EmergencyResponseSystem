@@ -301,6 +301,127 @@ function normalize_coordinate($value, float $min, float $max): ?float {
     return $number;
 }
 
+function build_incident_assignment_details(array $row): string {
+    $incidentId = (int)($row['incident_id'] ?? 0);
+    $dispatchId = (int)($row['dispatch_id'] ?? $row['id'] ?? 0);
+    $referenceNo = trim((string)($row['reference_no'] ?? ''));
+    $title = trim((string)($row['incident_title'] ?? $row['dispatch_name'] ?? ''));
+    $type = trim((string)($row['incident_type'] ?? $row['vehicle'] ?? ''));
+    $priority = trim((string)($row['incident_priority'] ?? $row['dispatch_priority'] ?? ''));
+    $location = trim((string)($row['incident_location'] ?? $row['dispatch_location'] ?? ''));
+
+    if ($referenceNo !== '') {
+        $label = 'Incident ' . $referenceNo;
+    } elseif ($incidentId > 0) {
+        $label = 'Incident #' . $incidentId;
+    } elseif ($dispatchId > 0) {
+        $label = 'Dispatch #' . $dispatchId;
+    } else {
+        $label = 'Assigned incident';
+    }
+
+    if ($title !== '') {
+        $label .= ' - ' . $title;
+    }
+
+    $parts = [$label];
+    if ($type !== '') {
+        $parts[] = 'Type: ' . $type;
+    }
+    if ($priority !== '') {
+        $parts[] = 'Priority: ' . ucfirst(strtolower($priority));
+    }
+    if ($location !== '') {
+        $parts[] = 'Location: ' . $location;
+    }
+
+    return implode(' | ', $parts);
+}
+
+function load_active_unit_incident_assignment_map(PDO $pdo): array {
+    if (
+        !table_exists($pdo, 'dispatch_operator_records')
+        || !table_column_exists($pdo, 'dispatch_operator_records', 'status')
+    ) {
+        return [];
+    }
+
+    $usersJoin = table_exists($pdo, 'users') && table_column_exists($pdo, 'dispatch_operator_records', 'assigned_to')
+        ? 'LEFT JOIN `users` u ON u.id = d.assigned_to'
+        : '';
+    $responderUnitCodeSelect = $usersJoin !== '' && table_column_exists($pdo, 'users', 'unit_code')
+        ? 'u.unit_code'
+        : 'NULL';
+    $hasIncidentId = table_column_exists($pdo, 'dispatch_operator_records', 'incident_id');
+    $incidentsJoin = table_exists($pdo, 'incidents') && $hasIncidentId
+        ? 'LEFT JOIN `incidents` i ON i.id = d.incident_id'
+        : '';
+    $incidentIdSelect = $hasIncidentId ? 'd.incident_id' : 'NULL';
+    $referenceNoSelect = $incidentsJoin !== '' ? 'i.reference_no' : 'NULL';
+    $incidentTitleSelect = $incidentsJoin !== '' ? 'i.title' : 'NULL';
+    $incidentTypeSelect = $incidentsJoin !== '' ? 'i.type' : 'NULL';
+    $incidentPrioritySelect = $incidentsJoin !== '' ? 'i.priority' : 'NULL';
+    $incidentLocationSelect = $incidentsJoin !== '' ? 'i.location_address' : 'NULL';
+    $assignedUnitCodeSelect = table_column_exists($pdo, 'dispatch_operator_records', 'assigned_unit_code')
+        ? 'd.assigned_unit_code'
+        : 'NULL';
+    $dispatchNameSelect = table_column_exists($pdo, 'dispatch_operator_records', 'name') ? 'd.name' : 'NULL';
+    $vehicleSelect = table_column_exists($pdo, 'dispatch_operator_records', 'vehicle') ? 'd.vehicle' : 'NULL';
+    $locationSelect = table_column_exists($pdo, 'dispatch_operator_records', 'location') ? 'd.location' : 'NULL';
+    $prioritySelect = table_column_exists($pdo, 'dispatch_operator_records', 'priority') ? 'd.priority' : 'NULL';
+    $assignedAtOrder = table_column_exists($pdo, 'dispatch_operator_records', 'assigned_at')
+        ? 'd.assigned_at DESC, '
+        : '';
+
+    try {
+        $stmt = $pdo->query(
+            "SELECT
+                d.id AS dispatch_id,
+                {$incidentIdSelect} AS incident_id,
+                {$dispatchNameSelect} AS dispatch_name,
+                {$vehicleSelect} AS vehicle,
+                {$locationSelect} AS dispatch_location,
+                {$prioritySelect} AS dispatch_priority,
+                d.status AS dispatch_status,
+                {$assignedUnitCodeSelect} AS assigned_unit_code,
+                {$responderUnitCodeSelect} AS responder_unit_code,
+                {$referenceNoSelect} AS reference_no,
+                {$incidentTitleSelect} AS incident_title,
+                {$incidentTypeSelect} AS incident_type,
+                {$incidentPrioritySelect} AS incident_priority,
+                {$incidentLocationSelect} AS incident_location
+             FROM `dispatch_operator_records` d
+             {$usersJoin}
+             {$incidentsJoin}
+             WHERE LOWER(d.status) IN ('pending','assigned','received','accepted','acknowledged','busy','in_use','enroute','en_route','on_scene')
+             ORDER BY {$assignedAtOrder}d.id DESC"
+        );
+    } catch (Throwable $e) {
+        error_log('admin_resources active unit assignment map skipped: ' . $e->getMessage());
+        return [];
+    }
+
+    $assignments = [];
+    foreach ($stmt->fetchAll(PDO::FETCH_ASSOC) as $row) {
+        $details = build_incident_assignment_details($row);
+        $unitCodes = [
+            strtoupper(trim((string)($row['assigned_unit_code'] ?? ''))),
+            strtoupper(trim((string)($row['responder_unit_code'] ?? ''))),
+        ];
+        foreach ($unitCodes as $unitCode) {
+            if ($unitCode !== '' && !isset($assignments[$unitCode])) {
+                $assignments[$unitCode] = [
+                    'details' => $details,
+                    'incident_id' => (int)($row['incident_id'] ?? 0),
+                    'incident_code' => trim((string)($row['reference_no'] ?? '')),
+                ];
+            }
+        }
+    }
+
+    return $assignments;
+}
+
 function row_to_item(array $row): array {
     return [
         'id' => (int)($row['id'] ?? 0),
@@ -315,10 +436,26 @@ function row_to_item(array $row): array {
         'plateNumber' => (string)($row['plate_number'] ?? ''),
         'positionTitle' => (string)($row['position_title'] ?? ''),
         'assignment' => (string)($row['assignment'] ?? ''),
+        'assignmentDetails' => (string)($row['assignmentDetails'] ?? ''),
+        'assignmentIncidentId' => (int)($row['assignmentIncidentId'] ?? 0),
+        'assignmentIncidentCode' => (string)($row['assignmentIncidentCode'] ?? ''),
         'quantity' => max(1, (int)($row['quantity'] ?? 1)),
         'notes' => (string)($row['notes'] ?? ''),
         'updatedAt' => (string)($row['updated_at'] ?? '')
     ];
+}
+
+function apply_active_assignment_to_item(array $item, array $activeIncidentAssignments): array {
+    $unitCode = strtoupper(trim((string)($item['code'] ?? '')));
+    $incidentAssignment = strtolower((string)($item['category'] ?? '')) === 'vehicles'
+        ? ($activeIncidentAssignments[$unitCode] ?? null)
+        : null;
+    if (is_array($incidentAssignment)) {
+        $item['assignmentDetails'] = (string)($incidentAssignment['details'] ?? '');
+        $item['assignmentIncidentId'] = (int)($incidentAssignment['incident_id'] ?? 0);
+        $item['assignmentIncidentCode'] = (string)($incidentAssignment['incident_code'] ?? '');
+    }
+    return $item;
 }
 
 function archive_row_to_item(array $row): array {
@@ -353,7 +490,7 @@ function fetch_item(PDO $pdo, int $id): ?array {
     );
     $stmt->execute([$id]);
     $row = $stmt->fetch(PDO::FETCH_ASSOC);
-    return $row ? row_to_item($row) : null;
+    return $row ? apply_active_assignment_to_item(row_to_item($row), load_active_unit_incident_assignment_map($pdo)) : null;
 }
 
 function fetch_active_resource_row(PDO $pdo, int $id): ?array {
@@ -632,7 +769,11 @@ try {
                 static fn(array $row): array => ers_apply_responder_presence_to_vehicle_resource_row($row, $presenceMap),
                 $rows
             );
-            $items = array_map('row_to_item', $rows);
+            $activeIncidentAssignments = load_active_unit_incident_assignment_map($pdo);
+            $items = array_map(
+                static fn(array $row): array => apply_active_assignment_to_item(row_to_item($row), $activeIncidentAssignments),
+                $rows
+            );
         }
         echo json_encode(['ok' => true, 'items' => $items]);
         exit;

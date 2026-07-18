@@ -517,7 +517,7 @@ try {
                             <th>Resource</th>
                             <th>Category</th>
                             <th>Status</th>
-                            <th>Location / Assignment</th>
+                            <th>Assignment</th>
                             <th>Last Updated</th>
                             <th>Actions</th>
                         </tr>
@@ -555,6 +555,9 @@ try {
                         details: String(raw.details || raw.notes || ''),
                         notes: String(raw.notes || ''),
                         assignment: String(raw.assignment || ''),
+                        assignmentDetails: String(raw.assignmentDetails || ''),
+                        assignmentIncidentId: Number(raw.assignmentIncidentId) || 0,
+                        assignmentIncidentCode: String(raw.assignmentIncidentCode || ''),
                         quantity: Math.max(1, Number(raw.quantity) || 1),
                         updatedAt: String(raw.updatedAt || raw.updated_at || ''),
                         source: String(raw.source || '')
@@ -660,7 +663,7 @@ try {
                     if (statusValue && (r.status || '').toLowerCase() !== statusValue) return false;
                     if (locationValue && (r.location || '').toLowerCase() !== locationValue) return false;
                     if (searchValue) {
-                        const hay = [r.code, r.name, r.location, r.role, r.details, r.notes, r.assignment]
+                        const hay = [r.code, r.name, r.location, r.role, r.details, r.notes, r.assignment, r.assignmentDetails]
                             .map(v => (v || '').toString().toLowerCase()).join(' ');
                         if (!hay.includes(searchValue)) return false;
                     }
@@ -699,10 +702,7 @@ try {
                 }
 
                 function formatAssignmentDisplay(resource) {
-                    const details = String(resource.details || '').trim();
-                    if (details) return details;
-                    const assignment = String(resource.assignment || '').trim();
-                    return assignment || 'N/A';
+                    return String(resource.assignmentDetails || '').trim();
                 }
 
                 function resourceRowHtml(r) {
@@ -716,7 +716,6 @@ try {
                     const safeSubtitle = escapeHtml(subtitle);
                     const safeAssignmentLine = escapeHtml(assignmentLine);
                     const safeQuantity = escapeHtml(Math.max(1, Number(r.quantity) || 1));
-                    const safeLocation = escapeHtml(String(r.location || ''));
                     const safeTypeLabel = escapeHtml(formatResourceType(r.type));
                     const safeStatusLabel = escapeHtml(formatResourceStatus(r.status));
                     const safeUpdatedAt = escapeHtml(formatUpdatedAt(r.updatedAt));
@@ -742,7 +741,7 @@ try {
                         `<td class=\"name-cell resource-title\"><strong>${safeResourceName}</strong><span>${safeSubtitle}</span></td>`+
                         `<td>${safeTypeLabel}</td>`+
                         `<td><span class=\"${statusClass}\">${safeStatusLabel}</span></td>`+
-                        `<td class=\"detail-value\">${safeLocation}<br><span class=\"resource-meta-note\">${safeAssignmentLine}</span></td>`+
+                        `<td class=\"detail-value\">${safeAssignmentLine}</td>`+
                         `<td>${safeUpdatedAt}</td>`+
                         `<td>${actionsHtml}</td>`+
                     `</tr>`;
