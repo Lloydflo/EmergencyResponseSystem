@@ -550,6 +550,17 @@ function ers_api_create_incoming_transfer(PDO $pdo, array $auth): array
     ers_external_ensure_identity($pdo, 'incidents');
     ers_external_ensure_link_table($pdo);
 
+    $roomForDuplicate = ers_external_clean($call['room'] ?? $input['room'] ?? $details['room'] ?? '', 150);
+    $socketUrlForDuplicate = ers_external_clean($call['socketUrl'] ?? $call['socket_url'] ?? $input['socketUrl'] ?? $input['socket_url'] ?? $details['socketUrl'] ?? $details['socket_url'] ?? 'https://emergency-comm.alertaraqc.com', 255);
+    $socketPathForDuplicate = ers_external_clean($call['socketPath'] ?? $call['socket_path'] ?? $input['socketPath'] ?? $input['socket_path'] ?? $details['socketPath'] ?? $details['socket_path'] ?? '/socket.io', 100);
+    $conversationIdForDuplicate = ers_external_clean($call['conversationId'] ?? $call['conversation_id'] ?? $input['conversationId'] ?? $input['conversation_id'] ?? $details['conversationId'] ?? $details['conversation_id'] ?? '', 80);
+    $externalCallIdForDuplicate = ers_external_clean($call['callId'] ?? $call['call_id'] ?? $input['callId'] ?? $input['call_id'] ?? $details['callId'] ?? $details['call_id'] ?? '', 120);
+    if ($transferId === '') {
+        $transferId = $externalCallIdForDuplicate !== ''
+            ? $externalCallIdForDuplicate
+            : ($conversationIdForDuplicate !== '' ? 'conversation-' . $conversationIdForDuplicate : 'TRN-' . date('YmdHis'));
+    }
+
     if ($sourceSystem !== '' && $transferId !== '') {
         $existing = $pdo->prepare(
             "SELECT i.id, i.reference_no, i.status
@@ -561,10 +572,18 @@ function ers_api_create_incoming_transfer(PDO $pdo, array $auth): array
         $existing->execute([$sourceSystem, $transferId]);
         $row = $existing->fetch(PDO::FETCH_ASSOC);
         if ($row) {
+            ers_external_link_incident($pdo, $sourceSystem, $transferId, (int)$row['id'], $input);
+            $isLiveDuplicate = $externalCallIdForDuplicate !== '' && $roomForDuplicate !== '';
             return [
                 'success' => true,
                 'duplicate' => true,
                 'transfer_id' => $transferId,
+                'transfer_type' => $isLiveDuplicate ? 'live_call' : 'report',
+                'call_id_external' => $externalCallIdForDuplicate,
+                'conversation_id' => $conversationIdForDuplicate,
+                'room' => $roomForDuplicate,
+                'socket_url' => $socketUrlForDuplicate,
+                'socket_path' => $socketPathForDuplicate,
                 'incident_id' => (int)$row['id'],
                 'reference_no' => $row['reference_no'],
                 'status' => $row['status'],
@@ -580,12 +599,18 @@ function ers_api_create_incoming_transfer(PDO $pdo, array $auth): array
     $title = ers_external_clean($details['title'] ?? ('Transferred call from ' . $sourceSystem), 200);
     $callerName = ers_external_clean($details['caller_name'] ?? $details['reporter_name'] ?? $caller['name'] ?? $details['name'] ?? 'Transferred Caller', 150);
     $callerPhone = ers_external_clean($details['caller_phone'] ?? $caller['phone'] ?? $details['phone'] ?? $details['contact_number'] ?? $details['contact'] ?? 'N/A', 50);
-    $room = ers_external_clean($call['room'] ?? $input['room'] ?? '', 150);
-    $socketUrl = ers_external_clean($call['socketUrl'] ?? $call['socket_url'] ?? $input['socketUrl'] ?? $input['socket_url'] ?? 'https://emergency-comm.alertaraqc.com', 255);
-    $socketPath = ers_external_clean($call['socketPath'] ?? $call['socket_path'] ?? $input['socketPath'] ?? $input['socket_path'] ?? '/socket.io', 100);
-    $conversationId = ers_external_clean($call['conversationId'] ?? $call['conversation_id'] ?? $input['conversationId'] ?? $input['conversation_id'] ?? '', 80);
-    $externalCallId = ers_external_clean($call['callId'] ?? $call['call_id'] ?? '', 120);
+    $room = ers_external_clean($call['room'] ?? $input['room'] ?? $details['room'] ?? '', 150);
+    $socketUrl = ers_external_clean($call['socketUrl'] ?? $call['socket_url'] ?? $input['socketUrl'] ?? $input['socket_url'] ?? $details['socketUrl'] ?? $details['socket_url'] ?? 'https://emergency-comm.alertaraqc.com', 255);
+    $socketPath = ers_external_clean($call['socketPath'] ?? $call['socket_path'] ?? $input['socketPath'] ?? $input['socket_path'] ?? $details['socketPath'] ?? $details['socket_path'] ?? '/socket.io', 100);
+    $conversationId = ers_external_clean($call['conversationId'] ?? $call['conversation_id'] ?? $input['conversationId'] ?? $input['conversation_id'] ?? $details['conversationId'] ?? $details['conversation_id'] ?? '', 80);
+    $externalCallId = ers_external_clean($call['callId'] ?? $call['call_id'] ?? $input['callId'] ?? $input['call_id'] ?? $details['callId'] ?? $details['call_id'] ?? '', 120);
     $isLiveCallTransfer = $externalCallId !== '' && $room !== '';
+
+    if ($transferId === '') {
+        $transferId = $externalCallId !== ''
+            ? $externalCallId
+            : ($conversationId !== '' ? 'conversation-' . $conversationId : $referenceNo);
+    }
 
     $pdo->beginTransaction();
     $callId = ers_external_insert_call($pdo, [
