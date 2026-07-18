@@ -311,6 +311,21 @@ $pageTitle = 'Emergency Call Center';
         </div>
     </div>
 
+    <div class="incident-details-modal" id="incidentDetailsModal" aria-hidden="true">
+        <div class="incident-details-dialog" role="dialog" aria-modal="true" aria-labelledby="incidentDetailsTitle">
+            <div class="incident-details-head">
+                <div>
+                    <div class="panel-eyebrow">Incident Details</div>
+                    <h2 id="incidentDetailsTitle">Incident</h2>
+                </div>
+                <button type="button" class="incident-details-close" onclick="closeIncidentModal()" aria-label="Close incident details">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+            <div class="incident-details-body" id="incidentDetailsBody"></div>
+        </div>
+    </div>
+
     <?php include $rootDir . '/includes/admin-footer.php'; ?>
 
     <script>
@@ -338,6 +353,22 @@ $pageTitle = 'Emergency Call Center';
     let pendingIncomingCall = null;
     let latestTransferLogId = Number(window.localStorage.getItem('ersLatestTransferLogId') || '0') || 0;
     let incomingTransferBaselineReady = latestTransferLogId > 0;
+
+    function escapeHtml(value) {
+        return String(value == null ? '' : value)
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;')
+            .replace(/'/g, '&#039;');
+    }
+
+    function formatDateTime(value) {
+        const raw = String(value || '').trim();
+        if (!raw) return 'N/A';
+        const parsed = new Date(raw.indexOf('T') === -1 ? raw.replace(' ', 'T') : raw);
+        return Number.isNaN(parsed.getTime()) ? raw : parsed.toLocaleString();
+    }
     let alertAudioContext = null;
     let transferSocket = null;
     let transferPeerConnection = null;
@@ -1566,20 +1597,29 @@ $pageTitle = 'Emergency Call Center';
     }
 
     function incidentCardHtml(i) {
-        const priorityClass = i.priority || 'low';
+        const rawPriority = String(i.priority || 'low').toLowerCase();
+        const priorityClass = ['high', 'medium', 'low'].includes(rawPriority) ? rawPriority : 'low';
         const created = new Date(i.created_at || Date.now());
         const code = i.incident_code || '';
+        const id = Number(i.id) || 0;
         return `
-            <div class="incident-card" onclick="openIncident('${code}')">
+            <div class="incident-card" role="button" tabindex="0" onclick="openIncidentById(${id})" onkeydown="handleIncidentCardKey(event, ${id})">
                 <div class="incident-header">
-                    <div class="incident-id">${code}</div>
-                    <div class="incident-priority ${priorityClass}">${(priorityClass||'low').toUpperCase()}</div>
+                    <div class="incident-id">${escapeHtml(code || ('#' + id))}</div>
+                    <div class="incident-priority ${escapeHtml(priorityClass)}">${escapeHtml((priorityClass||'low').toUpperCase())}</div>
                 </div>
-                <div class="incident-type">${labelForType(i.type)}</div>
-                <div class="incident-location"><i class="fas fa-map-marker-alt"></i> ${i.location}</div>
-                <div class="incident-time">${created.toLocaleString()}</div>
+                <div class="incident-type">${escapeHtml(labelForType(i.type))}</div>
+                <div class="incident-location"><i class="fas fa-map-marker-alt"></i> ${escapeHtml(i.location || 'No location')}</div>
+                <div class="incident-time">${escapeHtml(Number.isNaN(created.getTime()) ? 'N/A' : created.toLocaleString())}</div>
             </div>
         `;
+    }
+
+    function handleIncidentCardKey(event, id) {
+        if (event.key === 'Enter' || event.key === ' ') {
+            event.preventDefault();
+            openIncidentById(id);
+        }
     }
 
     function labelForType(t) {
@@ -1605,30 +1645,99 @@ $pageTitle = 'Emergency Call Center';
         renderIncidents();
     }
 
+    function incidentDetailRow(label, value) {
+        const display = value === null || value === undefined || String(value).trim() === '' ? 'N/A' : value;
+        return `
+            <div class="incident-detail-row">
+                <strong>${escapeHtml(label)}</strong>
+                <span>${escapeHtml(display)}</span>
+            </div>
+        `;
+    }
+
+    function openIncidentById(id) {
+        const item = incidentItems.find(x => Number(x.id) === Number(id));
+        if (!item) return;
+        openIncidentModal(item);
+    }
+
     function openIncident(code) {
         const item = incidentItems.find(x => x.incident_code === code);
         if (!item) return;
-        const lines = [];
-        lines.push(`Incident: ${item.incident_code || 'N/A'}`);
-        lines.push(`Type: ${labelForType(item.type)}`);
-        lines.push(`Location: ${item.location || 'N/A'}`);
-        if (Number.isFinite(Number(item.latitude)) && Number.isFinite(Number(item.longitude))) {
-            lines.push(`Coordinates: ${Number(item.latitude).toFixed(6)}, ${Number(item.longitude).toFixed(6)}`);
-        }
-        lines.push(`Priority: ${(item.priority || 'N/A').toUpperCase()}`);
-        lines.push(`Status: ${item.status || 'N/A'}`);
-        if (item.caller_name) lines.push(`Caller: ${item.caller_name}`);
-        if (item.caller_phone) lines.push(`Phone: ${item.caller_phone}`);
-        if (item.assigned_unit) {
-            const unitType = item.assigned_unit_type ? ` (${item.assigned_unit_type})` : '';
-            lines.push(`Assigned Unit: ${item.assigned_unit}${unitType}`);
-        }
-        if (item.response_time_min !== null && item.response_time_min !== undefined) {
-            lines.push(`Response Time: ${item.response_time_min} min`);
-        }
-        if (item.description) lines.push(`Description: ${item.description}`);
-        alert(lines.join('\n'));
+        openIncidentModal(item);
     }
+
+    function openIncidentModal(item) {
+        const modal = document.getElementById('incidentDetailsModal');
+        const title = document.getElementById('incidentDetailsTitle');
+        const body = document.getElementById('incidentDetailsBody');
+        if (!modal || !title || !body || !item) return;
+
+        const coordinates = Number.isFinite(Number(item.latitude)) && Number.isFinite(Number(item.longitude))
+            ? `${Number(item.latitude).toFixed(6)}, ${Number(item.longitude).toFixed(6)}`
+            : 'N/A';
+        const unitType = item.assigned_unit_type ? ` (${item.assigned_unit_type})` : '';
+        const assignedUnit = item.assigned_unit ? `${item.assigned_unit}${unitType}` : '';
+        const vehicleParts = [item.vehicle_name, item.driver_name ? `Driver: ${item.driver_name}` : '', item.plate_number ? `Plate: ${item.plate_number}` : '']
+            .filter(Boolean)
+            .join(' | ');
+        const rawPriority = String(item.priority || 'low').toLowerCase();
+        const priorityClass = ['high', 'medium', 'low'].includes(rawPriority) ? rawPriority : 'low';
+
+        title.textContent = item.incident_code || `Incident #${item.id || ''}`;
+        body.innerHTML = `
+            <div class="incident-details-summary">
+                <span class="incident-priority ${priorityClass}">${escapeHtml(priorityClass.toUpperCase())}</span>
+                <span class="incident-status-pill">${escapeHtml(item.status || 'N/A')}</span>
+                <span>${escapeHtml(formatDateTime(item.created_at))}</span>
+            </div>
+            <div class="incident-details-grid">
+                ${incidentDetailRow('Type', labelForType(item.type))}
+                ${incidentDetailRow('Location', item.location)}
+                ${incidentDetailRow('Coordinates', coordinates)}
+                ${incidentDetailRow('Caller', item.caller_name)}
+                ${incidentDetailRow('Phone', item.caller_phone)}
+                ${incidentDetailRow('Assigned Unit', assignedUnit)}
+                ${incidentDetailRow('Vehicle / Driver', vehicleParts)}
+                ${incidentDetailRow('Dispatch Status', item.latest_dispatch_status)}
+                ${incidentDetailRow('Assigned At', formatDateTime(item.assigned_at))}
+                ${incidentDetailRow('On Scene At', formatDateTime(item.on_scene_at))}
+                ${incidentDetailRow('Resolved At', formatDateTime(item.resolved_at || item.cleared_at))}
+                ${incidentDetailRow('Response Time', item.response_time_min !== null && item.response_time_min !== undefined ? item.response_time_min + ' min' : '')}
+            </div>
+            <div class="incident-description-panel">
+                <strong>Description</strong>
+                <p>${escapeHtml(item.description || 'No description provided.')}</p>
+            </div>
+        `;
+
+        modal.classList.add('active');
+        modal.setAttribute('aria-hidden', 'false');
+        document.body.classList.add('incident-details-modal-open');
+    }
+
+    function closeIncidentModal() {
+        const modal = document.getElementById('incidentDetailsModal');
+        if (!modal) return;
+        modal.classList.remove('active');
+        modal.setAttribute('aria-hidden', 'true');
+        document.body.classList.remove('incident-details-modal-open');
+    }
+
+    document.addEventListener('click', (event) => {
+        const modal = document.getElementById('incidentDetailsModal');
+        if (modal && modal.classList.contains('active') && event.target === modal) {
+            closeIncidentModal();
+        }
+    });
+
+    document.addEventListener('keydown', (event) => {
+        if (event.key === 'Escape') {
+            closeIncidentModal();
+        }
+    });
+
+    window.closeIncidentModal = closeIncidentModal;
 
     function exportIncidents() {
         const blob = new Blob([JSON.stringify(incidentItems, null, 2)], { type: 'application/json' });
