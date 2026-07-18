@@ -379,10 +379,49 @@ $pageTitle = 'Emergency Call Center';
     const shownIncomingTransferIds = new Set();
     const notifiedIncomingTransferKeys = new Set();
     const liveIncomingTransferKeys = new Set();
+    const DISMISSED_TRANSFER_QUEUE_STORAGE_KEY = 'ersDismissedTransferQueueKeys';
+    const DISMISSED_TRANSFER_QUEUE_LIMIT = 200;
     let transferQueueItems = [];
     let activeTransferCall = null;
     let incomingTransferPollTimer = null;
     const INCOMING_TRANSFER_POLL_MS = 1500;
+
+    function loadDismissedTransferQueueKeys() {
+        try {
+            const stored = JSON.parse(window.localStorage.getItem(DISMISSED_TRANSFER_QUEUE_STORAGE_KEY) || '[]');
+            if (!Array.isArray(stored)) return [];
+            return stored
+                .map((value) => String(value || '').trim())
+                .filter(Boolean)
+                .slice(-DISMISSED_TRANSFER_QUEUE_LIMIT);
+        } catch (error) {
+            return [];
+        }
+    }
+
+    const dismissedTransferQueueKeys = new Set(loadDismissedTransferQueueKeys());
+
+    function saveDismissedTransferQueueKeys() {
+        try {
+            const keys = Array.from(dismissedTransferQueueKeys).slice(-DISMISSED_TRANSFER_QUEUE_LIMIT);
+            window.localStorage.setItem(DISMISSED_TRANSFER_QUEUE_STORAGE_KEY, JSON.stringify(keys));
+        } catch (error) {
+            console.warn('Unable to save dismissed transfer queue keys:', error);
+        }
+    }
+
+    function isTransferQueueDismissed(key) {
+        return key && dismissedTransferQueueKeys.has(String(key));
+    }
+
+    function dismissTransferredQueueItem(key) {
+        const normalizedKey = String(key || '').trim();
+        if (!normalizedKey) return;
+        dismissedTransferQueueKeys.add(normalizedKey);
+        saveDismissedTransferQueueKeys();
+        transferQueueItems = transferQueueItems.filter((item) => item.queue_key !== normalizedKey);
+        renderTransferredQueue();
+    }
 
     function escapeHtml(value) {
         return String(value == null ? '' : value)
@@ -778,6 +817,11 @@ $pageTitle = 'Emergency Call Center';
     function upsertTransferredQueueItem(transfer) {
         const item = normalizeTransferQueueItem(transfer);
         if (!item) return;
+        if (isTransferQueueDismissed(item.queue_key)) {
+            transferQueueItems = transferQueueItems.filter((existing) => existing.queue_key !== item.queue_key);
+            renderTransferredQueue();
+            return;
+        }
         const terminalStatus = String(item.incident_status || '').toLowerCase();
         if (['resolved', 'cancelled', 'closed', 'rejected'].includes(terminalStatus)) {
             transferQueueItems = transferQueueItems.filter((existing) => existing.queue_key !== item.queue_key);
@@ -835,8 +879,7 @@ $pageTitle = 'Emergency Call Center';
                 } else if (action === 'open') {
                     openTransferredReportQueueItem(key);
                 } else if (action === 'dismiss') {
-                    transferQueueItems = transferQueueItems.filter((item) => item.queue_key !== key);
-                    renderTransferredQueue();
+                    dismissTransferredQueueItem(key);
                 }
             });
         });
@@ -1335,6 +1378,7 @@ $pageTitle = 'Emergency Call Center';
     function showRealtimeTransferNotice(payload) {
         const transfer = normalizeRealtimeTransferPayload(payload);
         const key = transferQueueKey(transfer) || ('live-' + Date.now());
+        if (isTransferQueueDismissed(key)) return;
         if (liveIncomingTransferKeys.has(key)) return;
         liveIncomingTransferKeys.add(key);
         notifiedIncomingTransferKeys.add(key);
@@ -1420,6 +1464,9 @@ $pageTitle = 'Emergency Call Center';
                     if (transferKey) {
                         notifiedIncomingTransferKeys.add(transferKey);
                     }
+                    if (isTransferQueueDismissed(transferKey)) {
+                        return;
+                    }
                     if (!(transfer.call_id_external || transfer.transfer_id)) {
                         return;
                     }
@@ -1451,6 +1498,9 @@ $pageTitle = 'Emergency Call Center';
                 }
                 if (transferKey) {
                     notifiedIncomingTransferKeys.add(transferKey);
+                }
+                if (isTransferQueueDismissed(transferKey)) {
+                    return;
                 }
                 if (!(transfer.call_id_external || transfer.transfer_id)) {
                     return;
