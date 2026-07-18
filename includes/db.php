@@ -6,19 +6,23 @@ function get_db_connection(): ?PDO {
     if ($pdo instanceof PDO) {
         return $pdo;
     }
-    // Get DB config array from config.php
+
     $config = require __DIR__ . '/config.php';
-    if (!isset($config['DB_HOST'], $config['DB_NAME'], $config['DB_USER'], $config['DB_PASS'])) {
+    if (empty($config['DB_HOST']) || empty($config['DB_NAME']) || empty($config['DB_USER'])) {
+        error_log('Database connection failed: missing DB_HOST, DB_NAME, or DB_USER in live configuration.');
         return null;
     }
-    $dsn = 'mysql:host=' . $config['DB_HOST'] . ';dbname=' . $config['DB_NAME'] . ';charset=utf8mb4';
+
+    $port = isset($config['DB_PORT']) && $config['DB_PORT'] !== '' ? (string)$config['DB_PORT'] : '3306';
+    $dsn = 'mysql:host=' . $config['DB_HOST'] . ';port=' . $port . ';dbname=' . $config['DB_NAME'] . ';charset=utf8mb4';
     $options = [
         PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
         PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
         PDO::ATTR_EMULATE_PREPARES => false,
     ];
+
     try {
-        $pdo = new PDO($dsn, $config['DB_USER'], $config['DB_PASS'], $options);
+        $pdo = new PDO($dsn, $config['DB_USER'], $config['DB_PASS'] ?? '', $options);
         return $pdo;
     } catch (PDOException $e) {
         error_log('Database connection failed: ' . $e->getMessage());
@@ -33,8 +37,4 @@ function fetch_all_from_table($table) {
     $stmt->execute();
     return $stmt->fetchAll();
 }
-
-// Usage example (for testing):
-// $rows = fetch_all_from_table('your_table_name');
-// print_r($rows);
 ?>

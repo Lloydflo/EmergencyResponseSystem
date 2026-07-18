@@ -75,10 +75,6 @@ try {
          INNER JOIN incidents i ON i.id = l.incident_id
          LEFT JOIN calls c ON c.id = i.reported_by_call_id
          WHERE l.id > :after_id
-           AND (
-                (l.payload_json LIKE '%\"room\"%' OR l.payload_json LIKE '%\"room\":%')
-                AND (l.payload_json LIKE '%\"callId\"%' OR l.payload_json LIKE '%\"call_id\"%')
-           )
          ORDER BY l.id " . ($latestOnly ? 'DESC' : 'ASC') . "
          LIMIT {$limit}"
     );
@@ -103,8 +99,9 @@ try {
         $detailSources = [$row, $call, $incident, $payload];
         $externalCallId = incoming_transfer_pick($detailSources, ['callId', 'call_id'], (string)($row['transfer_id'] ?? ''));
         $room = incoming_transfer_pick([$call, $payload], ['room']);
-        if (trim($externalCallId) === '' || trim($room) === '') {
-            continue;
+        $isLiveCall = trim($externalCallId) !== '' && trim($room) !== '';
+        if (trim($externalCallId) === '') {
+            $externalCallId = (string)($row['transfer_id'] ?? '');
         }
 
         $latitude = incoming_transfer_pick_float($detailSources, ['call_latitude', 'latitude', 'lat']);
@@ -117,7 +114,7 @@ try {
             'transfer_id' => incoming_transfer_pick([$row, $call, $payload], ['transfer_id', 'callId', 'call_id']),
             'call_id_external' => $externalCallId,
             'conversation_id' => incoming_transfer_pick([$call, $payload], ['conversationId', 'conversation_id']),
-            'transfer_type' => 'live_call',
+            'transfer_type' => $isLiveCall ? 'live_call' : 'report',
             'room' => $room,
             'socket_url' => incoming_transfer_pick([$call, $payload], ['socketUrl', 'socket_url'], 'https://emergency-comm.alertaraqc.com'),
             'socket_path' => incoming_transfer_pick([$call, $payload], ['socketPath', 'socket_path'], '/socket.io'),
