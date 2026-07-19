@@ -20,6 +20,7 @@ $allowed_roles = [
     'dispatcher' => 'Dispatcher'
 ];
 $selected_role = 'admin';
+$privacy_agreed = '';
 
 // If already logged in, redirect to index
 if (is_logged_in()) {
@@ -47,6 +48,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $selected_role = strtolower(trim($_POST['role'] ?? ''));
     $email = trim($_POST['email'] ?? '');
     $password = $_POST['password'] ?? '';
+    $privacy_agreed = trim((string)($_POST['privacy_agreed'] ?? ''));
     debug_log('Email: ' . $email);
     debug_log('Role: ' . $selected_role);
     if (!array_key_exists($selected_role, $allowed_roles)) {
@@ -55,6 +57,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     } elseif (empty($email) || empty($password)) {
         $error_message = 'Please enter both email and password.';
         debug_log('Missing email or password');
+    } elseif ($privacy_agreed !== '1') {
+        $error_message = 'Please review and accept the Data Privacy Agreement before signing in.';
+        debug_log('Data privacy agreement not accepted');
     } else {
         $result = login_user($email, $password, $selected_role);
         debug_log('login_user result: ' . json_encode($result));
@@ -173,6 +178,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
             <!-- Login Form -->
             <form class="login-form" method="POST" action="login.php">
+                <input type="hidden" id="privacyAgreed" name="privacy_agreed" value="<?php echo $privacy_agreed === '1' ? '1' : ''; ?>">
                 <!-- Role Field -->
                 <div class="form-group">
                     <label for="role" class="form-label">
@@ -256,6 +262,43 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             <!-- Contact Support -->
             <div class="login-footer">
                 <p>Need help? <a href="#" class="support-link">Contact Support</a></p>
+            </div>
+        </div>
+    </div>
+
+    <div class="privacy-modal" id="privacyModal" aria-hidden="true">
+        <div class="privacy-modal-dialog" role="dialog" aria-modal="true" aria-labelledby="privacyModalTitle">
+            <div class="privacy-modal-header">
+                <div class="privacy-modal-icon">
+                    <i class="fas fa-user-shield"></i>
+                </div>
+                <div>
+                    <h2 id="privacyModalTitle">Data Privacy Agreement</h2>
+                    <p>Data Privacy Act of 2012 (RA 10173)</p>
+                </div>
+            </div>
+
+            <div class="privacy-modal-body">
+                <p>
+                    By signing in to the Emergency Response System, you acknowledge that your account details,
+                    role, login activity, access logs, and actions inside the system may be collected and processed.
+                </p>
+                <ul>
+                    <li>Data will be used for emergency response operations, identity verification, access control, security monitoring, audit logs, and authorized administrative reporting.</li>
+                    <li>Only authorized personnel may access the data based on assigned roles and official responsibilities.</li>
+                    <li>You are responsible for keeping your credentials confidential and for using the system only for legitimate emergency response purposes.</li>
+                    <li>You may contact the system administrator for data privacy concerns, access requests, correction requests, or account-related support.</li>
+                </ul>
+
+                <label class="privacy-consent">
+                    <input type="checkbox" id="privacyConsentCheckbox">
+                    <span>I have read, understood, and agree to the Data Privacy Agreement.</span>
+                </label>
+            </div>
+
+            <div class="privacy-modal-actions">
+                <button type="button" class="privacy-btn privacy-btn-secondary" id="privacyCancelBtn">Cancel</button>
+                <button type="button" class="privacy-btn privacy-btn-primary" id="privacyAgreeBtn" disabled>Submit Agreement</button>
             </div>
         </div>
     </div>

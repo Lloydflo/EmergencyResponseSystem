@@ -390,6 +390,154 @@
     text-decoration: underline;
 }
 
+.privacy-modal {
+    position: fixed;
+    inset: 0;
+    z-index: 2000;
+    display: none;
+    align-items: center;
+    justify-content: center;
+    padding: 1.25rem;
+    background: rgba(17, 24, 39, 0.62);
+}
+
+.privacy-modal.is-open {
+    display: flex;
+}
+
+body.privacy-modal-open {
+    overflow: hidden;
+}
+
+.privacy-modal-dialog {
+    width: min(640px, 100%);
+    max-height: min(86vh, 760px);
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+    background: #ffffff;
+    border-radius: 12px;
+    box-shadow: 0 24px 70px rgba(15, 23, 42, 0.28);
+    text-align: left;
+}
+
+.privacy-modal-header {
+    display: flex;
+    align-items: flex-start;
+    gap: 1rem;
+    padding: 1.5rem 1.5rem 1rem;
+    border-bottom: 1px solid #e5e7eb;
+}
+
+.privacy-modal-icon {
+    width: 42px;
+    height: 42px;
+    border-radius: 8px;
+    display: grid;
+    place-items: center;
+    flex: 0 0 auto;
+    background: #e0f2f1;
+    color: #3d706f;
+}
+
+.privacy-modal-header h2 {
+    margin: 0 0 0.25rem;
+    color: #111827;
+    font-size: 1.35rem;
+    line-height: 1.25;
+}
+
+.privacy-modal-header p {
+    margin: 0;
+    color: #6b7280;
+    font-size: 0.9rem;
+}
+
+.privacy-modal-body {
+    overflow-y: auto;
+    padding: 1.25rem 1.5rem;
+    color: #374151;
+    line-height: 1.6;
+    font-size: 0.94rem;
+}
+
+.privacy-modal-body p {
+    margin: 0 0 1rem;
+}
+
+.privacy-modal-body ul {
+    margin: 0 0 1.25rem;
+    padding-left: 1.2rem;
+}
+
+.privacy-modal-body li {
+    margin-bottom: 0.65rem;
+}
+
+.privacy-consent {
+    display: flex;
+    align-items: flex-start;
+    gap: 0.75rem;
+    padding: 1rem;
+    border: 1px solid #d1d5db;
+    border-radius: 8px;
+    background: #f9fafb;
+    color: #1f2937;
+    font-weight: 600;
+    cursor: pointer;
+}
+
+.privacy-consent input {
+    width: 19px;
+    height: 19px;
+    margin-top: 0.15rem;
+    flex: 0 0 auto;
+    accent-color: #4c8a89;
+}
+
+.privacy-modal-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 0.75rem;
+    padding: 1rem 1.5rem 1.5rem;
+    border-top: 1px solid #e5e7eb;
+}
+
+.privacy-btn {
+    min-height: 42px;
+    padding: 0.75rem 1rem;
+    border-radius: 8px;
+    border: 1px solid transparent;
+    font: inherit;
+    font-weight: 700;
+    cursor: pointer;
+    transition: background-color 0.2s ease, border-color 0.2s ease, color 0.2s ease, opacity 0.2s ease;
+}
+
+.privacy-btn-secondary {
+    background: #ffffff;
+    border-color: #d1d5db;
+    color: #374151;
+}
+
+.privacy-btn-secondary:hover {
+    background: #f3f4f6;
+}
+
+.privacy-btn-primary {
+    background: #4c8a89;
+    color: #ffffff;
+}
+
+.privacy-btn-primary:hover {
+    background: #3d706f;
+}
+
+.privacy-btn:disabled {
+    opacity: 0.55;
+    cursor: not-allowed;
+}
+
 /* ===================================
    RESPONSIVE DESIGN
    =================================== */
@@ -480,6 +628,29 @@
         padding: 0.75rem 1.25rem;
         font-size: 0.95rem;
     }
+
+    .privacy-modal {
+        padding: 0.75rem;
+    }
+
+    .privacy-modal-header,
+    .privacy-modal-body,
+    .privacy-modal-actions {
+        padding-left: 1rem;
+        padding-right: 1rem;
+    }
+
+    .privacy-modal-header h2 {
+        font-size: 1.15rem;
+    }
+
+    .privacy-modal-actions {
+        flex-direction: column-reverse;
+    }
+
+    .privacy-btn {
+        width: 100%;
+    }
 }
 
 /* Dark mode support */
@@ -541,4 +712,43 @@
 
 [data-theme="dark"] .login-footer p {
     color: #a1a1aa;
+}
+
+[data-theme="dark"] .privacy-modal-dialog {
+    background: #0a0a0a;
+    border: 1px solid #27272a;
+}
+
+[data-theme="dark"] .privacy-modal-header,
+[data-theme="dark"] .privacy-modal-actions {
+    border-color: #27272a;
+}
+
+[data-theme="dark"] .privacy-modal-header h2,
+[data-theme="dark"] .privacy-consent {
+    color: #fafafa;
+}
+
+[data-theme="dark"] .privacy-modal-header p,
+[data-theme="dark"] .privacy-modal-body {
+    color: #d4d4d8;
+}
+
+[data-theme="dark"] .privacy-modal-icon {
+    background: rgba(76, 138, 137, 0.16);
+}
+
+[data-theme="dark"] .privacy-consent {
+    background: #171717;
+    border-color: #3f3f46;
+}
+
+[data-theme="dark"] .privacy-btn-secondary {
+    background: #171717;
+    border-color: #3f3f46;
+    color: #fafafa;
+}
+
+[data-theme="dark"] .privacy-btn-secondary:hover {
+    background: #27272a;
 }
