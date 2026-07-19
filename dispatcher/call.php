@@ -383,8 +383,43 @@ $pageTitle = 'Emergency Call Center';
     const DISMISSED_TRANSFER_QUEUE_LIMIT = 200;
     let transferQueueItems = [];
     let activeTransferCall = null;
+    let incomingCallQueue = [];
+    let incomingCallSequence = 0;
     let incomingTransferPollTimer = null;
     const INCOMING_TRANSFER_POLL_MS = 1500;
+    const PRIORITY_ORDER = { high: 0, medium: 1, low: 2 };
+
+    function normalizePriority(value, fallback = 'medium') {
+        const priority = String(value || '').trim().toLowerCase();
+        if (priority === 'critical' || priority === 'urgent') return 'high';
+        if (Object.prototype.hasOwnProperty.call(PRIORITY_ORDER, priority)) return priority;
+        return fallback;
+    }
+
+    function priorityRank(value) {
+        return PRIORITY_ORDER[normalizePriority(value)];
+    }
+
+    function parseQueueTime(value) {
+        const parsed = Date.parse(String(value || '').replace(' ', 'T'));
+        return Number.isFinite(parsed) ? parsed : 0;
+    }
+
+    function comparePriorityThenOldest(a, b) {
+        const byPriority = priorityRank(a.priority) - priorityRank(b.priority);
+        if (byPriority !== 0) return byPriority;
+        const byTime = parseQueueTime(a.transferred_at || a.start) - parseQueueTime(b.transferred_at || b.start);
+        if (byTime !== 0) return byTime;
+        return Number(a.queueSequence || 0) - Number(b.queueSequence || 0);
+    }
+
+    function comparePriorityThenNewest(a, b) {
+        const byPriority = priorityRank(a.priority) - priorityRank(b.priority);
+        if (byPriority !== 0) return byPriority;
+        const byLog = Number(b.transfer_log_id || 0) - Number(a.transfer_log_id || 0);
+        if (byLog !== 0) return byLog;
+        return parseQueueTime(b.transferred_at || b.created_at) - parseQueueTime(a.transferred_at || a.created_at);
+    }
 
     function loadDismissedTransferQueueKeys() {
         try {
@@ -557,45 +592,55 @@ $pageTitle = 'Emergency Call Center';
         startIncomingTransferPolling();
     });
 
-    function showIncomingCallModal(call) {
+    function normalizeIncomingCallDetail(call) {
+        const raw = call && typeof call === 'object' ? call : {};
+        const nameValue = raw.name || raw.caller_name || raw.callerName;
+        const phoneValue = raw.phone || raw.caller_phone || raw.callerPhone;
+        const startValue = raw.start || raw.received_at || raw.created_at;
+        const parsedStart = startValue ? Date.parse(startValue) : NaN;
+        const name = String(nameValue || 'Incoming Call').trim();
+        const phone = String(phoneValue || '').trim();
+        const isTransfer = !!(raw.is_transfer || raw.room || raw.transfer_id || raw.transfer_type);
+        return {
+            name: name || 'Incoming Call',
+            phone: phone,
+            start: Number(raw.start) > 0 ? Number(raw.start) : (Number.isFinite(parsedStart) ? parsedStart : Date.now()),
+            isTransfer,
+            transferId: raw.transfer_id || raw.transferId || '',
+            callId: raw.call_id_external || raw.callId || raw.call_id || raw.transfer_id || raw.transferId || '',
+            conversationId: raw.conversation_id || raw.conversationId || '',
+            room: raw.room || '',
+            transferType: raw.transfer_type || raw.transferType || (raw.room ? 'live_call' : 'report'),
+            socketUrl: raw.socket_url || raw.socketUrl || ALERTARA_SOCKET_URL,
+            socketPath: raw.socket_path || raw.socketPath || ALERTARA_SOCKET_PATH,
+            sourceSystem: raw.source_system || raw.sourceSystem || 'AlertaraQC Emergency Communication',
+            incidentId: raw.incident_id || raw.incidentId || null,
+            incidentReferenceNo: raw.reference_no || raw.incidentReferenceNo || '',
+            incidentStatus: raw.incident_status || raw.incidentStatus || '',
+            incidentType: raw.type || raw.incidentType || '',
+            priority: normalizePriority(raw.priority, ''),
+            location: raw.location || '',
+            latitude: raw.latitude || raw.lat || null,
+            longitude: raw.longitude || raw.lng || raw.lon || null,
+            description: raw.description || '',
+            queueSequence: ++incomingCallSequence
+        };
+    }
+
+    function incomingCallKey(call) {
+        return String(call && (call.transferId || call.callId || call.incidentId || '') || '').trim();
+    }
+
+    function displayIncomingCallModal(call) {
         const modal = document.getElementById('incomingCallModal');
         const alert = document.getElementById('incomingCallAlert');
         if (!modal || !alert) return;
 
-        const nameValue = call && (call.name || call.caller_name || call.callerName);
-        const phoneValue = call && (call.phone || call.caller_phone || call.callerPhone);
-        const startValue = call && (call.start || call.received_at || call.created_at);
-        const parsedStart = startValue ? Date.parse(startValue) : NaN;
-        const name = String(nameValue || 'Incoming Call').trim();
-        const phone = String(phoneValue || '').trim();
-        const isTransfer = !!(call && (call.is_transfer || call.room || call.transfer_id || call.transfer_type));
-        pendingIncomingCall = {
-            name: name || 'Incoming Call',
-            phone: phone,
-            start: Number(call && call.start) > 0 ? Number(call.start) : (Number.isFinite(parsedStart) ? parsedStart : Date.now()),
-            isTransfer,
-            transferId: call.transfer_id || '',
-            callId: call.call_id_external || call.callId || call.call_id || call.transfer_id || '',
-            conversationId: call.conversation_id || call.conversationId || '',
-            room: call.room || '',
-            transferType: call.transfer_type || (call.room ? 'live_call' : 'report'),
-            socketUrl: call.socket_url || call.socketUrl || ALERTARA_SOCKET_URL,
-            socketPath: call.socket_path || call.socketPath || ALERTARA_SOCKET_PATH,
-            sourceSystem: call.source_system || 'AlertaraQC Emergency Communication',
-            incidentId: call.incident_id || null,
-            incidentReferenceNo: call.reference_no || '',
-            incidentStatus: call.incident_status || '',
-            incidentType: call.type || '',
-            priority: call.priority || '',
-            location: call.location || '',
-            latitude: call.latitude || call.lat || null,
-            longitude: call.longitude || call.lng || call.lon || null,
-            description: call.description || ''
-        };
+        pendingIncomingCall = call;
 
         const eyebrow = document.querySelector('.call-alert-eyebrow');
         if (eyebrow) {
-            eyebrow.textContent = isTransfer ? 'Incoming Transferred Call' : 'Incoming Call';
+            eyebrow.textContent = call.isTransfer ? 'Incoming Transferred Call' : 'Incoming Call';
         }
         document.getElementById('incomingCallerName').textContent = pendingIncomingCall.name;
         document.getElementById('incomingCallerPhone').textContent = pendingIncomingCall.phone || 'Unknown number';
@@ -604,10 +649,45 @@ $pageTitle = 'Emergency Call Center';
         alert.classList.add('active');
         modal.setAttribute('aria-hidden', 'false');
         document.body.classList.add('incoming-call-modal-open');
-        if (isTransfer) {
+        if (call.isTransfer) {
             playIncomingTransferAlert();
         }
         document.getElementById('acceptIncomingCallBtn')?.focus();
+    }
+
+    function showNextQueuedIncomingCall() {
+        if (activeCall || pendingIncomingCall || !incomingCallQueue.length) return;
+        incomingCallQueue.sort(comparePriorityThenOldest);
+        displayIncomingCallModal(incomingCallQueue.shift());
+    }
+
+    function enqueueIncomingCall(call) {
+        const incoming = normalizeIncomingCallDetail(call);
+        const key = incomingCallKey(incoming);
+        if (key) {
+            const existingIndex = incomingCallQueue.findIndex((item) => incomingCallKey(item) === key);
+            if (existingIndex >= 0) {
+                incomingCallQueue[existingIndex] = { ...incomingCallQueue[existingIndex], ...incoming };
+            } else if (!pendingIncomingCall || incomingCallKey(pendingIncomingCall) !== key) {
+                incomingCallQueue.push(incoming);
+            }
+        } else {
+            incomingCallQueue.push(incoming);
+        }
+        incomingCallQueue.sort(comparePriorityThenOldest);
+
+        if (!activeCall && pendingIncomingCall && incomingCallQueue.length && comparePriorityThenOldest(incomingCallQueue[0], pendingIncomingCall) < 0) {
+            incomingCallQueue.push(pendingIncomingCall);
+            incomingCallQueue.sort(comparePriorityThenOldest);
+            displayIncomingCallModal(incomingCallQueue.shift());
+            return;
+        }
+
+        showNextQueuedIncomingCall();
+    }
+
+    function showIncomingCallModal(call) {
+        enqueueIncomingCall(call);
     }
 
     window.showIncomingCallModal = showIncomingCallModal;
@@ -632,6 +712,7 @@ $pageTitle = 'Emergency Call Center';
         const start = incomingCall.start || Date.now();
         hideIncomingCallModal();
         pendingIncomingCall = null;
+        removeTransferredQueueItemForIncomingCall(incomingCall);
         activeTransferCall = incomingCall.isTransfer ? incomingCall : null;
         const sessionApi = getSharedCallSessionApi();
         if (sessionApi) {
@@ -666,6 +747,7 @@ $pageTitle = 'Emergency Call Center';
     function rejectCall() {
         pendingIncomingCall = null;
         hideIncomingCallModal();
+        showNextQueuedIncomingCall();
     }
 
     function endCall() {
@@ -677,6 +759,7 @@ $pageTitle = 'Emergency Call Center';
         }
         activeTransferCall = null;
         renderActiveCallPanel(null);
+        showNextQueuedIncomingCall();
     }
 
     function renderIncomingTransferDetails(call) {
@@ -730,8 +813,7 @@ $pageTitle = 'Emergency Call Center';
             return;
         }
 
-        const priorityValue = String(report.priority || 'medium').toLowerCase();
-        const priority = ['high', 'medium', 'low'].includes(priorityValue) ? priorityValue : 'medium';
+        const priority = normalizePriority(report.priority);
         const card = document.createElement('article');
         card.className = 'transfer-report-notification priority-' + priority;
         if (notificationId) card.dataset.transferNotification = notificationId;
@@ -851,11 +933,7 @@ $pageTitle = 'Emergency Call Center';
         } else {
             transferQueueItems.unshift(item);
         }
-        transferQueueItems.sort((a, b) => {
-            const byLog = Number(b.transfer_log_id || 0) - Number(a.transfer_log_id || 0);
-            if (byLog !== 0) return byLog;
-            return Date.parse(b.transferred_at || '') - Date.parse(a.transferred_at || '');
-        });
+        transferQueueItems.sort(comparePriorityThenNewest);
         transferQueueItems = transferQueueItems.slice(0, 20);
         renderTransferredQueue();
     }
@@ -905,8 +983,7 @@ $pageTitle = 'Emergency Call Center';
     function transferredQueueCardHtml(item) {
         const isLiveCall = item.transfer_type === 'live_call';
         const canAnswerAudio = !!item.room;
-        const priorityValue = String(item.priority || 'medium').toLowerCase();
-        const priorityClass = ['high', 'medium', 'low'].includes(priorityValue) ? priorityValue : 'medium';
+        const priorityClass = normalizePriority(item.priority);
         const title = item.reference_no || (isLiveCall ? 'Transferred live call' : 'Transferred report');
         const actionText = isLiveCall ? (canAnswerAudio ? 'Answer call' : 'Open call') : 'Open report';
         const actionIcon = isLiveCall ? 'fa-phone-volume' : 'fa-eye';
@@ -942,6 +1019,28 @@ $pageTitle = 'Emergency Call Center';
         return transferQueueItems.find((item) => item.queue_key === String(key));
     }
 
+    function removeTransferredQueueItemForIncomingCall(call) {
+        const keys = new Set([
+            call && call.transferId,
+            call && call.callId,
+            call && call.incidentId
+        ].map((value) => String(value || '').trim()).filter(Boolean));
+        if (!keys.size) return;
+        const before = transferQueueItems.length;
+        transferQueueItems = transferQueueItems.filter((item) => {
+            return ![
+                item.queue_key,
+                item.transfer_id,
+                item.call_id_external,
+                item.incident_id
+            ].some((value) => keys.has(String(value || '').trim()));
+        });
+        incomingCallQueue = incomingCallQueue.filter((item) => !keys.has(incomingCallKey(item)));
+        if (transferQueueItems.length !== before) {
+            renderTransferredQueue();
+        }
+    }
+
     function incomingCallDetailFromTransfer(item) {
         return {
             is_transfer: true,
@@ -971,7 +1070,7 @@ $pageTitle = 'Emergency Call Center';
     function answerTransferredQueueItem(key) {
         const item = findTransferredQueueItem(key);
         if (!item) return;
-        showIncomingCallModal(incomingCallDetailFromTransfer(item));
+        displayIncomingCallModal(normalizeIncomingCallDetail(incomingCallDetailFromTransfer(item)));
         acceptCall();
     }
 
@@ -1459,7 +1558,7 @@ $pageTitle = 'Emergency Call Center';
         incomingTransferPollInFlight = true;
         try {
             const url = loadLatest
-                ? API_INCOMING_TRANSFERS_URL + '?latest=1&limit=10'
+                ? API_INCOMING_TRANSFERS_URL + '?latest=1&limit=25'
                 : API_INCOMING_TRANSFERS_URL + '?after_id=' + encodeURIComponent(String(latestTransferLogId)) + '&limit=25';
             const response = await fetch(url, { cache: 'no-store' });
             const data = await response.json();
@@ -2202,12 +2301,17 @@ $pageTitle = 'Emergency Call Center';
                 if (!hay.includes(currentSearch)) return false;
             }
             return true;
+        }).sort((a, b) => {
+            const byPriority = priorityRank(a.priority) - priorityRank(b.priority);
+            if (byPriority !== 0) return byPriority;
+            const byTime = parseQueueTime(b.updated_at || b.created_at || b.timestamp) - parseQueueTime(a.updated_at || a.created_at || a.timestamp);
+            if (byTime !== 0) return byTime;
+            return Number(b.id || 0) - Number(a.id || 0);
         });
     }
 
     function incidentCardHtml(i) {
-        const rawPriority = String(i.priority || 'low').toLowerCase();
-        const priorityClass = ['high', 'medium', 'low'].includes(rawPriority) ? rawPriority : 'low';
+        const priorityClass = normalizePriority(i.priority, 'low');
         const created = new Date(i.created_at || Date.now());
         const code = i.incident_code || '';
         const id = Number(i.id) || 0;
@@ -2290,8 +2394,7 @@ $pageTitle = 'Emergency Call Center';
         const vehicleParts = [item.vehicle_name, item.driver_name ? `Driver: ${item.driver_name}` : '', item.plate_number ? `Plate: ${item.plate_number}` : '']
             .filter(Boolean)
             .join(' | ');
-        const rawPriority = String(item.priority || 'low').toLowerCase();
-        const priorityClass = ['high', 'medium', 'low'].includes(rawPriority) ? rawPriority : 'low';
+        const priorityClass = normalizePriority(item.priority, 'low');
 
         title.textContent = item.incident_code || `Incident #${item.id || ''}`;
         body.innerHTML = `
