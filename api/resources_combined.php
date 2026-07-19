@@ -47,10 +47,13 @@ function table_column_exists(PDO $pdo, string $tableName, string $columnName): b
 
 function map_unit_status(string $status): string {
     $status = strtolower($status);
-    if (in_array($status, ['assigned', 'enroute', 'on_scene'], true)) {
-        return 'inuse';
+    if (in_array($status, ['assigned', 'acknowledged', 'enroute', 'en_route', 'on_scene', 'busy', 'active', 'in_progress'], true)) {
+        return 'in_use';
     }
-    if (in_array($status, ['unavailable', 'maintenance'], true)) {
+    if ($status === 'maintenance') {
+        return 'maintenance';
+    }
+    if (in_array($status, ['unavailable', 'offline'], true)) {
         return 'offline';
     }
     return 'available';
@@ -66,10 +69,13 @@ function map_staff_status(string $status): string {
 
 function map_equipment_status(string $status): string {
     $status = strtolower($status);
-    if (in_array($status, ['deployed'], true)) {
-        return 'inuse';
+    if (in_array($status, ['deployed', 'in_use', 'assigned'], true)) {
+        return 'in_use';
     }
-    if (in_array($status, ['maintenance', 'out_of_service'], true)) {
+    if ($status === 'maintenance') {
+        return 'maintenance';
+    }
+    if (in_array($status, ['out_of_service', 'offline'], true)) {
         return 'offline';
     }
     return 'available';
@@ -78,9 +84,12 @@ function map_equipment_status(string $status): string {
 function map_admin_resource_status(string $status): string {
     $status = strtolower($status);
     if ($status === 'in_use') {
-        return 'inuse';
+        return 'in_use';
     }
-    if (in_array($status, ['maintenance', 'offline'], true)) {
+    if ($status === 'maintenance') {
+        return 'maintenance';
+    }
+    if ($status === 'offline') {
         return 'offline';
     }
     return 'available';
@@ -337,12 +346,15 @@ function load_shared_resource_records(PDO $pdo, string $tableName): array {
         $incidentAssignment = $category === 'vehicles'
             ? ($activeIncidentAssignments[strtoupper(trim($code))] ?? null)
             : null;
+        $status = is_array($incidentAssignment)
+            ? 'in_use'
+            : map_admin_resource_status((string)($row['status'] ?? 'available'));
         $items[] = [
             'type' => $category,
             'code' => $code,
             'name' => (string)($row['name'] ?? ''),
             'identifier' => $category === 'vehicles' ? $code : '',
-            'status' => map_admin_resource_status((string)($row['status'] ?? 'available')),
+            'status' => $status,
             'location' => $category === 'vehicles' ? 'Responder GPS' : (string)($row['location'] ?? ''),
             'details' => build_admin_details($row),
             'notes' => (string)($row['notes'] ?? ''),

@@ -3,6 +3,7 @@
 header('Content-Type: application/json');
 
 require_once __DIR__ . '/../includes/db.php';
+require_once __DIR__ . '/../includes/vehicle_resource_units.php';
 
 if (!defined('RESOURCE_RECORDS_TABLE')) {
     define('RESOURCE_RECORDS_TABLE', 'resource_records');
@@ -45,6 +46,10 @@ try {
     }
 
     if ($resourceTable !== null) {
+        $resourceStmt = $pdo->prepare("SELECT code, category FROM `" . $resourceTable . "` WHERE id = ? LIMIT 1");
+        $resourceStmt->execute([$id]);
+        $resourceRow = $resourceStmt->fetch(PDO::FETCH_ASSOC);
+
         $stmt = $pdo->prepare(
             "UPDATE `" . $resourceTable . "`
              SET status = 'in_use',
@@ -63,6 +68,17 @@ try {
             }
         }
 
+        if (
+            is_array($resourceRow)
+            && strtolower(trim((string)($resourceRow['category'] ?? ''))) === 'vehicles'
+            && trim((string)($resourceRow['code'] ?? '')) !== ''
+        ) {
+            ers_update_unit_status_by_identifier($pdo, (string)$resourceRow['code'], 'assigned');
+            if (function_exists('ers_update_vehicle_resource_status_by_identifier')) {
+                ers_update_vehicle_resource_status_by_identifier($pdo, (string)$resourceRow['code'], 'in_use');
+            }
+        }
+
         echo json_encode(['ok' => true]);
         exit;
     }
@@ -70,6 +86,7 @@ try {
     if ($type === 'vehicles') {
         $stmt = $pdo->prepare("UPDATE units SET status = 'assigned', last_status_at = CURRENT_TIMESTAMP WHERE id = ?");
         $stmt->execute([$id]);
+        ers_sync_vehicle_resource_status_by_unit_id($pdo, $id, 'in_use');
     } elseif ($type === 'personnel') {
         $stmt = $pdo->prepare("UPDATE staff SET status = 'on_duty', updated_at = CURRENT_TIMESTAMP WHERE id = ?");
         $stmt->execute([$id]);

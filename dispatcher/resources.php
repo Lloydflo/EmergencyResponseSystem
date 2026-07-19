@@ -348,7 +348,8 @@ try {
                         <select id="status-filter">
                             <option value="">All Status</option>
                             <option value="available">Available</option>
-                            <option value="inuse">Busy</option>
+                            <option value="in_use">In Use</option>
+                            <option value="maintenance">Maintenance</option>
                             <option value="offline">Offline</option>
                         </select>
                     </div>
@@ -459,6 +460,18 @@ try {
                     white-space: nowrap;
                     display: inline-block;
                 }
+                .resource-status-maintenance {
+                    background: #fee2e2;
+                    color: #991b1b;
+                    font-weight: 700;
+                    border-radius: 999px;
+                    padding: 0.3rem 0.55rem;
+                    font-size: 0.76rem;
+                    text-transform: uppercase;
+                    letter-spacing: 0.03em;
+                    white-space: nowrap;
+                    display: inline-block;
+                }
                 .resource-status-offline {
                     background: #e5e7eb;
                     color: #374151;
@@ -531,9 +544,8 @@ try {
                 function normalizeDynamicResource(raw) {
                     const type = String(raw.type || raw.category || '').toLowerCase();
                     let status = String(raw.status || 'available').toLowerCase();
-                    if (status === 'in_use') status = 'inuse';
-                    if (status === 'maintenance') status = 'offline';
-                    if (!['available', 'inuse', 'offline'].includes(status)) {
+                    if (status === 'inuse' || status === 'busy' || status === 'deployed' || status === 'assigned') status = 'in_use';
+                    if (!['available', 'in_use', 'maintenance', 'offline'].includes(status)) {
                         status = 'available';
                     }
 
@@ -649,7 +661,8 @@ try {
                 }
 
                 function formatResourceStatus(status) {
-                    if (status === 'inuse') return 'Busy';
+                    if (status === 'in_use') return 'In Use';
+                    if (status === 'maintenance') return 'Maintenance';
                     if (status === 'offline') return 'Offline';
                     return 'Available';
                 }
@@ -677,7 +690,10 @@ try {
                 }
 
                 function resourceRowHtml(r) {
-                    let statusClass = r.status === 'available' ? 'resource-status-available' : (r.status === 'inuse' ? 'resource-status-inuse' : 'resource-status-offline');
+                    let statusClass = 'resource-status-available';
+                    if (r.status === 'in_use') statusClass = 'resource-status-inuse';
+                    if (r.status === 'maintenance') statusClass = 'resource-status-maintenance';
+                    if (r.status === 'offline') statusClass = 'resource-status-offline';
                     const resourceName = String(r.name || '');
                     const resourceCode = String(r.code || r.identifier || `RESOURCE-${r.id || ''}`).trim();
                     const subtitle = formatRowSubtitle(r);
@@ -2100,16 +2116,9 @@ try {
                     showCard = false;
                 }
 
-                // Status filter (exclude maintenance)
+                // Status filter
                 if (statusFilter) {
-                    if (card.dataset.status === 'maintenance') {
-                        showCard = false; // Always hide maintenance items
-                    } else if (card.dataset.status !== statusFilter) {
-                        showCard = false;
-                    }
-                } else {
-                    // If no filter, still hide maintenance items
-                    if (card.dataset.status === 'maintenance') {
+                    if (card.dataset.status !== statusFilter) {
                         showCard = false;
                     }
                 }

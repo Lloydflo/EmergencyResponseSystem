@@ -607,6 +607,10 @@ if (!function_exists('ers_sync_vehicle_resource_status_for_responder')) {
             $resourceStatus = ers_current_vehicle_resource_status_for_responder($pdo, $responderId);
         }
 
+        if (ers_responder_has_active_dispatch_assignment($pdo, $responderId)) {
+            $resourceStatus = 'in_use';
+        }
+
         $allowedStatuses = ['available', 'in_use', 'maintenance', 'offline'];
         if (!in_array($resourceStatus, $allowedStatuses, true)) {
             $resourceStatus = 'available';

@@ -473,6 +473,7 @@ function apply_active_assignment_to_item(array $item, array $activeIncidentAssig
         ? ($activeIncidentAssignments[$unitCode] ?? null)
         : null;
     if (is_array($incidentAssignment)) {
+        $item['status'] = 'in_use';
         $item['assignmentDetails'] = (string)($incidentAssignment['details'] ?? '');
         $item['assignmentIncidentId'] = (int)($incidentAssignment['incident_id'] ?? 0);
         $item['assignmentIncidentCode'] = (string)($incidentAssignment['incident_code'] ?? '');
