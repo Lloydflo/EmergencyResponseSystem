@@ -452,6 +452,7 @@ try {
         window.addEventListener('storage', function(e) {
             if (e.key === 'ers_incidents' || e.key === 'ers_incidents_changed') {
                 refreshAIAnalysis();
+                fetchIncidents();
             }
         });
 

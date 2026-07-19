@@ -504,6 +504,23 @@ $pageTitle = 'Emergency Call Center';
         window.location.href = 'dispatcher/dispatch.php?' + params.toString();
     }
 
+    function broadcastLoggedIncident(data) {
+        const now = Date.now();
+        const incident = {
+            id: Number(data && data.incident_id ? data.incident_id : 0) || null,
+            reference_no: String((data && (data.incident_reference_no || data.reference_no)) || ''),
+            status: String((data && data.incident_status) || 'pending'),
+            logged_at: now
+        };
+        try {
+            window.localStorage.setItem('ers_last_logged_incident', JSON.stringify(incident));
+            window.localStorage.setItem('ers_incidents_changed', String(now));
+        } catch (e) {}
+        try {
+            window.dispatchEvent(new CustomEvent('ers:incident-logged', { detail: incident }));
+        } catch (e) {}
+    }
+
     document.addEventListener('DOMContentLoaded', () => {
         initPrioritySelect();
         initIncidentTypeChecklist();
@@ -2114,6 +2131,7 @@ $pageTitle = 'Emergency Call Center';
                 });
             }
             const wasTransferredCall = !!activeTransferCall;
+            broadcastLoggedIncident(data);
             showToast(wasTransferredCall ? 'Transferred incident logged in Call Receiving & Logs.' : 'Incident logged successfully.');
             e.target.reset();
             resetIncidentTypeChecklist();

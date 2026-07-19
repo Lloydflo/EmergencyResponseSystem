@@ -1383,9 +1383,11 @@ document.addEventListener('DOMContentLoaded', () => {
                 });
             }
             showNotification(code ? `Incident ${code} logged. Live call is still ongoing.` : 'Incident logged. Live call is still ongoing.', 'info');
-            if (incidentId !== null) {
-                window.setTimeout(() => openDispatchModal(incidentId), 220);
-            }
+            refreshActiveCalls().finally(() => {
+                if (incidentId !== null) {
+                    window.setTimeout(() => openDispatchModal(incidentId), 220);
+                }
+            });
         } else if (code) {
             showNotification('Viewing incident context: ' + code, 'info');
         }
@@ -1916,6 +1918,13 @@ function removeIncidentFromActiveCalls(incidentId) {
         container.innerHTML = '<div class="call-card"><div class="call-info"><div class="call-details"><div class="call-title">No pending emergency calls.</div></div></div></div>';
     }
 }
+
+window.addEventListener('storage', function(e) {
+    if (e.key === 'ers_incidents' || e.key === 'ers_incidents_changed' || e.key === 'ers_last_logged_incident') {
+        refreshActiveCalls();
+        loadIncidentMarkers();
+    }
+});
 
 
 
