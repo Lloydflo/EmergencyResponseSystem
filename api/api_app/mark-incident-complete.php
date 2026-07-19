@@ -2,6 +2,7 @@
 header("Content-Type: application/json");
 require __DIR__ . "/connect.php";
 require_once __DIR__ . "/../../includes/vehicle_resource_units.php";
+require_once __DIR__ . "/../../includes/activity_log.php";
 
 $assignment_id = intval($_POST["assignment_id"] ?? 0);
 $responder_id  = intval($_POST["responder_id"] ?? 0);
@@ -205,6 +206,26 @@ function app_complete_resolve_incident(PDO $pdo, array $assignment, int $respond
     return ["resolved" => true, "incident_id" => $incidentId];
 }
 
+function app_complete_log_incident_resolved(int $incidentId, int $responderId): void
+{
+    if ($incidentId < 1) {
+        return;
+    }
+    $details = 'Incident #' . $incidentId . ' was completed by responder #' . $responderId . '.';
+    try {
+        $pdo = db();
+        $stmt = $pdo->prepare("SELECT reference_no FROM incidents WHERE id = ? LIMIT 1");
+        $stmt->execute([$incidentId]);
+        $reference = trim((string)$stmt->fetchColumn());
+        if ($reference !== '') {
+            $details = 'Incident ' . $reference . ' was completed by responder #' . $responderId . '.';
+        }
+    } catch (Throwable $e) {
+        // Best-effort audit detail only.
+    }
+    log_activity_event($responderId, 'incident_resolved', 'incident', $incidentId, $details);
+}
+
 try {
     $pdo = db();
     app_complete_ensure_incident_link($pdo);
@@ -251,6 +272,7 @@ try {
     }
 
     $pdo->commit();
+    app_complete_log_incident_resolved((int)$incidentSync["incident_id"], $responder_id);
 
     echo json_encode([
         "success" => true,

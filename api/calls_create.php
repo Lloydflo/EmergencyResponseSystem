@@ -9,6 +9,7 @@ if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
 }
 
 require_once __DIR__ . '/../includes/db.php';
+require_once __DIR__ . '/../includes/activity_log.php';
 $pdo = get_db_connection();
 if (!$pdo) {
     http_response_code(500);
@@ -127,6 +128,7 @@ try {
     }
 
     $pdo->commit();
+    log_incident_created_audit($incident ? (int)$incident['id'] : null, $incident ? (string)$incident['reference_no'] : $reference_no, $type, $priority, $location);
 
     echo json_encode([
         'ok' => true,
@@ -143,6 +145,17 @@ try {
     http_response_code(500);
     error_log('calls_create insert failed: ' . $e->getMessage());
     echo json_encode(['ok' => false, 'error' => build_user_facing_db_error($e)]);
+}
+
+function log_incident_created_audit(?int $incidentId, string $referenceNo, string $type, string $priority, string $location): void {
+    if ($incidentId === null || $incidentId < 1) {
+        return;
+    }
+    $details = 'Incoming incident ' . ($referenceNo !== '' ? $referenceNo : ('#' . $incidentId))
+        . ' was logged. Type: ' . $type
+        . ' | Priority: ' . $priority
+        . ' | Location: ' . $location;
+    log_activity_event(null, 'incident_created', 'incident', $incidentId, $details);
 }
 
 function insert_call_row(PDO $pdo, array $params): int {

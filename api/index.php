@@ -2,11 +2,25 @@
 declare(strict_types=1);
 
 require_once __DIR__ . '/_bootstrap.php';
+require_once __DIR__ . '/../includes/activity_log.php';
 
 $auth = ers_external_authenticate();
 $pdo = ers_external_db();
 $method = $_SERVER['REQUEST_METHOD'] ?? 'GET';
 $action = strtolower(ers_external_clean($_GET['action'] ?? 'overview', 50));
+
+function ers_api_log_incident_created(int $incidentId, string $referenceNo, string $type, string $priority, string $location, string $sourceSystem): void
+{
+    if ($incidentId < 1) {
+        return;
+    }
+    $details = 'Incoming incident ' . ($referenceNo !== '' ? $referenceNo : ('#' . $incidentId))
+        . ' was received from ' . ($sourceSystem !== '' ? $sourceSystem : 'external source')
+        . '. Type: ' . $type
+        . ' | Priority: ' . $priority
+        . ' | Location: ' . $location;
+    log_activity_event(null, 'incident_created', 'incident', $incidentId, $details);
+}
 
 if ($method !== 'GET' && !ers_external_intake_enabled()) {
     ers_external_json(403, [
@@ -462,6 +476,7 @@ function ers_api_create_incident(PDO $pdo, array $auth): array
         'reason_for_backup' => $reasonForBackup,
     ], $input);
     $pdo->commit();
+    ers_api_log_incident_created((int)$created['id'], (string)$created['reference_no'], $type, $priority, $location, $sourceSystem);
 
     return [
         'success' => true,
@@ -653,6 +668,7 @@ function ers_api_create_incoming_transfer(PDO $pdo, array $auth): array
 
     ers_external_link_incident($pdo, $sourceSystem, $transferId, (int)$created['id'], $input);
     $pdo->commit();
+    ers_api_log_incident_created((int)$created['id'], (string)$created['reference_no'], $type, $priority, $location, $sourceSystem);
 
     return [
         'success' => true,

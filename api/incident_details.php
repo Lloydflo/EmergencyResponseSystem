@@ -193,7 +193,8 @@ try {
                                 COUNT(rating) AS rating_count,
                                 ROUND(AVG(rating), 1) AS avg_rating
                          FROM incident_notes
-                         WHERE incident_id = ?"
+                         WHERE incident_id = ?
+                           AND note NOT LIKE 'Resolution proof uploaded:%'"
                     );
                 } else {
                     $feedbackStmt = $pdo->prepare(
@@ -201,7 +202,8 @@ try {
                                 0 AS rating_count,
                                 NULL AS avg_rating
                          FROM incident_notes
-                         WHERE incident_id = ?"
+                         WHERE incident_id = ?
+                           AND note NOT LIKE 'Resolution proof uploaded:%'"
                     );
                 }
                 $feedbackStmt->execute([$incidentId]);

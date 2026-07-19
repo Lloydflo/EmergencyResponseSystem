@@ -3,13 +3,13 @@
 -- https://www.phpmyadmin.net/
 --
 -- Host: 127.0.0.1
--- Generation Time: Feb 12, 2026 at 12:11 AM
+-- Generation Time: Feb 12, 2026 at 08:11 AM
 -- Server version: 10.4.32-MariaDB
 -- PHP Version: 8.2.12
 
 SET SQL_MODE = "NO_AUTO_VALUE_ON_ZERO";
 START TRANSACTION;
-SET time_zone = "+00:00";
+SET time_zone = "+08:00";
 
 
 /*!40101 SET @OLD_CHARACTER_SET_CLIENT=@@CHARACTER_SET_CLIENT */;
@@ -42,18 +42,18 @@ CREATE TABLE `activity_log` (
 --
 
 INSERT INTO `activity_log` (`id`, `user_id`, `action`, `entity_type`, `entity_id`, `details`, `created_at`) VALUES
-(1, NULL, 'call_logged', 'call', NULL, 'Type: traffic | Location: bagong silang caloocan city | Priority: low', '2026-02-04 10:51:54'),
-(2, NULL, 'call_logged', 'call', NULL, 'Type: medical | Location: Novaliches, Liliw, Laguna, Calabarzon, 4004, Philippines | Priority: high', '2026-02-04 11:04:30'),
-(3, NULL, 'call_logged', 'call', NULL, 'Type: medical | Location: novaliches | Priority: high', '2026-02-04 11:09:16'),
-(4, NULL, 'call_logged', 'call', NULL, 'Type: police | Location: City Hall | Priority: low', '2026-02-04 15:00:42'),
-(5, NULL, 'call_logged', 'call', NULL, 'Type: fire | Location: City Hall | Priority: medium', '2026-02-06 09:22:25'),
-(6, NULL, 'call_logged', 'call', NULL, 'Type: medical | Location: novaliches | Priority: low', '2026-02-07 21:27:51'),
-(7, NULL, 'lockdown', 'system', NULL, 'City-wide lockdown activated from Dispatch Center', '2026-02-11 12:25:30'),
-(8, NULL, 'chat', 'agency_chat', 1, 'Hi', '2026-02-11 14:44:23'),
-(9, NULL, 'call_logged', 'call', NULL, 'Type: fire | Location: novaliches, quezon city | Priority: medium', '2026-02-11 14:53:30'),
-(10, NULL, 'call_logged', 'call', NULL, 'Type: medical | Location: Nicanor Padilla Street, San Miguel, Sixth District, Manila, Capital District, Metro Manila, 1005, Philippines | Priority: low', '2026-02-11 14:57:07'),
-(11, NULL, 'call_logged', 'call', NULL, 'Type: medical | Location: Circle | Priority: low', '2026-02-11 15:51:07'),
-(12, NULL, 'call_logged', 'call', NULL, 'Type: fire | Location: Quezon City Hall | Priority: low', '2026-02-11 18:26:10');
+(1, NULL, 'call_logged', 'call', NULL, 'Type: traffic | Location: bagong silang caloocan city | Priority: low', '2026-02-04 18:51:54'),
+(2, NULL, 'call_logged', 'call', NULL, 'Type: medical | Location: Novaliches, Liliw, Laguna, Calabarzon, 4004, Philippines | Priority: high', '2026-02-04 19:04:30'),
+(3, NULL, 'call_logged', 'call', NULL, 'Type: medical | Location: novaliches | Priority: high', '2026-02-04 19:09:16'),
+(4, NULL, 'call_logged', 'call', NULL, 'Type: police | Location: City Hall | Priority: low', '2026-02-04 23:00:42'),
+(5, NULL, 'call_logged', 'call', NULL, 'Type: fire | Location: City Hall | Priority: medium', '2026-02-06 17:22:25'),
+(6, NULL, 'call_logged', 'call', NULL, 'Type: medical | Location: novaliches | Priority: low', '2026-02-08 05:27:51'),
+(7, NULL, 'lockdown', 'system', NULL, 'City-wide lockdown activated from Dispatch Center', '2026-02-11 20:25:30'),
+(8, NULL, 'chat', 'agency_chat', 1, 'Hi', '2026-02-11 22:44:23'),
+(9, NULL, 'call_logged', 'call', NULL, 'Type: fire | Location: novaliches, quezon city | Priority: medium', '2026-02-11 22:53:30'),
+(10, NULL, 'call_logged', 'call', NULL, 'Type: medical | Location: Nicanor Padilla Street, San Miguel, Sixth District, Manila, Capital District, Metro Manila, 1005, Philippines | Priority: low', '2026-02-11 22:57:07'),
+(11, NULL, 'call_logged', 'call', NULL, 'Type: medical | Location: Circle | Priority: low', '2026-02-11 23:51:07'),
+(12, NULL, 'call_logged', 'call', NULL, 'Type: fire | Location: Quezon City Hall | Priority: low', '2026-02-12 02:26:10');
 
 -- --------------------------------------------------------
 
@@ -309,18 +309,18 @@ CREATE TABLE `calls` (
 --
 
 INSERT INTO `calls` (`id`, `reference_no`, `caller_name`, `caller_phone`, `caller_email`, `location_address`, `latitude`, `longitude`, `incident_type`, `priority`, `status`, `description`, `received_at`, `created_at`, `updated_at`) VALUES
-(1, 'REF-20260202152404-8436', 'Maria Santos', '+63 922 562 3944', NULL, 'Diliman', NULL, NULL, 'police', 'medium', 'new', 'nakaw', '2026-02-02 22:24:04', '2026-02-02 22:24:04', NULL),
-(2, 'REF-20260203042136-4230', 'Jose Reyes', '+63 997 542 3898', NULL, 'Circle', NULL, NULL, 'fire', 'low', 'new', 'bilog', '2026-02-03 11:21:36', '2026-02-03 11:21:36', NULL),
-(3, 'REF-20260204035154-9212', 'Jose Reyes', '+63 930 876 4704', NULL, 'bagong silang caloocan city', NULL, NULL, 'traffic', 'low', 'new', 'hfffgdxffdf', '2026-02-04 10:51:54', '2026-02-04 10:51:54', NULL),
-(4, 'REF-20260204040430-8022', 'Juan Dela Cruz', '+63 948 559 5076', NULL, 'Novaliches, Liliw, Laguna, Calabarzon, 4004, Philippines', NULL, NULL, 'medical', 'high', 'new', 'stroke', '2026-02-04 11:04:30', '2026-02-04 11:04:30', NULL),
-(5, 'REF-20260204040916-4898', 'Juan Dela Cruz', '+63 906 953 1176', NULL, 'novaliches', NULL, NULL, 'medical', 'high', 'new', 'heart attack', '2026-02-04 11:09:16', '2026-02-04 11:09:16', NULL),
-(6, 'REF-20260204080042-4397', 'Maria Santos', '+63 926 832 9363', NULL, 'City Hall', NULL, NULL, 'police', 'low', 'new', 'nakaw', '2026-02-04 15:00:42', '2026-02-04 15:00:42', NULL),
-(7, 'REF-20260206022224-2140', 'Jose Reyes', '+63 905 251 6033', NULL, 'City Hall', NULL, NULL, 'fire', 'medium', 'new', 'sunog', '2026-02-06 09:22:24', '2026-02-06 09:22:24', NULL),
-(8, 'REF-20260207142751-7153', 'Jose Reyes', '+63 999 740 8340', NULL, 'novaliches', NULL, NULL, 'medical', 'low', 'new', 'heart attack', '2026-02-07 21:27:51', '2026-02-07 21:27:51', NULL),
-(9, 'REF-20260211075330-5287', 'Ana Garcia', '+63 925 143 7728', NULL, 'novaliches, quezon city', NULL, NULL, 'fire', 'medium', 'new', 'nasusunog na pagawaan ng sapatos', '2026-02-11 14:53:30', '2026-02-11 14:53:30', NULL),
-(10, 'REF-20260211075707-4064', 'ana garcia', '09251437728', NULL, 'Nicanor Padilla Street, San Miguel, Sixth District, Manila, Capital District, Metro Manila, 1005, Philippines', NULL, NULL, 'medical', 'low', 'new', 'fall from 2nd floor', '2026-02-11 14:57:07', '2026-02-11 14:57:07', NULL),
-(11, 'REF-20260211085107-1710', 'Ana Garcia', '+63 947 363 8243', NULL, 'Circle', NULL, NULL, 'medical', 'low', 'new', 'cardiac', '2026-02-11 15:51:07', '2026-02-11 15:51:07', NULL),
-(12, 'REF-20260211112610-3531', 'Jose Reyes', '+63 995 614 3488', NULL, 'Quezon City Hall', NULL, NULL, 'fire', 'low', 'new', 'burning stove', '2026-02-11 18:26:10', '2026-02-11 18:26:10', NULL);
+(1, 'REF-20260202152404-8436', 'Maria Santos', '+63 922 562 3944', NULL, 'Diliman', NULL, NULL, 'police', 'medium', 'new', 'nakaw', '2026-02-03 06:24:04', '2026-02-03 06:24:04', NULL),
+(2, 'REF-20260203042136-4230', 'Jose Reyes', '+63 997 542 3898', NULL, 'Circle', NULL, NULL, 'fire', 'low', 'new', 'bilog', '2026-02-03 19:21:36', '2026-02-03 19:21:36', NULL),
+(3, 'REF-20260204035154-9212', 'Jose Reyes', '+63 930 876 4704', NULL, 'bagong silang caloocan city', NULL, NULL, 'traffic', 'low', 'new', 'hfffgdxffdf', '2026-02-04 18:51:54', '2026-02-04 18:51:54', NULL),
+(4, 'REF-20260204040430-8022', 'Juan Dela Cruz', '+63 948 559 5076', NULL, 'Novaliches, Liliw, Laguna, Calabarzon, 4004, Philippines', NULL, NULL, 'medical', 'high', 'new', 'stroke', '2026-02-04 19:04:30', '2026-02-04 19:04:30', NULL),
+(5, 'REF-20260204040916-4898', 'Juan Dela Cruz', '+63 906 953 1176', NULL, 'novaliches', NULL, NULL, 'medical', 'high', 'new', 'heart attack', '2026-02-04 19:09:16', '2026-02-04 19:09:16', NULL),
+(6, 'REF-20260204080042-4397', 'Maria Santos', '+63 926 832 9363', NULL, 'City Hall', NULL, NULL, 'police', 'low', 'new', 'nakaw', '2026-02-04 23:00:42', '2026-02-04 23:00:42', NULL),
+(7, 'REF-20260206022224-2140', 'Jose Reyes', '+63 905 251 6033', NULL, 'City Hall', NULL, NULL, 'fire', 'medium', 'new', 'sunog', '2026-02-06 17:22:24', '2026-02-06 17:22:24', NULL),
+(8, 'REF-20260207142751-7153', 'Jose Reyes', '+63 999 740 8340', NULL, 'novaliches', NULL, NULL, 'medical', 'low', 'new', 'heart attack', '2026-02-08 05:27:51', '2026-02-08 05:27:51', NULL),
+(9, 'REF-20260211075330-5287', 'Ana Garcia', '+63 925 143 7728', NULL, 'novaliches, quezon city', NULL, NULL, 'fire', 'medium', 'new', 'nasusunog na pagawaan ng sapatos', '2026-02-11 22:53:30', '2026-02-11 22:53:30', NULL),
+(10, 'REF-20260211075707-4064', 'ana garcia', '09251437728', NULL, 'Nicanor Padilla Street, San Miguel, Sixth District, Manila, Capital District, Metro Manila, 1005, Philippines', NULL, NULL, 'medical', 'low', 'new', 'fall from 2nd floor', '2026-02-11 22:57:07', '2026-02-11 22:57:07', NULL),
+(11, 'REF-20260211085107-1710', 'Ana Garcia', '+63 947 363 8243', NULL, 'Circle', NULL, NULL, 'medical', 'low', 'new', 'cardiac', '2026-02-11 23:51:07', '2026-02-11 23:51:07', NULL),
+(12, 'REF-20260211112610-3531', 'Jose Reyes', '+63 995 614 3488', NULL, 'Quezon City Hall', NULL, NULL, 'fire', 'low', 'new', 'burning stove', '2026-02-12 02:26:10', '2026-02-12 02:26:10', NULL);
 
 --
 -- Triggers `calls`
@@ -395,17 +395,17 @@ CREATE TABLE IF NOT EXISTS `dispatch_operator_records` (
 --
 
 INSERT INTO `dispatches` (`id`, `incident_id`, `unit_id`, `status`, `assigned_at`, `acknowledged_at`, `enroute_at`, `on_scene_at`, `cleared_at`, `notes`) VALUES
-(1, 4, 2, 'cleared', '2026-02-04 11:04:58', NULL, NULL, NULL, '2026-02-04 11:34:57', NULL),
-(2, 7, 7, 'cleared', '2026-02-06 09:23:10', NULL, NULL, NULL, '2026-02-06 16:15:05', NULL),
-(3, 8, 5, 'cleared', '2026-02-07 21:28:03', NULL, NULL, NULL, '2026-02-11 09:54:47', NULL),
-(4, 6, 11, 'cleared', '2026-02-11 09:56:43', NULL, NULL, NULL, '2026-02-11 15:00:40', NULL),
-(5, 11, 1, 'cleared', '2026-02-11 15:01:38', NULL, NULL, NULL, '2026-02-11 15:22:18', NULL),
-(6, 12, 1, 'cleared', '2026-02-11 15:58:21', NULL, NULL, NULL, '2026-02-11 15:59:21', NULL),
-(7, 13, 6, 'assigned', '2026-02-11 18:34:09', NULL, NULL, NULL, NULL, NULL),
-(8, 13, 7, 'assigned', '2026-02-11 21:47:58', NULL, NULL, NULL, NULL, NULL),
-(9, 13, 9, 'assigned', '2026-02-11 21:56:05', NULL, NULL, NULL, NULL, NULL),
-(10, 13, 8, 'assigned', '2026-02-11 21:58:06', NULL, NULL, NULL, NULL, NULL),
-(11, 13, 10, 'assigned', '2026-02-11 21:58:31', NULL, NULL, NULL, NULL, NULL);
+(1, 4, 2, 'cleared', '2026-02-04 19:04:58', NULL, NULL, NULL, '2026-02-04 19:34:57', NULL),
+(2, 7, 7, 'cleared', '2026-02-06 17:23:10', NULL, NULL, NULL, '2026-02-07 00:15:05', NULL),
+(3, 8, 5, 'cleared', '2026-02-08 05:28:03', NULL, NULL, NULL, '2026-02-11 17:54:47', NULL),
+(4, 6, 11, 'cleared', '2026-02-11 17:56:43', NULL, NULL, NULL, '2026-02-11 23:00:40', NULL),
+(5, 11, 1, 'cleared', '2026-02-11 23:01:38', NULL, NULL, NULL, '2026-02-11 23:22:18', NULL),
+(6, 12, 1, 'cleared', '2026-02-11 23:58:21', NULL, NULL, NULL, '2026-02-11 23:59:21', NULL),
+(7, 13, 6, 'assigned', '2026-02-12 02:34:09', NULL, NULL, NULL, NULL, NULL),
+(8, 13, 7, 'assigned', '2026-02-12 05:47:58', NULL, NULL, NULL, NULL, NULL),
+(9, 13, 9, 'assigned', '2026-02-12 05:56:05', NULL, NULL, NULL, NULL, NULL),
+(10, 13, 8, 'assigned', '2026-02-12 05:58:06', NULL, NULL, NULL, NULL, NULL),
+(11, 13, 10, 'assigned', '2026-02-12 05:58:31', NULL, NULL, NULL, NULL, NULL);
 
 --
 -- Triggers `dispatches`
@@ -523,18 +523,18 @@ CREATE TABLE `incidents` (
 --
 
 INSERT INTO `incidents` (`id`, `reference_no`, `type`, `priority`, `status`, `title`, `description`, `location_address`, `latitude`, `longitude`, `reported_by_call_id`, `created_at`, `updated_at`, `responded_at`, `resolved_at`) VALUES
-(1, 'REF-20260202152404-8436', 'police', 'medium', 'pending', 'Incident from call REF-20260202152404-8436', 'nakaw', 'Diliman', NULL, NULL, 1, '2026-02-11 16:07:39', NULL, NULL, NULL),
-(2, 'REF-20260203042136-4230', 'fire', 'low', 'pending', 'Incident from call REF-20260203042136-4230', 'bilog', 'Circle', NULL, NULL, 2, '2026-02-11 16:07:39', NULL, NULL, NULL),
-(3, 'REF-20260204035154-9212', 'traffic', 'low', 'pending', 'Incident from call REF-20260204035154-9212', 'hfffgdxffdf', 'bagong silang caloocan city', NULL, NULL, 3, '2026-02-11 16:07:39', NULL, NULL, NULL),
-(4, 'REF-20260204040430-8022', 'medical', 'high', 'pending', 'Incident from call REF-20260204040430-8022', 'stroke', 'Novaliches, Liliw, Laguna, Calabarzon, 4004, Philippines', NULL, NULL, 4, '2026-02-11 16:07:39', NULL, NULL, NULL),
-(5, 'REF-20260204040916-4898', 'medical', 'high', 'pending', 'Incident from call REF-20260204040916-4898', 'heart attack', 'novaliches', NULL, NULL, 5, '2026-02-11 16:07:39', NULL, NULL, NULL),
-(6, 'REF-20260204080042-4397', 'police', 'low', 'pending', 'Incident from call REF-20260204080042-4397', 'nakaw', 'City Hall', NULL, NULL, 6, '2026-02-11 16:07:39', NULL, NULL, NULL),
-(7, 'REF-20260206022224-2140', 'fire', 'medium', 'pending', 'Incident from call REF-20260206022224-2140', 'sunog', 'City Hall', NULL, NULL, 7, '2026-02-11 16:07:39', NULL, NULL, NULL),
-(8, 'REF-20260207142751-7153', 'medical', 'low', 'pending', 'Incident from call REF-20260207142751-7153', 'heart attack', 'novaliches', NULL, NULL, 8, '2026-02-11 16:07:39', NULL, NULL, NULL),
-(9, 'REF-20260211075330-5287', 'fire', 'medium', 'pending', 'Incident from call REF-20260211075330-5287', 'nasusunog na pagawaan ng sapatos', 'novaliches, quezon city', NULL, NULL, 9, '2026-02-11 16:07:39', NULL, NULL, NULL),
-(10, 'REF-20260211075707-4064', 'medical', 'low', 'pending', 'Incident from call REF-20260211075707-4064', 'fall from 2nd floor', 'Nicanor Padilla Street, San Miguel, Sixth District, Manila, Capital District, Metro Manila, 1005, Philippines', NULL, NULL, 10, '2026-02-11 16:07:39', NULL, NULL, NULL),
-(11, 'REF-20260211085107-1710', 'medical', 'low', 'pending', 'Incident from call REF-20260211085107-1710', 'cardiac', 'Circle', NULL, NULL, 11, '2026-02-11 16:07:39', NULL, NULL, NULL),
-(12, 'REF-20260211112610-3531', 'fire', 'low', 'pending', 'Incident from call REF-20260211112610-3531', 'burning stove', 'Quezon City Hall', NULL, NULL, 12, '2026-02-11 16:07:39', NULL, NULL, NULL);
+(1, 'REF-20260202152404-8436', 'police', 'medium', 'pending', 'Incident from call REF-20260202152404-8436', 'nakaw', 'Diliman', NULL, NULL, 1, '2026-02-12 00:07:39', NULL, NULL, NULL),
+(2, 'REF-20260203042136-4230', 'fire', 'low', 'pending', 'Incident from call REF-20260203042136-4230', 'bilog', 'Circle', NULL, NULL, 2, '2026-02-12 00:07:39', NULL, NULL, NULL),
+(3, 'REF-20260204035154-9212', 'traffic', 'low', 'pending', 'Incident from call REF-20260204035154-9212', 'hfffgdxffdf', 'bagong silang caloocan city', NULL, NULL, 3, '2026-02-12 00:07:39', NULL, NULL, NULL),
+(4, 'REF-20260204040430-8022', 'medical', 'high', 'pending', 'Incident from call REF-20260204040430-8022', 'stroke', 'Novaliches, Liliw, Laguna, Calabarzon, 4004, Philippines', NULL, NULL, 4, '2026-02-12 00:07:39', NULL, NULL, NULL),
+(5, 'REF-20260204040916-4898', 'medical', 'high', 'pending', 'Incident from call REF-20260204040916-4898', 'heart attack', 'novaliches', NULL, NULL, 5, '2026-02-12 00:07:39', NULL, NULL, NULL),
+(6, 'REF-20260204080042-4397', 'police', 'low', 'pending', 'Incident from call REF-20260204080042-4397', 'nakaw', 'City Hall', NULL, NULL, 6, '2026-02-12 00:07:39', NULL, NULL, NULL),
+(7, 'REF-20260206022224-2140', 'fire', 'medium', 'pending', 'Incident from call REF-20260206022224-2140', 'sunog', 'City Hall', NULL, NULL, 7, '2026-02-12 00:07:39', NULL, NULL, NULL),
+(8, 'REF-20260207142751-7153', 'medical', 'low', 'pending', 'Incident from call REF-20260207142751-7153', 'heart attack', 'novaliches', NULL, NULL, 8, '2026-02-12 00:07:39', NULL, NULL, NULL),
+(9, 'REF-20260211075330-5287', 'fire', 'medium', 'pending', 'Incident from call REF-20260211075330-5287', 'nasusunog na pagawaan ng sapatos', 'novaliches, quezon city', NULL, NULL, 9, '2026-02-12 00:07:39', NULL, NULL, NULL),
+(10, 'REF-20260211075707-4064', 'medical', 'low', 'pending', 'Incident from call REF-20260211075707-4064', 'fall from 2nd floor', 'Nicanor Padilla Street, San Miguel, Sixth District, Manila, Capital District, Metro Manila, 1005, Philippines', NULL, NULL, 10, '2026-02-12 00:07:39', NULL, NULL, NULL),
+(11, 'REF-20260211085107-1710', 'medical', 'low', 'pending', 'Incident from call REF-20260211085107-1710', 'cardiac', 'Circle', NULL, NULL, 11, '2026-02-12 00:07:39', NULL, NULL, NULL),
+(12, 'REF-20260211112610-3531', 'fire', 'low', 'pending', 'Incident from call REF-20260211112610-3531', 'burning stove', 'Quezon City Hall', NULL, NULL, 12, '2026-02-12 00:07:39', NULL, NULL, NULL);
 
 -- --------------------------------------------------------
 
@@ -574,21 +574,21 @@ CREATE TABLE `incident_notes` (
 --
 
 INSERT INTO `incident_notes` (`id`, `incident_id`, `author_name`, `note`, `created_at`) VALUES
-(1, 3, 'System', 'Resolved via UI at 2/4/2026, 10:53:41 AM', '2026-02-04 10:53:41'),
-(2, 3, 'System', 'Resolved via UI at 2/4/2026, 10:54:14 AM', '2026-02-04 10:54:14'),
-(3, 2, 'System', 'Resolved via UI at 2/4/2026, 10:57:22 AM', '2026-02-04 10:57:22'),
-(4, 5, 'System', 'Resolved via UI at 2/4/2026, 11:12:58 AM', '2026-02-04 11:12:58'),
-(5, 5, 'System', 'Resolved via UI at 2/4/2026, 11:13:37 AM', '2026-02-04 11:13:37'),
-(6, 4, 'System', 'Resolved via Dispatch UI at 2/4/2026, 11:34:57 AM', '2026-02-04 11:34:57'),
-(7, 1, 'System', 'Resolved via UI at 2/4/2026, 2:55:15 PM', '2026-02-04 14:55:15'),
-(8, 4, 'System', 'Resolution proof uploaded: /images/proofs/incident_4_20260206_064229_capture.jpg', '2026-02-06 13:42:29'),
-(9, 7, 'System', 'Resolved via UI at 2/6/2026, 4:15:05 PM', '2026-02-06 16:15:05'),
-(10, 8, 'System', 'Resolved via UI at 2/11/2026, 9:54:47 AM', '2026-02-11 09:54:47'),
-(11, 9, 'System', 'Resolution proof uploaded: /images/proofs/incident_9_20260211_052425_capture.jpg.jpg', '2026-02-11 12:24:25'),
-(12, 10, 'System', 'Resolved via UI at 2/11/2026, 3:00:08 PM', '2026-02-11 15:00:08'),
-(13, 6, 'System', 'Resolved via UI at 2/11/2026, 3:00:40 PM', '2026-02-11 15:00:40'),
-(14, 11, 'System', 'Resolved via UI at 2/11/2026, 3:22:18 PM', '2026-02-11 15:22:18'),
-(15, 12, 'System', 'Resolved via UI at 2/11/2026, 3:59:21 PM', '2026-02-11 15:59:21');
+(1, 3, 'System', 'Resolved via UI at 2/4/2026, 6:53:41 PM', '2026-02-04 18:53:41'),
+(2, 3, 'System', 'Resolved via UI at 2/4/2026, 6:54:14 PM', '2026-02-04 18:54:14'),
+(3, 2, 'System', 'Resolved via UI at 2/4/2026, 6:57:22 PM', '2026-02-04 18:57:22'),
+(4, 5, 'System', 'Resolved via UI at 2/4/2026, 7:12:58 PM', '2026-02-04 19:12:58'),
+(5, 5, 'System', 'Resolved via UI at 2/4/2026, 7:13:37 PM', '2026-02-04 19:13:37'),
+(6, 4, 'System', 'Resolved via Dispatch UI at 2/4/2026, 7:34:57 PM', '2026-02-04 19:34:57'),
+(7, 1, 'System', 'Resolved via UI at 2/4/2026, 10:55:15 PM', '2026-02-04 22:55:15'),
+(8, 4, 'System', 'Resolution proof uploaded: /images/proofs/incident_4_20260206_064229_capture.jpg', '2026-02-06 21:42:29'),
+(9, 7, 'System', 'Resolved via UI at 2/7/2026, 12:15:05 AM', '2026-02-07 00:15:05'),
+(10, 8, 'System', 'Resolved via UI at 2/11/2026, 5:54:47 PM', '2026-02-11 17:54:47'),
+(11, 9, 'System', 'Resolution proof uploaded: /images/proofs/incident_9_20260211_052425_capture.jpg.jpg', '2026-02-11 20:24:25'),
+(12, 10, 'System', 'Resolved via UI at 2/11/2026, 11:00:08 PM', '2026-02-11 23:00:08'),
+(13, 6, 'System', 'Resolved via UI at 2/11/2026, 11:00:40 PM', '2026-02-11 23:00:40'),
+(14, 11, 'System', 'Resolved via UI at 2/11/2026, 11:22:18 PM', '2026-02-11 23:22:18'),
+(15, 12, 'System', 'Resolved via UI at 2/11/2026, 11:59:21 PM', '2026-02-11 23:59:21');
 
 -- --------------------------------------------------------
 
@@ -628,33 +628,33 @@ CREATE TABLE `otp_codes` (
 --
 
 INSERT INTO `otp_codes` (`id`, `email`, `otp_code`, `created_at`, `expires_at`, `status`) VALUES
-(1, 'aldrinisidro6@gmail.com', '868800', '2026-02-02 22:08:10', '2026-02-02 15:11:10', 'active'),
-(2, 'aldrinisidro6@gmail.com', '807644', '2026-02-02 22:40:53', '2026-02-02 15:43:53', 'active'),
-(3, 'aldrinisidro6@gmail.com', '618574', '2026-02-02 22:47:41', '2026-02-02 15:50:41', 'active'),
-(4, 'aldrinisidro6@gmail.com', '247431', '2026-02-02 22:50:30', '2026-02-02 15:53:30', 'active'),
-(5, 'aldrinisidro6@gmail.com', '275462', '2026-02-02 23:01:52', '2026-02-02 16:04:52', 'active'),
-(6, 'aldrinisidro6@gmail.com', '497930', '2026-02-04 13:42:17', '2026-02-04 06:45:17', 'active'),
-(7, 'aldrinisidro6@gmail.com', '328071', '2026-02-04 13:52:38', '2026-02-04 06:55:38', 'active'),
-(8, 'aldrinisidro6@gmail.com', '874186', '2026-02-04 13:57:19', '2026-02-04 07:00:19', 'active'),
-(9, 'aldrinisidro6@gmail.com', '720502', '2026-02-05 00:56:45', '2026-02-04 17:59:45', 'active'),
-(10, 'aldrinisidro6@gmail.com', '439167', '2026-02-06 09:00:06', '2026-02-06 02:03:06', 'active'),
-(11, 'aldrinisidro6@gmail.com', '156548', '2026-02-06 13:04:32', '2026-02-06 06:07:32', 'active'),
-(12, 'aldrinisidro6@gmail.com', '568830', '2026-02-06 18:39:21', '2026-02-06 11:42:21', 'active'),
-(13, 'aldrinisidro6@gmail.com', '292495', '2026-02-07 19:47:46', '2026-02-07 12:50:46', 'active'),
-(14, 'aldrinisidro6@gmail.com', '794837', '2026-02-08 15:59:44', '2026-02-08 09:02:44', 'active'),
-(15, 'aldrinisidro6@gmail.com', '475494', '2026-02-09 22:50:43', '2026-02-09 15:53:43', 'active'),
-(16, 'aldrinisidro6@gmail.com', '714467', '2026-02-09 23:27:33', '2026-02-09 16:30:33', 'active'),
-(17, 'aldrinisidro6@gmail.com', '110948', '2026-02-10 23:08:48', '2026-02-10 16:11:48', 'active'),
-(18, 'aldrinisidro6@gmail.com', '817542', '2026-02-11 09:39:57', '2026-02-11 02:42:57', 'active'),
-(19, 'aldrinisidro6@gmail.com', '682425', '2026-02-11 09:45:38', '2026-02-11 02:48:38', 'active'),
-(20, 'aldrinisidro6@gmail.com', '635086', '2026-02-11 10:47:08', '2026-02-11 03:50:08', 'active'),
-(21, 'aldrinisidro6@gmail.com', '854504', '2026-02-11 11:17:57', '2026-02-11 04:20:57', 'active'),
-(22, 'aldrinisidro6@gmail.com', '179078', '2026-02-11 12:22:37', '2026-02-11 05:25:37', 'active'),
-(23, 'aldrinisidro6@gmail.com', '770427', '2026-02-11 13:41:56', '2026-02-11 06:44:56', 'active'),
-(24, 'aldrinisidro6@gmail.com', '144404', '2026-02-11 17:37:32', '2026-02-11 10:40:32', 'active'),
-(25, 'aldrinisidro6@gmail.com', '555544', '2026-02-11 18:10:14', '2026-02-11 11:13:14', 'active'),
-(26, 'aldrinisidro6@gmail.com', '831973', '2026-02-11 21:46:26', '2026-02-11 14:49:25', 'active'),
-(27, 'aldrinisidro6@gmail.com', '902054', '2026-02-12 06:40:57', '2026-02-11 23:43:57', 'active');
+(1, 'aldrinisidro6@gmail.com', '868800', '2026-02-03 06:08:10', '2026-02-02 23:11:10', 'active'),
+(2, 'aldrinisidro6@gmail.com', '807644', '2026-02-03 06:40:53', '2026-02-02 23:43:53', 'active'),
+(3, 'aldrinisidro6@gmail.com', '618574', '2026-02-03 06:47:41', '2026-02-02 23:50:41', 'active'),
+(4, 'aldrinisidro6@gmail.com', '247431', '2026-02-03 06:50:30', '2026-02-02 23:53:30', 'active'),
+(5, 'aldrinisidro6@gmail.com', '275462', '2026-02-03 07:01:52', '2026-02-03 00:04:52', 'active'),
+(6, 'aldrinisidro6@gmail.com', '497930', '2026-02-04 21:42:17', '2026-02-04 14:45:17', 'active'),
+(7, 'aldrinisidro6@gmail.com', '328071', '2026-02-04 21:52:38', '2026-02-04 14:55:38', 'active'),
+(8, 'aldrinisidro6@gmail.com', '874186', '2026-02-04 21:57:19', '2026-02-04 15:00:19', 'active'),
+(9, 'aldrinisidro6@gmail.com', '720502', '2026-02-05 08:56:45', '2026-02-05 01:59:45', 'active'),
+(10, 'aldrinisidro6@gmail.com', '439167', '2026-02-06 17:00:06', '2026-02-06 10:03:06', 'active'),
+(11, 'aldrinisidro6@gmail.com', '156548', '2026-02-06 21:04:32', '2026-02-06 14:07:32', 'active'),
+(12, 'aldrinisidro6@gmail.com', '568830', '2026-02-07 02:39:21', '2026-02-06 19:42:21', 'active'),
+(13, 'aldrinisidro6@gmail.com', '292495', '2026-02-08 03:47:46', '2026-02-07 20:50:46', 'active'),
+(14, 'aldrinisidro6@gmail.com', '794837', '2026-02-08 23:59:44', '2026-02-08 17:02:44', 'active'),
+(15, 'aldrinisidro6@gmail.com', '475494', '2026-02-10 06:50:43', '2026-02-09 23:53:43', 'active'),
+(16, 'aldrinisidro6@gmail.com', '714467', '2026-02-10 07:27:33', '2026-02-10 00:30:33', 'active'),
+(17, 'aldrinisidro6@gmail.com', '110948', '2026-02-11 07:08:48', '2026-02-11 00:11:48', 'active'),
+(18, 'aldrinisidro6@gmail.com', '817542', '2026-02-11 17:39:57', '2026-02-11 10:42:57', 'active'),
+(19, 'aldrinisidro6@gmail.com', '682425', '2026-02-11 17:45:38', '2026-02-11 10:48:38', 'active'),
+(20, 'aldrinisidro6@gmail.com', '635086', '2026-02-11 18:47:08', '2026-02-11 11:50:08', 'active'),
+(21, 'aldrinisidro6@gmail.com', '854504', '2026-02-11 19:17:57', '2026-02-11 12:20:57', 'active'),
+(22, 'aldrinisidro6@gmail.com', '179078', '2026-02-11 20:22:37', '2026-02-11 13:25:37', 'active'),
+(23, 'aldrinisidro6@gmail.com', '770427', '2026-02-11 21:41:56', '2026-02-11 14:44:56', 'active'),
+(24, 'aldrinisidro6@gmail.com', '144404', '2026-02-12 01:37:32', '2026-02-11 18:40:32', 'active'),
+(25, 'aldrinisidro6@gmail.com', '555544', '2026-02-12 02:10:14', '2026-02-11 19:13:14', 'active'),
+(26, 'aldrinisidro6@gmail.com', '831973', '2026-02-12 05:46:26', '2026-02-11 22:49:25', 'active'),
+(27, 'aldrinisidro6@gmail.com', '902054', '2026-02-12 14:40:57', '2026-02-12 07:43:57', 'active');
 
 -- --------------------------------------------------------
 
@@ -734,9 +734,9 @@ CREATE TABLE `resources` (
 --
 
 INSERT INTO `resources` (`id`, `type`, `name`, `code`, `status`, `location`, `notes`, `created_at`, `updated_at`) VALUES
-(1, 'equipment', 'Portable Defibrillator', 'EQ-SEED-001', 'available', 'Station 1', 'Seeded resource data', '2026-02-19 00:00:00', NULL),
-(2, 'equipment', 'Trauma Kit', 'EQ-SEED-002', 'available', 'Station 2', 'Seeded resource data', '2026-02-19 00:00:00', NULL),
-(3, 'equipment', 'Oxygen Tank', 'EQ-SEED-003', 'available', 'Station 3', 'Seeded resource data', '2026-02-19 00:00:00', NULL);
+(1, 'equipment', 'Portable Defibrillator', 'EQ-SEED-001', 'available', 'Station 1', 'Seeded resource data', '2026-02-19 08:00:00', NULL),
+(2, 'equipment', 'Trauma Kit', 'EQ-SEED-002', 'available', 'Station 2', 'Seeded resource data', '2026-02-19 08:00:00', NULL),
+(3, 'equipment', 'Oxygen Tank', 'EQ-SEED-003', 'available', 'Station 3', 'Seeded resource data', '2026-02-19 08:00:00', NULL);
 
 -- --------------------------------------------------------
 
@@ -758,8 +758,8 @@ CREATE TABLE `resource_requests` (
 --
 
 INSERT INTO `resource_requests` (`id`, `requestor`, `resource_name`, `date_requested`, `status`, `details`) VALUES
-(1, 'Aldrin', 'Fire Truck', '2026-02-05 01:01:42', 'rejected', '{\"type\":\"vehicle\",\"quantity\":1,\"priority\":\"medium\",\"location\":\"quezon city hall\",\"notes\":\"need now\",\"urgency\":\"normal\",\"decision_reason\":\"I don\'t wanna\"}'),
-(2, 'Dispatch Center', 'Police', '2026-02-11 18:49:11', 'approved', '{\"type\":\"other\",\"quantity\":1,\"priority\":\"high\",\"location\":\"Dispatch HQ\",\"notes\":\"Requested via quick action\",\"urgency\":\"urgent\",\"decision_reason\":\"\"}');
+(1, 'Aldrin', 'Fire Truck', '2026-02-05 09:01:42', 'rejected', '{\"type\":\"vehicle\",\"quantity\":1,\"priority\":\"medium\",\"location\":\"quezon city hall\",\"notes\":\"need now\",\"urgency\":\"normal\",\"decision_reason\":\"I don\'t wanna\"}'),
+(2, 'Dispatch Center', 'Police', '2026-02-12 02:49:11', 'approved', '{\"type\":\"other\",\"quantity\":1,\"priority\":\"high\",\"location\":\"Dispatch HQ\",\"notes\":\"Requested via quick action\",\"urgency\":\"urgent\",\"decision_reason\":\"\"}');
 
 -- --------------------------------------------------------
 
@@ -814,9 +814,9 @@ CREATE TABLE `staff` (
 --
 
 INSERT INTO `staff` (`id`, `name`, `role`, `phone`, `email`, `status`, `assigned_resource_id`, `created_at`, `updated_at`) VALUES
-(1, 'Responder Ana Reyes', 'Paramedic', NULL, NULL, 'available', NULL, '2026-02-19 00:00:00', NULL),
-(2, 'Responder Mark Santos', 'EMT', NULL, NULL, 'available', NULL, '2026-02-19 00:00:00', NULL),
-(3, 'Responder Leo Cruz', 'Nurse', NULL, NULL, 'available', NULL, '2026-02-19 00:00:00', NULL);
+(1, 'Responder Ana Reyes', 'Paramedic', NULL, NULL, 'available', NULL, '2026-02-19 08:00:00', NULL),
+(2, 'Responder Mark Santos', 'EMT', NULL, NULL, 'available', NULL, '2026-02-19 08:00:00', NULL),
+(3, 'Responder Leo Cruz', 'Nurse', NULL, NULL, 'available', NULL, '2026-02-19 08:00:00', NULL);
 
 --
 -- Triggers `staff`
@@ -857,15 +857,15 @@ CREATE TABLE `units` (
 --
 
 INSERT INTO `units` (`id`, `identifier`, `unit_type`, `status`, `current_incident_id`, `latitude`, `longitude`, `last_status_at`, `created_at`, `updated_at`) VALUES
-(1, 'AMB-01', 'ambulance', 'available', NULL, 14.5995000, 120.9842000, '2026-02-12 07:05:56', '2026-02-12 07:05:56', '2026-02-12 07:05:56'),
-(2, 'AMB-02', 'ambulance', 'available', NULL, 14.6010000, 120.9890000, '2026-02-12 07:05:56', '2026-02-12 07:05:56', '2026-02-12 07:05:56'),
-(3, 'AMB-03', 'ambulance', 'available', NULL, 14.5822000, 121.0122000, '2026-02-12 07:05:56', '2026-02-12 07:05:56', '2026-02-12 07:05:56'),
-(4, 'POL-01', 'police', 'available', NULL, 14.6200000, 121.0500000, '2026-02-12 07:05:56', '2026-02-12 07:05:56', '2026-02-12 07:05:56'),
-(5, 'POL-02', 'police', 'available', NULL, 14.5547000, 121.0244000, '2026-02-12 07:05:56', '2026-02-12 07:05:56', '2026-02-12 07:05:56'),
-(6, 'POL-03', 'police', 'available', NULL, 14.6500000, 121.0300000, '2026-02-12 07:05:56', '2026-02-12 07:05:56', '2026-02-12 07:05:56'),
-(7, 'FIR-01', 'fire', 'available', NULL, 14.5700000, 121.0400000, '2026-02-12 07:05:56', '2026-02-12 07:05:56', '2026-02-12 07:05:56'),
-(8, 'FIR-02', 'fire', 'available', NULL, 14.5900000, 120.9700000, '2026-02-12 07:05:56', '2026-02-12 07:05:56', '2026-02-12 07:05:56'),
-(9, 'FIR-03', 'fire', 'available', NULL, 14.6100000, 121.0200000, '2026-02-12 07:05:56', '2026-02-12 07:05:56', '2026-02-12 07:05:56');
+(1, 'AMB-01', 'ambulance', 'available', NULL, 14.5995000, 120.9842000, '2026-02-12 15:05:56', '2026-02-12 15:05:56', '2026-02-12 15:05:56'),
+(2, 'AMB-02', 'ambulance', 'available', NULL, 14.6010000, 120.9890000, '2026-02-12 15:05:56', '2026-02-12 15:05:56', '2026-02-12 15:05:56'),
+(3, 'AMB-03', 'ambulance', 'available', NULL, 14.5822000, 121.0122000, '2026-02-12 15:05:56', '2026-02-12 15:05:56', '2026-02-12 15:05:56'),
+(4, 'POL-01', 'police', 'available', NULL, 14.6200000, 121.0500000, '2026-02-12 15:05:56', '2026-02-12 15:05:56', '2026-02-12 15:05:56'),
+(5, 'POL-02', 'police', 'available', NULL, 14.5547000, 121.0244000, '2026-02-12 15:05:56', '2026-02-12 15:05:56', '2026-02-12 15:05:56'),
+(6, 'POL-03', 'police', 'available', NULL, 14.6500000, 121.0300000, '2026-02-12 15:05:56', '2026-02-12 15:05:56', '2026-02-12 15:05:56'),
+(7, 'FIR-01', 'fire', 'available', NULL, 14.5700000, 121.0400000, '2026-02-12 15:05:56', '2026-02-12 15:05:56', '2026-02-12 15:05:56'),
+(8, 'FIR-02', 'fire', 'available', NULL, 14.5900000, 120.9700000, '2026-02-12 15:05:56', '2026-02-12 15:05:56', '2026-02-12 15:05:56'),
+(9, 'FIR-03', 'fire', 'available', NULL, 14.6100000, 121.0200000, '2026-02-12 15:05:56', '2026-02-12 15:05:56', '2026-02-12 15:05:56');
 
 -- --------------------------------------------------------
 
@@ -923,11 +923,11 @@ CREATE TABLE `users` (
 --
 
 INSERT INTO `users` (`id`, `email`, `password`, `name`, `department`, `role`, `status`, `inactive_at`, `created_at`, `updated_at`, `last_login`) VALUES
-(1, 'aldrinisidro6@gmail.com', '$2y$10$XaD//IFx/8UDuAraZmWPG.O9T8TI3dC3U8HzyrNookjpMUXumSu8G', 'Aldrin', 'Administration', 'admin', 'active', NULL, '2026-02-10 16:33:47', '2026-02-11 22:40:57', '2026-02-11 22:40:57'),
-(1, 'aldrinisidro6@gmail.com', '$2y$10$uijKapQWHxkPLPRxIHW34OoTWNaXnJlaxWVQeboSSdM1Kat33Sk6q', 'Aldrin', 'Administration', 'admin', 'active', NULL, '2026-02-02 14:05:18', '2026-02-11 22:40:57', '2026-02-11 22:40:57'),
-(2, 'admin@example.com', '$2y$10$/KMzrUa6seIiuUY2tDCALOwnudXUgXu02z9OYL33tvmjUUWx3jCT6', 'Administrator', 'Administration', 'admin', 'active', NULL, '2026-02-09 16:25:22', NULL, NULL),
-(1, 'aldrinisidro6@gmail.com', '$2y$10$uijKapQWHxkPLPRxIHW34OoTWNaXnJlaxWVQeboSSdM1Kat33Sk6q', 'Aldrin', 'Administration', 'admin', 'active', NULL, '2026-02-02 14:05:18', '2026-02-11 13:46:25', '2026-02-11 13:46:25'),
-(2, 'admin@example.com', '$2y$10$/KMzrUa6seIiuUY2tDCALOwnudXUgXu02z9OYL33tvmjUUWx3jCT6', 'Administrator', 'Administration', 'admin', 'active', NULL, '2026-02-09 16:25:22', NULL, NULL);
+(1, 'aldrinisidro6@gmail.com', '$2y$10$XaD//IFx/8UDuAraZmWPG.O9T8TI3dC3U8HzyrNookjpMUXumSu8G', 'Aldrin', 'Administration', 'admin', 'active', NULL, '2026-02-11 00:33:47', '2026-02-12 06:40:57', '2026-02-12 06:40:57'),
+(1, 'aldrinisidro6@gmail.com', '$2y$10$uijKapQWHxkPLPRxIHW34OoTWNaXnJlaxWVQeboSSdM1Kat33Sk6q', 'Aldrin', 'Administration', 'admin', 'active', NULL, '2026-02-02 22:05:18', '2026-02-12 06:40:57', '2026-02-12 06:40:57'),
+(2, 'admin@example.com', '$2y$10$/KMzrUa6seIiuUY2tDCALOwnudXUgXu02z9OYL33tvmjUUWx3jCT6', 'Administrator', 'Administration', 'admin', 'active', NULL, '2026-02-10 00:25:22', NULL, NULL),
+(1, 'aldrinisidro6@gmail.com', '$2y$10$uijKapQWHxkPLPRxIHW34OoTWNaXnJlaxWVQeboSSdM1Kat33Sk6q', 'Aldrin', 'Administration', 'admin', 'active', NULL, '2026-02-02 22:05:18', '2026-02-11 21:46:25', '2026-02-11 21:46:25'),
+(2, 'admin@example.com', '$2y$10$/KMzrUa6seIiuUY2tDCALOwnudXUgXu02z9OYL33tvmjUUWx3jCT6', 'Administrator', 'Administration', 'admin', 'active', NULL, '2026-02-10 00:25:22', NULL, NULL);
 
 --
 -- Indexes for dumped tables

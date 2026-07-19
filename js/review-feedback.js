@@ -64,6 +64,18 @@
   let selectedRating = 0;
   let searchDebounceTimer = null;
   let loadRequestSeq = 0;
+  const PH_TIME_ZONE = 'Asia/Manila';
+  const PH_DATE_FORMATTER = new Intl.DateTimeFormat('en-PH', {
+    timeZone: PH_TIME_ZONE,
+    year: 'numeric',
+    month: 'short',
+    day: '2-digit',
+    hour: 'numeric',
+    minute: '2-digit',
+    second: '2-digit',
+    hour12: true,
+    timeZoneName: 'short'
+  });
 
   function buildQuery() {
     const params = new URLSearchParams();
@@ -389,7 +401,7 @@
 
     proofGallery.innerHTML = items.map(item => `
       <figure class="proof-card">
-        <img src="${escapeAttribute(item.url || '')}" alt="Incident resolution proof">
+        <img src="${escapeAttribute(normalizeProofUrl(item.url || ''))}" alt="Incident resolution proof">
         <figcaption class="proof-meta">${escapeHtml(formatDate(item.created_at))}</figcaption>
       </figure>
     `).join('');
@@ -615,7 +627,7 @@
 
   function timestampOf(item) {
     const value = item?.resolved_at || item?.cleared_at || item?.updated_at || item?.created_at || 0;
-    const stamp = new Date(value).getTime();
+    const stamp = parseDateValue(value).getTime();
     return Number.isFinite(stamp) ? stamp : 0;
   }
 
@@ -652,9 +664,21 @@
 
   function formatDate(value) {
     if (!value) return '--';
-    const date = new Date(value);
+    const date = parseDateValue(value);
     if (Number.isNaN(date.getTime())) return String(value);
-    return date.toLocaleString();
+    return PH_DATE_FORMATTER.format(date);
+  }
+
+  function parseDateValue(value) {
+    const raw = String(value || '').trim();
+    if (!raw) return new Date(NaN);
+    if (/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/.test(raw)) {
+      return new Date(raw.replace(' ', 'T') + 'Z');
+    }
+    if (/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}$/.test(raw)) {
+      return new Date(raw + 'Z');
+    }
+    return new Date(raw);
   }
 
   function formatMinutes(value) {
@@ -692,6 +716,13 @@
 
   function clean(value) {
     return String(value || '').trim();
+  }
+
+  function normalizeProofUrl(value) {
+    const raw = clean(value);
+    if (!raw) return '';
+    if (/^(https?:|data:|blob:)/i.test(raw)) return raw;
+    return raw.replace(/^\/+/, '');
   }
 
   function loadingMarkup(message) {

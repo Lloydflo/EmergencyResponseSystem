@@ -113,15 +113,23 @@ if ($adminName === '') {
         .ar-feedback-head { display: flex; justify-content: space-between; gap: .8rem; align-items: center; }
         .ar-feedback-head strong { color: #0f172a; }
         .ar-feedback-head span { color: #64748b; font-size: .84rem; }
+        .ar-rating-wrap { display: grid; justify-items: end; gap: .25rem; }
+        .ar-rating-label { color: #92400e; font-size: .78rem; font-weight: 800; }
         .ar-stars { display: inline-flex; gap: .18rem; color: #f59e0b; }
         .ar-note { margin: .65rem 0 0; color: #334155; line-height: 1.65; white-space: pre-wrap; }
         .ar-feedback-empty { border: 1px dashed #cbd5e1; border-radius: 18px; background: #f8fafc; color: #64748b; padding: 1.05rem 1rem; }
+        .ar-proof-gallery { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: .8rem; margin-top: 1rem; }
+        .ar-proof-card { margin: 0; border: 1px solid #e2e8f0; border-radius: 18px; overflow: hidden; background: #fff; }
+        .ar-proof-card img { display: block; width: 100%; aspect-ratio: 4 / 3; object-fit: cover; background: #e2e8f0; }
+        .ar-proof-card figcaption { display: grid; gap: .18rem; padding: .7rem .78rem; color: #64748b; font-size: .82rem; line-height: 1.45; }
+        .ar-proof-card figcaption strong { color: #0f172a; font-size: .86rem; }
         [data-theme="dark"] .main-content { background: radial-gradient(circle at top right, rgba(59,130,246,.14), transparent 28%), #08111f; }
         [data-theme="dark"] .ar-stat, [data-theme="dark"] .ar-toolbar, [data-theme="dark"] .ar-card, [data-theme="dark"] .ar-modal-dialog { background: linear-gradient(180deg, rgba(15,23,42,.98), rgba(2,6,23,.98)); border-color: #334155; box-shadow: 0 18px 42px rgba(2,6,23,.38); }
-        [data-theme="dark"] .ar-stat strong, [data-theme="dark"] .ar-ref, [data-theme="dark"] .ar-card-head h2, [data-theme="dark"] .ar-modal-head h3, [data-theme="dark"] .ar-spotlight h4, [data-theme="dark"] .ar-side strong, [data-theme="dark"] .ar-grid h4, [data-theme="dark"] .ar-feedback-panel h4, [data-theme="dark"] .ar-detail strong, [data-theme="dark"] .ar-feedback-head strong { color: #f8fafc !important; }
-        [data-theme="dark"] .ar-stat span, [data-theme="dark"] .ar-stat p, [data-theme="dark"] .ar-field label, [data-theme="dark"] .ar-card-head p, [data-theme="dark"] .ar-meta, [data-theme="dark"] .ar-modal-head p, [data-theme="dark"] .ar-spotlight .type, [data-theme="dark"] .ar-spotlight .desc, [data-theme="dark"] .ar-side span, [data-theme="dark"] .ar-detail span, [data-theme="dark"] .ar-feedback-panel p, [data-theme="dark"] .ar-feedback-head span, [data-theme="dark"] .ar-note, [data-theme="dark"] .ar-feedback-empty { color: #94a3b8 !important; }
+        [data-theme="dark"] .ar-stat strong, [data-theme="dark"] .ar-ref, [data-theme="dark"] .ar-card-head h2, [data-theme="dark"] .ar-modal-head h3, [data-theme="dark"] .ar-spotlight h4, [data-theme="dark"] .ar-side strong, [data-theme="dark"] .ar-grid h4, [data-theme="dark"] .ar-feedback-panel h4, [data-theme="dark"] .ar-detail strong, [data-theme="dark"] .ar-feedback-head strong, [data-theme="dark"] .ar-proof-card figcaption strong { color: #f8fafc !important; }
+        [data-theme="dark"] .ar-stat span, [data-theme="dark"] .ar-stat p, [data-theme="dark"] .ar-field label, [data-theme="dark"] .ar-card-head p, [data-theme="dark"] .ar-meta, [data-theme="dark"] .ar-modal-head p, [data-theme="dark"] .ar-spotlight .type, [data-theme="dark"] .ar-spotlight .desc, [data-theme="dark"] .ar-side span, [data-theme="dark"] .ar-detail span, [data-theme="dark"] .ar-feedback-panel p, [data-theme="dark"] .ar-feedback-head span, [data-theme="dark"] .ar-note, [data-theme="dark"] .ar-feedback-empty, [data-theme="dark"] .ar-proof-card figcaption { color: #94a3b8 !important; }
+        [data-theme="dark"] .ar-rating-label { color: #fde68a !important; }
         [data-theme="dark"] .ar-field input, [data-theme="dark"] .ar-field select, [data-theme="dark"] .ar-btn.secondary, [data-theme="dark"] .ar-action, [data-theme="dark"] .ar-close { background: #0f172a !important; color: #f8fafc !important; border-color: #475569 !important; }
-        [data-theme="dark"] .ar-card-head, [data-theme="dark"] .ar-table th, [data-theme="dark"] .ar-table tr:hover td, [data-theme="dark"] .ar-spotlight, [data-theme="dark"] .ar-grid article, [data-theme="dark"] .ar-feedback-panel, [data-theme="dark"] .ar-side, [data-theme="dark"] .ar-detail, [data-theme="dark"] .ar-feedback, [data-theme="dark"] .ar-feedback-empty { background: #020617 !important; border-color: #334155 !important; }
+        [data-theme="dark"] .ar-card-head, [data-theme="dark"] .ar-table th, [data-theme="dark"] .ar-table tr:hover td, [data-theme="dark"] .ar-spotlight, [data-theme="dark"] .ar-grid article, [data-theme="dark"] .ar-feedback-panel, [data-theme="dark"] .ar-side, [data-theme="dark"] .ar-detail, [data-theme="dark"] .ar-feedback, [data-theme="dark"] .ar-feedback-empty, [data-theme="dark"] .ar-proof-card { background: #020617 !important; border-color: #334155 !important; }
         [data-theme="dark"] .ar-count, [data-theme="dark"] .ar-pill.empty { background: #1e293b !important; color: #cbd5e1 !important; }
         [data-theme="dark"] .ar-chip.resolved { background: #052e16 !important; color: #bbf7d0 !important; }
         [data-theme="dark"] .ar-chip.cancelled { background: #450a0a !important; color: #fecaca !important; }
@@ -244,6 +252,11 @@ if ($adminName === '') {
                     <p>Every note saved from the dispatcher review page appears here automatically.</p>
                     <div id="adminFeedbackList" class="ar-feedback-list"></div>
                 </section>
+                <section class="ar-feedback-panel">
+                    <h4><i class="fas fa-camera"></i> Responder Resolution Proof</h4>
+                    <p>Photos uploaded by responders when completing the incident are shown here for admin review.</p>
+                    <div id="adminProofGallery" class="ar-proof-gallery"></div>
+                </section>
             </div>
         </div>
     </div>
@@ -263,6 +276,18 @@ if ($adminName === '') {
             const modalOverlay = qs('#adminFeedbackOverlay');
             const modalClose = qs('#adminFeedbackClose');
             let incidentRows = [];
+            const PH_TIME_ZONE = 'Asia/Manila';
+            const PH_DATE_FORMATTER = new Intl.DateTimeFormat('en-PH', {
+                timeZone: PH_TIME_ZONE,
+                year: 'numeric',
+                month: 'short',
+                day: '2-digit',
+                hour: 'numeric',
+                minute: '2-digit',
+                second: '2-digit',
+                hour12: true,
+                timeZoneName: 'short'
+            });
 
             function escapeHtml(value) {
                 return String(value).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#039;');
@@ -283,8 +308,19 @@ if ($adminName === '') {
             }
             function formatDate(value) {
                 if (!value) return '--';
-                const date = new Date(value);
-                return Number.isNaN(date.getTime()) ? String(value) : date.toLocaleString();
+                const date = parseDateValue(value);
+                return Number.isNaN(date.getTime()) ? String(value) : PH_DATE_FORMATTER.format(date);
+            }
+            function parseDateValue(value) {
+                const raw = String(value || '').trim();
+                if (!raw) return new Date(NaN);
+                if (/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/.test(raw)) {
+                    return new Date(raw.replace(' ', 'T') + 'Z');
+                }
+                if (/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}$/.test(raw)) {
+                    return new Date(raw + 'Z');
+                }
+                return new Date(raw);
             }
             function formatMinutes(value) {
                 const minutes = toNumber(value);
@@ -297,6 +333,12 @@ if ($adminName === '') {
             function formatRating(value) {
                 const rating = toNumber(value);
                 return rating === null ? '--' : (rating.toFixed(1) + ' / 5');
+            }
+            function normalizeProofUrl(value) {
+                const raw = String(value || '').trim();
+                if (!raw) return '';
+                if (/^(https?:|data:|blob:)/i.test(raw)) return raw;
+                return raw.replace(/^\/+/, '');
             }
             function average(values) {
                 return values.length ? (values.reduce((sum, value) => sum + value, 0) / values.length) : null;
@@ -315,7 +357,7 @@ if ($adminName === '') {
                 const count = Number(row.feedback_count || 0);
                 if (!count) return '<span class="ar-pill empty"><i class="fas fa-inbox"></i> No feedback</span>';
                 const rating = toNumber(row.avg_rating);
-                const label = rating === null ? (count + ' note(s)') : (rating.toFixed(1) + ' / 5');
+                const label = rating === null ? (count + ' note(s)') : ('Response Rating ' + rating.toFixed(1) + ' / 5');
                 return '<span class="ar-pill feedback"><i class="fas fa-paper-plane"></i> ' + escapeHtml(label) + '</span>';
             }
             function renderStars(rating) {
@@ -325,6 +367,10 @@ if ($adminName === '') {
                 let html = '';
                 for (let i = 1; i <= 5; i += 1) html += '<i class="' + (i <= rounded ? 'fas' : 'far') + ' fa-star"></i>';
                 return html;
+            }
+            function responseRatingLabel(rating) {
+                const value = toNumber(rating);
+                return value === null || value < 1 ? 'No response rating' : 'Response Rating: ' + Math.round(value) + ' / 5';
             }
 
             async function loadRows() {
@@ -416,9 +462,37 @@ if ($adminName === '') {
                 qs('#adminModalLastUpdated').textContent = '--';
                 qs('#adminModalBadges').innerHTML = '';
                 qs('#adminFeedbackList').innerHTML = '<div class="ar-feedback-empty">Loading dispatcher feedback...</div>';
+                qs('#adminProofGallery').innerHTML = '<div class="ar-feedback-empty">Loading responder proof images...</div>';
             }
 
-            function populateModal(incident, feedbackPayload) {
+            function renderProofs(proofPayload) {
+                const gallery = qs('#adminProofGallery');
+                const items = proofPayload && proofPayload.ok && Array.isArray(proofPayload.items) ? proofPayload.items : [];
+                if (!proofPayload || !proofPayload.ok) {
+                    gallery.innerHTML = '<div class="ar-feedback-empty">Unable to load responder proof images.</div>';
+                    return;
+                }
+                if (!items.length) {
+                    gallery.innerHTML = '<div class="ar-feedback-empty">No responder proof image was uploaded for this incident.</div>';
+                    return;
+                }
+                gallery.innerHTML = items.map((item) => {
+                    const source = item.source === 'responder_completion'
+                        ? 'Responder completion upload'
+                        : 'Resolution proof upload';
+                    return `
+                        <figure class="ar-proof-card">
+                            <img src="${escapeHtml(normalizeProofUrl(item.url || ''))}" alt="Responder resolution proof">
+                            <figcaption>
+                                <strong>${escapeHtml(source)}</strong>
+                                <span>${escapeHtml(formatDate(item.created_at))}</span>
+                            </figcaption>
+                        </figure>
+                    `;
+                }).join('');
+            }
+
+            function populateModal(incident, feedbackPayload, proofPayload) {
                 qs('#adminFeedbackTitle').textContent = 'Incident ' + (incident.reference_no || incident.id || '');
                 qs('#adminModalCode').textContent = incident.reference_no || ('Incident #' + (incident.id || '--'));
                 qs('#adminModalType').textContent = incident.type || '--';
@@ -433,9 +507,13 @@ if ($adminName === '') {
                 qs('#adminModalDriver').textContent = incident.driver_name || 'Not recorded';
                 qs('#adminModalVehicle').textContent = incident.vehicle_name || incident.assigned_unit_identifier || 'Not recorded';
                 qs('#adminModalPlate').textContent = incident.plate_number || 'Not recorded';
-                qs('#adminModalAvgRating').textContent = formatRating(incident.avg_rating);
-                qs('#adminModalRatingCount').textContent = String(Number(incident.rating_count || 0));
-                qs('#adminModalFeedbackCount').textContent = String(Number(incident.feedback_count || 0));
+                const feedbackSummary = feedbackPayload && feedbackPayload.ok && feedbackPayload.summary ? feedbackPayload.summary : {};
+                const avgRating = toNumber(feedbackSummary.avg_rating) !== null ? feedbackSummary.avg_rating : incident.avg_rating;
+                const ratingCount = Number(feedbackSummary.rating_count ?? incident.rating_count ?? 0);
+                const feedbackCount = Number(feedbackSummary.feedback_count ?? incident.feedback_count ?? 0);
+                qs('#adminModalAvgRating').textContent = formatRating(avgRating);
+                qs('#adminModalRatingCount').textContent = String(ratingCount);
+                qs('#adminModalFeedbackCount').textContent = String(feedbackCount);
                 qs('#adminModalLastUpdated').textContent = formatDate(incident.updated_at || incident.resolved_at || incident.cleared_at);
                 qs('#adminModalBadges').innerHTML = statusChip(incident.status) + ' ' + priorityChip(incident.priority);
                 const notes = feedbackPayload && feedbackPayload.ok && Array.isArray(feedbackPayload.data) ? feedbackPayload.data : [];
@@ -443,11 +521,15 @@ if ($adminName === '') {
                     <div class="ar-feedback">
                         <div class="ar-feedback-head">
                             <div><strong>${escapeHtml(note.author_name || 'Dispatcher')}</strong><span>${escapeHtml(formatDate(note.created_at))}</span></div>
-                            <div class="ar-stars">${renderStars(note.rating)}</div>
+                            <div class="ar-rating-wrap">
+                                <span class="ar-rating-label">${escapeHtml(responseRatingLabel(note.rating))}</span>
+                                <div class="ar-stars">${renderStars(note.rating)}</div>
+                            </div>
                         </div>
                         <p class="ar-note">${escapeHtml(note.note || 'No additional note provided.')}</p>
                     </div>
                 `).join('') : '<div class="ar-feedback-empty">No dispatcher feedback has been sent for this incident yet.</div>';
+                renderProofs(proofPayload);
             }
 
             async function openModal(incidentId) {
@@ -455,16 +537,19 @@ if ($adminName === '') {
                 modalOverlay.hidden = false;
                 modal.hidden = false;
                 try {
-                    const [detailsRes, feedbackRes] = await Promise.all([
+                    const [detailsRes, feedbackRes, proofsRes] = await Promise.all([
                         fetch('api/incident_details.php?id=' + encodeURIComponent(incidentId), { cache: 'no-store' }),
-                        fetch('api/incident_feedback.php?incident_id=' + encodeURIComponent(incidentId), { cache: 'no-store' })
+                        fetch('api/incident_feedback.php?incident_id=' + encodeURIComponent(incidentId), { cache: 'no-store' }),
+                        fetch('api/incident_proofs.php?incident_id=' + encodeURIComponent(incidentId), { cache: 'no-store' })
                     ]);
                     const detailsData = await detailsRes.json();
                     const feedbackData = await feedbackRes.json();
+                    const proofsData = await proofsRes.json();
                     if (!detailsData.ok || !detailsData.incident) throw new Error(detailsData.error || 'Incident details not available');
-                    populateModal(detailsData.incident, feedbackData);
+                    populateModal(detailsData.incident, feedbackData, proofsData);
                 } catch (error) {
                     qs('#adminFeedbackList').innerHTML = '<div class="ar-feedback-empty">' + escapeHtml(error.message || 'Unable to load feedback.') + '</div>';
+                    qs('#adminProofGallery').innerHTML = '<div class="ar-feedback-empty">Unable to load responder proof images.</div>';
                 }
             }
 

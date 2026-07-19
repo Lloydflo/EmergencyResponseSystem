@@ -114,6 +114,17 @@ function insert_feedback_note(PDO $pdo, int $incidentId, string $authorName, ?in
     }
 }
 
+function infer_feedback_rating_from_note(string $note): ?int
+{
+    if (preg_match('/(?:rating submitted:\s*)?([1-5])\s*\/\s*5/i', $note, $matches)) {
+        return (int)$matches[1];
+    }
+    if (preg_match('/\b([1-5])\s*(?:star|stars)\b/i', $note, $matches)) {
+        return (int)$matches[1];
+    }
+    return null;
+}
+
 $hasRatingColumn = ensure_feedback_rating_column($pdo);
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
@@ -210,29 +221,32 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET') {
 
     try {
         if ($hasRatingColumn) {
-            $stmt = $pdo->prepare('SELECT author_name, rating, note, created_at FROM incident_notes WHERE incident_id = ? ORDER BY created_at DESC');
+            $stmt = $pdo->prepare("SELECT author_name, rating, note, created_at FROM incident_notes WHERE incident_id = ? AND note NOT LIKE 'Resolution proof uploaded:%' ORDER BY created_at DESC");
             $stmt->execute([$incidentId]);
-
-            $summaryStmt = $pdo->prepare(
-                'SELECT COUNT(*) AS feedback_count, COUNT(rating) AS rating_count, ROUND(AVG(rating), 1) AS avg_rating
-                 FROM incident_notes
-                 WHERE incident_id = ?'
-            );
-            $summaryStmt->execute([$incidentId]);
         } else {
-            $stmt = $pdo->prepare('SELECT author_name, NULL AS rating, note, created_at FROM incident_notes WHERE incident_id = ? ORDER BY created_at DESC');
+            $stmt = $pdo->prepare("SELECT author_name, NULL AS rating, note, created_at FROM incident_notes WHERE incident_id = ? AND note NOT LIKE 'Resolution proof uploaded:%' ORDER BY created_at DESC");
             $stmt->execute([$incidentId]);
-
-            $summaryStmt = $pdo->prepare(
-                'SELECT COUNT(*) AS feedback_count, 0 AS rating_count, NULL AS avg_rating
-                 FROM incident_notes
-                 WHERE incident_id = ?'
-            );
-            $summaryStmt->execute([$incidentId]);
         }
 
         $notes = $stmt->fetchAll();
-        $summary = $summaryStmt->fetch(PDO::FETCH_ASSOC) ?: ['feedback_count' => 0, 'rating_count' => 0, 'avg_rating' => null];
+        $ratingValues = [];
+        foreach ($notes as &$noteRow) {
+            $ratingValue = null;
+            if (isset($noteRow['rating']) && $noteRow['rating'] !== null && $noteRow['rating'] !== '' && is_numeric((string)$noteRow['rating'])) {
+                $ratingValue = (int)$noteRow['rating'];
+            }
+            if ($ratingValue === null) {
+                $ratingValue = infer_feedback_rating_from_note((string)($noteRow['note'] ?? ''));
+            }
+            if ($ratingValue !== null && $ratingValue >= 1 && $ratingValue <= 5) {
+                $noteRow['rating'] = $ratingValue;
+                $ratingValues[] = $ratingValue;
+            } else {
+                $noteRow['rating'] = null;
+            }
+        }
+        unset($noteRow);
+        $avgRating = $ratingValues ? round(array_sum($ratingValues) / count($ratingValues), 1) : null;
         $adminReview = ers_fetch_incident_admin_review($pdo, $incidentId);
 
         echo json_encode([
@@ -250,9 +264,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET') {
                 'sent_by_user_id' => null,
             ],
             'summary' => [
-                'feedback_count' => isset($summary['feedback_count']) ? (int)$summary['feedback_count'] : 0,
-                'rating_count' => isset($summary['rating_count']) ? (int)$summary['rating_count'] : 0,
-                'avg_rating' => isset($summary['avg_rating']) && $summary['avg_rating'] !== null ? (float)$summary['avg_rating'] : null,
+                'feedback_count' => count($notes),
+                'rating_count' => count($ratingValues),
+                'avg_rating' => $avgRating,
             ]
         ]);
         exit;

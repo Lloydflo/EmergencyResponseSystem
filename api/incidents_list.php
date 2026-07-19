@@ -171,12 +171,12 @@ if ($resourceRecordsTable !== null) {
 $feedbackSelect = ', 0 AS feedback_count, NULL AS avg_rating, 0 AS rating_count';
 if ($hasIncidentNotes && $hasRatingColumn) {
     $feedbackSelect = ',
-        (SELECT COUNT(*) FROM incident_notes n WHERE n.incident_id = i.id) AS feedback_count,
-        (SELECT ROUND(AVG(n.rating), 1) FROM incident_notes n WHERE n.incident_id = i.id AND n.rating IS NOT NULL) AS avg_rating,
-        (SELECT COUNT(*) FROM incident_notes n WHERE n.incident_id = i.id AND n.rating IS NOT NULL) AS rating_count';
+        (SELECT COUNT(*) FROM incident_notes n WHERE n.incident_id = i.id AND n.note NOT LIKE \'Resolution proof uploaded:%\') AS feedback_count,
+        (SELECT ROUND(AVG(n.rating), 1) FROM incident_notes n WHERE n.incident_id = i.id AND n.rating IS NOT NULL AND n.note NOT LIKE \'Resolution proof uploaded:%\') AS avg_rating,
+        (SELECT COUNT(*) FROM incident_notes n WHERE n.incident_id = i.id AND n.rating IS NOT NULL AND n.note NOT LIKE \'Resolution proof uploaded:%\') AS rating_count';
 } elseif ($hasIncidentNotes) {
     $feedbackSelect = ',
-        (SELECT COUNT(*) FROM incident_notes n WHERE n.incident_id = i.id) AS feedback_count,
+        (SELECT COUNT(*) FROM incident_notes n WHERE n.incident_id = i.id AND n.note NOT LIKE \'Resolution proof uploaded:%\') AS feedback_count,
         NULL AS avg_rating,
         0 AS rating_count';
 }

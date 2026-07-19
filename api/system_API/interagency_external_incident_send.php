@@ -5,6 +5,7 @@ header('Content-Type: application/json');
 
 require_once __DIR__ . '/../../includes/db.php';
 require_once __DIR__ . '/../../includes/interagency_time.php';
+require_once __DIR__ . '/../../includes/activity_log.php';
 
 function external_json_response(int $status, array $payload): void {
     http_response_code($status);
@@ -406,6 +407,7 @@ function external_find_or_create_incident(PDO $pdo, array $incident, string $sys
         $insert($columns);
         $id = (int)$pdo->lastInsertId();
         if ($id > 0) {
+            external_log_incident_created($id, $referenceNo, (string)$columns['type'], (string)$columns['priority'], (string)$columns['location_address'], $systemName);
             return $id;
         }
     } catch (Throwable $e) {
@@ -414,6 +416,7 @@ function external_find_or_create_incident(PDO $pdo, array $incident, string $sys
         }
         $columns = ['id' => external_next_numeric_id($pdo, 'incidents')] + $columns;
         $insert($columns);
+        external_log_incident_created((int)$columns['id'], $referenceNo, (string)$columns['type'], (string)$columns['priority'], (string)$columns['location_address'], $systemName);
         return (int)$columns['id'];
     }
 
@@ -422,7 +425,20 @@ function external_find_or_create_incident(PDO $pdo, array $incident, string $sys
     if ($id <= 0) {
         throw new RuntimeException('Incident insert did not return an id.');
     }
+    external_log_incident_created($id, $referenceNo, (string)$columns['type'], (string)$columns['priority'], (string)$columns['location_address'], $systemName);
     return $id;
+}
+
+function external_log_incident_created(int $incidentId, string $referenceNo, string $type, string $priority, string $location, string $systemName): void {
+    if ($incidentId < 1) {
+        return;
+    }
+    $details = 'Incoming incident ' . ($referenceNo !== '' ? $referenceNo : ('#' . $incidentId))
+        . ' was received from ' . ($systemName !== '' ? $systemName : 'external system')
+        . '. Type: ' . $type
+        . ' | Priority: ' . $priority
+        . ' | Location: ' . $location;
+    log_activity_event(null, 'incident_created', 'incident', $incidentId, $details);
 }
 
 function external_insert_activity(PDO $pdo, ?int $recipientUserId, string $details): int {
