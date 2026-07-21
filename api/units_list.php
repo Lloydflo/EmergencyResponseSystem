@@ -160,6 +160,7 @@ $responderPresenceStatusExpr = "'offline'";
 $responderLastSeenExpr = 'NULL';
 $responderLoggedInExpr = 'NULL';
 $responderUserIdExpr = 'NULL';
+$responderUnitStatusExpr = 'NULL';
 if (
     ers_table_exists($pdo, 'users') &&
     ers_column_exists($pdo, 'users', 'unit_code') &&
@@ -173,6 +174,14 @@ if (
     $responderAccountInactiveSql = ers_column_exists($pdo, 'users', 'status')
         ? "LOWER(COALESCE(usr.status, '')) <> 'active'"
         : '0 = 1';
+    $responderUnitStatusExpr = ers_column_exists($pdo, 'users', 'unit_status')
+        ? "(SELECT usr.unit_status
+            FROM users usr
+            WHERE LOWER(COALESCE(usr.role, '')) = 'responder'
+              AND UPPER(TRIM(usr.unit_code)) = UPPER(TRIM(u.identifier))
+            ORDER BY usr.id DESC
+            LIMIT 1)"
+        : 'NULL';
     $presenceStatusWithUnitSql = "CASE
         WHEN {$responderAccountInactiveSql}
           OR {$responderUnitOfflineSql}
@@ -267,6 +276,7 @@ $sql = "SELECT
             {$responderLastSeenExpr} AS responder_last_seen_at,
             {$responderLoggedInExpr} AS responder_logged_in_at,
             {$responderUserIdExpr} AS responder_user_id,
+            {$responderUnitStatusExpr} AS responder_unit_status,
             {$locationCurrentExpr} AS location_current,
             {$lastRecordedExpr} AS last_recorded_at
         FROM units u
