@@ -3,9 +3,18 @@
 header("Content-Type: application/json");
 
 require __DIR__ . "/connect.php";
+require_once __DIR__ . "/../../includes/user_presence.php";
 
-$responder_id = intval($_POST["responder_id"] ?? 0);
-$presence = strtolower(trim($_POST["presence"] ?? ""));
+$raw = file_get_contents("php://input");
+$input = json_decode($raw, true);
+if (!is_array($input)) {
+    $input = [];
+    parse_str($raw, $input);
+}
+$input = array_merge($_POST ?? [], $input);
+
+$responder_id = intval($input["responder_id"] ?? $input["user_id"] ?? 0);
+$presence = strtolower(trim((string)($input["presence"] ?? "")));
 
 if ($responder_id <= 0) {
     echo json_encode([
@@ -33,7 +42,9 @@ try {
 
     if ($presence === "offline") {
         $unitStatus = "offline";
+        mark_user_offline($pdo, $responder_id);
     } else {
+        mark_user_online($pdo, $responder_id);
         $q = $pdo->prepare("
             SELECT status
             FROM dispatch_operator_records

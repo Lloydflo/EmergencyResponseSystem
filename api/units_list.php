@@ -167,6 +167,18 @@ if (
     ers_column_exists($pdo, 'users', 'role')
 ) {
     $presenceStatusSql = user_presence_status_sql('up');
+    $responderUnitOfflineSql = ers_column_exists($pdo, 'users', 'unit_status')
+        ? "LOWER(COALESCE(usr.unit_status, '')) IN ('offline', 'unavailable', 'out_of_service', 'off_duty', 'leave')"
+        : '0 = 1';
+    $responderAccountInactiveSql = ers_column_exists($pdo, 'users', 'status')
+        ? "LOWER(COALESCE(usr.status, '')) <> 'active'"
+        : '0 = 1';
+    $presenceStatusWithUnitSql = "CASE
+        WHEN {$responderAccountInactiveSql}
+          OR {$responderUnitOfflineSql}
+        THEN 'offline'
+        ELSE {$presenceStatusSql}
+    END";
     $responderDriverExpr = "(SELECT usr.name
                              FROM users usr
                              WHERE LOWER(COALESCE(usr.role, '')) = 'responder'
@@ -174,7 +186,7 @@ if (
                                AND TRIM(COALESCE(usr.name, '')) <> ''
                              ORDER BY usr.id DESC
                              LIMIT 1)";
-    $responderPresenceStatusExpr = "COALESCE((SELECT {$presenceStatusSql}
+    $responderPresenceStatusExpr = "COALESCE((SELECT {$presenceStatusWithUnitSql}
                                      FROM users usr
                                      LEFT JOIN user_presence up ON up.user_id = usr.id
                                      WHERE LOWER(COALESCE(usr.role, '')) = 'responder'

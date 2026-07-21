@@ -963,6 +963,20 @@ function onlineResponderUnits(items) {
     });
 }
 
+function pruneOfflineUnitMarkers() {
+    return fetch('api/units_list.php', { cache: 'no-store' })
+        .then(r => r.json())
+        .then(res => {
+            if (!res || !res.ok || !Array.isArray(res.items)) return;
+            res.items.forEach(u => {
+                if (!isResponderUnitOnline(u) || !hasCurrentResponderLocation(u)) {
+                    removeUnitMarkerByIdentifier(u && u.identifier);
+                }
+            });
+        })
+        .catch(() => {});
+}
+
 function updateMapVisibility() {
         Object.values(markers).forEach(item => {
             let visible = true;
@@ -988,7 +1002,7 @@ function loadDispatchedUnits() {
 function syncUnitMarkers(items) {
     items.forEach(u => {
         const id = u.identifier;
-        if (!isResponderUnitOnline(u)) {
+        if (!isResponderUnitOnline(u) || !hasCurrentResponderLocation(u)) {
             removeUnitMarkerByIdentifier(id);
             return;
         }
@@ -1083,7 +1097,9 @@ function loadIncidentMarkers() {
 }
 
 function startLivePolling() {
+    pruneOfflineUnitMarkers();
     setInterval(() => {
+        pruneOfflineUnitMarkers();
         loadDispatchedUnits();
         refreshAvailableUnits();
         loadIncidentMarkers();

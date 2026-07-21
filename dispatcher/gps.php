@@ -396,6 +396,20 @@ function onlineResponderUnits(items) {
     });
 }
 
+function pruneOfflineUnitMarkers() {
+    return fetch('api/units_list.php', { cache: 'no-store' })
+        .then(r => r.json())
+        .then(res => {
+            if (!res || !res.ok || !Array.isArray(res.items)) return;
+            res.items.forEach(u => {
+                if (!isResponderUnitOnline(u)) {
+                    removeUnitMarkerByIdentifier(u && u.identifier);
+                }
+            });
+        })
+        .catch(() => {});
+}
+
 // ===============================
 // ROUTES (POLYLINES)
 // ===============================
@@ -1601,7 +1615,9 @@ function loadAvailableUnits() {
 let livePollTimer = null;
 function startLivePolling() {
     if (livePollTimer) return;
+    pruneOfflineUnitMarkers();
     livePollTimer = setInterval(() => {
+        pruneOfflineUnitMarkers();
         fetch('api/units_list.php?status=dispatched')
             .then(r => r.json())
             .then(res => {

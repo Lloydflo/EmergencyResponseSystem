@@ -266,6 +266,48 @@ if (!function_exists('ers_unit_location_resolve_unit')) {
 if (!function_exists('ers_unit_location_update')) {
     function ers_unit_location_update(PDO $pdo, array $input): array
     {
+        $responderId = (int)($input['responder_id'] ?? $input['responderId'] ?? $input['user_id'] ?? $input['userId'] ?? 0);
+        if ($responderId > 0 && ers_unit_location_table_exists($pdo, 'user_presence')) {
+            $presenceStmt = $pdo->prepare(
+                "SELECT is_online
+                 FROM user_presence
+                 WHERE user_id = ?
+                 LIMIT 1"
+            );
+            $presenceStmt->execute([$responderId]);
+            $isOnline = $presenceStmt->fetchColumn();
+            if ($isOnline !== false && (int)$isOnline !== 1) {
+                return ['ok' => false, 'error' => 'Responder is offline'];
+            }
+        }
+        if ($responderId > 0 && ers_unit_location_table_exists($pdo, 'users')) {
+            $unitStatusSelect = ers_unit_location_column_exists($pdo, 'users', 'unit_status')
+                ? 'COALESCE(unit_status, \'\')'
+                : "''";
+            $accountStatusSelect = ers_unit_location_column_exists($pdo, 'users', 'status')
+                ? 'COALESCE(status, \'\')'
+                : "'active'";
+            $statusStmt = $pdo->prepare(
+                "SELECT {$accountStatusSelect} AS account_status,
+                        {$unitStatusSelect} AS unit_status
+                 FROM users
+                 WHERE id = ?
+                 LIMIT 1"
+            );
+            $statusStmt->execute([$responderId]);
+            $statusRow = $statusStmt->fetch(PDO::FETCH_ASSOC);
+            if (is_array($statusRow)) {
+                $accountStatus = strtolower(trim((string)($statusRow['account_status'] ?? '')));
+                $unitStatus = strtolower(trim((string)($statusRow['unit_status'] ?? '')));
+                if ($accountStatus !== '' && $accountStatus !== 'active') {
+                    return ['ok' => false, 'error' => 'Responder account is inactive'];
+                }
+                if (in_array($unitStatus, ['offline', 'unavailable', 'out_of_service', 'off_duty', 'leave'], true)) {
+                    return ['ok' => false, 'error' => 'Responder is offline'];
+                }
+            }
+        }
+
         $latitude = ers_unit_location_normalize_coordinate($input['latitude'] ?? $input['lat'] ?? null, -90, 90);
         $longitude = ers_unit_location_normalize_coordinate(
             $input['longitude'] ?? $input['lng'] ?? $input['lon'] ?? null,
@@ -289,7 +331,6 @@ if (!function_exists('ers_unit_location_update')) {
         ers_unit_location_ensure_schema($pdo);
 
         $unitId = (int)$unit['id'];
-        $responderId = (int)($input['responder_id'] ?? $input['responderId'] ?? $input['user_id'] ?? $input['userId'] ?? 0);
         if ($responderId > 0) {
             touch_user_presence($pdo, $responderId);
         }
