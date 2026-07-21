@@ -248,6 +248,25 @@ function admin_users_unit_identifier(PDO $pdo, int $unitId): string
     return trim((string)$stmt->fetchColumn());
 }
 
+function admin_users_unit_id_for_identifier(PDO $pdo, string $identifier): ?int
+{
+    $identifier = trim($identifier);
+    if ($identifier === '' || !admin_users_table_exists($pdo, 'units')) {
+        return null;
+    }
+
+    $stmt = $pdo->prepare(
+        "SELECT `id`
+         FROM `units`
+         WHERE UPPER(TRIM(`identifier`)) = UPPER(TRIM(?))
+         LIMIT 1"
+    );
+    $stmt->execute([$identifier]);
+    $unitId = (int)$stmt->fetchColumn();
+
+    return $unitId > 0 ? $unitId : null;
+}
+
 function admin_users_unit_has_other_responder_assignment(
     PDO $pdo,
     int $unitId,
@@ -475,6 +494,63 @@ function admin_users_clear_unit_responder_assignment(PDO $pdo, ?int $unitId): vo
            AND LOWER(rr.category) = 'vehicles'"
     );
     $stmt->execute([$unitId]);
+}
+
+function admin_users_clear_unit_responder_assignment_by_identifier(PDO $pdo, string $unitCode): void
+{
+    $unitCode = trim($unitCode);
+    if ($unitCode === '') {
+        return;
+    }
+
+    $resourceTable = admin_users_vehicle_resource_table($pdo);
+    if ($resourceTable === null) {
+        return;
+    }
+
+    $sets = [];
+    if (admin_users_has_column($pdo, $resourceTable, 'assignment')) {
+        $sets[] = '`assignment` = NULL';
+    }
+    if (admin_users_has_column($pdo, $resourceTable, 'driver_name')) {
+        $sets[] = '`driver_name` = NULL';
+    }
+    if ($sets === []) {
+        return;
+    }
+
+    $stmt = $pdo->prepare(
+        "UPDATE `" . $resourceTable . "`
+         SET " . implode(', ', $sets) . "
+         WHERE UPPER(TRIM(`code`)) = UPPER(TRIM(?))
+           AND LOWER(`category`) = 'vehicles'"
+    );
+    $stmt->execute([$unitCode]);
+}
+
+function admin_users_release_responder_vehicle_assignment(PDO $pdo, array $user): void
+{
+    $assignedUnitId = admin_users_normalize_assigned_unit_id($user['assigned_unit_id'] ?? null);
+    $unitCode = trim((string)($user['unit_code'] ?? ''));
+
+    if ($assignedUnitId === null && $unitCode !== '') {
+        $assignedUnitId = admin_users_unit_id_for_identifier($pdo, $unitCode);
+    }
+    if ($unitCode === '' && $assignedUnitId !== null) {
+        $unitCode = admin_users_unit_identifier($pdo, $assignedUnitId);
+    }
+
+    if ($assignedUnitId !== null) {
+        admin_users_clear_unit_responder_assignment($pdo, $assignedUnitId);
+    }
+
+    if ($unitCode === '') {
+        return;
+    }
+
+    admin_users_clear_unit_responder_assignment_by_identifier($pdo, $unitCode);
+    ers_update_vehicle_resource_status_by_identifier($pdo, $unitCode, 'available');
+    ers_update_unit_status_by_identifier($pdo, $unitCode, 'available');
 }
 
 function admin_users_sync_responder_record(
@@ -1022,10 +1098,7 @@ if ($method !== 'POST') {
             }
 
             admin_users_delete_responder_record($pdo, (string)$existing['email']);
-            admin_users_clear_unit_responder_assignment(
-                $pdo,
-                admin_users_normalize_assigned_unit_id($existing['assigned_unit_id'] ?? null)
-            );
+            admin_users_release_responder_vehicle_assignment($pdo, $existing);
             $pdo->commit();
 
             admin_users_respond(200, [
