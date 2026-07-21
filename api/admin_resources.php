@@ -749,7 +749,7 @@ function deactivate_vehicle_resource_unit(PDO $pdo, string $identifier): void {
     }
 
     $fields = ['status = ?'];
-    $params = ['offline'];
+    $params = ['unavailable'];
     if (unit_column_exists($pdo, 'last_status_at')) {
         $fields[] = 'last_status_at = NOW()';
     }
