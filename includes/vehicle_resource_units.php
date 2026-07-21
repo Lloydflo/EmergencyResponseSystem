@@ -823,13 +823,19 @@ if (!function_exists('ers_sync_all_vehicle_resource_units')) {
         foreach ($stmt->fetchAll(PDO::FETCH_ASSOC) as $resource) {
             $unitCode = strtoupper(trim((string) ($resource['code'] ?? '')));
             $resourceStatus = strtolower(trim((string) ($resource['status'] ?? '')));
-            if (
-                $unitCode !== '' &&
-                $resourceStatus === 'available' &&
-                !ers_vehicle_resource_has_assigned_responder($pdo, $unitCode)
-            ) {
+            if ($unitCode === '') {
+                ers_sync_vehicle_resource_unit($pdo, $resource);
+                continue;
+            }
+
+            $hasAssignedResponder = ers_vehicle_resource_has_assigned_responder($pdo, $unitCode);
+            if ($resourceStatus === 'available' && !$hasAssignedResponder) {
                 ers_update_vehicle_resource_status_by_identifier($pdo, $unitCode, 'offline');
                 $resource['status'] = 'offline';
+            }
+            if ($resourceStatus === 'offline' && $hasAssignedResponder) {
+                ers_update_vehicle_resource_status_by_identifier($pdo, $unitCode, 'available');
+                $resource['status'] = 'available';
             }
             ers_sync_vehicle_resource_unit($pdo, $resource);
         }

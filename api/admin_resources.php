@@ -805,26 +805,34 @@ function deactivate_vehicle_resource_unit(PDO $pdo, string $identifier): void {
     $stmt->execute($params);
 }
 
-function sync_unassigned_vehicle_resource_availability(PDO $pdo): void {
+function sync_vehicle_resource_assignment_availability(PDO $pdo): void {
     if (!table_exists($pdo, RESOURCE_RECORDS_TABLE)) {
         return;
     }
 
     $stmt = $pdo->query(
-        "SELECT `code`
+        "SELECT `code`, `status`
          FROM `" . RESOURCE_RECORDS_TABLE . "`
          WHERE LOWER(`category`) = 'vehicles'
-           AND LOWER(`status`) = 'available'"
+           AND LOWER(`status`) IN ('available', 'offline')"
     );
 
     foreach ($stmt->fetchAll(PDO::FETCH_ASSOC) as $row) {
         $unitCode = strtoupper(trim((string)($row['code'] ?? '')));
-        if ($unitCode === '' || vehicle_resource_has_assigned_responder($pdo, $unitCode)) {
+        $status = strtolower(trim((string)($row['status'] ?? '')));
+        if ($unitCode === '') {
             continue;
         }
 
-        ers_update_vehicle_resource_status_by_identifier($pdo, $unitCode, 'offline');
-        deactivate_vehicle_resource_unit($pdo, $unitCode);
+        $hasAssignedResponder = vehicle_resource_has_assigned_responder($pdo, $unitCode);
+        if ($status === 'available' && !$hasAssignedResponder) {
+            ers_update_vehicle_resource_status_by_identifier($pdo, $unitCode, 'offline');
+            deactivate_vehicle_resource_unit($pdo, $unitCode);
+        }
+        if ($status === 'offline' && $hasAssignedResponder) {
+            ers_update_vehicle_resource_status_by_identifier($pdo, $unitCode, 'available');
+            ers_update_unit_status_by_identifier($pdo, $unitCode, 'available');
+        }
     }
 }
 
@@ -850,7 +858,7 @@ try {
     $method = strtoupper((string)($_SERVER['REQUEST_METHOD'] ?? 'GET'));
     if ($method === 'GET') {
         ers_sync_responder_vehicle_resources($pdo);
-        sync_unassigned_vehicle_resource_availability($pdo);
+        sync_vehicle_resource_assignment_availability($pdo);
         $archived = isset($_GET['archived']) && (string)$_GET['archived'] === '1';
         if ($archived) {
             $stmt = $pdo->query(
@@ -870,11 +878,6 @@ try {
                  ORDER BY updated_at DESC, id DESC"
             );
             $rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
-            $presenceMap = ers_vehicle_resource_responder_presence_map($pdo);
-            $rows = array_map(
-                static fn(array $row): array => ers_apply_responder_presence_to_vehicle_resource_row($row, $presenceMap),
-                $rows
-            );
             $activeIncidentAssignments = load_active_unit_incident_assignment_map($pdo);
             $items = array_map(
                 static fn(array $row): array => apply_active_assignment_to_item(row_to_item($row), $activeIncidentAssignments),
