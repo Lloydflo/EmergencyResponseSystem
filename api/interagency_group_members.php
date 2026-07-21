@@ -51,10 +51,59 @@ function ensure_interagency_group_tables(PDO $pdo): void {
     );
 }
 
+function interagency_group_members_table_exists(PDO $pdo, string $table): bool {
+    try {
+        $stmt = $pdo->prepare(
+            "SELECT 1
+             FROM information_schema.TABLES
+             WHERE TABLE_SCHEMA = DATABASE()
+               AND TABLE_NAME = ?
+             LIMIT 1"
+        );
+        $stmt->execute([$table]);
+        return (bool)$stmt->fetchColumn();
+    } catch (Throwable $e) {
+        return false;
+    }
+}
+
+function interagency_group_members_column_exists(PDO $pdo, string $table, string $column): bool {
+    try {
+        $stmt = $pdo->prepare(
+            "SELECT 1
+             FROM information_schema.COLUMNS
+             WHERE TABLE_SCHEMA = DATABASE()
+               AND TABLE_NAME = ?
+               AND COLUMN_NAME = ?
+             LIMIT 1"
+        );
+        $stmt->execute([$table, $column]);
+        return (bool)$stmt->fetchColumn();
+    } catch (Throwable $e) {
+        return false;
+    }
+}
+
 function interagency_group_member_status(array $row): string {
     $accountStatus = strtolower(trim((string)($row['status'] ?? '')));
     if ($accountStatus !== 'active') {
         return 'offline';
+    }
+
+    $unitStatus = strtolower(trim((string)($row['unit_status'] ?? '')));
+    if (in_array($unitStatus, ['offline', 'unavailable', 'out_of_service', 'off_duty', 'leave'], true)) {
+        return 'offline';
+    }
+
+    $role = strtolower(trim((string)($row['role'] ?? '')));
+    if ($role === 'responder') {
+        $responderStatus = strtolower(trim((string)($row['responder_status'] ?? '')));
+        if (in_array($responderStatus, ['offline', 'unavailable', 'inactive', 'out_of_service', 'off_duty', 'leave'], true)) {
+            return 'offline';
+        }
+        if (array_key_exists('responder_is_active', $row) && $row['responder_is_active'] !== null && (int)$row['responder_is_active'] !== 1) {
+            return 'offline';
+        }
     }
 
     $presenceStatus = strtolower(trim((string)($row['presence_status'] ?? 'offline')));
@@ -62,7 +111,6 @@ function interagency_group_member_status(array $row): string {
         return 'offline';
     }
 
-    $unitStatus = strtolower(trim((string)($row['unit_status'] ?? '')));
     if (in_array($unitStatus, ['busy', 'in_use', 'assigned', 'acknowledged', 'enroute', 'en_route', 'on_scene', 'active', 'in_progress', 'dispatched'], true)) {
         return 'busy';
     }
@@ -111,8 +159,19 @@ try {
     }
 
     $presenceStatusExpr = user_presence_status_sql('up');
+    $responderJoin = interagency_group_members_table_exists($pdo, 'responders')
+        ? 'LEFT JOIN responders r ON LOWER(TRIM(r.email)) = LOWER(TRIM(u.email))'
+        : '';
+    $responderStatusSelect = $responderJoin !== '' && interagency_group_members_column_exists($pdo, 'responders', 'status')
+        ? 'r.status AS responder_status'
+        : 'NULL AS responder_status';
+    $responderActiveSelect = $responderJoin !== '' && interagency_group_members_column_exists($pdo, 'responders', 'is_active')
+        ? 'r.is_active AS responder_is_active'
+        : 'NULL AS responder_is_active';
     $membersStmt = $pdo->prepare(
         "SELECT u.id, u.name, u.email, u.role, u.status, u.unit_status,
+                {$responderStatusSelect},
+                {$responderActiveSelect},
                 {$presenceStatusExpr} AS presence_status,
                 up.last_seen_at,
                 gm.created_at AS joined_at,
@@ -120,6 +179,7 @@ try {
          FROM interagency_group_members gm
          INNER JOIN users u ON u.id = gm.user_id
          LEFT JOIN user_presence up ON up.user_id = u.id
+         {$responderJoin}
          WHERE gm.group_id = ?
            AND gm.is_active = 1
          ORDER BY u.name ASC"
@@ -142,6 +202,8 @@ try {
             'status' => $availabilityStatus,
             'account_status' => strtolower((string)$row['status']),
             'presence_status' => strtolower((string)($row['presence_status'] ?? 'offline')),
+            'responder_status' => strtolower((string)($row['responder_status'] ?? '')),
+            'responder_is_active' => $row['responder_is_active'] !== null ? (int)$row['responder_is_active'] : null,
             'availability_status' => $availabilityStatus,
             'user_status' => $availabilityStatus,
             'unit_status' => strtolower((string)($row['unit_status'] ?? '')),

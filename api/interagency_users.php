@@ -107,6 +107,23 @@ function interagency_users_availability_status(array $row, array $activeAssignme
         return 'offline';
     }
 
+    $unitStatus = strtolower(trim((string)($row['unit_status'] ?? '')));
+    if (in_array($unitStatus, ['offline', 'unavailable', 'out_of_service', 'off_duty', 'leave'], true)) {
+        return 'offline';
+    }
+
+    $role = strtolower(trim((string)($row['role'] ?? '')));
+    if ($role === 'responder') {
+        $responderStatus = strtolower(trim((string)($row['responder_status'] ?? '')));
+        if (in_array($responderStatus, ['offline', 'unavailable', 'inactive', 'out_of_service', 'off_duty', 'leave'], true)) {
+            return 'offline';
+        }
+
+        if (array_key_exists('responder_is_active', $row) && $row['responder_is_active'] !== null && (int)$row['responder_is_active'] !== 1) {
+            return 'offline';
+        }
+    }
+
     $presenceStatus = strtolower(trim((string)($row['presence_status'] ?? 'offline')));
     if ($presenceStatus !== 'online') {
         return 'offline';
@@ -117,7 +134,6 @@ function interagency_users_availability_status(array $row, array $activeAssignme
         return 'responding';
     }
 
-    $unitStatus = strtolower(trim((string)($row['unit_status'] ?? '')));
     if (in_array($unitStatus, ['busy', 'in_use', 'assigned', 'acknowledged', 'enroute', 'en_route', 'on_scene', 'active', 'in_progress', 'dispatched'], true)) {
         return 'busy';
     }
@@ -138,6 +154,15 @@ try {
     $unitStatusSelect = interagency_users_column_exists($pdo, 'users', 'unit_status')
         ? 'u.unit_status'
         : 'NULL AS unit_status';
+    $responderJoin = interagency_users_table_exists($pdo, 'responders')
+        ? 'LEFT JOIN responders r ON LOWER(TRIM(r.email)) = LOWER(TRIM(u.email))'
+        : '';
+    $responderStatusSelect = $responderJoin !== '' && interagency_users_column_exists($pdo, 'responders', 'status')
+        ? 'r.status AS responder_status'
+        : 'NULL AS responder_status';
+    $responderActiveSelect = $responderJoin !== '' && interagency_users_column_exists($pdo, 'responders', 'is_active')
+        ? 'r.is_active AS responder_is_active'
+        : 'NULL AS responder_is_active';
     $activeAssignments = interagency_users_active_assignment_map($pdo);
 
     $statusFilter = $includeInactive ? '' : " AND u.status = 'active'";
@@ -149,6 +174,8 @@ try {
 
     $stmt = $pdo->prepare(
         "SELECT u.id, u.name, u.email, u.role, u.status, {$unitStatusSelect},
+                {$responderStatusSelect},
+                {$responderActiveSelect},
                 {$presenceStatusExpr} AS presence_status,
                 up.last_seen_at,
                 CASE WHEN t.target_user_id IS NULL THEN 0 ELSE 1 END AS has_thread
@@ -157,6 +184,7 @@ try {
                 ON t.owner_user_id = ? AND t.target_user_id = u.id AND t.is_active = 1
          LEFT JOIN user_presence up
                 ON up.user_id = u.id
+         {$responderJoin}
          WHERE 1=1{$selfFilter}{$statusFilter}
          ORDER BY u.name ASC"
     );
@@ -177,6 +205,8 @@ try {
             'status' => strtolower((string)$row['status']),
             'account_status' => strtolower((string)$row['status']),
             'presence_status' => strtolower((string)($row['presence_status'] ?? 'offline')),
+            'responder_status' => strtolower((string)($row['responder_status'] ?? '')),
+            'responder_is_active' => $row['responder_is_active'] !== null ? (int)$row['responder_is_active'] : null,
             'availability_status' => $availabilityStatus,
             'user_status' => $availabilityStatus,
             'unit_status' => $unitStatus,

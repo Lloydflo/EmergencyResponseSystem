@@ -27,6 +27,46 @@ function user_presence_session_id(): ?string {
     return $id !== '' ? substr(hash('sha256', $id), 0, 128) : null;
 }
 
+function sync_responder_presence_status(PDO $pdo, int $userId, bool $online): void {
+    if (
+        $userId <= 0
+        || !ers_vehicle_resource_table_exists($pdo, 'users')
+        || !ers_vehicle_resource_table_exists($pdo, 'responders')
+        || !ers_vehicle_resource_column_exists($pdo, 'users', 'email')
+        || !ers_vehicle_resource_column_exists($pdo, 'responders', 'email')
+        || !ers_vehicle_resource_column_exists($pdo, 'responders', 'status')
+    ) {
+        return;
+    }
+
+    try {
+        $typeStmt = $pdo->prepare(
+            "SELECT COLUMN_TYPE
+             FROM information_schema.COLUMNS
+             WHERE TABLE_SCHEMA = DATABASE()
+               AND TABLE_NAME = 'responders'
+               AND COLUMN_NAME = 'status'
+             LIMIT 1"
+        );
+        $typeStmt->execute();
+        $statusType = (string)($typeStmt->fetchColumn() ?: '');
+        $status = $online ? 'available' : 'offline';
+        if (stripos($statusType, "'Available'") !== false || stripos($statusType, "'Offline'") !== false) {
+            $status = $online ? 'Available' : 'Offline';
+        }
+
+        $stmt = $pdo->prepare(
+            "UPDATE responders r
+             INNER JOIN users u ON LOWER(TRIM(u.email)) = LOWER(TRIM(r.email))
+             SET r.status = ?
+             WHERE u.id = ?"
+        );
+        $stmt->execute([$status, $userId]);
+    } catch (Throwable $e) {
+        error_log('sync responder presence status skipped: ' . $e->getMessage());
+    }
+}
+
 function mark_user_online(PDO $pdo, int $userId): void {
     if ($userId <= 0) {
         return;
@@ -43,6 +83,7 @@ function mark_user_online(PDO $pdo, int $userId): void {
             logged_out_at = NULL"
     );
     $stmt->execute([$userId, user_presence_session_id()]);
+    sync_responder_presence_status($pdo, $userId, true);
     ers_sync_online_vehicle_resource_status_for_responder($pdo, $userId);
 }
 
@@ -79,6 +120,7 @@ function mark_user_offline(PDO $pdo, int $userId): void {
             logged_out_at = NOW()"
     );
     $stmt->execute([$userId, user_presence_session_id()]);
+    sync_responder_presence_status($pdo, $userId, false);
     ers_sync_vehicle_resource_status_for_responder($pdo, $userId, 'offline');
 }
 

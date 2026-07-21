@@ -305,10 +305,66 @@ function normalize_account_status(?string $accountStatus): string {
     return $status === 'active' ? 'active' : 'inactive';
 }
 
-function derive_user_thread_status(?string $accountStatus, ?string $presenceStatus, ?string $unitStatus): string {
+function interagency_chat_table_exists(PDO $pdo, string $table): bool {
+    try {
+        $stmt = $pdo->prepare(
+            "SELECT 1
+             FROM information_schema.TABLES
+             WHERE TABLE_SCHEMA = DATABASE()
+               AND TABLE_NAME = ?
+             LIMIT 1"
+        );
+        $stmt->execute([$table]);
+        return (bool)$stmt->fetchColumn();
+    } catch (Throwable $e) {
+        return false;
+    }
+}
+
+function interagency_chat_column_exists(PDO $pdo, string $table, string $column): bool {
+    try {
+        $stmt = $pdo->prepare(
+            "SELECT 1
+             FROM information_schema.COLUMNS
+             WHERE TABLE_SCHEMA = DATABASE()
+               AND TABLE_NAME = ?
+               AND COLUMN_NAME = ?
+             LIMIT 1"
+        );
+        $stmt->execute([$table, $column]);
+        return (bool)$stmt->fetchColumn();
+    } catch (Throwable $e) {
+        return false;
+    }
+}
+
+function derive_user_thread_status(
+    ?string $accountStatus,
+    ?string $presenceStatus,
+    ?string $unitStatus,
+    ?string $responderStatus = null,
+    $responderIsActive = null,
+    ?string $role = null
+): string {
     $accountStatus = strtolower(trim((string)$accountStatus));
     if ($accountStatus !== 'active') {
         return 'offline';
+    }
+
+    $unitStatus = strtolower(trim((string)$unitStatus));
+    if (in_array($unitStatus, ['offline', 'unavailable', 'out_of_service', 'off_duty', 'leave'], true)) {
+        return 'offline';
+    }
+
+    $role = strtolower(trim((string)$role));
+    if ($role === 'responder') {
+        $responderStatus = strtolower(trim((string)$responderStatus));
+        if (in_array($responderStatus, ['offline', 'unavailable', 'inactive', 'out_of_service', 'off_duty', 'leave'], true)) {
+            return 'offline';
+        }
+        if ($responderIsActive !== null && (int)$responderIsActive !== 1) {
+            return 'offline';
+        }
     }
 
     $presenceStatus = strtolower(trim((string)$presenceStatus));
@@ -316,7 +372,6 @@ function derive_user_thread_status(?string $accountStatus, ?string $presenceStat
         return 'offline';
     }
 
-    $unitStatus = strtolower(trim((string)$unitStatus));
     if (in_array($unitStatus, ['busy', 'in_use', 'assigned', 'acknowledged', 'enroute', 'en_route', 'on_scene', 'active', 'in_progress', 'dispatched'], true)) {
         return 'busy';
     }
@@ -549,11 +604,23 @@ try {
         sort($counterpartIds);
         $placeholders = implode(',', array_fill(0, count($counterpartIds), '?'));
         $presenceStatusExpr = user_presence_status_sql('up');
+        $responderJoin = interagency_chat_table_exists($pdo, 'responders')
+            ? 'LEFT JOIN responders r ON LOWER(TRIM(r.email)) = LOWER(TRIM(u.email))'
+            : '';
+        $responderStatusSelect = $responderJoin !== '' && interagency_chat_column_exists($pdo, 'responders', 'status')
+            ? 'r.status AS responder_status'
+            : 'NULL AS responder_status';
+        $responderActiveSelect = $responderJoin !== '' && interagency_chat_column_exists($pdo, 'responders', 'is_active')
+            ? 'r.is_active AS responder_is_active'
+            : 'NULL AS responder_is_active';
         $usersStmt = $pdo->prepare(
             "SELECT u.id, u.name, u.role, u.status, u.unit_status,
+                    {$responderStatusSelect},
+                    {$responderActiveSelect},
                     {$presenceStatusExpr} AS presence_status
              FROM users u
              LEFT JOIN user_presence up ON up.user_id = u.id
+             {$responderJoin}
              WHERE u.id IN ($placeholders)"
         );
         $usersStmt->execute($counterpartIds);
@@ -617,7 +684,10 @@ try {
         $threadStatus = derive_user_thread_status(
             $accountStatus,
             isset($counterpart['presence_status']) ? (string)$counterpart['presence_status'] : null,
-            isset($counterpart['unit_status']) ? (string)$counterpart['unit_status'] : null
+            isset($counterpart['unit_status']) ? (string)$counterpart['unit_status'] : null,
+            isset($counterpart['responder_status']) ? (string)$counterpart['responder_status'] : null,
+            $counterpart['responder_is_active'] ?? null,
+            $displayRole
         );
         $threadKey = build_thread_key('user', '', $targetUserId);
         $customTitle = $titleOverrides[$threadKey] ?? '';
