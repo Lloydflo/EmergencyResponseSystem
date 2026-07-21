@@ -727,6 +727,8 @@ function unitStatus(unitId, status) {
 }
 let map;
 let markers = {};
+let authoritativeOnlineUnitKeys = new Set();
+let authoritativeOnlineUnitKeysReady = false;
 let incidentMarkers = {};
 let QC_BOUNDS_GLOBAL;
 let pendingDispatchTrackUnit = '';
@@ -775,7 +777,7 @@ function initMap() {
     loadDispatchedUnits();
     loadAvailableUnits();
     loadIncidentMarkers();
-    initFirebaseLiveTracking();
+    pruneOfflineUnitMarkers().finally(() => initFirebaseLiveTracking());
     addLegendControl();
     updateMapVisibility();
     startLivePolling();
@@ -816,6 +818,10 @@ function initFirebaseLiveTracking() {
             if (!key) return;
             const status = String(r.status || 'available').trim().toLowerCase();
             if (['offline', 'logged_out', 'inactive'].includes(status)) {
+                removeUnitMarkerByIdentifier(key);
+                return;
+            }
+            if (!canRenderLiveUnitMarker(key)) {
                 removeUnitMarkerByIdentifier(key);
                 return;
             }
@@ -963,18 +969,42 @@ function onlineResponderUnits(items) {
     });
 }
 
+function addAuthoritativeOnlineUnitKeys(unit, keys) {
+    ['identifier', 'id', 'responder_user_id'].forEach(field => {
+        const value = String(unit && unit[field] !== undefined && unit[field] !== null ? unit[field] : '').trim();
+        if (value) keys.add(value);
+    });
+}
+
 function pruneOfflineUnitMarkers() {
     return fetch('api/units_list.php', { cache: 'no-store' })
         .then(r => r.json())
         .then(res => {
             if (!res || !res.ok || !Array.isArray(res.items)) return;
+            const onlineKeys = new Set();
             res.items.forEach(u => {
-                if (!isResponderUnitOnline(u) || !hasCurrentResponderLocation(u)) {
-                    removeUnitMarkerByIdentifier(u && u.identifier);
+                const id = String(u && u.identifier ? u.identifier : '').trim();
+                if (!id) return;
+                if (isResponderUnitOnline(u) && hasCurrentResponderLocation(u)) {
+                    addAuthoritativeOnlineUnitKeys(u, onlineKeys);
+                }
+            });
+            authoritativeOnlineUnitKeys = onlineKeys;
+            authoritativeOnlineUnitKeysReady = true;
+            Object.entries(markers).forEach(([key, entry]) => {
+                if (!entry || entry.type !== 'unit') return;
+                if (!onlineKeys.has(String(key))) {
+                    try { map.removeLayer(entry.marker); } catch (e) {}
+                    delete markers[key];
                 }
             });
         })
         .catch(() => {});
+}
+
+function canRenderLiveUnitMarker(identifier) {
+    const id = String(identifier || '').trim();
+    return !!id && authoritativeOnlineUnitKeysReady && authoritativeOnlineUnitKeys.has(id);
 }
 
 function updateMapVisibility() {
