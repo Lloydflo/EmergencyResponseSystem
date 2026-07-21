@@ -305,7 +305,7 @@ if (!function_exists('ers_update_vehicle_resource_status_by_identifier')) {
             "UPDATE `" . $tableName . "`
              SET status = ?,
                  updated_at = CURRENT_TIMESTAMP
-             WHERE code = ?
+             WHERE UPPER(TRIM(code)) = UPPER(TRIM(?))
                AND LOWER(category) = 'vehicles'"
         );
         $stmt->execute([$status, $identifier]);

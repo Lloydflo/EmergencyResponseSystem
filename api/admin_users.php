@@ -515,6 +515,12 @@ function admin_users_clear_unit_responder_assignment_by_identifier(PDO $pdo, str
     if (admin_users_has_column($pdo, $resourceTable, 'driver_name')) {
         $sets[] = '`driver_name` = NULL';
     }
+    if (admin_users_has_column($pdo, $resourceTable, 'status')) {
+        $sets[] = "`status` = 'available'";
+    }
+    if (admin_users_has_column($pdo, $resourceTable, 'updated_at')) {
+        $sets[] = '`updated_at` = CURRENT_TIMESTAMP';
+    }
     if ($sets === []) {
         return;
     }
@@ -528,10 +534,44 @@ function admin_users_clear_unit_responder_assignment_by_identifier(PDO $pdo, str
     $stmt->execute([$unitCode]);
 }
 
+function admin_users_clear_stale_responder_unit_links(PDO $pdo, ?int $unitId, string $email): void
+{
+    if (
+        $unitId === null ||
+        $unitId <= 0 ||
+        !admin_users_table_exists($pdo, 'responders') ||
+        !admin_users_has_column($pdo, 'responders', 'assigned_unit_id')
+    ) {
+        return;
+    }
+
+    $sets = ['`assigned_unit_id` = NULL'];
+    $params = [];
+    if (admin_users_has_column($pdo, 'responders', 'status')) {
+        $sets[] = '`status` = ?';
+        $params[] = admin_users_responder_status_value($pdo, 'inactive');
+    }
+
+    $where = '`assigned_unit_id` = ?';
+    $params[] = $unitId;
+    if ($email !== '' && admin_users_has_column($pdo, 'responders', 'email')) {
+        $where .= ' OR LOWER(TRIM(`email`)) = LOWER(TRIM(?))';
+        $params[] = $email;
+    }
+
+    $stmt = $pdo->prepare(
+        'UPDATE `responders`
+         SET ' . implode(', ', $sets) . "
+         WHERE {$where}"
+    );
+    $stmt->execute($params);
+}
+
 function admin_users_release_responder_vehicle_assignment(PDO $pdo, array $user): void
 {
     $assignedUnitId = admin_users_normalize_assigned_unit_id($user['assigned_unit_id'] ?? null);
     $unitCode = trim((string)($user['unit_code'] ?? ''));
+    $email = trim((string)($user['email'] ?? ''));
 
     if ($assignedUnitId === null && $unitCode !== '') {
         $assignedUnitId = admin_users_unit_id_for_identifier($pdo, $unitCode);
@@ -543,6 +583,7 @@ function admin_users_release_responder_vehicle_assignment(PDO $pdo, array $user)
     if ($assignedUnitId !== null) {
         admin_users_clear_unit_responder_assignment($pdo, $assignedUnitId);
     }
+    admin_users_clear_stale_responder_unit_links($pdo, $assignedUnitId, $email);
 
     if ($unitCode === '') {
         return;
@@ -1082,6 +1123,8 @@ if ($method !== 'POST') {
 
             $pdo->beginTransaction();
 
+            admin_users_release_responder_vehicle_assignment($pdo, $existing);
+
             $deleteStmt = $pdo->prepare(
                 "DELETE FROM `users`
                  WHERE `id` = ?
@@ -1098,7 +1141,6 @@ if ($method !== 'POST') {
             }
 
             admin_users_delete_responder_record($pdo, (string)$existing['email']);
-            admin_users_release_responder_vehicle_assignment($pdo, $existing);
             $pdo->commit();
 
             admin_users_respond(200, [
