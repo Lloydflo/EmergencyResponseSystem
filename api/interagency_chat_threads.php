@@ -605,7 +605,7 @@ try {
         $placeholders = implode(',', array_fill(0, count($counterpartIds), '?'));
         $presenceStatusExpr = user_presence_status_sql('up');
         $responderJoin = interagency_chat_table_exists($pdo, 'responders')
-            ? 'LEFT JOIN responders r ON LOWER(TRIM(r.email)) = LOWER(TRIM(u.email))'
+            ? 'LEFT JOIN responders r ON LOWER(TRIM(r.email)) COLLATE utf8mb4_unicode_ci = LOWER(TRIM(u.email)) COLLATE utf8mb4_unicode_ci'
             : '';
         $responderStatusSelect = $responderJoin !== '' && interagency_chat_column_exists($pdo, 'responders', 'status')
             ? 'r.status AS responder_status'
@@ -937,7 +937,7 @@ try {
         if (($thread['thread_kind'] ?? '') !== 'user') {
             continue;
         }
-        if (($thread['status'] ?? '') === 'active' && strtolower((string)($thread['role'] ?? '')) !== 'admin') {
+        if (in_array((string)($thread['status'] ?? ''), ['online', 'busy'], true) && strtolower((string)($thread['role'] ?? '')) !== 'admin') {
             $activeResponders++;
         }
     }
@@ -957,6 +957,7 @@ try {
         ]
     ]);
 } catch (Throwable $e) {
+    error_log('interagency_chat_threads failed: ' . $e->getMessage());
     http_response_code(500);
     echo json_encode(['ok' => false, 'error' => 'Unable to load threads']);
 }

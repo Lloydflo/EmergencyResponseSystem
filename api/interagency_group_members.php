@@ -160,7 +160,7 @@ try {
 
     $presenceStatusExpr = user_presence_status_sql('up');
     $responderJoin = interagency_group_members_table_exists($pdo, 'responders')
-        ? 'LEFT JOIN responders r ON LOWER(TRIM(r.email)) = LOWER(TRIM(u.email))'
+        ? 'LEFT JOIN responders r ON LOWER(TRIM(r.email)) COLLATE utf8mb4_unicode_ci = LOWER(TRIM(u.email)) COLLATE utf8mb4_unicode_ci'
         : '';
     $responderStatusSelect = $responderJoin !== '' && interagency_group_members_column_exists($pdo, 'responders', 'status')
         ? 'r.status AS responder_status'

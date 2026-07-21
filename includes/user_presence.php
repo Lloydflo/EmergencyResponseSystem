@@ -57,7 +57,7 @@ function sync_responder_presence_status(PDO $pdo, int $userId, bool $online): vo
 
         $stmt = $pdo->prepare(
             "UPDATE responders r
-             INNER JOIN users u ON LOWER(TRIM(u.email)) = LOWER(TRIM(r.email))
+             INNER JOIN users u ON LOWER(TRIM(u.email)) COLLATE utf8mb4_unicode_ci = LOWER(TRIM(r.email)) COLLATE utf8mb4_unicode_ci
              SET r.status = ?
              WHERE u.id = ?"
         );
