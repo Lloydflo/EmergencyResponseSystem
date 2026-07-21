@@ -72,16 +72,17 @@ try {
     while ($row = $stmt->fetch()) {
         $details = json_decode($row["message_details"], true);
         $text = $details["text"] ?? "";
-        if ($fileUrl && !$isImage && $fileName) {
-        $text = $fileName;
-    }
-        $text = preg_replace('/^\[ROUTINE\]\s*/', '', $text);
 
         $status = ($othersReadUpTo >= intval($row["id"])) ? "read" : "delivered";
 
         $isImage = intval($row["is_image"] ?? 0) === 1;
         $fileUrl = $row["file_url"] ?? null;
         $fileName = $row["file_name"] ?? null;
+
+        if ($fileUrl && !$isImage && $fileName) {
+            $text = $fileName;
+        }
+        $text = preg_replace('/^\[ROUTINE\]\s*/', '', $text);
 
         if (!$fileUrl && isset($details["attachments"][0])) {
         $att = $details["attachments"][0];
