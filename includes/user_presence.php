@@ -73,6 +73,7 @@ function mark_user_offline(PDO $pdo, int $userId): void {
         "INSERT INTO user_presence (user_id, session_id, is_online, last_seen_at, logged_in_at, logged_out_at)
          VALUES (?, ?, 0, NOW(), NULL, NOW())
          ON DUPLICATE KEY UPDATE
+            session_id = VALUES(session_id),
             is_online = 0,
             last_seen_at = NOW(),
             logged_out_at = NOW()"

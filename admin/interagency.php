@@ -2281,6 +2281,7 @@ $pageTitle = 'Inter-Agency Conversations';
                 userStatuses: [],
                 chatSettingsOpen: false,
                 poller: null,
+                presencePoller: null,
                 activeIncident: null,
                 typingUsers: [],
                 typingTimer: null,
@@ -2964,7 +2965,10 @@ $pageTitle = 'Inter-Agency Conversations';
                 groupMembersModalBody.innerHTML = `
                     <div class="ia-member-list">
                         ${list.map((member) => {
-                            const status = String(member.status || '').toLowerCase() === 'active' ? 'Active' : 'Inactive';
+                            const rawStatus = String(member.availability_status || member.user_status || member.status || '').toLowerCase();
+                            const statusKey = rawStatus === 'active' || rawStatus === 'online' ? 'available' : (rawStatus || 'offline');
+                            const statusLabels = { responding: 'Responding', available: 'Available', busy: 'Busy', offline: 'Offline' };
+                            const status = statusLabels[statusKey] || 'Offline';
                             const creatorBadge = member.is_creator ? '<span class="ia-member-badge">Creator</span>' : '';
                             const removeButton = member.can_remove ? `<button type="button" class="ia-member-remove" data-remove-group-member="${escapeAttr(member.id)}" data-member-name="${escapeAttr(member.name || ('User #' + member.id))}">Remove</button>` : '';
                             return `
@@ -2977,7 +2981,7 @@ $pageTitle = 'Inter-Agency Conversations';
                                     <div class="ia-member-side">
                                         <span class="ia-member-badge">${escapeHtml(formatRole(member.role || 'user'))}</span>
                                         ${creatorBadge}
-                                        <span class="ia-member-status ${status === 'Active' ? '' : 'inactive'}">${escapeHtml(status)}</span>
+                                        <span class="ia-member-status ${status === 'Offline' ? 'inactive' : ''}">${escapeHtml(status)}</span>
                                         ${removeButton}
                                     </div>
                                 </article>
@@ -5032,6 +5036,12 @@ $pageTitle = 'Inter-Agency Conversations';
                         await loadTypingIndicator();
                     } catch (_) {}
                 }, 5000);
+
+                state.presencePoller = setInterval(async () => {
+                    try {
+                        await loadUserStatuses();
+                    } catch (_) {}
+                }, 2000);
             });
         })();
     </script>

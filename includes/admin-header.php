@@ -373,6 +373,7 @@ document.addEventListener('DOMContentLoaded', function() {
     const incidentCardSeenKey = 'ers.interagencyIncidentCardSeen.' + userRole;
     const resourceAdditionSeenKey = 'ers.resourceAdditionSeen.' + userRole;
     const resourceRequestSeenKey = 'ers.resourceRequestSeen.' + userRole;
+    const presenceEndpoint = 'api/user_presence.php';
     const state = {
         lastUnreadCount: null,
         lastBackupCount: null,
@@ -397,6 +398,27 @@ document.addEventListener('DOMContentLoaded', function() {
         toastTimer: null,
         poller: null
     };
+
+    function markPresenceOfflineNow() {
+        const payload = new FormData();
+        payload.append('action', 'offline');
+
+        if (navigator.sendBeacon) {
+            navigator.sendBeacon(presenceEndpoint, payload);
+            return;
+        }
+
+        fetch(presenceEndpoint, {
+            method: 'POST',
+            body: payload,
+            credentials: 'same-origin',
+            keepalive: true
+        }).catch(function() {});
+    }
+
+    document.querySelectorAll('a.logout-item[href]').forEach(function(link) {
+        link.addEventListener('click', markPresenceOfflineNow);
+    });
 
     function escapeHtml(value) {
         return String(value == null ? '' : value)

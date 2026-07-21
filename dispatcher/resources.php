@@ -83,7 +83,6 @@ try {
     $pdo = get_db_connection();
 
     if ($pdo) {
-        ers_sync_responder_vehicle_resources($pdo);
         $activeIncidents = (int)$pdo->query("SELECT COUNT(*) AS c FROM incidents WHERE status IN ('pending','dispatched','active','in_progress')")->fetch()['c'];
 
         $pendingRows = [];
@@ -530,7 +529,7 @@ try {
                         </tr>
                     </thead>
                     <tbody id="resource-list-dynamic">
-                        <!-- Table will be rendered here by JS -->
+                        <tr><td colspan="7" style="text-align:center;color:#888;">Loading resources...</td></tr>
                     </tbody>
                 </table>
                 </div>
@@ -637,6 +636,7 @@ try {
                 const typeFilter = document.getElementById('resource-type');
                 const statusFilter = document.getElementById('status-filter');
                 const searchInput = document.getElementById('search-resource');
+                const locationFilter = document.getElementById('location-filter');
 
                 function passFilters(r) {
                     const typeValue = (typeFilter.value || '').toLowerCase();
@@ -752,7 +752,9 @@ try {
                 // Add event listeners to filters
                 typeFilter.addEventListener('change', applyTableFilters);
                 statusFilter.addEventListener('change', applyTableFilters);
-                locationFilter.addEventListener('change', applyTableFilters);
+                if (locationFilter) {
+                    locationFilter.addEventListener('change', applyTableFilters);
+                }
                 searchInput.addEventListener('input', applyTableFilters);
 
                 // Initial render
@@ -916,19 +918,7 @@ try {
                         <span class="ai-chip"><strong>Active Incidents:</strong> <?php echo (int)$resourceAiData['active_incidents']; ?></span>
                     </div>
                     <div class="ai-predictive-content" id="ai-predictive-content">
-                        <?php
-                        include $rootDir . '/includes/gemini_helper.php';
-                        $recommendations = getResourceGapRecommendations($resourceAiData);
-                        if ($recommendations) {
-                            echo '<div class="ai-predictive-text">' . nl2br(htmlspecialchars($recommendations)) . '</div>';
-                        } else {
-                            $aiError = function_exists('getGeminiLastError') ? trim((string)getGeminiLastError()) : '';
-                            if ($aiError === '') {
-                                $aiError = 'Unable to generate AI resource recommendations at this time.';
-                            }
-                            echo '<div class="ai-error"><i class="fas fa-exclamation-triangle"></i> ' . htmlspecialchars($aiError) . '</div>';
-                        }
-                        ?>
+                        <div class="ai-loading"><i class="fas fa-spinner"></i> Loading recommendations...</div>
                     </div>
                     <div class="ai-predictive-actions">
                         <button class="btn-ai-refresh" onclick="refreshAIPredictions()">
@@ -1168,7 +1158,8 @@ try {
     </div>
 
     <script>
-        function refreshAIPredictions() {
+        function refreshAIPredictions(options) {
+            const silent = !!(options && options.silent);
             const container = document.getElementById('ai-predictive-content');
             if (container) {
                 container.innerHTML = '<div class="ai-loading"><i class="fas fa-spinner"></i> Generating recommendations...</div>';
@@ -1189,20 +1180,32 @@ try {
                                     '<span class="ai-chip"><strong>Active Incidents:</strong> ' + Number(data.snapshot.active_incidents || 0) + '</span>';
                             }
                         }
-                        showNotification('AI resource recommendations updated', 'success');
+                        if (!silent) {
+                            showNotification('AI resource recommendations updated', 'success');
+                        }
                     } else {
                         const msg = (data && data.error) ? String(data.error) : 'Unable to generate AI resource recommendations at this time.';
                         container.innerHTML = '<div class="ai-error"><i class="fas fa-exclamation-triangle"></i> ' + msg.replace(/\n/g, '<br>') + '</div>';
-                        showNotification(msg, 'error');
+                        if (!silent) {
+                            showNotification(msg, 'error');
+                        }
                     }
                 })
                 .catch(() => {
                     if (container) {
                         container.innerHTML = '<div class="ai-error"><i class="fas fa-exclamation-triangle"></i> Network error while generating recommendations.</div>';
                     }
-                    showNotification('Network error', 'error');
+                    if (!silent) {
+                        showNotification('Network error', 'error');
+                    }
                 });
         }
+
+        document.addEventListener('DOMContentLoaded', function() {
+            window.setTimeout(function() {
+                refreshAIPredictions({ silent: true });
+            }, 600);
+        });
 
         // Scheduling Modal Logic
         function openScheduleModal(personnelName) {
@@ -1834,7 +1837,12 @@ try {
                     if (res && (res.ok || res.success)) {
                         showNotification('Backup request sent to responders successfully.', 'success');
                         closeDispatcherRequestModal();
-                        setTimeout(() => { window.location.reload(); }, 700);
+                        if (typeof loadResources === 'function') {
+                            loadResources(false);
+                        }
+                        if (typeof loadDispatcherBackupData === 'function') {
+                            loadDispatcherBackupData().catch(() => {});
+                        }
                     } else {
                         showNotification('Failed to send request: ' + (res && res.error ? res.error : 'Unknown error'), 'error');
                     }
@@ -1944,8 +1952,12 @@ try {
                     if (res && res.success) {
                         updateRequestRowUI(tr, 'approved', reason || '');
                         showNotification('Request approved', 'success');
-                        // Refresh overview cards and tables so DB-backed counts reflect newly provisioned resources.
-                        setTimeout(() => { window.location.reload(); }, 700);
+                        if (typeof loadResources === 'function') {
+                            loadResources(false);
+                        }
+                        if (typeof loadDispatcherBackupData === 'function') {
+                            loadDispatcherBackupData().catch(() => {});
+                        }
                     } else {
                         showNotification('Failed to approve: ' + (res && res.error ? res.error : 'Unknown error'), 'error');
                     }

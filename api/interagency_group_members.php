@@ -3,6 +3,7 @@ header('Content-Type: application/json');
 
 require_once __DIR__ . '/../includes/db.php';
 require_once __DIR__ . '/../includes/auth.php';
+require_once __DIR__ . '/../includes/user_presence.php';
 
 if (!is_logged_in()) {
     http_response_code(401);
@@ -50,8 +51,28 @@ function ensure_interagency_group_tables(PDO $pdo): void {
     );
 }
 
+function interagency_group_member_status(array $row): string {
+    $accountStatus = strtolower(trim((string)($row['status'] ?? '')));
+    if ($accountStatus !== 'active') {
+        return 'offline';
+    }
+
+    $presenceStatus = strtolower(trim((string)($row['presence_status'] ?? 'offline')));
+    if ($presenceStatus !== 'online') {
+        return 'offline';
+    }
+
+    $unitStatus = strtolower(trim((string)($row['unit_status'] ?? '')));
+    if (in_array($unitStatus, ['busy', 'in_use', 'assigned', 'acknowledged', 'enroute', 'en_route', 'on_scene', 'active', 'in_progress', 'dispatched'], true)) {
+        return 'busy';
+    }
+
+    return 'available';
+}
+
 try {
     ensure_interagency_group_tables($pdo);
+    ensure_user_presence_table($pdo);
 
     $user = get_logged_in_user();
     $currentUserId = (int)($user['id'] ?? 0);
@@ -62,6 +83,7 @@ try {
         echo json_encode(['ok' => false, 'error' => 'Invalid group']);
         exit;
     }
+    touch_user_presence($pdo, $currentUserId);
 
     $accessStmt = $pdo->prepare(
         "SELECT g.id, g.name, g.created_by,
@@ -88,12 +110,16 @@ try {
         exit;
     }
 
+    $presenceStatusExpr = user_presence_status_sql('up');
     $membersStmt = $pdo->prepare(
-        "SELECT u.id, u.name, u.email, u.role, u.status,
+        "SELECT u.id, u.name, u.email, u.role, u.status, u.unit_status,
+                {$presenceStatusExpr} AS presence_status,
+                up.last_seen_at,
                 gm.created_at AS joined_at,
                 gm.is_active AS member_active
          FROM interagency_group_members gm
          INNER JOIN users u ON u.id = gm.user_id
+         LEFT JOIN user_presence up ON up.user_id = u.id
          WHERE gm.group_id = ?
            AND gm.is_active = 1
          ORDER BY u.name ASC"
@@ -107,12 +133,19 @@ try {
     $members = array_map(static function (array $row) use ($creatorId, $canManage): array {
         $memberId = (int)$row['id'];
         $isCreator = $memberId === $creatorId;
+        $availabilityStatus = interagency_group_member_status($row);
         return [
             'id' => $memberId,
             'name' => (string)$row['name'],
             'email' => (string)$row['email'],
             'role' => strtolower((string)$row['role']),
-            'status' => strtolower((string)$row['status']),
+            'status' => $availabilityStatus,
+            'account_status' => strtolower((string)$row['status']),
+            'presence_status' => strtolower((string)($row['presence_status'] ?? 'offline')),
+            'availability_status' => $availabilityStatus,
+            'user_status' => $availabilityStatus,
+            'unit_status' => strtolower((string)($row['unit_status'] ?? '')),
+            'last_seen_at' => $row['last_seen_at'] !== null ? (string)$row['last_seen_at'] : null,
             'joined_at' => (string)$row['joined_at'],
             'member_active' => ((int)$row['member_active']) === 1,
             'is_creator' => $isCreator,

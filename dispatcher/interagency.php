@@ -2013,7 +2013,8 @@ $pageTitle = 'Inter-Agency Coordination';
                 typingHeartbeat: null,
                 typingActive: false,
                 typingPayload: null,
-                poller: null
+                poller: null,
+                presencePoller: null
             };
 
             const threadListEl = document.getElementById('threadList');
@@ -2300,7 +2301,10 @@ $pageTitle = 'Inter-Agency Coordination';
                 groupMembersModalBody.innerHTML = `
                     <div class="ia-member-list">
                         ${list.map((member) => {
-                            const status = String(member.status || '').toLowerCase() === 'active' ? 'Active' : 'Inactive';
+                            const rawStatus = String(member.availability_status || member.user_status || member.status || '').toLowerCase();
+                            const statusKey = rawStatus === 'active' || rawStatus === 'online' ? 'available' : (rawStatus || 'offline');
+                            const statusLabels = { responding: 'Responding', available: 'Available', busy: 'Busy', offline: 'Offline' };
+                            const status = statusLabels[statusKey] || 'Offline';
                             const creatorBadge = member.is_creator ? '<span class="ia-member-badge">Creator</span>' : '';
                             return `
                                 <article class="ia-member-card">
@@ -2312,7 +2316,7 @@ $pageTitle = 'Inter-Agency Coordination';
                                     <div class="ia-member-side">
                                         <span class="ia-member-badge">${escapeHtml(formatRole(member.role || 'user'))}</span>
                                         ${creatorBadge}
-                                        <span class="ia-member-status ${status === 'Active' ? '' : 'inactive'}">${escapeHtml(status)}</span>
+                                        <span class="ia-member-status ${status === 'Offline' ? 'inactive' : ''}">${escapeHtml(status)}</span>
                                     </div>
                                 </article>
                             `;
@@ -3985,6 +3989,12 @@ $pageTitle = 'Inter-Agency Coordination';
                         await loadTypingIndicator();
                     } catch (_) {}
                 }, 5000);
+
+                state.presencePoller = setInterval(async () => {
+                    try {
+                        await loadUserStatuses();
+                    } catch (_) {}
+                }, 2000);
             });
         })();
     </script>
