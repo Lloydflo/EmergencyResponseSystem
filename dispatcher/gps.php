@@ -386,8 +386,7 @@ function removeUnitMarkerByIdentifier(identifier) {
 
 function isResponderUnitOnline(unit) {
     const online = String(unit && unit.presence_status ? unit.presence_status : '').trim().toLowerCase() === 'online';
-    const hasCurrentLocation = String(unit && unit.location_current !== undefined && unit.location_current !== null ? unit.location_current : '').trim() === '1';
-    return online && hasCurrentLocation && isRenderableResponderUnit(unit);
+    return online && isRenderableResponderUnit(unit);
 }
 
 function normalizedUnitStatus(value) {
@@ -398,7 +397,7 @@ function isRenderableResponderUnit(unit) {
     const vehicleStatus = normalizedUnitStatus(unit && unit.status);
     const responderStatus = normalizedUnitStatus(unit && unit.responder_unit_status);
     const vehicleAvailable = vehicleStatus === 'available';
-    const responderAvailable = responderStatus === 'available';
+    const responderAvailable = responderStatus === '' || responderStatus === 'available';
     const vehicleDispatched = ['assigned', 'enroute', 'en_route', 'on_scene'].includes(vehicleStatus);
     const responderActive = ['assigned', 'accepted', 'received', 'busy', 'in_use', 'enroute', 'en_route', 'on_scene'].includes(responderStatus);
     return (vehicleAvailable && responderAvailable) || (vehicleDispatched && responderActive);

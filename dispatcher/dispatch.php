@@ -729,6 +729,7 @@ let map;
 let markers = {};
 let authoritativeOnlineUnitKeys = new Set();
 let authoritativeOnlineUnitKeysReady = false;
+let availableUnitsByIdentifier = {};
 let incidentMarkers = {};
 let QC_BOUNDS_GLOBAL;
 let pendingDispatchTrackUnit = '';
@@ -970,7 +971,7 @@ function isRenderableResponderUnit(unit) {
     const vehicleStatus = normalizedUnitStatus(unit && unit.status);
     const responderStatus = normalizedUnitStatus(unit && unit.responder_unit_status);
     const vehicleAvailable = vehicleStatus === 'available';
-    const responderAvailable = responderStatus === 'available';
+    const responderAvailable = responderStatus === '' || responderStatus === 'available';
     const vehicleDispatched = ['assigned', 'enroute', 'en_route', 'on_scene'].includes(vehicleStatus);
     const responderActive = ['assigned', 'accepted', 'received', 'busy', 'in_use', 'enroute', 'en_route', 'on_scene'].includes(responderStatus);
     return (vehicleAvailable && responderAvailable) || (vehicleDispatched && responderActive);
@@ -1000,7 +1001,7 @@ function pruneOfflineUnitMarkers() {
             res.items.forEach(u => {
                 const id = String(u && u.identifier ? u.identifier : '').trim();
                 if (!id) return;
-                if (isResponderUnitOnline(u) && hasCurrentResponderLocation(u)) {
+                if (isResponderUnitOnline(u)) {
                     addAuthoritativeOnlineUnitKeys(u, onlineKeys);
                 }
             });
@@ -1047,7 +1048,7 @@ function loadDispatchedUnits() {
 function syncUnitMarkers(items) {
     items.forEach(u => {
         const id = u.identifier;
-        if (!isResponderUnitOnline(u) || !hasCurrentResponderLocation(u)) {
+        if (!isResponderUnitOnline(u)) {
             removeUnitMarkerByIdentifier(id);
             return;
         }
@@ -1085,7 +1086,7 @@ function fetchAvailableUnitsData() {
 function syncAvailableUnitMarkers(items) {
     (items || []).forEach(u => {
         const id = u.identifier;
-        if (!isResponderUnitOnline(u) || !hasCurrentResponderLocation(u)) {
+        if (!isResponderUnitOnline(u)) {
             removeUnitMarkerByIdentifier(id);
             return;
         }
@@ -1225,6 +1226,14 @@ function refreshAvailableUnits() {
     const container = document.getElementById('available-units-container');
     return fetchAvailableUnitsData()
         .then(items => {
+            availableUnitsByIdentifier = {};
+            (items || []).forEach(u => {
+                if (u && u.identifier) {
+                    const id = String(u.identifier);
+                    availableUnitsByIdentifier[id] = u;
+                    availableUnitsByIdentifier[id.toUpperCase()] = u;
+                }
+            });
             syncAvailableUnitMarkers(items);
             if (container) {
                 renderAvailableUnits(items);
@@ -1232,6 +1241,7 @@ function refreshAvailableUnits() {
             return items;
         })
         .catch(() => {
+            availableUnitsByIdentifier = {};
             if (container) {
                 renderAvailableUnits([]);
             }
@@ -1249,6 +1259,31 @@ function escapeAttr(s) {
 
 function escapeJs(s) {
     return String(s || '').replace(/\\/g, '\\\\').replace(/'/g, "\\'").replace(/\r?\n/g, ' ');
+}
+
+function ensureUnitMarkerFromApiUnit(unit) {
+    if (!unit || !unit.identifier || !isResponderUnitOnline(unit)) return null;
+    const id = String(unit.identifier);
+    const lat = parseFloat(unit.latitude);
+    const lng = parseFloat(unit.longitude);
+    if (isNaN(lat) || isNaN(lng)) return null;
+
+    const type = unit.unit_type || 'other';
+    const speed = (unit.speed_kph !== undefined && unit.speed_kph !== null) ? parseFloat(unit.speed_kph) : null;
+    if (markers[id] && markers[id].marker) {
+        markers[id].marker.setLatLng([lat, lng]);
+        markers[id].marker.setIcon(getIcon(type));
+    } else {
+        addUnitMarker(id, lat, lng, id, type, speed);
+    }
+    return markers[id] || null;
+}
+
+function focusMarkerObject(markerObj) {
+    if (!markerObj || !markerObj.marker || !map) return false;
+    map.setView(markerObj.marker.getLatLng(), 17, { animate: true });
+    markerObj.marker.openPopup();
+    return true;
 }
 
 document.addEventListener('DOMContentLoaded', () => {
@@ -1326,12 +1361,30 @@ function focusUnitOnMap(unitIdentifier) {
         const matchedKey = Object.keys(markers).find((key) => String(key).toUpperCase() === upperIdentifier);
         markerObj = matchedKey ? markers[matchedKey] : null;
     }
-    if (markerObj && markerObj.marker && map) {
-        map.setView(markerObj.marker.getLatLng(), 17, { animate: true });
-        markerObj.marker.openPopup();
-    } else {
-        alert('Unit location not available on map.');
+    if (!markerObj) {
+        const unit = availableUnitsByIdentifier[String(unitIdentifier)] || availableUnitsByIdentifier[String(unitIdentifier).toUpperCase()];
+        markerObj = ensureUnitMarkerFromApiUnit(unit);
     }
+    if (focusMarkerObject(markerObj)) {
+        return;
+    }
+    fetchAvailableUnitsData()
+        .then(items => {
+            availableUnitsByIdentifier = {};
+            (items || []).forEach(u => {
+                if (!u || !u.identifier) return;
+                const id = String(u.identifier);
+                availableUnitsByIdentifier[id] = u;
+                availableUnitsByIdentifier[id.toUpperCase()] = u;
+            });
+            syncAvailableUnitMarkers(items);
+            const unit = availableUnitsByIdentifier[String(unitIdentifier)] || availableUnitsByIdentifier[String(unitIdentifier).toUpperCase()];
+            const refreshedMarkerObj = ensureUnitMarkerFromApiUnit(unit);
+            if (!focusMarkerObject(refreshedMarkerObj)) {
+                alert('Unit location not available on map.');
+            }
+        })
+        .catch(() => alert('Unit location not available on map.'));
 }
 
 function tryFocusPendingDispatchUnit() {
