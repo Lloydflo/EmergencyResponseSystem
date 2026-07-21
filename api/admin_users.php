@@ -230,7 +230,7 @@ function admin_users_available_unit_exists(PDO $pdo, int $unitId): bool
         "SELECT 1
          FROM `units`
          WHERE `id` = ?
-           AND LOWER(COALESCE(`status`, '')) = 'available'
+           AND LOWER(COALESCE(`status`, '')) IN ('available', 'unavailable')
          LIMIT 1"
     );
     $stmt->execute([$unitId]);
@@ -449,19 +449,24 @@ function admin_users_assign_unit_to_responder(PDO $pdo, ?int $unitId, string $na
         $sets[] = 'rr.driver_name = ?';
         $params[] = $name;
     }
-    if ($sets === []) {
-        return;
-    }
-    $params[] = $unitId;
+    if ($sets !== []) {
+        $params[] = $unitId;
 
-    $stmt = $pdo->prepare(
-        "UPDATE `" . $resourceTable . "` rr
-         INNER JOIN `units` u ON u.identifier = rr.code
-         SET " . implode(', ', $sets) . "
-         WHERE u.id = ?
-           AND LOWER(rr.category) = 'vehicles'"
-    );
-    $stmt->execute($params);
+        $stmt = $pdo->prepare(
+            "UPDATE `" . $resourceTable . "` rr
+             INNER JOIN `units` u ON u.identifier = rr.code
+             SET " . implode(', ', $sets) . "
+             WHERE u.id = ?
+               AND LOWER(rr.category) = 'vehicles'"
+        );
+        $stmt->execute($params);
+    }
+
+    $unitCode = admin_users_unit_identifier($pdo, $unitId);
+    if ($unitCode !== '') {
+        ers_update_vehicle_resource_status_by_identifier($pdo, $unitCode, 'available');
+        ers_update_unit_status_by_identifier($pdo, $unitCode, 'available');
+    }
 }
 
 function admin_users_clear_unit_responder_assignment(PDO $pdo, ?int $unitId): void
@@ -1024,6 +1029,9 @@ if ($method !== 'POST') {
                     $input
                 )
                 : admin_users_empty_unit_assignment();
+            if ($role === 'responder' && $assignedUnitId !== null) {
+                $unitAssignment['unit_status'] = 'available';
+            }
             $inactiveSql = $status === 'inactive'
                 ? "`inactive_at` = COALESCE(`inactive_at`, NOW())"
                 : "`inactive_at` = NULL";
@@ -1244,6 +1252,9 @@ try {
             $input
         )
         : admin_users_empty_unit_assignment();
+    if ($role === 'responder' && $assignedUnitId !== null) {
+        $unitAssignment['unit_status'] = 'available';
+    }
 
     $pdo->beginTransaction();
 

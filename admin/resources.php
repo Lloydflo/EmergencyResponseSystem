@@ -1882,6 +1882,7 @@ $pageTitle = 'Resources Status';
 
         function formatStatus(status) {
             if (status === 'in_use') return 'In Use';
+            if (status === 'offline') return 'Unavailable';
             return status.charAt(0).toUpperCase() + status.slice(1);
         }
 

@@ -218,6 +218,56 @@ if (!function_exists('ers_find_unit_by_identifiers')) {
     }
 }
 
+if (!function_exists('ers_vehicle_resource_has_assigned_responder')) {
+    function ers_vehicle_resource_has_assigned_responder(PDO $pdo, string $unitCode): bool
+    {
+        $unitCode = strtoupper(trim($unitCode));
+        if ($unitCode === '') {
+            return false;
+        }
+
+        if (
+            ers_vehicle_resource_table_exists($pdo, 'users') &&
+            ers_vehicle_resource_column_exists($pdo, 'users', 'role') &&
+            ers_vehicle_resource_column_exists($pdo, 'users', 'unit_code')
+        ) {
+            $stmt = $pdo->prepare(
+                "SELECT 1
+                 FROM `users`
+                 WHERE LOWER(COALESCE(`role`, '')) = 'responder'
+                   AND `unit_code` IS NOT NULL
+                   AND TRIM(`unit_code`) <> ''
+                   AND UPPER(TRIM(`unit_code`)) = ?
+                 LIMIT 1"
+            );
+            $stmt->execute([$unitCode]);
+            if ($stmt->fetchColumn()) {
+                return true;
+            }
+        }
+
+        if (
+            ers_vehicle_resource_table_exists($pdo, 'responders') &&
+            ers_vehicle_resource_column_exists($pdo, 'responders', 'assigned_unit_id') &&
+            ers_units_table_available($pdo)
+        ) {
+            $stmt = $pdo->prepare(
+                "SELECT 1
+                 FROM `responders` r
+                 INNER JOIN `units` u ON u.id = r.assigned_unit_id
+                 WHERE UPPER(TRIM(u.identifier)) = ?
+                 LIMIT 1"
+            );
+            $stmt->execute([$unitCode]);
+            if ($stmt->fetchColumn()) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+}
+
 if (!function_exists('ers_sync_vehicle_resource_unit')) {
     function ers_sync_vehicle_resource_unit(PDO $pdo, array $resource, ?string $previousCode = null): void
     {
@@ -771,6 +821,16 @@ if (!function_exists('ers_sync_all_vehicle_resource_units')) {
         );
 
         foreach ($stmt->fetchAll(PDO::FETCH_ASSOC) as $resource) {
+            $unitCode = strtoupper(trim((string) ($resource['code'] ?? '')));
+            $resourceStatus = strtolower(trim((string) ($resource['status'] ?? '')));
+            if (
+                $unitCode !== '' &&
+                $resourceStatus === 'available' &&
+                !ers_vehicle_resource_has_assigned_responder($pdo, $unitCode)
+            ) {
+                ers_update_vehicle_resource_status_by_identifier($pdo, $unitCode, 'offline');
+                $resource['status'] = 'offline';
+            }
             ers_sync_vehicle_resource_unit($pdo, $resource);
         }
     }

@@ -674,6 +674,53 @@ function find_unit_by_identifiers(PDO $pdo, array $identifiers): ?array {
     return $row ?: null;
 }
 
+function vehicle_resource_has_assigned_responder(PDO $pdo, string $unitCode): bool {
+    $unitCode = strtoupper(trim($unitCode));
+    if ($unitCode === '') {
+        return false;
+    }
+
+    if (
+        table_exists($pdo, 'users') &&
+        table_column_exists($pdo, 'users', 'role') &&
+        table_column_exists($pdo, 'users', 'unit_code')
+    ) {
+        $stmt = $pdo->prepare(
+            "SELECT 1
+             FROM `users`
+             WHERE LOWER(COALESCE(`role`, '')) = 'responder'
+               AND `unit_code` IS NOT NULL
+               AND TRIM(`unit_code`) <> ''
+               AND UPPER(TRIM(`unit_code`)) = ?
+             LIMIT 1"
+        );
+        $stmt->execute([$unitCode]);
+        if ($stmt->fetchColumn()) {
+            return true;
+        }
+    }
+
+    if (
+        table_exists($pdo, 'responders') &&
+        table_column_exists($pdo, 'responders', 'assigned_unit_id') &&
+        units_table_available($pdo)
+    ) {
+        $stmt = $pdo->prepare(
+            "SELECT 1
+             FROM `responders` r
+             INNER JOIN `units` u ON u.id = r.assigned_unit_id
+             WHERE UPPER(TRIM(u.identifier)) = ?
+             LIMIT 1"
+        );
+        $stmt->execute([$unitCode]);
+        if ($stmt->fetchColumn()) {
+            return true;
+        }
+    }
+
+    return false;
+}
+
 function sync_vehicle_resource_unit(PDO $pdo, array $resource, ?string $previousCode = null): void {
     if (!units_table_available($pdo)) {
         return;
@@ -758,6 +805,41 @@ function deactivate_vehicle_resource_unit(PDO $pdo, string $identifier): void {
     $stmt->execute($params);
 }
 
+function sync_unassigned_vehicle_resource_availability(PDO $pdo): void {
+    if (!table_exists($pdo, RESOURCE_RECORDS_TABLE)) {
+        return;
+    }
+
+    $stmt = $pdo->query(
+        "SELECT `code`
+         FROM `" . RESOURCE_RECORDS_TABLE . "`
+         WHERE LOWER(`category`) = 'vehicles'
+           AND LOWER(`status`) = 'available'"
+    );
+
+    foreach ($stmt->fetchAll(PDO::FETCH_ASSOC) as $row) {
+        $unitCode = strtoupper(trim((string)($row['code'] ?? '')));
+        if ($unitCode === '' || vehicle_resource_has_assigned_responder($pdo, $unitCode)) {
+            continue;
+        }
+
+        ers_update_vehicle_resource_status_by_identifier($pdo, $unitCode, 'offline');
+        deactivate_vehicle_resource_unit($pdo, $unitCode);
+    }
+}
+
+function apply_unassigned_vehicle_status(PDO $pdo, array $payload): array {
+    if (
+        strtolower(trim((string)($payload['category'] ?? ''))) === 'vehicles' &&
+        strtolower(trim((string)($payload['status'] ?? ''))) === 'available' &&
+        !vehicle_resource_has_assigned_responder($pdo, (string)($payload['code'] ?? ''))
+    ) {
+        $payload['status'] = 'offline';
+    }
+
+    return $payload;
+}
+
 try {
     ensure_resource_records_table($pdo);
     ensure_resource_records_archive_table($pdo);
@@ -768,6 +850,7 @@ try {
     $method = strtoupper((string)($_SERVER['REQUEST_METHOD'] ?? 'GET'));
     if ($method === 'GET') {
         ers_sync_responder_vehicle_resources($pdo);
+        sync_unassigned_vehicle_resource_availability($pdo);
         $archived = isset($_GET['archived']) && (string)$_GET['archived'] === '1';
         if ($archived) {
             $stmt = $pdo->query(
@@ -895,7 +978,7 @@ try {
             exit;
         }
 
-        $payload = normalize_payload($rawPayload);
+        $payload = apply_unassigned_vehicle_status($pdo, normalize_payload($rawPayload));
         $stmt = $pdo->prepare(
             "INSERT INTO `" . RESOURCE_RECORDS_TABLE . "` (code, name, category, status, location, latitude, longitude, driver_name, plate_number, position_title, assignment, quantity, notes, created_at, updated_at)
              VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW())"
@@ -939,7 +1022,7 @@ try {
             exit;
         }
 
-        $payload = normalize_payload($rawPayload);
+        $payload = apply_unassigned_vehicle_status($pdo, normalize_payload($rawPayload));
         $stmt = $pdo->prepare(
             "UPDATE `" . RESOURCE_RECORDS_TABLE . "`
              SET code = ?, name = ?, category = ?, status = ?, location = ?, latitude = ?, longitude = ?, driver_name = ?, plate_number = ?, position_title = ?, assignment = ?, quantity = ?, notes = ?, updated_at = NOW()

@@ -66,6 +66,8 @@ $onlyUnassignedResponders = isset($_GET['only_unassigned_responders'])
 $statuses = [];
 if ($status === 'dispatched') {
     $statuses = ['assigned', 'enroute', 'en_route', 'on_scene'];
+} elseif ($status === 'available' && $includeUnassigned && $onlyUnassignedResponders) {
+    $statuses = ['available', 'unavailable'];
 } elseif ($status !== '') {
     $statuses = [$status];
 }
@@ -320,10 +322,6 @@ if ($onlyUnassignedResponders) {
             WHERE assigned_responder.assigned_unit_id = u.id
             LIMIT 1
         )";
-    }
-
-    if ($vehicleResourceTable !== null && ers_column_exists($pdo, $vehicleResourceTable, 'driver_name')) {
-        $unassignedClauses[] = "TRIM(COALESCE(rr.driver_name, '')) = ''";
     }
 
     if ($unassignedClauses !== []) {
