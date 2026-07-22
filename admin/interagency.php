@@ -80,7 +80,7 @@ $pageTitle = 'Inter-Agency Conversations';
 
         .ia-overview {
             display: grid;
-            grid-template-columns: repeat(3, minmax(160px, 1fr));
+            grid-template-columns: repeat(4, minmax(160px, 1fr));
             gap: 0.75rem;
             margin-bottom: 1rem;
         }
@@ -2005,9 +2005,31 @@ $pageTitle = 'Inter-Agency Conversations';
                     <div class="ia-stat-label">Unread Messages</div>
                     <div class="ia-stat-value" id="iaUnreadCount">0</div>
                 </article>
+                <article class="ia-stat">
+                    <div class="ia-stat-label">External Inbox</div>
+                    <div class="ia-stat-value" id="iaExternalInboxCount">0</div>
+                </article>
             </section>
 
             <section class="ia-command-center" id="iaCommandCenter" aria-label="Inter-Agency Command Center"></section>
+
+            <section class="ia-external-inbox" id="iaExternalIncidentInbox" aria-label="Incoming external incidents">
+                <div class="ia-external-inbox-head">
+                    <div>
+                        <h2>External Incident Inbox</h2>
+                        <p>Incoming incidents and call transfers from connected systems.</p>
+                    </div>
+                    <div class="ia-external-inbox-actions">
+                        <span class="ia-external-inbox-badge" id="iaExternalInboxBadge">Loading</span>
+                        <button type="button" class="ia-external-inbox-refresh" id="iaExternalInboxRefresh" title="Refresh external inbox" aria-label="Refresh external inbox">
+                            <i class="fas fa-rotate-right"></i>
+                        </button>
+                    </div>
+                </div>
+                <div class="ia-external-inbox-list" id="iaExternalInboxList" aria-live="polite">
+                    <div class="ia-external-inbox-empty">Loading external incidents...</div>
+                </div>
+            </section>
 
             <section class="ia-board">
                 <aside class="ia-list-panel">
@@ -5046,5 +5068,6 @@ $pageTitle = 'Inter-Agency Conversations';
         })();
     </script>
     <script src="js/interagency-command.js"></script>
+    <script src="js/interagency-external-inbox.js"></script>
 </body>
 </html>

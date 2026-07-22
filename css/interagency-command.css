@@ -7,6 +7,209 @@
     overflow: hidden;
 }
 
+.ia-external-inbox {
+    margin: 1rem 0;
+    border: 1px solid var(--ia-border, #dfe6ee);
+    border-radius: 8px;
+    background: var(--ia-card, #fff);
+    box-shadow: 0 10px 24px rgba(15, 23, 42, 0.06);
+    overflow: hidden;
+}
+
+.ia-external-inbox-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+    padding: 0.9rem 1rem;
+    border-bottom: 1px solid var(--ia-border, #dfe6ee);
+    background: #f8fafc;
+}
+
+.ia-external-inbox-head h2 {
+    margin: 0;
+    color: var(--ia-text, #122031);
+    font-size: 1rem;
+    font-weight: 900;
+}
+
+.ia-external-inbox-head p {
+    margin: 0.2rem 0 0;
+    color: var(--ia-muted, #5f7286);
+    font-size: 0.82rem;
+}
+
+.ia-external-inbox-actions {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.45rem;
+    flex-shrink: 0;
+}
+
+.ia-external-inbox-badge {
+    min-height: 30px;
+    border: 1px solid #bfdbfe;
+    border-radius: 999px;
+    padding: 0.35rem 0.65rem;
+    background: #eff6ff;
+    color: #1d4ed8;
+    font-size: 0.72rem;
+    font-weight: 900;
+    text-transform: uppercase;
+    white-space: nowrap;
+}
+
+.ia-external-inbox-refresh,
+.ia-external-inbox-btn {
+    min-height: 34px;
+    border: 1px solid var(--ia-border, #dfe6ee);
+    border-radius: 8px;
+    background: #fff;
+    color: var(--ia-text, #122031);
+    font-weight: 900;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.35rem;
+}
+
+.ia-external-inbox-refresh {
+    width: 34px;
+    padding: 0;
+}
+
+.ia-external-inbox-btn {
+    padding: 0 0.65rem;
+    font-size: 0.76rem;
+}
+
+.ia-external-inbox-btn.primary {
+    border-color: #0f766e;
+    background: #0f766e;
+    color: #fff;
+}
+
+.ia-external-inbox-refresh:hover,
+.ia-external-inbox-btn:hover {
+    border-color: #94a3b8;
+    box-shadow: 0 2px 8px rgba(15, 23, 42, 0.12);
+}
+
+.ia-external-inbox-list {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 0.75rem;
+    max-height: 320px;
+    overflow-y: auto;
+    padding: 0.9rem;
+}
+
+.ia-external-inbox-empty {
+    grid-column: 1 / -1;
+    padding: 1rem;
+    border: 1px dashed var(--ia-border, #dfe6ee);
+    border-radius: 8px;
+    color: var(--ia-muted, #5f7286);
+    text-align: center;
+    font-weight: 800;
+}
+
+.ia-external-card {
+    min-width: 0;
+    border: 1px solid var(--ia-border, #dfe6ee);
+    border-left: 4px solid #0f766e;
+    border-radius: 8px;
+    background: #fff;
+    padding: 0.8rem;
+    display: grid;
+    gap: 0.55rem;
+}
+
+.ia-external-card.is-live {
+    border-left-color: #2563eb;
+}
+
+.ia-external-card.priority-critical,
+.ia-external-card.priority-high,
+.ia-external-card.priority-urgent {
+    border-left-color: #dc2626;
+}
+
+.ia-external-card-head,
+.ia-external-card-actions,
+.ia-external-card-meta {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.ia-external-card-head {
+    justify-content: space-between;
+    align-items: flex-start;
+}
+
+.ia-external-card-title {
+    margin: 0;
+    color: var(--ia-text, #122031);
+    font-size: 0.9rem;
+    font-weight: 900;
+    line-height: 1.3;
+    overflow-wrap: anywhere;
+}
+
+.ia-external-card-source,
+.ia-external-card-location,
+.ia-external-card-desc {
+    margin: 0;
+    color: var(--ia-muted, #5f7286);
+    font-size: 0.78rem;
+    line-height: 1.35;
+    overflow-wrap: anywhere;
+}
+
+.ia-external-card-desc {
+    color: #334155;
+}
+
+.ia-external-card-meta {
+    flex-wrap: wrap;
+}
+
+.ia-external-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.3rem;
+    border-radius: 999px;
+    padding: 0.22rem 0.5rem;
+    background: #f1f5f9;
+    color: #475569;
+    font-size: 0.68rem;
+    font-weight: 900;
+    text-transform: uppercase;
+}
+
+.ia-external-pill.priority-critical,
+.ia-external-pill.priority-high,
+.ia-external-pill.priority-urgent {
+    background: #fee2e2;
+    color: #991b1b;
+}
+
+.ia-external-pill.priority-low {
+    background: #dcfce7;
+    color: #166534;
+}
+
+.ia-external-pill.live {
+    background: #dbeafe;
+    color: #1e40af;
+}
+
+.ia-external-card-actions {
+    flex-wrap: wrap;
+}
+
 .ia-command-head {
     display: flex;
     align-items: center;
@@ -299,6 +502,8 @@
 }
 
 [data-theme="dark"] .ia-command-center,
+[data-theme="dark"] .ia-external-inbox,
+[data-theme="dark"] .ia-external-card,
 [data-theme="dark"] .ia-command-panel,
 [data-theme="dark"] .ia-command-task,
 [data-theme="dark"] .ia-command-broadcast {
@@ -307,6 +512,7 @@
 }
 
 [data-theme="dark"] .ia-command-head,
+[data-theme="dark"] .ia-external-inbox-head,
 [data-theme="dark"] .ia-command-panel-head,
 [data-theme="dark"] .ia-command-kpi,
 [data-theme="dark"] .ia-command-audit {
@@ -315,6 +521,8 @@
 }
 
 [data-theme="dark"] .ia-command-title,
+[data-theme="dark"] .ia-external-inbox-head h2,
+[data-theme="dark"] .ia-external-card-title,
 [data-theme="dark"] .ia-command-panel-title,
 [data-theme="dark"] .ia-command-kpi strong,
 [data-theme="dark"] .ia-command-task-title,
@@ -324,6 +532,10 @@
 }
 
 [data-theme="dark"] .ia-command-sub,
+[data-theme="dark"] .ia-external-inbox-head p,
+[data-theme="dark"] .ia-external-card-source,
+[data-theme="dark"] .ia-external-card-location,
+[data-theme="dark"] .ia-external-card-desc,
 [data-theme="dark"] .ia-command-kpi span,
 [data-theme="dark"] .ia-command-meta,
 [data-theme="dark"] .ia-command-audit p,
@@ -346,9 +558,20 @@
     color: #e2e8f0;
 }
 
+[data-theme="dark"] .ia-external-inbox-refresh,
+[data-theme="dark"] .ia-external-inbox-btn {
+    background: #111827;
+    border-color: rgba(148, 163, 184, 0.24);
+    color: #e2e8f0;
+}
+
 @media (max-width: 1100px) {
     .ia-command-grid {
         grid-template-columns: 1fr;
+    }
+
+    .ia-external-inbox-list {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
     }
 
     .ia-command-incident {
@@ -357,9 +580,18 @@
 }
 
 @media (max-width: 760px) {
-    .ia-command-head {
+    .ia-command-head,
+    .ia-external-inbox-head {
         align-items: stretch;
         flex-direction: column;
+    }
+
+    .ia-external-inbox-actions {
+        justify-content: space-between;
+    }
+
+    .ia-external-inbox-list {
+        grid-template-columns: 1fr;
     }
 
     .ia-command-controls,
