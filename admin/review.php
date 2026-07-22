@@ -147,7 +147,7 @@ if ($adminName === '') {
         <div class="main-container ar-shell">
             <section class="ar-hero">
                 <h1>Review &amp; Feedback Console</h1>
-                <p>Hi <?php echo htmlspecialchars($adminName); ?>. Feedback sent from the dispatcher review page is listed here automatically so the admin team can review it per closed incident.</p>
+                <p>Hi <?php echo htmlspecialchars($adminName); ?>. Feedback and received survey entries are listed here automatically so the admin team can review them per closed incident.</p>
             </section>
 
             <section class="ar-stats" aria-live="polite">
@@ -179,7 +179,7 @@ if ($adminName === '') {
                         <option value="">All Closed Cases</option>
                         <option value="resolved">Resolved Only</option>
                         <option value="cancelled">Cancelled Only</option>
-                        <option value="with_feedback">With Dispatcher Feedback</option>
+                        <option value="with_feedback">With Feedback / Survey</option>
                         <option value="without_feedback">No Feedback Yet</option>
                     </select>
                 </div>
@@ -192,7 +192,7 @@ if ($adminName === '') {
             <section class="ar-card">
                 <div class="ar-card-head">
                     <div>
-                        <h2>Dispatcher Feedback Queue</h2>
+                        <h2>Feedback &amp; Survey Queue</h2>
                         <p id="tableSubtitle">Loading closed incidents and dispatcher feedback...</p>
                     </div>
                     <span class="ar-count" id="incidentCountBadge">0 incident(s)</span>
@@ -248,8 +248,8 @@ if ($adminName === '') {
                     <article><h4><i class="fas fa-chart-line"></i> Feedback Summary</h4><div class="ar-list"><div class="ar-detail"><span>Average Rating</span><strong id="adminModalAvgRating">--</strong></div><div class="ar-detail"><span>Rated Entries</span><strong id="adminModalRatingCount">0</strong></div><div class="ar-detail"><span>Total Feedback</span><strong id="adminModalFeedbackCount">0</strong></div><div class="ar-detail"><span>Last Updated</span><strong id="adminModalLastUpdated">--</strong></div></div></article>
                 </section>
                 <section class="ar-feedback-panel">
-                    <h4><i class="fas fa-paper-plane"></i> Feedback Sent by Dispatcher</h4>
-                    <p>Every note saved from the dispatcher review page appears here automatically.</p>
+                    <h4><i class="fas fa-paper-plane"></i> Feedback &amp; Surveys</h4>
+                    <p>Dispatcher notes and received survey entries appear here automatically.</p>
                     <div id="adminFeedbackList" class="ar-feedback-list"></div>
                 </section>
                 <section class="ar-feedback-panel">
@@ -374,17 +374,19 @@ if ($adminName === '') {
             }
 
             async function loadRows() {
-                tableBody.innerHTML = '<tr><td colspan="9" class="ar-empty">Loading dispatcher feedback queue...</td></tr>';
+                tableBody.innerHTML = '<tr><td colspan="9" class="ar-empty">Loading feedback and survey queue...</td></tr>';
                 try {
-                    const response = await fetch('api/incidents_list.php?status=closed&admin_review=sent', { cache: 'no-store' });
+                    const response = await fetch('api/incidents_list.php?status=closed', { cache: 'no-store' });
                     const data = await response.json();
                     if (!data.ok) throw new Error(data.error || 'Failed to load incidents');
-                    incidentRows = Array.isArray(data.items) ? data.items : [];
+                    incidentRows = (Array.isArray(data.items) ? data.items : []).filter((row) => {
+                        return Boolean(row.submitted_to_admin) || Number(row.feedback_count || 0) > 0;
+                    });
                     renderStats(incidentRows);
                     renderTable();
                 } catch (error) {
                     tableBody.innerHTML = '<tr><td colspan="9" class="ar-empty">Failed to load feedback queue.</td></tr>';
-                    tableSubtitle.textContent = 'Unable to load dispatcher feedback at the moment.';
+                    tableSubtitle.textContent = 'Unable to load feedback and survey entries at the moment.';
                 }
             }
 
@@ -421,9 +423,9 @@ if ($adminName === '') {
             function renderTable() {
                 const rows = getFilteredRows();
                 countBadge.textContent = rows.length + ' incident(s)';
-                tableSubtitle.textContent = rows.length ? 'Incidents sent by dispatcher and ready for admin review.' : 'No submitted incident reviews matched the current filter.';
+                tableSubtitle.textContent = rows.length ? 'Closed incidents with dispatcher feedback, received surveys, or admin review submissions.' : 'No feedback or survey entries matched the current filter.';
                 if (!rows.length) {
-                    tableBody.innerHTML = '<tr><td colspan="9" class="ar-empty">No submitted incident reviews match the current filter.</td></tr>';
+                    tableBody.innerHTML = '<tr><td colspan="9" class="ar-empty">No feedback or survey entries match the current filter.</td></tr>';
                     return;
                 }
                 tableBody.innerHTML = rows.map((row) => `
@@ -528,7 +530,7 @@ if ($adminName === '') {
                         </div>
                         <p class="ar-note">${escapeHtml(note.note || 'No additional note provided.')}</p>
                     </div>
-                `).join('') : '<div class="ar-feedback-empty">No dispatcher feedback has been sent for this incident yet.</div>';
+                `).join('') : '<div class="ar-feedback-empty">No feedback or survey entry has been received for this incident yet.</div>';
                 renderProofs(proofPayload);
             }
 

@@ -20,6 +20,8 @@ $pageTitle = 'Inter-Agency Conversations';
     <link rel="stylesheet" href="css/admin-header.css">
     <link rel="stylesheet" href="css/sidebar-footer.css">
     <link rel="stylesheet" href="css/interagency-command.css">
+    <link rel="stylesheet" href="css/interagency-events.css">
+    <link rel="stylesheet" href="css/interagency-tips.css">
     <style>
         :root {
             --ia-bg: #f4f7fb;
@@ -2012,6 +2014,10 @@ $pageTitle = 'Inter-Agency Conversations';
             </section>
 
             <section class="ia-command-center" id="iaCommandCenter" aria-label="Inter-Agency Command Center"></section>
+
+            <section class="ia-event-section" id="iaEventCoordination" aria-label="Event Coordination"></section>
+
+            <section class="ia-tip-section" id="iaAnonymousTipInbox" aria-label="Anonymous Tip Inbox"></section>
 
             <section class="ia-external-inbox" id="iaExternalIncidentInbox" aria-label="Incoming external incidents">
                 <div class="ia-external-inbox-head">
@@ -5068,6 +5074,8 @@ $pageTitle = 'Inter-Agency Conversations';
         })();
     </script>
     <script src="js/interagency-command.js"></script>
+    <script src="js/interagency-events.js"></script>
+    <script src="js/interagency-tips.js"></script>
     <script src="js/interagency-external-inbox.js"></script>
 </body>
 </html>

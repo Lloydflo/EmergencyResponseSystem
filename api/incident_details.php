@@ -92,6 +92,9 @@ try {
             $incidentId = (int)$incident['id'];
             $hasIncidentNotes = ers_table_exists($pdo, 'incident_notes');
             $hasRatingColumn = $hasIncidentNotes && ers_column_exists($pdo, 'incident_notes', 'rating');
+            $hasIncidentSurveys = ers_table_exists($pdo, 'incident_surveys')
+                && ers_column_exists($pdo, 'incident_surveys', 'incident_id')
+                && ers_column_exists($pdo, 'incident_surveys', 'response_rating');
 
             $dispatchSelect = 'NULL AS vehicle_name, NULL AS driver_name, NULL AS plate_number';
             $dispatchJoin = '';
@@ -186,34 +189,54 @@ try {
                 }
             }
 
+            $noteCount = 0;
+            $ratingCount = 0;
+            $ratingSum = 0.0;
             if ($hasIncidentNotes) {
-                if ($hasRatingColumn) {
-                    $feedbackStmt = $pdo->prepare(
-                        "SELECT COUNT(*) AS feedback_count,
-                                COUNT(rating) AS rating_count,
-                                ROUND(AVG(rating), 1) AS avg_rating
-                         FROM incident_notes
-                         WHERE incident_id = ?
-                           AND note NOT LIKE 'Resolution proof uploaded:%'"
-                    );
-                } else {
-                    $feedbackStmt = $pdo->prepare(
-                        "SELECT COUNT(*) AS feedback_count,
-                                0 AS rating_count,
-                                NULL AS avg_rating
-                         FROM incident_notes
-                         WHERE incident_id = ?
-                           AND note NOT LIKE 'Resolution proof uploaded:%'"
-                    );
-                }
+                $noteSql = $hasRatingColumn
+                    ? "SELECT COUNT(*) AS feedback_count,
+                              COUNT(rating) AS rating_count,
+                              COALESCE(SUM(rating), 0) AS rating_sum
+                       FROM incident_notes
+                       WHERE incident_id = ?
+                         AND note NOT LIKE 'Resolution proof uploaded:%'"
+                    : "SELECT COUNT(*) AS feedback_count,
+                              0 AS rating_count,
+                              0 AS rating_sum
+                       FROM incident_notes
+                       WHERE incident_id = ?
+                         AND note NOT LIKE 'Resolution proof uploaded:%'";
+                $feedbackStmt = $pdo->prepare($noteSql);
                 $feedbackStmt->execute([$incidentId]);
                 $feedback = $feedbackStmt->fetch(PDO::FETCH_ASSOC) ?: null;
                 if ($feedback) {
-                    $incident['feedback_count'] = isset($feedback['feedback_count']) ? (int)$feedback['feedback_count'] : 0;
-                    $incident['rating_count'] = isset($feedback['rating_count']) ? (int)$feedback['rating_count'] : 0;
-                    $incident['avg_rating'] = isset($feedback['avg_rating']) && $feedback['avg_rating'] !== null ? (float)$feedback['avg_rating'] : null;
+                    $noteCount = isset($feedback['feedback_count']) ? (int)$feedback['feedback_count'] : 0;
+                    $ratingCount += isset($feedback['rating_count']) ? (int)$feedback['rating_count'] : 0;
+                    $ratingSum += isset($feedback['rating_sum']) ? (float)$feedback['rating_sum'] : 0.0;
                 }
             }
+
+            $surveyCount = 0;
+            if ($hasIncidentSurveys) {
+                $surveyStmt = $pdo->prepare(
+                    "SELECT COUNT(*) AS feedback_count,
+                            COUNT(response_rating) AS rating_count,
+                            COALESCE(SUM(response_rating), 0) AS rating_sum
+                     FROM incident_surveys
+                     WHERE incident_id = ?"
+                );
+                $surveyStmt->execute([$incidentId]);
+                $survey = $surveyStmt->fetch(PDO::FETCH_ASSOC) ?: null;
+                if ($survey) {
+                    $surveyCount = isset($survey['feedback_count']) ? (int)$survey['feedback_count'] : 0;
+                    $ratingCount += isset($survey['rating_count']) ? (int)$survey['rating_count'] : 0;
+                    $ratingSum += isset($survey['rating_sum']) ? (float)$survey['rating_sum'] : 0.0;
+                }
+            }
+
+            $incident['feedback_count'] = $noteCount + $surveyCount;
+            $incident['rating_count'] = $ratingCount;
+            $incident['avg_rating'] = $ratingCount > 0 ? round($ratingSum / $ratingCount, 1) : null;
 
             $out['incident'] = $incident;
             $out['ok'] = true;
