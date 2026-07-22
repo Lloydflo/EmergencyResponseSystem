@@ -35,24 +35,28 @@ try {
 
         LEFT JOIN interagency_group_members gm
             ON gm.group_id = gt.id
-            AND gm.user_id = :user_id
+            AND gm.user_id = :user_id1
             AND gm.is_active = 1
 
         LEFT JOIN interagency_group_member_requests req
             ON req.group_id = gt.id
-            AND req.requested_user_id = :user_id
+            AND req.requested_user_id = :user_id2
             AND req.status = 'pending'
 
         LEFT JOIN interagency_group_thread_reads r
             ON r.group_id = gt.id
-            AND r.user_id = :user_id
+            AND r.user_id = :user_id3
 
         WHERE gt.is_active = 1
         ORDER BY gt.name ASC
     ";
 
     $stmt = $pdo->prepare($sql);
-    $stmt->execute(["user_id" => $user_id]);
+    $stmt->execute([
+        "user_id1" => $user_id,
+        "user_id2" => $user_id,
+        "user_id3" => $user_id
+    ]);
 
     $groups = [];
 
