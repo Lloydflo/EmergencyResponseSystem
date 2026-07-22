@@ -811,7 +811,7 @@ $adminName = $_SESSION['user_name'] ?? 'Admin';
                         </div>
                         <div class="um-field full">
                             <label for="newUserDepartment">Department / Assignment</label>
-                            <select id="newUserDepartment" class="um-select" required>
+                            <select id="newUserDepartment" class="um-select">
                                 <option value="">Select department</option>
                                 <option value="medical">Medical</option>
                                 <option value="police">Police</option>
@@ -1173,6 +1173,12 @@ $adminName = $_SESSION['user_name'] ?? 'Admin';
             }
         }
 
+        function syncDepartmentFieldForRole() {
+            if (!newUserRole || !newUserDepartment) return;
+
+            newUserDepartment.required = newUserRole.value === 'responder';
+        }
+
         function syncPasswordFieldForRole() {
             if (!newUserRole || !newUserPassword) return;
 
@@ -1195,6 +1201,7 @@ $adminName = $_SESSION['user_name'] ?? 'Admin';
             }
 
             updatePasswordRequirements(false);
+            syncDepartmentFieldForRole();
             syncResponderUnitField();
         }
 
@@ -1489,7 +1496,9 @@ $adminName = $_SESSION['user_name'] ?? 'Admin';
             }
             const passwordRequired = isPasswordRequiredForRole(payload.role);
 
-            if (!payload.name || !payload.email || !payload.contact_number || !payload.department || (passwordRequired && !payload.password)) {
+            const departmentRequired = payload.role === 'responder';
+
+            if (!payload.name || !payload.email || !payload.contact_number || (departmentRequired && !payload.department) || (passwordRequired && !payload.password)) {
                 showToast('Please complete required fields.');
                 return;
             }

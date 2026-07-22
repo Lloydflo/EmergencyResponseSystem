@@ -954,7 +954,9 @@ if ($method !== 'POST') {
             ? admin_users_normalize_assigned_unit_id($input['assigned_unit_id'] ?? null)
             : null;
 
-        if ($id <= 0 || $name === '' || $email === '' || $department === '' || $contactNumber === '') {
+        $departmentRequired = $role === 'responder';
+
+        if ($id <= 0 || $name === '' || $email === '' || ($departmentRequired && $department === '') || $contactNumber === '') {
             admin_users_respond(422, [
                 'success' => false,
                 'message' => 'Please complete all required fields.',
@@ -1186,11 +1188,12 @@ $department = trim((string)($input['department'] ?? ''));
 $contactNumber = trim((string)($input['contact_number'] ?? ''));
 $status = strtolower(trim((string)($input['status'] ?? 'active')));
 $passwordRequired = $role !== 'responder';
+$departmentRequired = $role === 'responder';
 $assignedUnitId = $role === 'responder'
     ? admin_users_normalize_assigned_unit_id($input['assigned_unit_id'] ?? null)
     : null;
 
-if ($name === '' || $email === '' || $department === '' || $contactNumber === '' || ($passwordRequired && $password === '')) {
+if ($name === '' || $email === '' || ($departmentRequired && $department === '') || $contactNumber === '' || ($passwordRequired && $password === '')) {
     admin_users_respond(422, [
         'success' => false,
         'message' => 'Please complete all required fields.',
