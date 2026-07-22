@@ -598,10 +598,10 @@ document.addEventListener('DOMContentLoaded', function() {
             return { lat: Number(unit.latitude), lng: Number(unit.longitude) };
         }
         const type = selectedOption ? selectedOption.getAttribute('data-type') : (unit.unit_type || 'other');
-        if (type === 'police') return { lat: 14.6500, lng: 121.0300 };
-        if (type === 'fire') return { lat: 14.6700, lng: 121.0450 };
-        if (type === 'ambulance') return { lat: 14.6900, lng: 121.0600 };
-        return { lat: 14.6760, lng: 121.0437 };
+        if (type === 'police') return { lat: 14.7338, lng: 121.0368 };
+        if (type === 'fire') return { lat: 14.7295, lng: 121.0342 };
+        if (type === 'ambulance') return { lat: 14.7351, lng: 121.0380 };
+        return { lat: 14.7320, lng: 121.0351 };
     }
     document.getElementById('confirm-dispatch-btn').onclick = function() {
         const btn = document.getElementById('confirm-dispatch-btn');
@@ -631,9 +631,9 @@ document.addEventListener('DOMContentLoaded', function() {
                 toLat = parts[0];
                 toLng = parts[1];
             } else {
-                // Default fallback: QC Hall
-                toLat = 14.6760;
-                toLng = 121.0437;
+                // Default fallback: Barangay San Agustin center.
+                toLat = 14.7320;
+                toLng = 121.0351;
             }
 
             const routeUnits = unitResponses.map((unitRes, index) => {
@@ -743,20 +743,21 @@ let QC_BOUNDS_GLOBAL;
 let pendingDispatchTrackUnit = '';
 let pendingDispatchTrackAttempts = 0;
 const MAX_DISPATCH_TRACK_ATTEMPTS = 20;
+const SAN_AGUSTIN_CENTER = [14.7320, 121.0351];
+const SAN_AGUSTIN_BOUNDS = [
+    [14.7225, 121.0290],
+    [14.7415, 121.0415]
+];
+const SAN_AGUSTIN_GEOJSON = 'dispatcher/san_agustin.geojson';
 
 // ===============================
 // LEAFLET MAP INITIALIZATION
 // ===============================
 function initMap() {
-    QC_BOUNDS_GLOBAL = L.latLngBounds(
-        [14.6000, 121.0000],
-        [14.7500, 121.1000]
-    );
+    QC_BOUNDS_GLOBAL = L.latLngBounds(SAN_AGUSTIN_BOUNDS);
     map = L.map("map", {
-        center: [14.6760, 121.0437],
-        zoom: 13,
-        maxBounds: QC_BOUNDS_GLOBAL,
-        maxBoundsViscosity: 1.0
+        center: SAN_AGUSTIN_CENTER,
+        zoom: 15
     });
     L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
         attribution: "© OpenStreetMap contributors"
@@ -769,15 +770,17 @@ function initMap() {
         try { map.invalidateSize(); } catch (e) {}
     });
 
-    // Load and display Quezon City border from GeoJSON
-    fetch('dispatcher/quezon_city.geojson')
+    // Load and display Barangay San Agustin border from GeoJSON.
+    fetch(SAN_AGUSTIN_GEOJSON)
         .then(res => res.json())
         .then(data => {
             L.geoJSON(data, {
                 style: {
                     color: 'red',
                     weight: 3,
-                    fill: false
+                    opacity: 1,
+                    fillColor: '#ef4444',
+                    fillOpacity: 0.08
                 }
             }).addTo(map);
         });
