@@ -296,7 +296,16 @@ CREATE TABLE `calls` (
   `latitude` decimal(10,7) DEFAULT NULL,
   `longitude` decimal(10,7) DEFAULT NULL,
   `incident_type` varchar(100) NOT NULL,
-  `priority` enum('low','medium','high') NOT NULL DEFAULT 'medium',
+  `priority` varchar(20) NOT NULL DEFAULT 'moderate',
+  `priority_score` tinyint(3) UNSIGNED DEFAULT NULL,
+  `priority_label` varchar(20) DEFAULT NULL,
+  `priority_color` varchar(20) DEFAULT NULL,
+  `indicator_incident_type` varchar(80) DEFAULT NULL,
+  `threat_to_life` varchar(80) DEFAULT NULL,
+  `severity_level` varchar(80) DEFAULT NULL,
+  `population_affected` varchar(80) DEFAULT NULL,
+  `verification_status` varchar(80) DEFAULT NULL,
+  `priority_breakdown` longtext DEFAULT NULL,
   `status` enum('new','triaged','closed') NOT NULL DEFAULT 'new',
   `description` text DEFAULT NULL,
   `received_at` datetime NOT NULL DEFAULT current_timestamp(),
@@ -328,12 +337,13 @@ INSERT INTO `calls` (`id`, `reference_no`, `caller_name`, `caller_phone`, `calle
 DELIMITER $$
 CREATE TRIGGER `trg_calls_ai_create_incident` AFTER INSERT ON `calls` FOR EACH ROW BEGIN
   INSERT INTO `incidents` (
-    `reference_no`, `type`, `priority`, `status`, `title`, `description`,
-    `location_address`, `latitude`, `longitude`, `reported_by_call_id`
+    `reference_no`, `type`, `priority`, `priority_score`, `priority_label`, `priority_color`,
+    `indicator_incident_type`, `threat_to_life`, `severity_level`, `population_affected`, `verification_status`, `priority_breakdown`,
+    `status`, `title`, `description`, `location_address`, `latitude`, `longitude`, `reported_by_call_id`
   ) VALUES (
-    NEW.`reference_no`, NEW.`incident_type`, NEW.`priority`, 'pending',
-    CONCAT('Incident from call ', NEW.`reference_no`), NEW.`description`,
-    NEW.`location_address`, NEW.`latitude`, NEW.`longitude`, NEW.`id`
+    NEW.`reference_no`, NEW.`incident_type`, NEW.`priority`, NEW.`priority_score`, NEW.`priority_label`, NEW.`priority_color`,
+    NEW.`indicator_incident_type`, NEW.`threat_to_life`, NEW.`severity_level`, NEW.`population_affected`, NEW.`verification_status`, NEW.`priority_breakdown`,
+    'pending', CONCAT('Incident from call ', NEW.`reference_no`), NEW.`description`, NEW.`location_address`, NEW.`latitude`, NEW.`longitude`, NEW.`id`
   );
 END
 $$
@@ -504,7 +514,16 @@ CREATE TABLE `incidents` (
   `id` bigint(20) UNSIGNED NOT NULL,
   `reference_no` varchar(50) NOT NULL,
   `type` varchar(100) NOT NULL,
-  `priority` enum('low','medium','high') NOT NULL DEFAULT 'medium',
+  `priority` varchar(20) NOT NULL DEFAULT 'moderate',
+  `priority_score` tinyint(3) UNSIGNED DEFAULT NULL,
+  `priority_label` varchar(20) DEFAULT NULL,
+  `priority_color` varchar(20) DEFAULT NULL,
+  `indicator_incident_type` varchar(80) DEFAULT NULL,
+  `threat_to_life` varchar(80) DEFAULT NULL,
+  `severity_level` varchar(80) DEFAULT NULL,
+  `population_affected` varchar(80) DEFAULT NULL,
+  `verification_status` varchar(80) DEFAULT NULL,
+  `priority_breakdown` longtext DEFAULT NULL,
   `status` enum('pending','dispatched','resolved','cancelled') NOT NULL DEFAULT 'pending',
   `title` varchar(200) DEFAULT NULL,
   `description` text DEFAULT NULL,

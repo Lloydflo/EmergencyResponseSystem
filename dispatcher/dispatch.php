@@ -51,7 +51,15 @@ try {
         $topIncident = $pdo->query("SELECT reference_no, type, location_address, priority
                                     FROM incidents
                                     WHERE status IN ('pending','dispatched','active','in_progress')
-                                    ORDER BY FIELD(LOWER(priority),'critical','high','medium','low'), created_at DESC
+                                    ORDER BY CASE LOWER(priority)
+                                        WHEN 'critical' THEN 1
+                                        WHEN 'high' THEN 2
+                                        WHEN 'urgent' THEN 3
+                                        WHEN 'moderate' THEN 4
+                                        WHEN 'medium' THEN 4
+                                        WHEN 'low' THEN 5
+                                        ELSE 6
+                                    END, created_at DESC
                                     LIMIT 1")->fetch();
         if ($topIncident) {
             $currentIncidentSummary = trim(
@@ -1535,8 +1543,10 @@ document.addEventListener('DOMContentLoaded', () => {
                 }
                 container.innerHTML = '';
                 items.forEach(it => {
-                    const prio = (it.priority || 'medium').toLowerCase();
-                    const prioClass = prio === 'high' ? 'high' : (prio === 'low' ? 'low' : 'medium');
+                    const prio = (it.priority || 'moderate').toLowerCase();
+                    const prioClass = ['critical', 'high', 'urgent', 'moderate', 'low'].includes(prio)
+                        ? prio
+                        : (prio === 'medium' ? 'moderate' : 'low');
                     const minsAgo = (() => { try { return Math.max(0, Math.floor((Date.now() - new Date(it.created_at).getTime()) / 60000)); } catch(e) { return 0; } })();
                     const timeAgo = minsAgo < 1 ? 'Just now' : (minsAgo + ' min ago');
                     const title = it.title || it.type || 'Incident';
@@ -1984,8 +1994,10 @@ function refreshActiveCalls() {
         }
         container.innerHTML = '';
         items.forEach(it => {
-            const prio = (it.priority || 'medium').toLowerCase();
-            const prioClass = prio === 'high' ? 'high' : (prio === 'low' ? 'low' : 'medium');
+            const prio = (it.priority || 'moderate').toLowerCase();
+            const prioClass = ['critical', 'high', 'urgent', 'moderate', 'low'].includes(prio)
+                ? prio
+                : (prio === 'medium' ? 'moderate' : 'low');
             const minsAgo = (() => { try { return Math.max(0, Math.floor((Date.now() - new Date(it.created_at).getTime()) / 60000)); } catch(e) { return 0; } })();
             const timeAgo = minsAgo < 1 ? 'Just now' : (minsAgo + ' min ago');
             const title = it.title || it.type || 'Incident';

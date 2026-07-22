@@ -19,7 +19,15 @@ try {
         $incident = $pdo->query("SELECT type, location_address, description, priority
                                  FROM incidents
                                  WHERE status IN ('pending','dispatched','active','in_progress')
-                                 ORDER BY FIELD(LOWER(priority),'critical','high','medium','low'), created_at DESC
+                                 ORDER BY CASE LOWER(priority)
+                                     WHEN 'critical' THEN 1
+                                     WHEN 'high' THEN 2
+                                     WHEN 'urgent' THEN 3
+                                     WHEN 'moderate' THEN 4
+                                     WHEN 'medium' THEN 4
+                                     WHEN 'low' THEN 5
+                                     ELSE 6
+                                 END, created_at DESC
                                  LIMIT 1")->fetch();
         if (!$incident) {
             $incident = $pdo->query("SELECT type, location_address, description, priority
@@ -255,21 +263,14 @@ try {
         document.querySelectorAll('.btn-priority').forEach(button => {
             button.addEventListener('click', function() {
                 const incidentCard = this.closest('.incident-card');
-                const currentPriority = incidentCard.classList.contains('priority-high') ? 'high' :
-                                      incidentCard.classList.contains('priority-medium') ? 'medium' : 'low';
+                const priorityCycle = ['critical', 'high', 'urgent', 'moderate', 'low'];
+                const currentPriority = priorityCycle.find((priority) => incidentCard.classList.contains(`priority-${priority}`)) || 'low';
 
-                // Cycle through priorities: high -> medium -> low -> high
-                let newPriority;
-                if (currentPriority === 'high') {
-                    newPriority = 'medium';
-                } else if (currentPriority === 'medium') {
-                    newPriority = 'low';
-                } else {
-                    newPriority = 'high';
-                }
+                const currentIndex = priorityCycle.indexOf(currentPriority);
+                const newPriority = priorityCycle[(currentIndex + 1) % priorityCycle.length];
 
                 // Update card styling
-                incidentCard.classList.remove('priority-high', 'priority-medium', 'priority-low');
+                incidentCard.classList.remove('priority-critical', 'priority-high', 'priority-urgent', 'priority-moderate', 'priority-medium', 'priority-low');
                 incidentCard.classList.add(`priority-${newPriority}`);
 
                 // Update button styling and text

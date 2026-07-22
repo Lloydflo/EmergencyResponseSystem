@@ -18,7 +18,15 @@ try {
     $topIncident = $pdo->query("SELECT reference_no, type, location_address, priority
                                 FROM incidents
                                 WHERE status IN ('pending','dispatched','active','in_progress')
-                                ORDER BY FIELD(LOWER(priority),'critical','high','medium','low'), created_at DESC
+                                ORDER BY CASE LOWER(priority)
+                                    WHEN 'critical' THEN 1
+                                    WHEN 'high' THEN 2
+                                    WHEN 'urgent' THEN 3
+                                    WHEN 'moderate' THEN 4
+                                    WHEN 'medium' THEN 4
+                                    WHEN 'low' THEN 5
+                                    ELSE 6
+                                END, created_at DESC
                                 LIMIT 1")->fetch();
     if ($topIncident) {
         $currentIncident = trim(

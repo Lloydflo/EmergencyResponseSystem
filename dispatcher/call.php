@@ -211,7 +211,7 @@ $pageTitle = 'Emergency Call Center';
                                 </div>
                                 <div class="form-row">
                                     <div class="form-group">
-                                        <label>Vehicle Type</label>
+                                        <label>Response Unit Type</label>
                                         <div class="incident-type-dropdown" id="incidentTypeDropdown">
                                             <button type="button" class="incident-type-trigger" id="incidentTypeTrigger" aria-expanded="false" aria-controls="incidentTypeMenu">
                                                 <span id="incidentTypeTriggerText">Select type</span>
@@ -243,14 +243,91 @@ $pageTitle = 'Emergency Call Center';
                                     <label for="incidentDescription">Description</label>
                                     <textarea id="incidentDescription" name="incidentDescription" placeholder="Brief description of the situation" required></textarea>
                                 </div>
-                                <div class="form-group">
-                                    <label>Priority <span id="prioritySuggestion" class="priority-suggestion"></span></label>
-                                    <div class="priority-select" id="prioritySelect">
-                                        <div class="priority-option high" data-value="high">High</div>
-                                        <div class="priority-option medium" data-value="medium">Medium</div>
-                                        <div class="priority-option low" data-value="low">Low</div>
+                                <div class="indicator-section">
+                                    <div class="section-title indicator-title">
+                                        <i class="fas fa-triangle-exclamation"></i>
+                                        Incident Indicator
+                                        <span id="prioritySuggestion" class="priority-suggestion"></span>
                                     </div>
-                                    <input type="hidden" id="incidentPriority" name="incidentPriority" required>
+                                    <div class="indicator-grid">
+                                        <div class="form-group">
+                                            <label for="indicatorIncidentType">Incident Type</label>
+                                            <select id="indicatorIncidentType" name="indicatorIncidentType" required>
+                                                <option value="">Select incident type</option>
+                                                <option value="bomb_threat">Bomb Threat - 40</option>
+                                                <option value="active_shooter">Active Shooter - 40</option>
+                                                <option value="major_structural_fire">Major Structural Fire - 38</option>
+                                                <option value="building_collapse">Building Collapse - 38</option>
+                                                <option value="chemical_spill_hazardous_material">Chemical Spill / Hazardous Material - 35</option>
+                                                <option value="earthquake">Earthquake - 35</option>
+                                                <option value="landslide">Landslide - 33</option>
+                                                <option value="flash_flood">Flash Flood - 32</option>
+                                                <option value="typhoon_damage">Typhoon Damage - 30</option>
+                                                <option value="gas_leak">Gas Leak - 30</option>
+                                                <option value="medical_emergency">Medical Emergency - 28</option>
+                                                <option value="vehicular_accident">Vehicular Accident - 25</option>
+                                                <option value="missing_person">Missing Person - 20</option>
+                                                <option value="animal_rescue">Animal Rescue - 10</option>
+                                                <option value="power_outage">Power Outage - 8</option>
+                                                <option value="noise_complaint_minor_disturbance">Noise Complaint / Minor Disturbance - 3</option>
+                                            </select>
+                                        </div>
+                                        <div class="form-group">
+                                            <label for="threatToLife">Threat to Human Life</label>
+                                            <select id="threatToLife" name="threatToLife" required>
+                                                <option value="">Select threat level</option>
+                                                <option value="multiple_lives_immediate_danger">Multiple lives in immediate danger - 30</option>
+                                                <option value="trapped_or_seriously_injured">People trapped or seriously injured - 25</option>
+                                                <option value="possible_danger_nearby_people">Possible danger nearby - 15</option>
+                                                <option value="no_immediate_danger">No immediate danger - 5</option>
+                                                <option value="false_alarm_hoax">False alarm / Hoax - 0</option>
+                                            </select>
+                                        </div>
+                                        <div class="form-group">
+                                            <label for="severityLevel">Severity</label>
+                                            <select id="severityLevel" name="severityLevel" required>
+                                                <option value="">Select severity</option>
+                                                <option value="catastrophic">Catastrophic - 20</option>
+                                                <option value="major">Major - 15</option>
+                                                <option value="moderate">Moderate - 10</option>
+                                                <option value="minor">Minor - 5</option>
+                                                <option value="very_minor">Very Minor - 2</option>
+                                            </select>
+                                        </div>
+                                        <div class="form-group">
+                                            <label for="populationAffected">Population Affected</label>
+                                            <select id="populationAffected" name="populationAffected" required>
+                                                <option value="">Select population</option>
+                                                <option value="more_than_500">More than 500 people - 10</option>
+                                                <option value="100_500">100-500 people - 8</option>
+                                                <option value="20_99">20-99 people - 6</option>
+                                                <option value="5_19">5-19 people - 4</option>
+                                                <option value="1_4">1-4 people - 2</option>
+                                            </select>
+                                        </div>
+                                        <div class="form-group">
+                                            <label for="verificationStatus">Report Verification</label>
+                                            <select id="verificationStatus" name="verificationStatus" required>
+                                                <option value="">Select verification</option>
+                                                <option value="verified_emergency_personnel_cctv_official">Verified by emergency personnel / CCTV / official - 10</option>
+                                                <option value="confirmed_multiple_witnesses">Confirmed by multiple witnesses - 8</option>
+                                                <option value="one_identified_witness">One identified witness - 5</option>
+                                                <option value="anonymous_unverified">Anonymous or unverified - 2</option>
+                                                <option value="confirmed_false_report">Confirmed false report - 0</option>
+                                            </select>
+                                        </div>
+                                        <div class="priority-score-card" id="priorityIndicatorPreview">
+                                            <div>
+                                                <span>Priority Score</span>
+                                                <strong id="priorityScoreValue">0</strong>
+                                            </div>
+                                            <div class="priority-score-meta">
+                                                <span id="priorityLevelBadge" class="incident-priority low">LOW</span>
+                                                <small id="priorityActionText">Complete the indicator fields.</small>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <input type="hidden" id="incidentPriority" name="incidentPriority" value="low" required>
                                 </div>
                             </div>
 
@@ -321,8 +398,10 @@ $pageTitle = 'Emergency Call Center';
 
                     <div class="filter-tabs">
                         <button class="filter-tab active" data-filter="all" onclick="setFilter(this)">All</button>
+                        <button class="filter-tab" data-filter="critical" onclick="setFilter(this)">Critical</button>
                         <button class="filter-tab" data-filter="high" onclick="setFilter(this)">High</button>
-                        <button class="filter-tab" data-filter="medium" onclick="setFilter(this)">Medium</button>
+                        <button class="filter-tab" data-filter="urgent" onclick="setFilter(this)">Urgent</button>
+                        <button class="filter-tab" data-filter="moderate" onclick="setFilter(this)">Moderate</button>
                         <button class="filter-tab" data-filter="low" onclick="setFilter(this)">Low</button>
                     </div>
 
@@ -363,7 +442,7 @@ $pageTitle = 'Emergency Call Center';
     const ALERTARA_SOCKET_URL = 'https://emergency-comm.alertaraqc.com';
     const ALERTARA_SOCKET_PATH = '/socket.io';
     const TRANSFER_INBOX_ROOM = 'ers-transfer-inbox';
-    let priorityAuto = true; // auto-apply suggested priority until user overrides
+    let priorityAuto = true; // keeps transferred/manual fallback priority until indicator fields calculate a score
     let prioritySuggestTimer = null; // debounce timer for suggestion updates
     let currentSearch = '';
     let filterDay = '';
@@ -387,13 +466,61 @@ $pageTitle = 'Emergency Call Center';
     let incomingCallSequence = 0;
     let incomingTransferPollTimer = null;
     const INCOMING_TRANSFER_POLL_MS = 1500;
-    const PRIORITY_ORDER = { high: 0, medium: 1, low: 2 };
+    const PRIORITY_ORDER = { critical: 0, high: 1, urgent: 2, moderate: 3, medium: 3, low: 4 };
+    const PRIORITY_RULES = {
+        incident_type: {
+            bomb_threat: { label: 'Bomb Threat', score: 40 },
+            active_shooter: { label: 'Active Shooter', score: 40 },
+            major_structural_fire: { label: 'Major Structural Fire', score: 38 },
+            building_collapse: { label: 'Building Collapse', score: 38 },
+            chemical_spill_hazardous_material: { label: 'Chemical Spill / Hazardous Material', score: 35 },
+            earthquake: { label: 'Earthquake', score: 35 },
+            landslide: { label: 'Landslide', score: 33 },
+            flash_flood: { label: 'Flash Flood', score: 32 },
+            typhoon_damage: { label: 'Typhoon Damage', score: 30 },
+            gas_leak: { label: 'Gas Leak', score: 30 },
+            medical_emergency: { label: 'Medical Emergency', score: 28 },
+            vehicular_accident: { label: 'Vehicular Accident', score: 25 },
+            missing_person: { label: 'Missing Person', score: 20 },
+            animal_rescue: { label: 'Animal Rescue', score: 10 },
+            power_outage: { label: 'Power Outage', score: 8 },
+            noise_complaint_minor_disturbance: { label: 'Noise Complaint / Minor Disturbance', score: 3 }
+        },
+        threat_to_life: {
+            multiple_lives_immediate_danger: { label: 'Multiple lives are in immediate danger', score: 30 },
+            trapped_or_seriously_injured: { label: 'People are trapped or seriously injured', score: 25 },
+            possible_danger_nearby_people: { label: 'Possible danger to nearby people', score: 15 },
+            no_immediate_danger: { label: 'No immediate danger to life', score: 5 },
+            false_alarm_hoax: { label: 'False alarm / Hoax', score: 0 }
+        },
+        severity_level: {
+            catastrophic: { label: 'Catastrophic', score: 20 },
+            major: { label: 'Major', score: 15 },
+            moderate: { label: 'Moderate', score: 10 },
+            minor: { label: 'Minor', score: 5 },
+            very_minor: { label: 'Very Minor', score: 2 }
+        },
+        population_affected: {
+            more_than_500: { label: 'More than 500 people', score: 10 },
+            '100_500': { label: '100-500 people', score: 8 },
+            '20_99': { label: '20-99 people', score: 6 },
+            '5_19': { label: '5-19 people', score: 4 },
+            '1_4': { label: '1-4 people', score: 2 }
+        },
+        verification_status: {
+            verified_emergency_personnel_cctv_official: { label: 'Verified by emergency personnel, CCTV, or official source', score: 10 },
+            confirmed_multiple_witnesses: { label: 'Confirmed by multiple witnesses', score: 8 },
+            one_identified_witness: { label: 'Reported by one identified witness', score: 5 },
+            anonymous_unverified: { label: 'Anonymous or unverified report', score: 2 },
+            confirmed_false_report: { label: 'Confirmed false report', score: 0 }
+        }
+    };
 
     function normalizePriority(value, fallback = 'medium') {
         const priority = String(value || '').trim().toLowerCase();
-        if (priority === 'critical' || priority === 'urgent') return 'high';
+        if (priority === 'medium') return 'moderate';
         if (Object.prototype.hasOwnProperty.call(PRIORITY_ORDER, priority)) return priority;
-        return fallback;
+        return fallback === 'medium' ? 'moderate' : fallback;
     }
 
     function priorityRank(value) {
@@ -472,6 +599,94 @@ $pageTitle = 'Emergency Call Center';
         if (!raw) return 'N/A';
         const parsed = new Date(raw.indexOf('T') === -1 ? raw.replace(' ', 'T') : raw);
         return Number.isNaN(parsed.getTime()) ? raw : parsed.toLocaleString();
+    }
+
+    function priorityMetaFromScore(score) {
+        const value = Number(score) || 0;
+        if (value >= 90) return { priority: 'critical', label: 'CRITICAL', color: 'red', action: 'Immediate dispatch and notify all responders/admins.' };
+        if (value >= 70) return { priority: 'high', label: 'HIGH', color: 'orange', action: 'Dispatch as soon as possible with high priority.' };
+        if (value >= 45) return { priority: 'urgent', label: 'URGENT', color: 'yellow', action: 'Standard emergency response queue.' };
+        if (value >= 20) return { priority: 'moderate', label: 'MODERATE', color: 'blue', action: 'Normal response to available responders.' };
+        return { priority: 'low', label: 'LOW', color: 'green', action: 'Routine handling and monitoring.' };
+    }
+
+    function getIncidentIndicatorPayload() {
+        return {
+            incident_type: document.getElementById('indicatorIncidentType')?.value || '',
+            threat_to_life: document.getElementById('threatToLife')?.value || '',
+            severity_level: document.getElementById('severityLevel')?.value || '',
+            population_affected: document.getElementById('populationAffected')?.value || '',
+            verification_status: document.getElementById('verificationStatus')?.value || ''
+        };
+    }
+
+    function computeIncidentPriorityIndicator() {
+        const values = getIncidentIndicatorPayload();
+        let score = 0;
+        const breakdown = {};
+        Object.entries(values).forEach(([key, value]) => {
+            const item = PRIORITY_RULES[key] && PRIORITY_RULES[key][value] ? PRIORITY_RULES[key][value] : null;
+            const itemScore = item ? Number(item.score) || 0 : 0;
+            score += itemScore;
+            breakdown[key] = {
+                value,
+                label: item ? item.label : '',
+                score: itemScore
+            };
+        });
+        return { score, values, breakdown, meta: priorityMetaFromScore(score) };
+    }
+
+    function syncIncidentPriorityIndicator() {
+        const result = computeIncidentPriorityIndicator();
+        const priorityInput = document.getElementById('incidentPriority');
+        const scoreEl = document.getElementById('priorityScoreValue');
+        const badgeEl = document.getElementById('priorityLevelBadge');
+        const actionEl = document.getElementById('priorityActionText');
+        const previewEl = document.getElementById('priorityIndicatorPreview');
+        const suggestionEl = document.getElementById('prioritySuggestion');
+        const selectedCount = Object.values(result.values).filter(Boolean).length;
+
+        if (priorityInput) {
+            priorityInput.value = result.meta.priority;
+        }
+        if (scoreEl) {
+            scoreEl.textContent = String(result.score);
+        }
+        if (badgeEl) {
+            badgeEl.className = `incident-priority ${result.meta.priority}`;
+            badgeEl.textContent = result.meta.label;
+        }
+        if (actionEl) {
+            actionEl.textContent = selectedCount === 5 ? result.meta.action : 'Complete the indicator fields.';
+        }
+        if (previewEl) {
+            previewEl.className = `priority-score-card priority-${result.meta.priority}`;
+        }
+        if (suggestionEl) {
+            suggestionEl.textContent = selectedCount > 0 ? `(Score: ${result.score})` : '';
+        }
+        return result;
+    }
+
+    function initIncidentPriorityIndicator() {
+        ['indicatorIncidentType', 'threatToLife', 'severityLevel', 'populationAffected', 'verificationStatus'].forEach((id) => {
+            const el = document.getElementById(id);
+            if (el) {
+                el.addEventListener('change', syncIncidentPriorityIndicator);
+            }
+        });
+        syncIncidentPriorityIndicator();
+    }
+
+    function resetIncidentPriorityIndicator() {
+        ['indicatorIncidentType', 'threatToLife', 'severityLevel', 'populationAffected', 'verificationStatus'].forEach((id) => {
+            const el = document.getElementById(id);
+            if (el) {
+                el.value = '';
+            }
+        });
+        syncIncidentPriorityIndicator();
     }
     let alertAudioContext = null;
     let transferSocket = null;
@@ -559,6 +774,7 @@ $pageTitle = 'Emergency Call Center';
     document.addEventListener('DOMContentLoaded', () => {
         initPrioritySelect();
         initIncidentTypeChecklist();
+        initIncidentPriorityIndicator();
         initIncidentSidebarControls();
         if (RECENT_INCIDENTS_ENABLED) {
             loadIncidentsFromServer();
@@ -1833,18 +2049,20 @@ $pageTitle = 'Emergency Call Center';
     }
 
     function setPrioritySelection(value) {
+        const normalized = normalizePriority(value, 'moderate');
         const options = document.querySelectorAll('#prioritySelect .priority-option');
         let applied = false;
         options.forEach(o => {
-            if (o.dataset.value === value) {
+            if (normalizePriority(o.dataset.value, '') === normalized) {
                 o.classList.add('active');
                 applied = true;
             } else {
                 o.classList.remove('active');
             }
         });
-        if (applied) {
-            document.getElementById('incidentPriority').value = value;
+        const priorityEl = document.getElementById('incidentPriority');
+        if (priorityEl) {
+            priorityEl.value = applied ? normalized : normalized;
         }
     }
 
@@ -1993,6 +2211,13 @@ $pageTitle = 'Emergency Call Center';
     function updatePrioritySuggestion(desc) {
         const text = (desc || '').trim();
         const badge = document.getElementById('prioritySuggestion');
+        const indicator = computeIncidentPriorityIndicator();
+        const indicatorStarted = Object.values(indicator.values).some(Boolean);
+        if (indicatorStarted) {
+            if (badge) badge.textContent = `(Score: ${indicator.score})`;
+            syncIncidentPriorityIndicator();
+            return;
+        }
         // Show suggestion only after user types some description
         if (!text || text.length < 3) {
             if (badge) badge.textContent = '';
@@ -2176,14 +2401,16 @@ $pageTitle = 'Emergency Call Center';
         }
         const finalLocationText = document.getElementById('incidentLocation').value.trim() || locationText;
         const selectedTypes = getSelectedIncidentTypes();
+        const priorityIndicator = syncIncidentPriorityIndicator();
         const payload = {
             caller_name: document.getElementById('callerName').value.trim(),
             caller_phone: document.getElementById('callerPhone').value.trim(),
             type: selectedTypes,
             location: finalLocationText,
             description: document.getElementById('incidentDescription').value.trim(),
-            priority: document.getElementById('incidentPriority').value,
-            status: document.getElementById('status').value
+            priority: priorityIndicator.meta.priority,
+            status: document.getElementById('status').value,
+            priority_indicator: priorityIndicator.values
         };
         if (coords) {
             payload.latitude = coords.lat;
@@ -2235,7 +2462,7 @@ $pageTitle = 'Emergency Call Center';
             e.target.reset();
             resetIncidentTypeChecklist();
             document.querySelectorAll('#prioritySelect .priority-option').forEach(o => o.classList.remove('active'));
-            document.getElementById('incidentPriority').value = '';
+            resetIncidentPriorityIndicator();
             const locationInput = document.getElementById('incidentLocation');
             if (locationInput) {
                 delete locationInput.dataset.lat;
@@ -2282,7 +2509,7 @@ $pageTitle = 'Emergency Call Center';
 
     function applyIncidentFilters(items) {
         return items.filter((i) => {
-            if (currentFilter !== 'all' && i.priority !== currentFilter) return false;
+            if (currentFilter !== 'all' && normalizePriority(i.priority, 'low') !== currentFilter) return false;
             if (filterDay || filterMonth) {
                 const d = new Date(i.created_at || i.createdAt || i.timestamp || Date.now());
                 if (isNaN(d)) return false;
@@ -2304,6 +2531,8 @@ $pageTitle = 'Emergency Call Center';
         }).sort((a, b) => {
             const byPriority = priorityRank(a.priority) - priorityRank(b.priority);
             if (byPriority !== 0) return byPriority;
+            const byScore = (Number(b.priority_score) || 0) - (Number(a.priority_score) || 0);
+            if (byScore !== 0) return byScore;
             const byTime = parseQueueTime(b.updated_at || b.created_at || b.timestamp) - parseQueueTime(a.updated_at || a.created_at || a.timestamp);
             if (byTime !== 0) return byTime;
             return Number(b.id || 0) - Number(a.id || 0);
@@ -2312,6 +2541,7 @@ $pageTitle = 'Emergency Call Center';
 
     function incidentCardHtml(i) {
         const priorityClass = normalizePriority(i.priority, 'low');
+        const priorityScore = Number.isFinite(Number(i.priority_score)) ? Number(i.priority_score) : null;
         const created = new Date(i.created_at || Date.now());
         const code = i.incident_code || '';
         const id = Number(i.id) || 0;
@@ -2319,7 +2549,7 @@ $pageTitle = 'Emergency Call Center';
             <div class="incident-card" role="button" tabindex="0" onclick="openIncidentById(${id})" onkeydown="handleIncidentCardKey(event, ${id})">
                 <div class="incident-header">
                     <div class="incident-id">${escapeHtml(code || ('#' + id))}</div>
-                    <div class="incident-priority ${escapeHtml(priorityClass)}">${escapeHtml((priorityClass||'low').toUpperCase())}</div>
+                    <div class="incident-priority ${escapeHtml(priorityClass)}">${escapeHtml((priorityClass||'low').toUpperCase())}${priorityScore !== null ? ` - ${priorityScore} pts` : ''}</div>
                 </div>
                 <div class="incident-type">${escapeHtml(labelForType(i.type))}</div>
                 <div class="incident-location"><i class="fas fa-map-marker-alt"></i> ${escapeHtml(i.location || 'No location')}</div>
@@ -2395,16 +2625,18 @@ $pageTitle = 'Emergency Call Center';
             .filter(Boolean)
             .join(' | ');
         const priorityClass = normalizePriority(item.priority, 'low');
+        const priorityScore = Number.isFinite(Number(item.priority_score)) ? `${Number(item.priority_score)} pts` : '';
 
         title.textContent = item.incident_code || `Incident #${item.id || ''}`;
         body.innerHTML = `
             <div class="incident-details-summary">
-                <span class="incident-priority ${priorityClass}">${escapeHtml(priorityClass.toUpperCase())}</span>
+                <span class="incident-priority ${priorityClass}">${escapeHtml(priorityClass.toUpperCase())}${priorityScore ? ` - ${escapeHtml(priorityScore)}` : ''}</span>
                 <span class="incident-status-pill">${escapeHtml(item.status || 'N/A')}</span>
                 <span>${escapeHtml(formatDateTime(item.created_at))}</span>
             </div>
             <div class="incident-details-grid">
                 ${incidentDetailRow('Type', labelForType(item.type))}
+                ${incidentDetailRow('Priority Score', priorityScore)}
                 ${incidentDetailRow('Location', item.location)}
                 ${incidentDetailRow('Coordinates', coordinates)}
                 ${incidentDetailRow('Caller', item.caller_name)}

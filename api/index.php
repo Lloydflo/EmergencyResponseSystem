@@ -148,7 +148,15 @@ function ers_api_alerts(PDO $pdo): array
             "SELECT id, reference_no, title, type, priority, status, location_address, created_at
              FROM incidents
              WHERE status IN ('pending', 'dispatched')
-             ORDER BY FIELD(priority, 'high', 'medium', 'low'), created_at DESC
+             ORDER BY CASE LOWER(priority)
+                WHEN 'critical' THEN 1
+                WHEN 'high' THEN 2
+                WHEN 'urgent' THEN 3
+                WHEN 'moderate' THEN 4
+                WHEN 'medium' THEN 4
+                WHEN 'low' THEN 5
+                ELSE 6
+             END, created_at DESC
              LIMIT 10"
         );
         foreach (($stmt ? $stmt->fetchAll(PDO::FETCH_ASSOC) : []) as $row) {

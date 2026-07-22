@@ -461,12 +461,21 @@
     background: #f8fafc;
 }
 
-.incidents-table tbody tr.priority-high td:first-child {
+.incidents-table tbody tr.priority-critical td:first-child {
     box-shadow: inset 4px 0 0 #dc2626;
 }
 
-.incidents-table tbody tr.priority-medium td:first-child {
+.incidents-table tbody tr.priority-high td:first-child {
     box-shadow: inset 4px 0 0 #ea580c;
+}
+
+.incidents-table tbody tr.priority-urgent td:first-child {
+    box-shadow: inset 4px 0 0 #eab308;
+}
+
+.incidents-table tbody tr.priority-medium td:first-child,
+.incidents-table tbody tr.priority-moderate td:first-child {
+    box-shadow: inset 4px 0 0 #2563eb;
 }
 
 .incidents-table tbody tr.priority-low td:first-child {
@@ -519,14 +528,25 @@
     text-transform: capitalize;
 }
 
-.priority-badge.priority-high {
+.priority-badge.priority-critical {
     background: #fee2e2;
     color: #991b1b;
 }
 
-.priority-badge.priority-medium {
+.priority-badge.priority-high {
     background: #ffedd5;
     color: #9a3412;
+}
+
+.priority-badge.priority-urgent {
+    background: #fef3c7;
+    color: #854d0e;
+}
+
+.priority-badge.priority-medium,
+.priority-badge.priority-moderate {
+    background: #dbeafe;
+    color: #1d4ed8;
 }
 
 .priority-badge.priority-low {
@@ -577,14 +597,25 @@
     color: #0f172a;
 }
 
-.btn-table-action.btn-priority.priority-high {
+.btn-table-action.btn-priority.priority-critical {
     background: #fee2e2;
     color: #991b1b;
 }
 
-.btn-table-action.btn-priority.priority-medium {
+.btn-table-action.btn-priority.priority-high {
     background: #ffedd5;
     color: #9a3412;
+}
+
+.btn-table-action.btn-priority.priority-urgent {
+    background: #fef3c7;
+    color: #854d0e;
+}
+
+.btn-table-action.btn-priority.priority-medium,
+.btn-table-action.btn-priority.priority-moderate {
+    background: #dbeafe;
+    color: #1d4ed8;
 }
 
 .btn-table-action.btn-priority.priority-low {
@@ -699,12 +730,21 @@
     font-family: inherit;
 }
 
-.priority-high {
+.priority-critical {
     border-left-color: #dc2626;
 }
 
-.priority-medium {
+.priority-high {
     border-left-color: #ea580c;
+}
+
+.priority-urgent {
+    border-left-color: #eab308;
+}
+
+.priority-medium,
+.priority-moderate {
+    border-left-color: #2563eb;
 }
 
 .priority-low {
