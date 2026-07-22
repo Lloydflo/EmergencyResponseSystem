@@ -177,13 +177,13 @@ function ers_external_normalize_type($value): string
 function ers_external_normalize_priority($value): string
 {
     $priority = strtolower(trim((string)$value));
-    if (in_array($priority, ['low', 'medium', 'high'], true)) {
+    if ($priority === 'medium') {
+        return 'moderate';
+    }
+    if (in_array($priority, ['critical', 'high', 'urgent', 'moderate', 'low'], true)) {
         return $priority;
     }
-    if ($priority === 'critical' || $priority === 'urgent') {
-        return 'high';
-    }
-    return 'medium';
+    return 'moderate';
 }
 
 function ers_external_normalize_status($value): string

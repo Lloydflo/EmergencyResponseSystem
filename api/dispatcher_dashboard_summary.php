@@ -85,6 +85,10 @@ try {
         $avgResponseMin = (float)(($avgStmt->fetch()['avg_rt'] ?? 0) ?: 0);
     }
 
+    $hasPriorityScore = ers_column_exists($pdo, 'incidents', 'priority_score');
+    $priorityScoreSelect = $hasPriorityScore ? 'i.priority_score,' : 'NULL AS priority_score,';
+    $priorityScoreOrder = $hasPriorityScore ? 'COALESCE(i.priority_score, 0) DESC,' : '';
+
     $queueStmt = $pdo->query("
         SELECT
             i.id,
@@ -92,6 +96,7 @@ try {
             i.title,
             i.type,
             i.priority,
+            {$priorityScoreSelect}
             i.status,
             i.location_address,
             i.created_at,
@@ -109,7 +114,15 @@ try {
         )
         LEFT JOIN units u ON u.id = d.unit_id
         WHERE i.status IN ('pending', 'dispatched', 'active', 'in_progress')
-        ORDER BY FIELD(LOWER(i.priority), 'critical', 'high', 'medium', 'low'), i.created_at ASC
+        ORDER BY CASE LOWER(i.priority)
+            WHEN 'critical' THEN 1
+            WHEN 'high' THEN 2
+            WHEN 'urgent' THEN 3
+            WHEN 'moderate' THEN 4
+            WHEN 'medium' THEN 4
+            WHEN 'low' THEN 5
+            ELSE 6
+        END, {$priorityScoreOrder} i.created_at ASC
         LIMIT 10
     ");
     $queueItems = $queueStmt ? $queueStmt->fetchAll(PDO::FETCH_ASSOC) : [];

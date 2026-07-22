@@ -79,7 +79,15 @@ try {
             )
             LEFT JOIN units u ON u.id = d.unit_id
             WHERE i.status IN ('pending', 'dispatched', 'active', 'in_progress')
-            ORDER BY FIELD(LOWER(i.priority), 'critical', 'high', 'medium', 'low'), i.created_at ASC
+            ORDER BY CASE LOWER(i.priority)
+                WHEN 'critical' THEN 1
+                WHEN 'high' THEN 2
+                WHEN 'urgent' THEN 3
+                WHEN 'moderate' THEN 4
+                WHEN 'medium' THEN 4
+                WHEN 'low' THEN 5
+                ELSE 6
+            END, i.created_at ASC
             LIMIT 10
         ");
         $queue_items = $queue_stmt ? $queue_stmt->fetchAll(PDO::FETCH_ASSOC) : [];
@@ -169,7 +177,10 @@ function dispatcher_priority_class(string $priority): string {
     if ($p === 'high') {
         return 'priority-high';
     }
-    if ($p === 'medium') {
+    if ($p === 'urgent') {
+        return 'priority-urgent';
+    }
+    if ($p === 'moderate' || $p === 'medium') {
         return 'priority-medium';
     }
     return 'priority-low';
@@ -439,7 +450,8 @@ $type_total = array_sum($type_counts);
         const p = String(priority || '').trim().toLowerCase();
         if (p === 'critical') return 'priority-critical';
         if (p === 'high') return 'priority-high';
-        if (p === 'medium') return 'priority-medium';
+        if (p === 'urgent') return 'priority-urgent';
+        if (p === 'moderate' || p === 'medium') return 'priority-medium';
         return 'priority-low';
     }
 

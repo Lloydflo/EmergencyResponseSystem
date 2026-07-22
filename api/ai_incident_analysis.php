@@ -14,7 +14,15 @@ try {
     $sql = "SELECT id, reference_no, type, priority, status, location_address, description
             FROM incidents
             WHERE status IN ('pending','dispatched','active','in_progress')
-            ORDER BY FIELD(LOWER(priority),'critical','high','medium','low'),
+            ORDER BY CASE LOWER(priority)
+                         WHEN 'critical' THEN 1
+                         WHEN 'high' THEN 2
+                         WHEN 'urgent' THEN 3
+                         WHEN 'moderate' THEN 4
+                         WHEN 'medium' THEN 4
+                         WHEN 'low' THEN 5
+                         ELSE 6
+                     END,
                      created_at DESC
             LIMIT 1";
     $incident = $pdo->query($sql)->fetch();
@@ -55,4 +63,3 @@ try {
     http_response_code(500);
     echo json_encode(['ok' => false, 'error' => 'Query failed']);
 }
-

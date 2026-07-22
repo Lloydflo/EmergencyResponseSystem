@@ -161,8 +161,10 @@ function emergency_vehicle_label(string $unitType, string $vehicleName = ''): st
 function emergency_priority_weight(string $priority): int
 {
     $priority = strtolower(trim($priority));
-    if ($priority === 'high' || $priority === 'critical') return 3;
-    if ($priority === 'medium') return 2;
+    if ($priority === 'critical') return 5;
+    if ($priority === 'high') return 4;
+    if ($priority === 'urgent') return 3;
+    if ($priority === 'moderate' || $priority === 'medium') return 2;
     return 1;
 }
 
@@ -248,10 +250,13 @@ function emergency_load_active_incidents(PDO $pdo): array
         WHERE i.status IN ('pending','dispatched','active','in_progress')
         ORDER BY
             CASE LOWER(COALESCE(i.priority, ''))
-                WHEN 'high' THEN 1
                 WHEN 'critical' THEN 1
-                WHEN 'medium' THEN 2
-                ELSE 3
+                WHEN 'high' THEN 2
+                WHEN 'urgent' THEN 3
+                WHEN 'moderate' THEN 4
+                WHEN 'medium' THEN 4
+                WHEN 'low' THEN 5
+                ELSE 6
             END,
             i.created_at ASC,
             i.id ASC

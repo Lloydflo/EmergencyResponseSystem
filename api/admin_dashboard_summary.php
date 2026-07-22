@@ -66,17 +66,18 @@ try {
         }
     }
 
-    $priorityCounts = ['high' => 0, 'medium' => 0, 'low' => 0];
+    $priorityCounts = ['critical' => 0, 'high' => 0, 'urgent' => 0, 'moderate' => 0, 'medium' => 0, 'low' => 0];
     $priorityStmt = $pdo->query("SELECT LOWER(priority) AS priority_name, COUNT(*) AS c FROM incidents GROUP BY LOWER(priority)");
     foreach (($priorityStmt ? $priorityStmt->fetchAll(PDO::FETCH_ASSOC) : []) as $row) {
         $key = (string)($row['priority_name'] ?? '');
-        if ($key === 'critical') {
-            $key = 'high';
+        if ($key === 'medium') {
+            $key = 'moderate';
         }
         if (isset($priorityCounts[$key])) {
             $priorityCounts[$key] += (int)($row['c'] ?? 0);
         }
     }
+    $priorityCounts['medium'] = $priorityCounts['moderate'];
 
     echo json_encode([
         'ok' => true,

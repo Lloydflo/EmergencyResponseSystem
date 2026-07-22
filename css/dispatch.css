@@ -551,6 +551,27 @@
     background-color: #ef4444;
 }
 
+.status-critical {
+    background-color: #ef4444;
+}
+
+.status-high {
+    background-color: #f97316;
+}
+
+.status-urgent {
+    background-color: #f59e0b;
+}
+
+.status-moderate,
+.status-medium {
+    background-color: #2563eb;
+}
+
+.status-low {
+    background-color: #10b981;
+}
+
 .status-available {
     background-color: #06b6d4;
 }
@@ -587,14 +608,25 @@
     border-left: 5px solid #ef4444;
 }
 
-.call-card.high {
+.call-card.critical {
     border-left: 5px solid #ef4444;
     background: linear-gradient(180deg, #fff5f5, #fff1f2);
 }
 
-.call-card.medium {
+.call-card.high {
+    border-left: 5px solid #f97316;
+    background: linear-gradient(180deg, #fff7ed, #ffedd5);
+}
+
+.call-card.urgent {
     border-left: 5px solid #f59e0b;
     background: linear-gradient(180deg, #fffaf0, #fff7ed);
+}
+
+.call-card.moderate,
+.call-card.medium {
+    border-left: 5px solid #2563eb;
+    background: linear-gradient(180deg, #eff6ff, #dbeafe);
 }
 
 .call-card.low {

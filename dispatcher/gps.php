@@ -50,7 +50,7 @@ $pageTitle = 'GPS Tracking System';
 
                     <div class="gps-hero-chips">
                         <span class="gps-chip gps-chip-live"><span class="gps-chip-dot"></span> Live Tracking Active</span>
-                        <span class="gps-chip">Quezon City Coverage</span>
+                        <span class="gps-chip">San Agustin Coverage</span>
                         <span class="gps-chip">Routing Ready</span>
                     </div>
                 </div>
@@ -193,22 +193,25 @@ let pendingRouteAttempts = 0;
 let activeRouteState = null;
 const MAX_PENDING_TRACK_ATTEMPTS = 20;
 const MAX_PENDING_ROUTE_ATTEMPTS = 20;
-const QC_VIEWBOX = '121.0000,14.7500,121.1000,14.6000';
+const SAN_AGUSTIN_CENTER = [14.7320, 121.0351];
+const SAN_AGUSTIN_BOUNDS = [
+    [14.7225, 121.0290],
+    [14.7415, 121.0415]
+];
+const SAN_AGUSTIN_GEOJSON = 'dispatcher/san_agustin.geojson';
+const QC_VIEWBOX = '121.0290,14.7415,121.0415,14.7225';
 
 // ===============================
 // LEAFLET MAP INITIALIZATION
 // ===============================
 function initMap() {
 
-  // Quezon City bounds
-  QC_BOUNDS_GLOBAL = L.latLngBounds(
-    [14.6000, 121.0000],
-    [14.7500, 121.1000]
-  );
+  // Barangay San Agustin, Novaliches bounds.
+  QC_BOUNDS_GLOBAL = L.latLngBounds(SAN_AGUSTIN_BOUNDS);
 
     map = L.map("map", {
-        center: [14.6760, 121.0437], // QC Hall
-        zoom: 13,
+        center: SAN_AGUSTIN_CENTER,
+        zoom: 15,
         worldCopyJump: true
     });
     window.map = map;
@@ -225,15 +228,17 @@ function initMap() {
         try { map.invalidateSize(); } catch (e) {}
     });
 
-    // Load and display Quezon City border from GeoJSON
-    fetch('dispatcher/quezon_city.geojson')
+    // Load and display Barangay San Agustin border from GeoJSON.
+    fetch(SAN_AGUSTIN_GEOJSON)
         .then(res => res.json())
         .then(data => {
             L.geoJSON(data, {
                 style: {
                     color: 'red',
                     weight: 3,
-                    fill: false
+                    opacity: 1,
+                    fillColor: '#ef4444',
+                    fillOpacity: 0.08
                 }
             }).addTo(map);
         });
@@ -455,18 +460,18 @@ function canRenderLiveUnitMarker(identifier) {
 function initRoutes() {
   routes["route-1"] = L.polyline(
     [
-      [14.6825, 121.0505],
-      [14.6760, 121.0437],
-      [14.6690, 121.0380]
+      [14.7295, 121.0342],
+      [14.7320, 121.0351],
+      [14.7351, 121.0380]
     ],
     { color: "red", weight: 4 }
   );
 
   routes["route-2"] = L.polyline(
     [
-      [14.6672, 121.0603],
-      [14.6720, 121.0650],
-      [14.6900, 121.0600]
+      [14.7259, 121.0309],
+      [14.7310, 121.0321],
+      [14.7381, 121.0363]
     ],
     { color: "blue", weight: 4 }
   );
@@ -523,8 +528,7 @@ function updateMapVisibility() {
 }
 
 function centerMap() {
-    // Quezon City Hall coordinates
-    map.setView([14.6760, 121.0437], 13);
+    map.fitBounds(QC_BOUNDS_GLOBAL, { padding: [18, 18] });
 }
 
 function refreshMap() {
@@ -895,7 +899,7 @@ function revealFocusedUnitCard() {
     }
 }
 
-    // Quezon City bounds
+// Barangay San Agustin search helpers.
 function toNum(v) {
     const n = parseFloat(v);
     return Number.isFinite(n) ? n : null;
@@ -914,7 +918,7 @@ function parseCoordsFromText(value) {
 }
 
 function hasLocationContext(text) {
-    return /(quezon city|qc|metro manila|philippines)\b/i.test(String(text || ''));
+    return /(san agustin|novaliches|quezon city|qc|metro manila|philippines)\b/i.test(String(text || ''));
 }
 
 async function geocodeOnce(query, strictViewbox) {
@@ -943,6 +947,8 @@ function selectBestGeocodeCandidate(items, originalQuery) {
     const scored = items.map((item) => {
         const label = String(item.display_name || '').toLowerCase();
         let score = Number(item.importance || 0);
+        if (label.includes('san agustin')) score += 3;
+        if (label.includes('novaliches')) score += 2;
         if (label.includes('quezon city')) score += 2;
         if (q && label.includes(q)) score += 1.5;
         return { item, score };
@@ -965,7 +971,7 @@ async function geocodeIncidentLocation(locationText) {
 
     const query = hasLocationContext(raw)
         ? raw
-        : `${raw}, Quezon City, Metro Manila, Philippines`;
+        : `${raw}, San Agustin, Novaliches, Quezon City, Metro Manila, Philippines`;
 
     try {
         let candidates = await geocodeOnce(query, true);
@@ -1195,7 +1201,7 @@ function initSearchLocationControls() {
             coords = await geocodeIncidentLocation(raw);
         }
         if (!coords) {
-            showNotification('Unable to locate this search in Quezon City', 'error');
+            showNotification('Unable to locate this search in Barangay San Agustin', 'error');
             return;
         }
         input.dataset.lat = String(coords.lat);

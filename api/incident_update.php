@@ -2,6 +2,7 @@
 // API endpoint: /api/incident_update.php
 header('Content-Type: application/json');
 require_once __DIR__ . '/../includes/db.php';
+require_once __DIR__ . '/../includes/incident_priority.php';
 
 if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
     http_response_code(405);
@@ -68,8 +69,8 @@ try {
     $params = [':id' => $id];
     // Validate enums if provided
     if ($priority !== null) {
-        $p = strtolower($priority);
-        if (!in_array($p, ['low','medium','high'], true)) {
+        $p = ers_normalize_priority_value($priority);
+        if (!in_array($p, ['critical','high','urgent','moderate','low'], true)) {
             http_response_code(400);
             echo json_encode(['ok' => false, 'error' => 'Invalid priority']);
             exit;

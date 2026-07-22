@@ -253,12 +253,21 @@
     background: #f8fbff;
 }
 
-.review-incidents-table tbody tr.priority-high td:first-child {
+.review-incidents-table tbody tr.priority-critical td:first-child {
     border-left: 4px solid #ef4444;
 }
 
-.review-incidents-table tbody tr.priority-medium td:first-child {
+.review-incidents-table tbody tr.priority-high td:first-child {
+    border-left: 4px solid #f97316;
+}
+
+.review-incidents-table tbody tr.priority-urgent td:first-child {
     border-left: 4px solid #f59e0b;
+}
+
+.review-incidents-table tbody tr.priority-medium td:first-child,
+.review-incidents-table tbody tr.priority-moderate td:first-child {
+    border-left: 4px solid #2563eb;
 }
 
 .review-incidents-table tbody tr.priority-low td:first-child {
@@ -333,12 +342,21 @@
     display: grid;
 }
 
-.review-card.priority-high {
+.review-card.priority-critical {
     border-left: 4px solid #ef4444;
 }
 
-.review-card.priority-medium {
+.review-card.priority-high {
+    border-left: 4px solid #f97316;
+}
+
+.review-card.priority-urgent {
     border-left: 4px solid #f59e0b;
+}
+
+.review-card.priority-medium,
+.review-card.priority-moderate {
+    border-left: 4px solid #2563eb;
 }
 
 .review-card.priority-low {
@@ -396,14 +414,25 @@
     color: #991b1b;
 }
 
-.priority-chip.priority-high {
+.priority-chip.priority-critical {
     background: #fee2e2;
     color: #b91c1c;
 }
 
-.priority-chip.priority-medium {
+.priority-chip.priority-high {
+    background: #ffedd5;
+    color: #c2410c;
+}
+
+.priority-chip.priority-urgent {
     background: #fef3c7;
     color: #b45309;
+}
+
+.priority-chip.priority-medium,
+.priority-chip.priority-moderate {
+    background: #dbeafe;
+    color: #1d4ed8;
 }
 
 .priority-chip.priority-low {

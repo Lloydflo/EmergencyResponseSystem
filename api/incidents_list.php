@@ -160,6 +160,15 @@ if (ers_table_exists($pdo, 'resource_records')) {
 $hasIncidentNotes = ers_table_exists($pdo, 'incident_notes');
 $hasRatingColumn = $hasIncidentNotes && ers_column_exists($pdo, 'incident_notes', 'rating');
 $hasAdminReviewTable = ers_ensure_incident_admin_reviews($pdo);
+$hasPriorityScore = ers_column_exists($pdo, 'incidents', 'priority_score');
+$hasPriorityLabel = ers_column_exists($pdo, 'incidents', 'priority_label');
+$hasPriorityColor = ers_column_exists($pdo, 'incidents', 'priority_color');
+$hasPriorityBreakdown = ers_column_exists($pdo, 'incidents', 'priority_breakdown');
+$priorityIndicatorSelect = '
+            ' . ($hasPriorityScore ? 'i.priority_score' : 'NULL') . ' AS priority_score,
+            ' . ($hasPriorityLabel ? 'i.priority_label' : 'NULL') . ' AS priority_label,
+            ' . ($hasPriorityColor ? 'i.priority_color' : 'NULL') . ' AS priority_color,
+            ' . ($hasPriorityBreakdown ? 'i.priority_breakdown' : 'NULL') . ' AS priority_breakdown';
 
 $resourceSelect = ', NULL AS vehicle_name, NULL AS driver_name, NULL AS plate_number';
 $resourceJoin = '';
@@ -199,6 +208,7 @@ $sql = "SELECT
             i.reference_no,
             i.type,
             i.priority,
+            {$priorityIndicatorSelect},
             i.status,
             i.location_address,
             i.description,
@@ -326,7 +336,17 @@ if ($where) {
     $sql .= ' WHERE ' . implode(' AND ', $where);
 }
 
-$sql .= ' ORDER BY COALESCE(i.resolved_at, ld.cleared_at, i.updated_at, i.created_at) DESC, i.id DESC LIMIT 200';
+$priorityOrderExpr = "CASE LOWER(i.priority)
+            WHEN 'critical' THEN 1
+            WHEN 'high' THEN 2
+            WHEN 'urgent' THEN 3
+            WHEN 'moderate' THEN 4
+            WHEN 'medium' THEN 4
+            WHEN 'low' THEN 5
+            ELSE 6
+        END";
+$scoreOrderExpr = $hasPriorityScore ? 'COALESCE(i.priority_score, 0) DESC,' : '';
+$sql .= " ORDER BY {$priorityOrderExpr}, {$scoreOrderExpr} COALESCE(i.resolved_at, ld.cleared_at, i.updated_at, i.created_at) DESC, i.id DESC LIMIT 200";
 
 try {
     $stmt = $pdo->prepare($sql);
@@ -342,6 +362,10 @@ try {
             'location' => $row['location_address'] ?? '',
             'description' => $row['description'] ?? '',
             'priority' => $row['priority'] ?? '',
+            'priority_score' => isset($row['priority_score']) && $row['priority_score'] !== null ? (int)$row['priority_score'] : null,
+            'priority_label' => $row['priority_label'] ?? null,
+            'priority_color' => $row['priority_color'] ?? null,
+            'priority_breakdown' => $row['priority_breakdown'] ?? null,
             'status' => $row['status'] ?? '',
             'created_at' => $row['created_at'] ?? null,
             'updated_at' => $row['updated_at'] ?? null,
