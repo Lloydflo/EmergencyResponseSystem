@@ -200,6 +200,11 @@ const SAN_AGUSTIN_BOUNDS = [
 ];
 const SAN_AGUSTIN_GEOJSON = 'dispatcher/san_agustin.geojson';
 const QC_VIEWBOX = '121.0290,14.7415,121.0415,14.7225';
+const MARKER_SMOOTHING_MS = 900;
+const MAX_ACCEPTED_ACCURACY_M = 180;
+const MAX_REASONABLE_SPEED_KPH = 160;
+const MAX_FIRST_JUMP_M = 800;
+const ROUTE_REPLOT_MIN_MOVE_M = 35;
 
 // ===============================
 // LEAFLET MAP INITIALIZATION
@@ -370,7 +375,10 @@ function addUnitMarker(id, lat, lng, label, type, speedKph, unitDbId) {
         type: "unit",
         unitType: (type || '').toLowerCase(),
         speedKph: speedKph,
-        unitDbId: unitDbId !== undefined && unitDbId !== null ? String(unitDbId) : ''
+        unitDbId: unitDbId !== undefined && unitDbId !== null ? String(unitDbId) : '',
+        lastAcceptedLatLng: L.latLng(lat, lng),
+        lastLocationAt: Date.now(),
+        ignoredGpsSpikes: 0
     };
 }
 
@@ -454,6 +462,91 @@ function canRenderLiveUnitMarker(identifier) {
     return !!id && authoritativeOnlineUnitKeysReady && authoritativeOnlineUnitKeys.has(id);
 }
 
+function parseFiniteNumber(value) {
+    const number = Number(value);
+    return Number.isFinite(number) ? number : null;
+}
+
+function distanceMeters(a, b) {
+    if (!a || !b) return 0;
+    if (map && typeof map.distance === 'function') {
+        return map.distance(a, b);
+    }
+    return haversine(a.lat, a.lng, b.lat, b.lng) * 1000;
+}
+
+function isPlausibleUnitMove(entry, nextLatLng, options) {
+    if (!entry || !entry.marker) return true;
+    const now = Date.now();
+    const previous = entry.lastAcceptedLatLng || entry.marker.getLatLng();
+    const distance = distanceMeters(previous, nextLatLng);
+    const accuracyM = parseFiniteNumber(options.accuracyM);
+
+    if (accuracyM !== null && accuracyM > MAX_ACCEPTED_ACCURACY_M && distance > 20) {
+        return false;
+    }
+
+    const elapsedSeconds = entry.lastLocationAt ? Math.max((now - entry.lastLocationAt) / 1000, 1) : null;
+    if (elapsedSeconds) {
+        const impliedSpeedKph = (distance / elapsedSeconds) * 3.6;
+        if (distance > 80 && impliedSpeedKph > MAX_REASONABLE_SPEED_KPH) {
+            return false;
+        }
+    } else if (distance > MAX_FIRST_JUMP_M) {
+        return false;
+    }
+
+    return true;
+}
+
+function moveUnitMarker(id, lat, lng, options) {
+    const entry = markers[id];
+    if (!entry || !entry.marker || !Number.isFinite(lat) || !Number.isFinite(lng)) return false;
+
+    const nextLatLng = L.latLng(lat, lng);
+    if (!isPlausibleUnitMove(entry, nextLatLng, options || {})) {
+        const sameRejectedArea = entry.lastRejectedLatLng && distanceMeters(entry.lastRejectedLatLng, nextLatLng) < 60;
+        entry.ignoredGpsSpikes = sameRejectedArea ? ((entry.ignoredGpsSpikes || 0) + 1) : 1;
+        entry.lastRejectedLatLng = nextLatLng;
+        if (entry.ignoredGpsSpikes < 3) {
+            return false;
+        }
+    }
+
+    const previous = entry.marker.getLatLng();
+    entry.ignoredGpsSpikes = 0;
+    entry.lastRejectedLatLng = null;
+    entry.lastAcceptedLatLng = nextLatLng;
+    entry.lastLocationAt = Date.now();
+
+    if (entry.moveAnimationFrame) {
+        cancelAnimationFrame(entry.moveAnimationFrame);
+        entry.moveAnimationFrame = null;
+    }
+
+    if (!(options && options.animate) || distanceMeters(previous, nextLatLng) < 3) {
+        entry.marker.setLatLng(nextLatLng);
+        return true;
+    }
+
+    const startTime = performance.now();
+    const duration = MARKER_SMOOTHING_MS;
+    const animateMove = (time) => {
+        const progress = Math.min((time - startTime) / duration, 1);
+        const eased = 1 - Math.pow(1 - progress, 3);
+        const latNow = previous.lat + (nextLatLng.lat - previous.lat) * eased;
+        const lngNow = previous.lng + (nextLatLng.lng - previous.lng) * eased;
+        entry.marker.setLatLng([latNow, lngNow]);
+        if (progress < 1) {
+            entry.moveAnimationFrame = requestAnimationFrame(animateMove);
+        } else {
+            entry.moveAnimationFrame = null;
+        }
+    };
+    entry.moveAnimationFrame = requestAnimationFrame(animateMove);
+    return true;
+}
+
 // ===============================
 // ROUTES (POLYLINES)
 // ===============================
@@ -532,11 +625,13 @@ function centerMap() {
 }
 
 function refreshMap() {
-    Object.values(markers).forEach(item => {
-        const pos = item.marker.getLatLng();
-        const newLat = pos.lat + (Math.random() - 0.5) * 0.001;
-        const newLng = pos.lng + (Math.random() - 0.5) * 0.001;
-        item.marker.setLatLng([newLat, newLng]);
+    Promise.allSettled([
+        pruneOfflineUnitMarkers(),
+        loadDispatchedUnits(),
+        loadAvailableUnits()
+    ]).finally(() => {
+        updateMapVisibility();
+        showNotification('Live GPS refreshed', 'info');
     });
 }
 
@@ -1082,6 +1177,22 @@ async function showUnitRoute(unitId, options) {
         return false;
     }
 
+    if (
+        options.silent &&
+        window.currentRoutingControl &&
+        activeRouteState &&
+        activeRouteState.lastFromLat &&
+        activeRouteState.lastFromLng &&
+        String(activeRouteState.toLat || '') === String(toLat) &&
+        String(activeRouteState.toLng || '') === String(toLng)
+    ) {
+        const previousStart = L.latLng(Number(activeRouteState.lastFromLat), Number(activeRouteState.lastFromLng));
+        const nextStart = L.latLng(fromLat, fromLng);
+        if (distanceMeters(previousStart, nextStart) < ROUTE_REPLOT_MIN_MOVE_M) {
+            return true;
+        }
+    }
+
     const routed = plotKnownDispatchRoute(fromLat, fromLng, toLat, toLng, options);
     if (!routed) return false;
 
@@ -1091,7 +1202,9 @@ async function showUnitRoute(unitId, options) {
         incidentId: String(options.incidentId || unit.current_incident_id || ''),
         incidentLocation: incidentLocation,
         toLat: String(toLat),
-        toLng: String(toLng)
+        toLng: String(toLng),
+        lastFromLat: String(fromLat),
+        lastFromLng: String(fromLng)
     };
 
     return true;
@@ -1323,7 +1436,7 @@ document.addEventListener('DOMContentLoaded', () => {
 <script>
 // Load dispatched units and render list + map markers
 function loadDispatchedUnits() {
-    fetch('api/units_list.php?status=dispatched')
+    return fetch('api/units_list.php?status=dispatched')
         .then(r => r.json())
         .then(res => {
             if (!res.ok) return;
@@ -1444,7 +1557,7 @@ function syncUnitMarkers(items) {
         if (!isNaN(lat) && !isNaN(lng)) {
             const label = `${id}`;
             if (markers[id]) {
-                markers[id].marker.setLatLng([lat, lng]);
+                moveUnitMarker(id, lat, lng, { speedKph: speed, animate: true });
                 markers[id].marker.setIcon(getIcon(type));
                 const popupHtml = `
                     <strong>${label}</strong><br>
@@ -1475,6 +1588,7 @@ function initFirebaseLiveTracking() {
             const lat = parseFloat(r.lat);
             const lng = parseFloat(r.lng);
             if (isNaN(lat) || isNaN(lng)) return;
+            const accuracyM = parseFiniteNumber(r.accuracy ?? r.accuracy_m);
 
             const key = String(r.unitCode || r.responderId || '').trim();
             if (!key) return;
@@ -1497,11 +1611,13 @@ function initFirebaseLiveTracking() {
             const type = isEnRoute ? dept : `idle_${dept}`;
 
             if (markers[key]) {
-                markers[key].marker.setLatLng([lat, lng]);
+                const accepted = moveUnitMarker(key, lat, lng, { speedKph, accuracyM, animate: true });
+                if (!accepted) return;
                 markers[key].marker.setIcon(getIcon(type));
                 markers[key].marker.bindPopup(`
                     <strong>${label}</strong><br>
                     Status: ${r.status || 'unknown'}<br>
+                    ${accuracyM !== null ? `Accuracy: ${accuracyM.toFixed(0)} m<br>` : ''}
                     ${speedKph !== null ? `Speed: ${speedKph.toFixed(1)} km/h<br>` : ''}
                     Coords: ${lat.toFixed(5)}, ${lng.toFixed(5)}<br>
                     <em>Live GPS</em>
@@ -1549,7 +1665,7 @@ function syncUnitMarkers(items) {
         if (!isNaN(lat) && !isNaN(lng)) {
             const label = `${id}`;
             if (markers[id]) {
-                markers[id].marker.setLatLng([lat, lng]);
+                moveUnitMarker(id, lat, lng, { speedKph: speed, animate: true });
                 markers[id].marker.setIcon(getIcon(type));
                 const popupHtml = `
                     <strong>${label}</strong><br>
@@ -1620,7 +1736,7 @@ function haversine(lat1, lon1, lat2, lon2) {
 }
 
 function loadAvailableUnits() {
-    fetch('api/units_list.php?status=available')
+    return fetch('api/units_list.php?status=available')
         .then(r => r.json())
         .then(res => {
             if (!res.ok) return;
@@ -1642,7 +1758,7 @@ function loadAvailableUnits() {
                 const speed = (u.speed_kph !== undefined && u.speed_kph !== null) ? parseFloat(u.speed_kph) : null;
                 if (!isNaN(lat) && !isNaN(lng)) {
                     if (markers[id]) {
-                        markers[id].marker.setLatLng([lat, lng]);
+                        moveUnitMarker(id, lat, lng, { speedKph: speed, animate: true });
                         markers[id].marker.setIcon(getIcon(type));
                         markers[id].speedKph = speed;
                         markers[id].unitType = String(type || '').toLowerCase();
