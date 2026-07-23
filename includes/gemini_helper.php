@@ -128,7 +128,7 @@ if (!function_exists('ers_resolve_gemini_key')) {
 
 if (!function_exists('ers_resolve_gemini_url')) {
     function ers_resolve_gemini_url() {
-        $defaultUrl = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent';
+        $defaultUrl = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash-lite:generateContent';
         $candidates = [];
         if (defined('GEMINI_API_URL')) {
             $candidates[] = (string)GEMINI_API_URL;
@@ -170,8 +170,10 @@ if (!function_exists('ers_gemini_url_candidates')) {
         }
 
         $fallbackModels = [
-            'gemini-2.0-flash',
-            'gemini-1.5-flash',
+            'gemini-3.5-flash-lite',
+            'gemini-3.1-flash-lite',
+            'gemini-3.5-flash',
+            'gemini-3.6-flash',
         ];
         foreach ($fallbackModels as $model) {
             $urls[] = 'https://generativelanguage.googleapis.com/v1beta/models/' . $model . ':generateContent';
@@ -181,9 +183,79 @@ if (!function_exists('ers_gemini_url_candidates')) {
     }
 }
 
+if (!function_exists('ers_gemini_model_from_url')) {
+    function ers_gemini_model_from_url($url) {
+        if (preg_match('#/models/([^:/?]+)#', (string)$url, $matches)) {
+            return (string)$matches[1];
+        }
+        return 'configured model';
+    }
+}
+
+if (!function_exists('ers_gemini_cache_dir')) {
+    function ers_gemini_cache_dir() {
+        return dirname(__DIR__) . '/data/cache/gemini';
+    }
+}
+
+if (!function_exists('ers_gemini_cache_path')) {
+    function ers_gemini_cache_path($prompt) {
+        return ers_gemini_cache_dir() . '/' . hash('sha256', (string)$prompt) . '.json';
+    }
+}
+
+if (!function_exists('ers_gemini_read_cached_response')) {
+    function ers_gemini_read_cached_response($prompt, $maxAgeSeconds = 900) {
+        $cachePath = ers_gemini_cache_path($prompt);
+        if (!is_file($cachePath)) {
+            return '';
+        }
+
+        $raw = @file_get_contents($cachePath);
+        $payload = is_string($raw) ? json_decode($raw, true) : null;
+        if (!is_array($payload)) {
+            return '';
+        }
+
+        $createdAt = (int)($payload['created_at'] ?? 0);
+        if ($maxAgeSeconds > 0 && ($createdAt <= 0 || (time() - $createdAt) > $maxAgeSeconds)) {
+            return '';
+        }
+
+        return trim((string)($payload['text'] ?? ''));
+    }
+}
+
+if (!function_exists('ers_gemini_write_cached_response')) {
+    function ers_gemini_write_cached_response($prompt, $text) {
+        $text = trim((string)$text);
+        if ($text === '') {
+            return;
+        }
+
+        $cacheDir = ers_gemini_cache_dir();
+        if (!is_dir($cacheDir)) {
+            @mkdir($cacheDir, 0775, true);
+        }
+        if (!is_dir($cacheDir) || !is_writable($cacheDir)) {
+            return;
+        }
+
+        $payload = [
+            'created_at' => time(),
+            'text' => $text,
+        ];
+        @file_put_contents(ers_gemini_cache_path($prompt), json_encode($payload, JSON_UNESCAPED_SLASHES));
+    }
+}
+
 if (!function_exists('ers_should_retry_gemini_with_fallback_model')) {
     function ers_should_retry_gemini_with_fallback_model($httpCode, $apiError) {
         $apiError = strtolower(trim((string)$apiError));
+
+        if ((int)$httpCode === 429 || (int)$httpCode >= 500) {
+            return true;
+        }
 
         if ($httpCode === 404) {
             return true;
@@ -240,7 +312,10 @@ function callGeminiAPI($prompt) {
         return null;
     }
 
-    $apiUrl = $apiBaseUrl . '?key=' . urlencode($apiKey);
+    $cachedText = ers_gemini_read_cached_response($prompt, 900);
+    if ($cachedText !== '') {
+        return $cachedText;
+    }
 
     $data = [
         'contents' => [
@@ -253,68 +328,100 @@ function callGeminiAPI($prompt) {
     ];
 
     $jsonData = json_encode($data);
+    $lastHttpCode = 0;
+    $lastApiError = '';
+    $lastCurlError = '';
+    $lastModel = 'configured model';
+    $urls = ers_gemini_url_candidates($apiBaseUrl);
 
-    // Initialize cURL
-    $ch = curl_init($apiUrl);
-    curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
-    curl_setopt($ch, CURLOPT_POST, true);
-    curl_setopt($ch, CURLOPT_POSTFIELDS, $jsonData);
-    curl_setopt($ch, CURLOPT_CONNECTTIMEOUT, 10);
-    curl_setopt($ch, CURLOPT_TIMEOUT, 25);
-    curl_setopt($ch, CURLOPT_HTTPHEADER, [
-        'Content-Type: application/json'
-    ]);
+    foreach ($urls as $urlIndex => $candidateUrl) {
+        $lastModel = ers_gemini_model_from_url($candidateUrl);
+        $attempts = 2;
 
-    $response = curl_exec($ch);
-    $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
-    $curlError = curl_error($ch);
-    curl_close($ch);
+        for ($attempt = 1; $attempt <= $attempts; $attempt++) {
+            $apiUrl = $candidateUrl . '?key=' . urlencode($apiKey);
+            $ch = curl_init($apiUrl);
+            curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+            curl_setopt($ch, CURLOPT_POST, true);
+            curl_setopt($ch, CURLOPT_POSTFIELDS, $jsonData);
+            curl_setopt($ch, CURLOPT_CONNECTTIMEOUT, 10);
+            curl_setopt($ch, CURLOPT_TIMEOUT, 25);
+            curl_setopt($ch, CURLOPT_HTTPHEADER, [
+                'Content-Type: application/json'
+            ]);
 
-    if ($response === false) {
-        $msg = $curlError !== '' ? $curlError : 'Unknown cURL error';
-        setGeminiLastError('Gemini request failed: ' . $msg);
-        error_log('Gemini API request failed: ' . $msg);
-        return null;
-    }
+            $response = curl_exec($ch);
+            $httpCode = (int)curl_getinfo($ch, CURLINFO_HTTP_CODE);
+            $curlError = curl_error($ch);
+            curl_close($ch);
 
-    $responseData = json_decode((string) $response, true);
+            $lastHttpCode = $httpCode;
+            $lastCurlError = $response === false ? (string)$curlError : '';
+            $responseData = $response !== false ? json_decode((string)$response, true) : null;
+            $apiError = '';
+            if (is_array($responseData) && isset($responseData['error']['message'])) {
+                $apiError = trim((string)$responseData['error']['message']);
+            }
+            $lastApiError = $apiError;
 
-    if ($httpCode === 200) {
-        if (isset($responseData['candidates'][0]['content']['parts'][0]['text'])) {
-            return ers_clean_ai_text($responseData['candidates'][0]['content']['parts'][0]['text']);
+            if ($response === false) {
+                $msg = $lastCurlError !== '' ? $lastCurlError : 'Unknown cURL error';
+                error_log('Gemini API request failed for ' . $lastModel . ': ' . $msg);
+            } elseif ($httpCode === 200) {
+                if (isset($responseData['candidates'][0]['content']['parts'][0]['text'])) {
+                    $text = ers_clean_ai_text($responseData['candidates'][0]['content']['parts'][0]['text']);
+                    ers_gemini_write_cached_response($prompt, $text);
+                    return $text;
+                }
+
+                setGeminiLastError('Gemini returned an empty response.');
+                error_log('Gemini API returned HTTP 200 with no candidate text for ' . $lastModel . '.');
+                return null;
+            } else {
+                if ($apiError !== '') {
+                    error_log('Gemini API error HTTP ' . $httpCode . ' for ' . $lastModel . ': ' . $apiError);
+                } else {
+                    error_log('Gemini API error HTTP ' . $httpCode . ' for ' . $lastModel . '.');
+                }
+            }
+
+            if (!ers_should_retry_gemini_with_fallback_model($httpCode, $apiError)) {
+                break 2;
+            }
+
+            if ($attempt < $attempts) {
+                usleep(random_int(350000, 850000));
+            }
         }
 
-        setGeminiLastError('Gemini returned an empty response.');
-        error_log('Gemini API returned HTTP 200 with no candidate text.');
-        return null;
+        if ($urlIndex < count($urls) - 1) {
+            error_log('Gemini retrying with fallback model after ' . $lastModel . ' failed.');
+        }
     }
 
-    $apiError = '';
-    if (is_array($responseData) && isset($responseData['error']['message'])) {
-        $apiError = trim((string) $responseData['error']['message']);
+    $staleText = ers_gemini_read_cached_response($prompt, 86400);
+    if ($staleText !== '') {
+        setGeminiLastError('Gemini is temporarily unavailable. Showing the latest cached response.');
+        error_log('Gemini API failed; served cached response.');
+        return $staleText;
     }
 
-    if ($httpCode === 429) {
+    if ($lastCurlError !== '') {
+        $friendly = 'Gemini request failed: ' . $lastCurlError;
+    } elseif ($lastHttpCode === 429) {
         $friendly = 'Gemini quota exceeded. Check API plan/billing or wait then retry.';
-    } elseif ($httpCode === 401 || $httpCode === 403) {
+    } elseif ($lastHttpCode === 401 || $lastHttpCode === 403) {
         $friendly = 'Gemini key is invalid or not authorized for this API/project.';
-    } elseif ($httpCode >= 500) {
-        $friendly = 'Gemini service is temporarily unavailable. Please retry.';
+    } elseif ($lastHttpCode >= 500) {
+        $friendly = 'Gemini service is temporarily unavailable after retrying fallback models. Please retry.';
     } else {
-        $friendly = 'Gemini request failed (HTTP ' . $httpCode . ').';
+        $friendly = 'Gemini request failed (HTTP ' . $lastHttpCode . ').';
     }
 
-    // Do not expose raw auth/quota provider messages directly to UI.
-    if ($apiError !== '' && !in_array($httpCode, [401, 403, 429], true)) {
-        $friendly .= ' ' . $apiError;
+    if ($lastApiError !== '' && !in_array($lastHttpCode, [401, 403, 429, 503], true)) {
+        $friendly .= ' ' . $lastApiError;
     }
     setGeminiLastError($friendly);
-
-    if ($apiError !== '') {
-        error_log('Gemini API error HTTP ' . $httpCode . ': ' . $apiError);
-    } else {
-        error_log('Gemini API error HTTP ' . $httpCode . '.');
-    }
 
     return null;
 }

@@ -89,6 +89,8 @@ if (ers_table_exists($pdo, 'users')) {
 $hasCurrentIncidentId = ers_column_exists($pdo, 'units', 'current_incident_id');
 $hasUnitLatitude = ers_column_exists($pdo, 'units', 'latitude');
 $hasUnitLongitude = ers_column_exists($pdo, 'units', 'longitude');
+$hasLocationLatitude = $hasUnitLocationsTable && ers_column_exists($pdo, 'unit_locations', 'latitude');
+$hasLocationLongitude = $hasUnitLocationsTable && ers_column_exists($pdo, 'unit_locations', 'longitude');
 $hasIncidentReportedByCall = $hasIncidentsTable && ers_column_exists($pdo, 'incidents', 'reported_by_call_id');
 $hasCallLocationAddress = $hasCallsTable && ers_column_exists($pdo, 'calls', 'location_address');
 $hasCallLatitude = $hasCallsTable && ers_column_exists($pdo, 'calls', 'latitude');
@@ -98,9 +100,45 @@ $hasHeading = $hasUnitLocationsTable && ers_column_exists($pdo, 'unit_locations'
 $hasAccuracy = $hasUnitLocationsTable && ers_column_exists($pdo, 'unit_locations', 'accuracy_m');
 $hasSource = $hasUnitLocationsTable && ers_column_exists($pdo, 'unit_locations', 'source');
 $hasRecordedAt = $hasUnitLocationsTable && ers_column_exists($pdo, 'unit_locations', 'recorded_at');
+$hasLocationId = $hasUnitLocationsTable && ers_column_exists($pdo, 'unit_locations', 'id');
+$latestLocationOrderExpr = $hasLocationId ? 'ul.recorded_at DESC, ul.id DESC' : 'ul.recorded_at DESC';
+$ignoredFallbackGpsWhere = ($hasLocationLatitude && $hasLocationLongitude) ? " AND NOT (
+    (ABS(ul.latitude - 14.7338) < 0.000001 AND ABS(ul.longitude - 121.0368) < 0.000001)
+    OR (ABS(ul.latitude - 14.7295) < 0.000001 AND ABS(ul.longitude - 121.0342) < 0.000001)
+    OR (ABS(ul.latitude - 14.7351) < 0.000001 AND ABS(ul.longitude - 121.0380) < 0.000001)
+    OR (ABS(ul.latitude - 14.7320) < 0.000001 AND ABS(ul.longitude - 121.0351) < 0.000001)
+)" : '';
 
-$unitLatExpr = $hasUnitLatitude ? 'u.latitude' : 'NULL';
-$unitLngExpr = $hasUnitLongitude ? 'u.longitude' : 'NULL';
+$storedUnitLatRawExpr = $hasUnitLatitude ? 'u.latitude' : 'NULL';
+$storedUnitLngRawExpr = $hasUnitLongitude ? 'u.longitude' : 'NULL';
+$storedFallbackCoordinateSql = ($hasUnitLatitude && $hasUnitLongitude) ? "(
+    (ABS(u.latitude - 14.7338) < 0.000001 AND ABS(u.longitude - 121.0368) < 0.000001)
+    OR (ABS(u.latitude - 14.7295) < 0.000001 AND ABS(u.longitude - 121.0342) < 0.000001)
+    OR (ABS(u.latitude - 14.7351) < 0.000001 AND ABS(u.longitude - 121.0380) < 0.000001)
+    OR (ABS(u.latitude - 14.7320) < 0.000001 AND ABS(u.longitude - 121.0351) < 0.000001)
+)" : '0 = 1';
+$storedUnitLatExpr = ($hasUnitLatitude && $hasUnitLongitude) ? "CASE WHEN {$storedFallbackCoordinateSql} THEN NULL ELSE u.latitude END" : $storedUnitLatRawExpr;
+$storedUnitLngExpr = ($hasUnitLatitude && $hasUnitLongitude) ? "CASE WHEN {$storedFallbackCoordinateSql} THEN NULL ELSE u.longitude END" : $storedUnitLngRawExpr;
+$latestLocationLatExpr = 'NULL';
+$latestLocationLngExpr = 'NULL';
+if ($hasLocationLatitude && $hasRecordedAt) {
+    $latestLocationLatExpr = "(SELECT ul.latitude
+                               FROM unit_locations ul
+                               WHERE ul.unit_id = u.id
+                               {$ignoredFallbackGpsWhere}
+                               ORDER BY {$latestLocationOrderExpr}
+                               LIMIT 1)";
+}
+if ($hasLocationLongitude && $hasRecordedAt) {
+    $latestLocationLngExpr = "(SELECT ul.longitude
+                               FROM unit_locations ul
+                               WHERE ul.unit_id = u.id
+                               {$ignoredFallbackGpsWhere}
+                               ORDER BY {$latestLocationOrderExpr}
+                               LIMIT 1)";
+}
+$unitLatExpr = $latestLocationLatExpr;
+$unitLngExpr = $latestLocationLngExpr;
 $incidentJoin = ($hasIncidentsTable && $hasCurrentIncidentId)
     ? ' LEFT JOIN incidents i ON i.id = u.current_incident_id'
     : ' LEFT JOIN incidents i ON 1 = 0';
@@ -117,7 +155,8 @@ if ($hasSpeed && $hasRecordedAt) {
     $speedExpr = "(SELECT ul.speed_kph
                    FROM unit_locations ul
                    WHERE ul.unit_id = u.id
-                   ORDER BY ul.recorded_at DESC
+                   {$ignoredFallbackGpsWhere}
+                   ORDER BY {$latestLocationOrderExpr}
                    LIMIT 1)";
 }
 
@@ -126,7 +165,8 @@ if ($hasHeading && $hasRecordedAt) {
     $headingExpr = "(SELECT ul.heading_deg
                      FROM unit_locations ul
                      WHERE ul.unit_id = u.id
-                     ORDER BY ul.recorded_at DESC
+                     {$ignoredFallbackGpsWhere}
+                     ORDER BY {$latestLocationOrderExpr}
                      LIMIT 1)";
 }
 
@@ -135,7 +175,8 @@ if ($hasRecordedAt) {
     $lastRecordedExpr = "(SELECT ul.recorded_at
                          FROM unit_locations ul
                          WHERE ul.unit_id = u.id
-                         ORDER BY ul.recorded_at DESC
+                         {$ignoredFallbackGpsWhere}
+                         ORDER BY {$latestLocationOrderExpr}
                          LIMIT 1)";
 }
 
@@ -144,7 +185,8 @@ if ($hasAccuracy && $hasRecordedAt) {
     $accuracyExpr = "(SELECT ul.accuracy_m
                       FROM unit_locations ul
                       WHERE ul.unit_id = u.id
-                      ORDER BY ul.recorded_at DESC
+                      {$ignoredFallbackGpsWhere}
+                      ORDER BY {$latestLocationOrderExpr}
                       LIMIT 1)";
 }
 
@@ -153,7 +195,8 @@ if ($hasSource && $hasRecordedAt) {
     $locationSourceExpr = "(SELECT ul.source
                            FROM unit_locations ul
                            WHERE ul.unit_id = u.id
-                           ORDER BY ul.recorded_at DESC
+                           {$ignoredFallbackGpsWhere}
+                           ORDER BY {$latestLocationOrderExpr}
                            LIMIT 1)";
 }
 
@@ -263,6 +306,10 @@ $sql = "SELECT
             {$resourceSelect},
             {$unitLatExpr} AS latitude,
             {$unitLngExpr} AS longitude,
+            {$latestLocationLatExpr} AS latest_latitude,
+            {$latestLocationLngExpr} AS latest_longitude,
+            {$storedUnitLatExpr} AS stored_latitude,
+            {$storedUnitLngExpr} AS stored_longitude,
             {$currentIncidentExpr} AS current_incident_id,
             i.reference_no AS incident_code,
             i.title AS incident_title,
