@@ -12,7 +12,7 @@
         editingId: null,
         search: '',
         status: 'all',
-        expanded: false,
+        expanded: true,
     };
 
     const hazardOrder = {
@@ -226,6 +226,12 @@
                         <span><i class="fas fa-network-wired"></i> ${escapeHtml(item.source_system || 'ERS')}</span>
                     </div>
                     ${item.emergency_contact_persons ? `<div class="ia-event-meta"><span><i class="fas fa-address-book"></i> ${escapeHtml(item.emergency_contact_persons)}</span></div>` : ''}
+                    <div class="ia-event-flow">
+                        <span class="${['active', 'standby', 'completed'].includes(item.status) ? 'is-done' : ''}">Profile</span>
+                        <span class="${['standby', 'active', 'completed'].includes(item.status) ? 'is-done' : ''}">Standby</span>
+                        <span class="${['active', 'completed'].includes(item.status) ? 'is-done' : ''}">Active</span>
+                        <span class="${item.status === 'completed' ? 'is-done' : ''}">Closeout</span>
+                    </div>
                 </div>
                 <div class="ia-event-row-actions">
                     <button type="button" class="ia-event-icon" data-event-edit="${Number(item.id)}" title="Edit event" aria-label="Edit event">
@@ -305,6 +311,12 @@
                         <button type="submit" class="ia-event-primary" data-event-submit><i class="fas fa-floppy-disk"></i> Save</button>
                     </div>
                 </form>
+                <div class="ia-event-readiness" aria-label="Event readiness checklist">
+                    <div class="${defaults.event_schedule ? 'is-ready' : ''}"><i class="fas fa-calendar-check"></i><span>Schedule confirmed</span></div>
+                    <div class="${Number(defaults.required_standby_responders || 0) > 0 ? 'is-ready' : ''}"><i class="fas fa-user-shield"></i><span>Standby responders set</span></div>
+                    <div class="${defaults.emergency_contact_persons ? 'is-ready' : ''}"><i class="fas fa-address-book"></i><span>Emergency contacts ready</span></div>
+                    <div class="${['high', 'critical'].includes(defaults.on_site_safety_hazard_level) ? 'is-alert' : 'is-ready'}"><i class="fas fa-triangle-exclamation"></i><span>Hazard reviewed</span></div>
+                </div>
             </aside>
         `;
     };

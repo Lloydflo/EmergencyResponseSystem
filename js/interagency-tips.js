@@ -14,7 +14,7 @@
         selectedId: null,
         search: '',
         status: 'all',
-        expanded: false,
+        expanded: true,
     };
 
     const escapeHtml = (value) => String(value ?? '')
@@ -128,6 +128,38 @@
         }
     };
 
+    const quickStatus = async (status, outcome) => {
+        const item = selectedItem();
+        if (!item) {
+            return;
+        }
+
+        try {
+            const response = await fetch(apiUrl, {
+                method: 'POST',
+                credentials: 'same-origin',
+                headers: {
+                    Accept: 'application/json',
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    action: 'update_status',
+                    id: item.id,
+                    status,
+                    outcome: outcome || item.outcome || '',
+                }),
+            });
+            const data = await response.json();
+            if (!response.ok || !data.success) {
+                throw new Error(data.error || 'Unable to update anonymous tip');
+            }
+            await loadTips();
+        } catch (error) {
+            state.error = error.message || 'Unable to update anonymous tip';
+            render();
+        }
+    };
+
     const renderStats = () => {
         const newCount = state.items.filter((item) => item.status === 'new').length;
         const reviewing = state.items.filter((item) => item.status === 'reviewing').length;
@@ -187,6 +219,11 @@
                             <span><i class="fas fa-clock"></i> ${escapeHtml(formatDate(item.tip_datetime))}</span>
                             <span><i class="fas fa-network-wired"></i> ${escapeHtml(item.source_system || 'Group 6')}</span>
                         </span>
+                        <span class="ia-tip-flow">
+                            <span class="${['reviewing', 'verified', 'converted_to_incident'].includes(item.status) ? 'is-done' : ''}">Review</span>
+                            <span class="${['verified', 'converted_to_incident'].includes(item.status) ? 'is-done' : ''}">Verify</span>
+                            <span class="${item.status === 'converted_to_incident' ? 'is-done' : ''}">Convert</span>
+                        </span>
                     </span>
                     <span>${evidenceButton}</span>
                 </article>
@@ -236,6 +273,12 @@
                         <div class="ia-tip-detail-label">Photo of Evidence</div>
                         ${evidence}
                     </div>
+                </div>
+                <div class="ia-tip-quick-actions" aria-label="Tip quick actions">
+                    <button type="button" class="ia-tip-secondary" data-tip-quick-status="reviewing"><i class="fas fa-magnifying-glass"></i> Review</button>
+                    <button type="button" class="ia-tip-secondary" data-tip-quick-status="verified"><i class="fas fa-check-circle"></i> Verify</button>
+                    <button type="button" class="ia-tip-secondary" data-tip-quick-status="converted_to_incident"><i class="fas fa-file-circle-plus"></i> Convert</button>
+                    <button type="button" class="ia-tip-secondary" data-tip-quick-status="dismissed"><i class="fas fa-ban"></i> Dismiss</button>
                 </div>
                 <form data-tip-status-form>
                     <div class="ia-tip-detail-grid ia-tip-detail-form-grid">
@@ -315,6 +358,13 @@
         const refresh = event.target.closest('[data-tip-refresh]');
         if (refresh) {
             loadTips();
+            return;
+        }
+
+        const quick = event.target.closest('[data-tip-quick-status]');
+        if (quick) {
+            const status = String(quick.getAttribute('data-tip-quick-status') || 'reviewing');
+            quickStatus(status, statusLabel(status));
             return;
         }
 

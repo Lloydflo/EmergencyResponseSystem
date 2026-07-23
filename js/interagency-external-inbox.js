@@ -17,7 +17,7 @@
     const state = {
         items: [],
         loading: false,
-        expanded: false,
+        expanded: true,
         dismissed: loadDismissedKeys()
     };
 
@@ -184,6 +184,11 @@
                 </div>
                 <p class="ia-external-card-location"><i class="fas fa-location-dot"></i> ${escapeHtml(location)}</p>
                 <p class="ia-external-card-desc">${escapeHtml(description.length > 150 ? description.slice(0, 147) + '...' : description)}</p>
+                <div class="ia-external-next">
+                    <span><i class="fas fa-inbox"></i> Received</span>
+                    <span><i class="fas fa-magnifying-glass-location"></i> Review match</span>
+                    <span><i class="fas fa-link"></i> Link or convert</span>
+                </div>
                 <div class="ia-external-card-actions">
                     <button type="button" class="ia-external-inbox-btn primary" data-external-action="view" data-incident-id="${escapeAttr(incidentId)}">
                         <i class="fas fa-eye"></i> View

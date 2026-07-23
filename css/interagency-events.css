@@ -273,6 +273,29 @@
     font-size: 0.82rem;
 }
 
+.ia-event-flow {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin-top: 10px;
+}
+
+.ia-event-flow span {
+    border: 1px solid var(--ia-border, #dfe6ee);
+    border-radius: 999px;
+    background: #f8fafc;
+    color: var(--ia-muted, #5f7286);
+    padding: 3px 8px;
+    font-size: 0.7rem;
+    font-weight: 900;
+}
+
+.ia-event-flow span.is-done {
+    border-color: #bbf7d0;
+    background: #ecfdf5;
+    color: #166534;
+}
+
 .ia-event-chip {
     display: inline-flex;
     align-items: center;
@@ -369,6 +392,53 @@
     margin-top: 2px;
 }
 
+.ia-event-readiness {
+    display: grid;
+    gap: 8px;
+    margin-top: 14px;
+    border-top: 1px solid var(--ia-border, #dfe6ee);
+    padding-top: 14px;
+}
+
+.ia-event-readiness div {
+    display: flex;
+    align-items: center;
+    gap: 9px;
+    border: 1px solid var(--ia-border, #dfe6ee);
+    border-radius: 8px;
+    background: #ffffff;
+    color: var(--ia-muted, #5f7286);
+    padding: 9px 10px;
+    font-size: 0.8rem;
+    font-weight: 800;
+}
+
+.ia-event-readiness i {
+    width: 16px;
+    color: #94a3b8;
+    text-align: center;
+}
+
+.ia-event-readiness .is-ready {
+    border-color: #bbf7d0;
+    background: #f0fdf4;
+    color: #166534;
+}
+
+.ia-event-readiness .is-ready i {
+    color: #16a34a;
+}
+
+.ia-event-readiness .is-alert {
+    border-color: #fecaca;
+    background: #fef2f2;
+    color: #991b1b;
+}
+
+.ia-event-readiness .is-alert i {
+    color: #dc2626;
+}
+
 .ia-event-empty,
 .ia-event-loading,
 .ia-event-error {
@@ -417,7 +487,8 @@ html[data-theme="dark"] .ia-event-list-head {
 }
 
 html[data-theme="dark"] .ia-event-form-panel,
-html[data-theme="dark"] .ia-event-row {
+html[data-theme="dark"] .ia-event-row,
+html[data-theme="dark"] .ia-event-readiness div {
     background: var(--ia-event-surface);
 }
 
@@ -433,7 +504,8 @@ html[data-theme="dark"] .ia-event-stat-value,
 html[data-theme="dark"] .ia-event-name,
 html[data-theme="dark"] .ia-event-form-panel h3,
 html[data-theme="dark"] .ia-event-icon,
-html[data-theme="dark"] .ia-event-secondary {
+html[data-theme="dark"] .ia-event-secondary,
+html[data-theme="dark"] .ia-event-flow span.is-done {
     color: var(--ia-event-text);
 }
 
@@ -444,7 +516,9 @@ html[data-theme="dark"] .ia-event-kicker,
 html[data-theme="dark"] .ia-event-meta,
 html[data-theme="dark"] .ia-event-field label,
 html[data-theme="dark"] .ia-event-empty,
-html[data-theme="dark"] .ia-event-loading {
+html[data-theme="dark"] .ia-event-loading,
+html[data-theme="dark"] .ia-event-flow span,
+html[data-theme="dark"] .ia-event-readiness div {
     color: var(--ia-event-muted);
 }
 
@@ -490,6 +564,25 @@ html[data-theme="dark"] .ia-event-chip {
     background: #0b1220;
     border-color: #475569;
     color: #dbeafe;
+}
+
+html[data-theme="dark"] .ia-event-flow span,
+html[data-theme="dark"] .ia-event-readiness div {
+    background: #0b1220;
+    border-color: #475569;
+}
+
+html[data-theme="dark"] .ia-event-flow span.is-done,
+html[data-theme="dark"] .ia-event-readiness .is-ready {
+    background: #052e16;
+    border-color: #15803d;
+    color: #bbf7d0;
+}
+
+html[data-theme="dark"] .ia-event-readiness .is-alert {
+    background: #450a0a;
+    border-color: #dc2626;
+    color: #fecaca;
 }
 
 html[data-theme="dark"] .ia-event-chip.hazard-low {

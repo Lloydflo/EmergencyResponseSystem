@@ -111,6 +111,169 @@ $pageTitle = 'Inter-Agency Conversations';
             line-height: 1;
         }
 
+        .ia-ops-desk {
+            display: grid;
+            grid-template-columns: minmax(0, 1fr) 360px;
+            gap: 0.9rem;
+            margin-bottom: 1rem;
+        }
+
+        .ia-ops-panel {
+            background: var(--ia-card);
+            border: 1px solid var(--ia-border);
+            border-radius: 8px;
+            box-shadow: 0 6px 18px rgba(15, 23, 42, 0.06);
+            overflow: hidden;
+        }
+
+        .ia-ops-panel-head {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 0.75rem;
+            padding: 0.85rem 1rem;
+            border-bottom: 1px solid var(--ia-border);
+            background: #f8fbff;
+        }
+
+        .ia-ops-title {
+            margin: 0;
+            color: var(--ia-text);
+            font-size: 1rem;
+            font-weight: 900;
+        }
+
+        .ia-ops-sub {
+            margin: 0.2rem 0 0;
+            color: var(--ia-muted);
+            font-size: 0.82rem;
+        }
+
+        .ia-ops-live {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.4rem;
+            border: 1px solid #bfdbfe;
+            border-radius: 999px;
+            background: #eff6ff;
+            color: #1d4ed8;
+            padding: 0.34rem 0.62rem;
+            font-size: 0.72rem;
+            font-weight: 900;
+            text-transform: uppercase;
+            white-space: nowrap;
+        }
+
+        .ia-ops-metrics {
+            display: grid;
+            grid-template-columns: repeat(5, minmax(0, 1fr));
+        }
+
+        .ia-ops-metric {
+            border-right: 1px solid var(--ia-border);
+            padding: 0.95rem 1rem;
+            min-width: 0;
+        }
+
+        .ia-ops-metric:last-child {
+            border-right: 0;
+        }
+
+        .ia-ops-metric-label {
+            color: var(--ia-muted);
+            font-size: 0.72rem;
+            font-weight: 900;
+            text-transform: uppercase;
+        }
+
+        .ia-ops-metric-value {
+            margin-top: 0.35rem;
+            color: var(--ia-text);
+            font-size: 1.55rem;
+            font-weight: 900;
+            line-height: 1;
+        }
+
+        .ia-ops-metric-note {
+            margin-top: 0.35rem;
+            color: var(--ia-muted);
+            font-size: 0.74rem;
+            line-height: 1.3;
+        }
+
+        .ia-ops-lanes {
+            display: grid;
+            gap: 0.55rem;
+            padding: 0.75rem;
+        }
+
+        .ia-ops-lane {
+            display: grid;
+            grid-template-columns: 36px minmax(0, 1fr) auto;
+            align-items: center;
+            gap: 0.65rem;
+            border: 1px solid #dbe5ef;
+            border-radius: 8px;
+            background: #fff;
+            padding: 0.65rem;
+        }
+
+        .ia-ops-lane-icon {
+            width: 36px;
+            height: 36px;
+            border-radius: 8px;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            color: #fff;
+            background: #0f766e;
+        }
+
+        .ia-ops-lane:nth-child(2) .ia-ops-lane-icon {
+            background: #2563eb;
+        }
+
+        .ia-ops-lane:nth-child(3) .ia-ops-lane-icon {
+            background: #b45309;
+        }
+
+        .ia-ops-lane:nth-child(4) .ia-ops-lane-icon {
+            background: #7c3aed;
+        }
+
+        .ia-ops-lane-title {
+            margin: 0;
+            color: var(--ia-text);
+            font-size: 0.86rem;
+            font-weight: 900;
+        }
+
+        .ia-ops-lane-sub {
+            margin: 0.14rem 0 0;
+            color: var(--ia-muted);
+            font-size: 0.75rem;
+            line-height: 1.3;
+        }
+
+        .ia-ops-jump {
+            width: 34px;
+            height: 34px;
+            border: 1px solid var(--ia-border);
+            border-radius: 8px;
+            background: #fff;
+            color: var(--ia-text);
+            cursor: pointer;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .ia-ops-jump:hover {
+            border-color: #0f766e;
+            color: #0f766e;
+            background: #ecfdf5;
+        }
+
         .ia-board {
             display: grid;
             grid-template-columns: 330px minmax(0, 1fr) 270px;
@@ -250,6 +413,40 @@ $pageTitle = 'Inter-Agency Conversations';
             border-color: #334155;
             border-right-color: #14b8a6;
             box-shadow: 0 10px 24px rgba(0, 0, 0, 0.24);
+        }
+
+        [data-theme="dark"] .ia-ops-panel,
+        [data-theme="dark"] .ia-ops-lane {
+            background: #111827;
+            border-color: #334155;
+        }
+
+        [data-theme="dark"] .ia-ops-panel-head {
+            background: #1f2937;
+            border-bottom-color: #334155;
+        }
+
+        [data-theme="dark"] .ia-ops-title,
+        [data-theme="dark"] .ia-ops-metric-value,
+        [data-theme="dark"] .ia-ops-lane-title {
+            color: #f8fafc;
+        }
+
+        [data-theme="dark"] .ia-ops-sub,
+        [data-theme="dark"] .ia-ops-metric-label,
+        [data-theme="dark"] .ia-ops-metric-note,
+        [data-theme="dark"] .ia-ops-lane-sub {
+            color: #cbd5e1;
+        }
+
+        [data-theme="dark"] .ia-ops-metric {
+            border-right-color: #334155;
+        }
+
+        [data-theme="dark"] .ia-ops-jump {
+            background: #0f172a;
+            border-color: #475569;
+            color: #e2e8f0;
         }
 
         [data-theme="dark"] .ia-user-status-head {
@@ -1681,6 +1878,10 @@ $pageTitle = 'Inter-Agency Conversations';
         }
 
         @media (max-width: 1280px) {
+            .ia-ops-desk {
+                grid-template-columns: 1fr;
+            }
+
             .ia-board {
                 grid-template-columns: 320px minmax(0, 1fr);
             }
@@ -1697,6 +1898,14 @@ $pageTitle = 'Inter-Agency Conversations';
         }
 
         @media (max-width: 1080px) {
+            .ia-ops-metrics {
+                grid-template-columns: repeat(2, minmax(0, 1fr));
+            }
+
+            .ia-ops-metric {
+                border-bottom: 1px solid var(--ia-border);
+            }
+
             .ia-board {
                 grid-template-columns: 1fr;
             }
@@ -1715,6 +1924,20 @@ $pageTitle = 'Inter-Agency Conversations';
             .ia-head {
                 flex-direction: column;
                 align-items: flex-start;
+            }
+
+            .ia-ops-panel-head {
+                flex-direction: column;
+                align-items: flex-start;
+            }
+
+            .ia-ops-metrics,
+            .ia-ops-lane {
+                grid-template-columns: 1fr;
+            }
+
+            .ia-ops-metric {
+                border-right: 0;
             }
 
             .ia-overview {
@@ -2013,34 +2236,169 @@ $pageTitle = 'Inter-Agency Conversations';
                 </article>
             </section>
 
-            <section class="ia-command-center" id="iaCommandCenter" aria-label="Inter-Agency Command Center"></section>
-
-            <section class="ia-event-section" id="iaEventCoordination" aria-label="Event Coordination"></section>
-
-            <section class="ia-tip-section" id="iaAnonymousTipInbox" aria-label="Anonymous Tip Inbox"></section>
-
-            <section class="ia-external-inbox" id="iaExternalIncidentInbox" aria-label="Incoming external incidents">
-                <div class="ia-external-inbox-head">
-                    <button type="button" class="ia-external-inbox-toggle" id="iaExternalInboxToggle" aria-expanded="false" aria-controls="iaExternalInboxDropdown">
-                        <span class="ia-external-inbox-title-wrap">
-                            <span class="ia-external-inbox-title">External Incident Inbox</span>
-                            <span class="ia-external-inbox-sub">Incoming incidents and call transfers from connected systems.</span>
-                        </span>
-                        <span class="ia-external-inbox-chevron" aria-hidden="true"><i class="fas fa-chevron-down"></i></span>
-                    </button>
+            <section class="ia-ops-desk" id="iaOperationsDesk" aria-label="Inter-agency operations desk">
+                <div class="ia-ops-panel">
+                    <div class="ia-ops-panel-head">
+                        <div>
+                            <h2 class="ia-ops-title">Operations Desk</h2>
+                            <p class="ia-ops-sub">Live admin triage view for command rooms, external reports, events, and anonymous tips.</p>
+                        </div>
+                        <span class="ia-ops-live" id="iaOpsUpdated"><i class="fas fa-rotate"></i> Syncing</span>
+                    </div>
+                    <div class="ia-ops-metrics">
+                        <article class="ia-ops-metric">
+                            <div class="ia-ops-metric-label">External Queue</div>
+                            <div class="ia-ops-metric-value" id="iaOpsExternal">0</div>
+                            <div class="ia-ops-metric-note">Incoming reports waiting</div>
+                        </article>
+                        <article class="ia-ops-metric">
+                            <div class="ia-ops-metric-label">Active Incidents</div>
+                            <div class="ia-ops-metric-value" id="iaOpsActiveIncidents">0</div>
+                            <div class="ia-ops-metric-note">Open command candidates</div>
+                        </article>
+                        <article class="ia-ops-metric">
+                            <div class="ia-ops-metric-label">New Tips</div>
+                            <div class="ia-ops-metric-value" id="iaOpsNewTips">0</div>
+                            <div class="ia-ops-metric-note">Need verification</div>
+                        </article>
+                        <article class="ia-ops-metric">
+                            <div class="ia-ops-metric-label">High-Risk Events</div>
+                            <div class="ia-ops-metric-value" id="iaOpsHighEvents">0</div>
+                            <div class="ia-ops-metric-note">High or critical hazard</div>
+                        </article>
+                        <article class="ia-ops-metric">
+                            <div class="ia-ops-metric-label">Standby Units</div>
+                            <div class="ia-ops-metric-value" id="iaOpsStandbyUnits">0</div>
+                            <div class="ia-ops-metric-note">Required for events</div>
+                        </article>
+                    </div>
                 </div>
-                <div class="ia-external-inbox-dropdown" id="iaExternalInboxDropdown" hidden>
-                    <div class="ia-external-inbox-actions">
-                        <span class="ia-external-inbox-badge" id="iaExternalInboxBadge">Loading</span>
-                        <button type="button" class="ia-external-inbox-refresh" id="iaExternalInboxRefresh" title="Refresh external inbox" aria-label="Refresh external inbox">
-                            <i class="fas fa-rotate-right"></i>
+                <aside class="ia-ops-panel">
+                    <div class="ia-ops-panel-head">
+                        <div>
+                            <h2 class="ia-ops-title">Workflow Lanes</h2>
+                            <p class="ia-ops-sub">Jump into the queue that needs action.</p>
+                        </div>
+                    </div>
+                    <div class="ia-ops-lanes">
+                        <article class="ia-ops-lane">
+                            <span class="ia-ops-lane-icon"><i class="fas fa-tower-broadcast"></i></span>
+                            <span>
+                                <strong class="ia-ops-lane-title">Command Center</strong>
+                                <span class="ia-ops-lane-sub">Tasking, broadcast ack, map, and audit trail.</span>
+                            </span>
+                            <button type="button" class="ia-ops-jump" data-ops-open="iaCommandCenter" aria-label="Open command center"><i class="fas fa-arrow-down"></i></button>
+                        </article>
+                        <article class="ia-ops-lane">
+                            <span class="ia-ops-lane-icon"><i class="fas fa-calendar-check"></i></span>
+                            <span>
+                                <strong class="ia-ops-lane-title">Event Coordination</strong>
+                                <span class="ia-ops-lane-sub">Readiness for scheduled and standby events.</span>
+                            </span>
+                            <button type="button" class="ia-ops-jump" data-ops-open="iaEventCoordination" aria-label="Open event coordination"><i class="fas fa-arrow-down"></i></button>
+                        </article>
+                        <article class="ia-ops-lane">
+                            <span class="ia-ops-lane-icon"><i class="fas fa-user-secret"></i></span>
+                            <span>
+                                <strong class="ia-ops-lane-title">Tip Inbox</strong>
+                                <span class="ia-ops-lane-sub">Verify, dismiss, or prepare tips for incident conversion.</span>
+                            </span>
+                            <button type="button" class="ia-ops-jump" data-ops-open="iaAnonymousTipInbox" aria-label="Open anonymous tip inbox"><i class="fas fa-arrow-down"></i></button>
+                        </article>
+                        <article class="ia-ops-lane">
+                            <span class="ia-ops-lane-icon"><i class="fas fa-inbox"></i></span>
+                            <span>
+                                <strong class="ia-ops-lane-title">External Inbox</strong>
+                                <span class="ia-ops-lane-sub">Triage outside reports and live call transfers.</span>
+                            </span>
+                            <button type="button" class="ia-ops-jump" data-ops-open="iaExternalIncidentInbox" aria-label="Open external incident inbox"><i class="fas fa-arrow-down"></i></button>
+                        </article>
+                    </div>
+                </aside>
+            </section>
+
+            <section class="ia-module-launcher" aria-label="Inter-agency module launcher">
+                <button type="button" class="ia-module-btn" data-module-open="iaCommandCenter" data-module-title="Inter-Agency Command Center" data-module-subtitle="Incident intelligence, tasking, broadcasts, acknowledgements, and audit trail.">
+                    <span class="ia-module-btn-icon"><i class="fas fa-tower-broadcast"></i></span>
+                    <span class="ia-module-btn-main">
+                        <span class="ia-module-btn-title">Command Center</span>
+                        <span class="ia-module-btn-sub">Active incident rooms</span>
+                    </span>
+                    <span class="ia-module-badge" data-module-badge="iaCommandCenter">0</span>
+                </button>
+                <button type="button" class="ia-module-btn" data-module-open="iaEventCoordination" data-module-title="Event Coordination" data-module-subtitle="Shared event profiles, standby needs, hazards, and readiness checklist.">
+                    <span class="ia-module-btn-icon"><i class="fas fa-calendar-check"></i></span>
+                    <span class="ia-module-btn-main">
+                        <span class="ia-module-btn-title">Event Coordination</span>
+                        <span class="ia-module-btn-sub">High-risk and standby events</span>
+                    </span>
+                    <span class="ia-module-badge" data-module-badge="iaEventCoordination">0</span>
+                </button>
+                <button type="button" class="ia-module-btn" data-module-open="iaAnonymousTipInbox" data-module-title="Anonymous Tip Inbox" data-module-subtitle="Incoming anonymous tips, evidence, review status, and outcomes.">
+                    <span class="ia-module-btn-icon"><i class="fas fa-user-secret"></i></span>
+                    <span class="ia-module-btn-main">
+                        <span class="ia-module-btn-title">Anonymous Tip Inbox</span>
+                        <span class="ia-module-btn-sub">Tips needing review</span>
+                    </span>
+                    <span class="ia-module-badge" data-module-badge="iaAnonymousTipInbox">0</span>
+                </button>
+                <button type="button" class="ia-module-btn" data-module-open="iaExternalIncidentInbox" data-module-title="External Incident Inbox" data-module-subtitle="Incoming incidents and call transfers from connected systems.">
+                    <span class="ia-module-btn-icon"><i class="fas fa-inbox"></i></span>
+                    <span class="ia-module-btn-main">
+                        <span class="ia-module-btn-title">External Incident Inbox</span>
+                        <span class="ia-module-btn-sub">Incoming external reports</span>
+                    </span>
+                    <span class="ia-module-badge" data-module-badge="iaExternalIncidentInbox">0</span>
+                </button>
+            </section>
+
+            <div class="ia-module-stage" id="iaModuleStage">
+                <section class="ia-command-center" id="iaCommandCenter" aria-label="Inter-Agency Command Center"></section>
+
+                <section class="ia-event-section" id="iaEventCoordination" aria-label="Event Coordination"></section>
+
+                <section class="ia-tip-section" id="iaAnonymousTipInbox" aria-label="Anonymous Tip Inbox"></section>
+
+                <section class="ia-external-inbox" id="iaExternalIncidentInbox" aria-label="Incoming external incidents">
+                    <div class="ia-external-inbox-head">
+                        <button type="button" class="ia-external-inbox-toggle" id="iaExternalInboxToggle" aria-expanded="false" aria-controls="iaExternalInboxDropdown">
+                            <span class="ia-external-inbox-title-wrap">
+                                <span class="ia-external-inbox-title">External Incident Inbox</span>
+                                <span class="ia-external-inbox-sub">Incoming incidents and call transfers from connected systems.</span>
+                            </span>
+                            <span class="ia-external-inbox-chevron" aria-hidden="true"><i class="fas fa-chevron-down"></i></span>
                         </button>
                     </div>
-                    <div class="ia-external-inbox-list" id="iaExternalInboxList" aria-live="polite">
-                        <div class="ia-external-inbox-empty">Loading external incidents...</div>
+                    <div class="ia-external-inbox-dropdown" id="iaExternalInboxDropdown" hidden>
+                        <div class="ia-external-inbox-actions">
+                            <span class="ia-external-inbox-badge" id="iaExternalInboxBadge">Loading</span>
+                            <button type="button" class="ia-external-inbox-refresh" id="iaExternalInboxRefresh" title="Refresh external inbox" aria-label="Refresh external inbox">
+                                <i class="fas fa-rotate-right"></i>
+                            </button>
+                        </div>
+                        <div class="ia-external-inbox-list" id="iaExternalInboxList" aria-live="polite">
+                            <div class="ia-external-inbox-empty">Loading external incidents...</div>
+                        </div>
                     </div>
+                </section>
+            </div>
+
+            <div class="ia-module-modal" id="iaModuleModal" aria-hidden="true">
+                <button type="button" class="ia-module-modal-backdrop" data-module-close aria-label="Close module modal"></button>
+                <div class="ia-module-modal-dialog" role="dialog" aria-modal="true" aria-labelledby="iaModuleModalTitle">
+                    <div class="ia-module-modal-head">
+                        <div>
+                            <h2 class="ia-module-modal-title" id="iaModuleModalTitle">Inter-Agency Module</h2>
+                            <p class="ia-module-modal-sub" id="iaModuleModalSub">Operational tools and inboxes.</p>
+                        </div>
+                        <button type="button" class="ia-module-modal-close" data-module-close aria-label="Close module modal">
+                            <i class="fas fa-times"></i>
+                        </button>
+                    </div>
+                    <div class="ia-module-modal-body" id="iaModuleModalBody"></div>
                 </div>
-            </section>
+            </div>
+            <div class="ia-module-toast" id="iaModuleToast" aria-live="polite"></div>
 
             <section class="ia-board">
                 <aside class="ia-list-panel">
@@ -5078,9 +5436,11 @@ $pageTitle = 'Inter-Agency Conversations';
             });
         })();
     </script>
+    <script src="js/interagency-operations.js"></script>
     <script src="js/interagency-command.js"></script>
     <script src="js/interagency-events.js"></script>
     <script src="js/interagency-tips.js"></script>
     <script src="js/interagency-external-inbox.js"></script>
+    <script src="js/interagency-module-launcher.js"></script>
 </body>
 </html>
