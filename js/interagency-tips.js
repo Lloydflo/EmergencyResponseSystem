@@ -14,6 +14,7 @@
         selectedId: null,
         search: '',
         status: 'all',
+        expanded: false,
     };
 
     const escapeHtml = (value) => String(value ?? '')
@@ -259,32 +260,39 @@
 
     const render = () => {
         root.innerHTML = `
-            <div class="ia-tip-shell">
+            <div class="ia-tip-shell ${state.expanded ? 'is-open' : 'is-collapsed'}">
                 <header class="ia-tip-head">
-                    <div class="ia-tip-title">
-                        <h2>Anonymous Tip Inbox</h2>
-                        <p>Incoming anonymous tips, evidence, review status, and outcomes.</p>
-                    </div>
-                    <button type="button" class="ia-tip-icon" data-tip-refresh title="Refresh tips" aria-label="Refresh tips">
-                        <i class="fas fa-rotate-right"></i>
+                    <button type="button" class="ia-tip-toggle" data-tip-toggle aria-expanded="${state.expanded ? 'true' : 'false'}" aria-controls="iaTipDropdown">
+                        <span class="ia-tip-title">
+                            <span class="ia-tip-title-text">Anonymous Tip Inbox</span>
+                            <span class="ia-tip-sub">Incoming anonymous tips, evidence, review status, and outcomes.</span>
+                        </span>
+                        <span class="ia-tip-chevron" aria-hidden="true"><i class="fas fa-chevron-down"></i></span>
                     </button>
                 </header>
-                ${renderStats()}
-                ${state.error ? `<div class="ia-tip-error">${escapeHtml(state.error)}</div>` : ''}
-                <div class="ia-tip-body">
-                    <section class="ia-tip-list" aria-label="Anonymous tip records">
-                        <div class="ia-tip-list-head">
-                            <div class="ia-tip-search">
-                                <i class="fas fa-magnifying-glass"></i>
-                                <input type="search" value="${escapeHtml(state.search)}" placeholder="Search tips" data-tip-search>
+                <div class="ia-tip-dropdown" id="iaTipDropdown" ${state.expanded ? '' : 'hidden'}>
+                    <div class="ia-tip-toolbar">
+                        <button type="button" class="ia-tip-icon" data-tip-refresh title="Refresh tips" aria-label="Refresh tips">
+                            <i class="fas fa-rotate-right"></i>
+                        </button>
+                    </div>
+                    ${renderStats()}
+                    ${state.error ? `<div class="ia-tip-error">${escapeHtml(state.error)}</div>` : ''}
+                    <div class="ia-tip-body">
+                        <section class="ia-tip-list" aria-label="Anonymous tip records">
+                            <div class="ia-tip-list-head">
+                                <div class="ia-tip-search">
+                                    <i class="fas fa-magnifying-glass"></i>
+                                    <input type="search" value="${escapeHtml(state.search)}" placeholder="Search tips" data-tip-search>
+                                </div>
+                                <select class="ia-tip-filter" data-tip-filter aria-label="Filter tips by status">
+                                    ${statuses.map((status) => `<option value="${status}" ${state.status === status ? 'selected' : ''}>${statusLabel(status)}</option>`).join('')}
+                                </select>
                             </div>
-                            <select class="ia-tip-filter" data-tip-filter aria-label="Filter tips by status">
-                                ${statuses.map((status) => `<option value="${status}" ${state.status === status ? 'selected' : ''}>${statusLabel(status)}</option>`).join('')}
-                            </select>
-                        </div>
-                        <div class="ia-tip-rows">${renderRows()}</div>
-                    </section>
-                    ${renderDetail()}
+                            <div class="ia-tip-rows">${renderRows()}</div>
+                        </section>
+                        ${renderDetail()}
+                    </div>
                 </div>
             </div>
         `;
@@ -294,6 +302,13 @@
         const evidence = event.target.closest('.ia-tip-evidence');
         if (evidence) {
             event.stopPropagation();
+            return;
+        }
+
+        const toggle = event.target.closest('[data-tip-toggle]');
+        if (toggle) {
+            state.expanded = !state.expanded;
+            render();
             return;
         }
 

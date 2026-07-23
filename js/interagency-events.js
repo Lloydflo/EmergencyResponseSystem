@@ -12,6 +12,7 @@
         editingId: null,
         search: '',
         status: 'all',
+        expanded: false,
     };
 
     const hazardOrder = {
@@ -310,37 +311,44 @@
 
     const render = () => {
         root.innerHTML = `
-            <div class="ia-event-shell">
+            <div class="ia-event-shell ${state.expanded ? 'is-open' : 'is-collapsed'}">
                 <header class="ia-event-head">
-                    <div class="ia-event-title-wrap">
-                        <h2>Event Coordination</h2>
-                        <p>Shared event profiles, standby needs, hazards, and emergency contacts.</p>
-                    </div>
-                    <div class="ia-event-actions">
-                        <button type="button" class="ia-event-icon" data-event-refresh title="Refresh events" aria-label="Refresh events">
-                            <i class="fas fa-rotate-right"></i>
-                        </button>
-                        <button type="button" class="ia-event-primary" data-event-new>
-                            <i class="fas fa-plus"></i> New Event
-                        </button>
-                    </div>
+                    <button type="button" class="ia-event-toggle" data-event-toggle aria-expanded="${state.expanded ? 'true' : 'false'}" aria-controls="iaEventDropdown">
+                        <span class="ia-event-title-wrap">
+                            <span class="ia-event-title">Event Coordination</span>
+                            <span class="ia-event-sub">Shared event profiles, standby needs, hazards, and emergency contacts.</span>
+                        </span>
+                        <span class="ia-event-chevron" aria-hidden="true"><i class="fas fa-chevron-down"></i></span>
+                    </button>
                 </header>
-                ${renderStats()}
-                ${state.error ? `<div class="ia-event-error">${escapeHtml(state.error)}</div>` : ''}
-                <div class="ia-event-body">
-                    <section class="ia-event-list" aria-label="Event coordination records">
-                        <div class="ia-event-list-head">
-                            <div class="ia-event-search">
-                                <i class="fas fa-magnifying-glass"></i>
-                                <input type="search" value="${escapeHtml(state.search)}" placeholder="Search events" data-event-search>
-                            </div>
-                            <select class="ia-event-filter" data-event-status aria-label="Filter events by status">
-                                ${['all', 'active', 'standby', 'draft', 'completed', 'cancelled'].map((value) => `<option value="${value}" ${state.status === value ? 'selected' : ''}>${value}</option>`).join('')}
-                            </select>
+                <div class="ia-event-dropdown" id="iaEventDropdown" ${state.expanded ? '' : 'hidden'}>
+                    <div class="ia-event-toolbar">
+                        <div class="ia-event-actions">
+                            <button type="button" class="ia-event-icon" data-event-refresh title="Refresh events" aria-label="Refresh events">
+                                <i class="fas fa-rotate-right"></i>
+                            </button>
+                            <button type="button" class="ia-event-primary" data-event-new>
+                                <i class="fas fa-plus"></i> New Event
+                            </button>
                         </div>
-                        <div class="ia-event-rows">${renderRows()}</div>
-                    </section>
-                    ${renderForm()}
+                    </div>
+                    ${renderStats()}
+                    ${state.error ? `<div class="ia-event-error">${escapeHtml(state.error)}</div>` : ''}
+                    <div class="ia-event-body">
+                        <section class="ia-event-list" aria-label="Event coordination records">
+                            <div class="ia-event-list-head">
+                                <div class="ia-event-search">
+                                    <i class="fas fa-magnifying-glass"></i>
+                                    <input type="search" value="${escapeHtml(state.search)}" placeholder="Search events" data-event-search>
+                                </div>
+                                <select class="ia-event-filter" data-event-status aria-label="Filter events by status">
+                                    ${['all', 'active', 'standby', 'draft', 'completed', 'cancelled'].map((value) => `<option value="${value}" ${state.status === value ? 'selected' : ''}>${value}</option>`).join('')}
+                                </select>
+                            </div>
+                            <div class="ia-event-rows">${renderRows()}</div>
+                        </section>
+                        ${renderForm()}
+                    </div>
                 </div>
             </div>
         `;
@@ -349,6 +357,12 @@
     root.addEventListener('click', (event) => {
         const target = event.target.closest('button');
         if (!target) {
+            return;
+        }
+
+        if (target.matches('[data-event-toggle]')) {
+            state.expanded = !state.expanded;
+            render();
             return;
         }
 

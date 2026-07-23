@@ -29,6 +29,7 @@
         incidentId: 0,
         room: null,
         loading: false,
+        expanded: false,
         timer: null
     };
 
@@ -78,10 +79,15 @@
     function renderShell() {
         root.innerHTML = `
             <div class="ia-command-head">
-                <div>
-                    <h2 class="ia-command-title">Inter-Agency Command Center</h2>
-                    <p class="ia-command-sub">Incident room, tasking, critical broadcasts, acknowledgement, map link, and audit trail.</p>
-                </div>
+                <button type="button" class="ia-command-toggle" id="iaCommandToggle" aria-expanded="false" aria-controls="iaCommandDropdown">
+                    <span class="ia-command-title-wrap">
+                        <span class="ia-command-title">Inter-Agency Command Center</span>
+                        <span class="ia-command-sub">Incident room, tasking, critical broadcasts, acknowledgement, map link, and audit trail.</span>
+                    </span>
+                    <span class="ia-command-chevron" aria-hidden="true"><i class="fas fa-chevron-down"></i></span>
+                </button>
+            </div>
+            <div class="ia-command-dropdown" id="iaCommandDropdown" hidden>
                 <div class="ia-command-controls">
                     <select class="ia-command-select" id="iaCommandIncidentSelect" aria-label="Select incident">
                         <option value="">Loading active incidents...</option>
@@ -90,14 +96,18 @@
                         <i class="fas fa-rotate"></i> Refresh
                     </button>
                 </div>
-            </div>
-            <div class="ia-command-body" id="iaCommandBody">
-                <div class="ia-command-empty">Choose an active incident to open the command room.</div>
+                <div class="ia-command-body" id="iaCommandBody">
+                    <div class="ia-command-empty">Choose an active incident to open the command room.</div>
+                </div>
             </div>
         `;
 
+        const toggle = document.getElementById('iaCommandToggle');
         const select = document.getElementById('iaCommandIncidentSelect');
         const refresh = document.getElementById('iaCommandRefreshBtn');
+        if (toggle) {
+            toggle.addEventListener('click', () => setExpanded(!state.expanded));
+        }
         if (select) {
             select.addEventListener('change', () => {
                 state.incidentId = Number(select.value || 0);
@@ -111,6 +121,23 @@
         }
         if (refresh) {
             refresh.addEventListener('click', () => refreshAll());
+        }
+
+        setExpanded(state.expanded);
+    }
+
+    function setExpanded(expanded) {
+        state.expanded = Boolean(expanded);
+        root.classList.toggle('is-open', state.expanded);
+        root.classList.toggle('is-collapsed', !state.expanded);
+
+        const toggle = document.getElementById('iaCommandToggle');
+        const dropdown = document.getElementById('iaCommandDropdown');
+        if (toggle) {
+            toggle.setAttribute('aria-expanded', state.expanded ? 'true' : 'false');
+        }
+        if (dropdown) {
+            dropdown.hidden = !state.expanded;
         }
     }
 

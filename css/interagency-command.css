@@ -17,26 +17,73 @@
 }
 
 .ia-external-inbox-head {
+    background: #f8fafc;
+}
+
+.ia-external-inbox.is-open .ia-external-inbox-head {
+    border-bottom: 1px solid var(--ia-border, #dfe6ee);
+}
+
+.ia-external-inbox-toggle {
+    width: 100%;
+    border: 0;
+    background: transparent;
+    color: inherit;
+    padding: 0.9rem 1rem;
+    cursor: pointer;
     display: flex;
     align-items: center;
     justify-content: space-between;
     gap: 1rem;
-    padding: 0.9rem 1rem;
-    border-bottom: 1px solid var(--ia-border, #dfe6ee);
-    background: #f8fafc;
+    text-align: left;
 }
 
-.ia-external-inbox-head h2 {
+.ia-external-inbox-toggle:hover {
+    background: rgba(15, 118, 110, 0.06);
+}
+
+.ia-external-inbox-toggle:focus-visible {
+    outline: 3px solid rgba(15, 118, 110, 0.24);
+    outline-offset: -3px;
+}
+
+.ia-external-inbox-title-wrap {
+    display: grid;
+    gap: 0.25rem;
+    min-width: 0;
+}
+
+.ia-external-inbox-title {
     margin: 0;
     color: var(--ia-text, #122031);
     font-size: 1rem;
     font-weight: 900;
+    line-height: 1.2;
 }
 
-.ia-external-inbox-head p {
-    margin: 0.2rem 0 0;
+.ia-external-inbox-sub {
+    margin: 0;
     color: var(--ia-muted, #5f7286);
     font-size: 0.82rem;
+    line-height: 1.35;
+}
+
+.ia-external-inbox-chevron {
+    width: 34px;
+    height: 34px;
+    border: 1px solid var(--ia-border, #dfe6ee);
+    border-radius: 8px;
+    background: #fff;
+    color: var(--ia-text, #122031);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex: 0 0 auto;
+    transition: transform 0.18s ease;
+}
+
+.ia-external-inbox.is-open .ia-external-inbox-chevron {
+    transform: rotate(180deg);
 }
 
 .ia-external-inbox-actions {
@@ -44,6 +91,8 @@
     align-items: center;
     gap: 0.45rem;
     flex-shrink: 0;
+    justify-content: flex-end;
+    padding: 0.9rem 0.9rem 0;
 }
 
 .ia-external-inbox-badge {
@@ -211,13 +260,40 @@
 }
 
 .ia-command-head {
+    background: #f8fafc;
+}
+
+.ia-command-center.is-open .ia-command-head {
+    border-bottom: 1px solid var(--ia-border, #dfe6ee);
+}
+
+.ia-command-toggle {
+    width: 100%;
+    border: 0;
+    background: transparent;
+    color: inherit;
+    padding: 1rem;
+    cursor: pointer;
     display: flex;
     align-items: center;
     justify-content: space-between;
     gap: 1rem;
-    padding: 1rem;
-    border-bottom: 1px solid var(--ia-border, #dfe6ee);
-    background: #f8fafc;
+    text-align: left;
+}
+
+.ia-command-toggle:hover {
+    background: rgba(15, 118, 110, 0.06);
+}
+
+.ia-command-toggle:focus-visible {
+    outline: 3px solid rgba(15, 118, 110, 0.24);
+    outline-offset: -3px;
+}
+
+.ia-command-title-wrap {
+    display: grid;
+    gap: 0.25rem;
+    min-width: 0;
 }
 
 .ia-command-title {
@@ -225,12 +301,32 @@
     color: var(--ia-text, #122031);
     font-size: 1rem;
     font-weight: 900;
+    line-height: 1.2;
 }
 
 .ia-command-sub {
-    margin: 0.25rem 0 0;
+    margin: 0;
     color: var(--ia-muted, #5f7286);
     font-size: 0.82rem;
+    line-height: 1.35;
+}
+
+.ia-command-chevron {
+    width: 34px;
+    height: 34px;
+    border: 1px solid var(--ia-border, #dfe6ee);
+    border-radius: 8px;
+    background: #fff;
+    color: var(--ia-text, #122031);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex: 0 0 auto;
+    transition: transform 0.18s ease;
+}
+
+.ia-command-center.is-open .ia-command-chevron {
+    transform: rotate(180deg);
 }
 
 .ia-command-controls {
@@ -238,6 +334,7 @@
     gap: 0.5rem;
     align-items: center;
     flex-wrap: wrap;
+    padding: 1rem 1rem 0;
 }
 
 .ia-command-select,
@@ -522,6 +619,7 @@
 
 [data-theme="dark"] .ia-command-title,
 [data-theme="dark"] .ia-external-inbox-head h2,
+[data-theme="dark"] .ia-external-inbox-title,
 [data-theme="dark"] .ia-external-card-title,
 [data-theme="dark"] .ia-command-panel-title,
 [data-theme="dark"] .ia-command-kpi strong,
@@ -533,6 +631,7 @@
 
 [data-theme="dark"] .ia-command-sub,
 [data-theme="dark"] .ia-external-inbox-head p,
+[data-theme="dark"] .ia-external-inbox-sub,
 [data-theme="dark"] .ia-external-card-source,
 [data-theme="dark"] .ia-external-card-location,
 [data-theme="dark"] .ia-external-card-desc,
@@ -554,6 +653,26 @@
 
 [data-theme="dark"] .ia-command-btn.secondary {
     background: #111827;
+    border-color: rgba(148, 163, 184, 0.24);
+    color: #e2e8f0;
+}
+
+[data-theme="dark"] .ia-command-toggle:hover {
+    background: rgba(20, 184, 166, 0.1);
+}
+
+[data-theme="dark"] .ia-external-inbox-toggle:hover {
+    background: rgba(20, 184, 166, 0.1);
+}
+
+[data-theme="dark"] .ia-command-chevron {
+    background: #0f172a;
+    border-color: rgba(148, 163, 184, 0.24);
+    color: #e2e8f0;
+}
+
+[data-theme="dark"] .ia-external-inbox-chevron {
+    background: #0f172a;
     border-color: rgba(148, 163, 184, 0.24);
     color: #e2e8f0;
 }
@@ -580,10 +699,18 @@
 }
 
 @media (max-width: 760px) {
-    .ia-command-head,
     .ia-external-inbox-head {
         align-items: stretch;
         flex-direction: column;
+    }
+
+    .ia-command-toggle {
+        align-items: flex-start;
+        padding: 0.9rem;
+    }
+
+    .ia-external-inbox-toggle {
+        align-items: flex-start;
     }
 
     .ia-external-inbox-actions {

@@ -2021,19 +2021,24 @@ $pageTitle = 'Inter-Agency Conversations';
 
             <section class="ia-external-inbox" id="iaExternalIncidentInbox" aria-label="Incoming external incidents">
                 <div class="ia-external-inbox-head">
-                    <div>
-                        <h2>External Incident Inbox</h2>
-                        <p>Incoming incidents and call transfers from connected systems.</p>
-                    </div>
+                    <button type="button" class="ia-external-inbox-toggle" id="iaExternalInboxToggle" aria-expanded="false" aria-controls="iaExternalInboxDropdown">
+                        <span class="ia-external-inbox-title-wrap">
+                            <span class="ia-external-inbox-title">External Incident Inbox</span>
+                            <span class="ia-external-inbox-sub">Incoming incidents and call transfers from connected systems.</span>
+                        </span>
+                        <span class="ia-external-inbox-chevron" aria-hidden="true"><i class="fas fa-chevron-down"></i></span>
+                    </button>
+                </div>
+                <div class="ia-external-inbox-dropdown" id="iaExternalInboxDropdown" hidden>
                     <div class="ia-external-inbox-actions">
                         <span class="ia-external-inbox-badge" id="iaExternalInboxBadge">Loading</span>
                         <button type="button" class="ia-external-inbox-refresh" id="iaExternalInboxRefresh" title="Refresh external inbox" aria-label="Refresh external inbox">
                             <i class="fas fa-rotate-right"></i>
                         </button>
                     </div>
-                </div>
-                <div class="ia-external-inbox-list" id="iaExternalInboxList" aria-live="polite">
-                    <div class="ia-external-inbox-empty">Loading external incidents...</div>
+                    <div class="ia-external-inbox-list" id="iaExternalInboxList" aria-live="polite">
+                        <div class="ia-external-inbox-empty">Loading external incidents...</div>
+                    </div>
                 </div>
             </section>
 

@@ -6,6 +6,8 @@
     const badgeEl = document.getElementById('iaExternalInboxBadge');
     const countEl = document.getElementById('iaExternalInboxCount');
     const refreshBtn = document.getElementById('iaExternalInboxRefresh');
+    const toggleBtn = document.getElementById('iaExternalInboxToggle');
+    const dropdownEl = document.getElementById('iaExternalInboxDropdown');
     const detailModal = document.getElementById('incidentDetailModal');
     const detailTitle = document.getElementById('incidentDetailModalTitle');
     const detailSubtitle = document.getElementById('incidentDetailModalSubtitle');
@@ -15,6 +17,7 @@
     const state = {
         items: [],
         loading: false,
+        expanded: false,
         dismissed: loadDismissedKeys()
     };
 
@@ -138,6 +141,18 @@
         }
 
         listEl.innerHTML = items.map(renderCard).join('');
+    }
+
+    function setExpanded(expanded) {
+        state.expanded = Boolean(expanded);
+        root.classList.toggle('is-open', state.expanded);
+        root.classList.toggle('is-collapsed', !state.expanded);
+        if (toggleBtn) {
+            toggleBtn.setAttribute('aria-expanded', state.expanded ? 'true' : 'false');
+        }
+        if (dropdownEl) {
+            dropdownEl.hidden = !state.expanded;
+        }
     }
 
     function renderCard(item) {
@@ -290,6 +305,9 @@
     }
 
     function bindEvents() {
+        if (toggleBtn) {
+            toggleBtn.addEventListener('click', () => setExpanded(!state.expanded));
+        }
         if (refreshBtn) {
             refreshBtn.addEventListener('click', loadInbox);
         }
@@ -326,6 +344,7 @@
 
     document.addEventListener('DOMContentLoaded', () => {
         bindEvents();
+        setExpanded(state.expanded);
         loadInbox();
         window.setInterval(loadInbox, 30000);
     });
