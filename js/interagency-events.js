@@ -4,7 +4,7 @@
         return;
     }
 
-    const apiUrl = 'api/system_API/event_coordination.php';
+    const apiUrl = 'api/system_API/?action=event_coordination';
     const state = {
         items: [],
         loading: true,
@@ -85,7 +85,7 @@
         render();
 
         try {
-            const response = await fetch(`${apiUrl}?limit=80`, {
+            const response = await fetch(`${apiUrl}&limit=80`, {
                 credentials: 'same-origin',
                 headers: { Accept: 'application/json' },
             });

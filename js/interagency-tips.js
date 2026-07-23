@@ -4,7 +4,7 @@
         return;
     }
 
-    const apiUrl = 'api/system_API/anonymous_tip.php';
+    const apiUrl = 'api/system_API/?action=anonymous_tip';
     const statuses = ['all', 'new', 'reviewing', 'verified', 'dismissed', 'converted_to_incident'];
     const editableStatuses = statuses.filter((status) => status !== 'all');
     const state = {
@@ -72,7 +72,7 @@
         render();
 
         try {
-            const response = await fetch(`${apiUrl}?limit=80`, {
+            const response = await fetch(`${apiUrl}&limit=80`, {
                 credentials: 'same-origin',
                 headers: { Accept: 'application/json' },
             });
