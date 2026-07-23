@@ -594,14 +594,18 @@ document.addEventListener('DOMContentLoaded', function() {
         window.location.href = 'dispatcher/gps.php?' + qp.toString();
     }
     function getUnitRoutePoint(unit, selectedOption) {
-        if (unit.latitude && unit.longitude) {
-            return { lat: Number(unit.latitude), lng: Number(unit.longitude) };
+        const candidates = [
+            [unit.latest_latitude, unit.latest_longitude],
+            [unit.latitude, unit.longitude]
+        ];
+        for (const pair of candidates) {
+            const lat = Number(pair[0]);
+            const lng = Number(pair[1]);
+            if (Number.isFinite(lat) && Number.isFinite(lng) && !(Math.abs(lat) < 0.000001 && Math.abs(lng) < 0.000001)) {
+                return { lat, lng };
+            }
         }
-        const type = selectedOption ? selectedOption.getAttribute('data-type') : (unit.unit_type || 'other');
-        if (type === 'police') return { lat: 14.7338, lng: 121.0368 };
-        if (type === 'fire') return { lat: 14.7295, lng: 121.0342 };
-        if (type === 'ambulance') return { lat: 14.7351, lng: 121.0380 };
-        return { lat: 14.7320, lng: 121.0351 };
+        return null;
     }
     document.getElementById('confirm-dispatch-btn').onclick = function() {
         const btn = document.getElementById('confirm-dispatch-btn');
@@ -630,10 +634,6 @@ document.addEventListener('DOMContentLoaded', function() {
                 const parts = inc.location_address.split(',').map(Number);
                 toLat = parts[0];
                 toLng = parts[1];
-            } else {
-                // Default fallback: Barangay San Agustin center.
-                toLat = 14.7320;
-                toLng = 121.0351;
             }
 
             const routeUnits = unitResponses.map((unitRes, index) => {
@@ -643,21 +643,12 @@ document.addEventListener('DOMContentLoaded', function() {
                 return {
                     id: unitIds[index],
                     identifier: selectedOption ? selectedOption.getAttribute('data-identifier') : (unit.identifier || ''),
-                    fromLat: point.lat,
-                    fromLng: point.lng
+                    fromLat: point ? point.lat : null,
+                    fromLng: point ? point.lng : null
                 };
             });
 
-            const ensureUnitLocations = routeUnits.map(routeUnit => (routeUnit.fromLat && routeUnit.fromLng)
-                ? fetch('api/unit_location_update.php', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ unit_id: routeUnit.id, latitude: routeUnit.fromLat, longitude: routeUnit.fromLng })
-                }).catch(() => null)
-                : Promise.resolve());
-
-            return Promise.allSettled(ensureUnitLocations).then(() => {
-                return fetch('api/dispatch_unit.php', {
+            return fetch('api/dispatch_unit.php', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ incident_id: currentIncidentId, unit_ids: unitIds })
@@ -696,11 +687,6 @@ document.addEventListener('DOMContentLoaded', function() {
                         btn.textContent = 'Confirm Dispatch';
                     }
                 });
-            }).catch(() => {
-                alert('Network error.');
-                btn.disabled = false;
-                btn.textContent = 'Confirm Dispatch';
-            });
         }).catch(() => {
             alert('Network error.');
             btn.disabled = false;
@@ -1311,7 +1297,12 @@ function renderAvailableUnits(items) {
         const meta = [];
         if (u.unit_type) meta.push(u.unit_type.charAt(0).toUpperCase() + u.unit_type.slice(1));
         const displayName = u.resource_name || u.identifier;
-        const locationText = u.resource_location || (u.latitude && u.longitude ? `${u.latitude}, ${u.longitude}` : 'Location pending');
+        const latestLat = Number(u.latest_latitude ?? u.latitude);
+        const latestLng = Number(u.latest_longitude ?? u.longitude);
+        const gpsLocationText = Number.isFinite(latestLat) && Number.isFinite(latestLng)
+            ? `Responder GPS: ${latestLat.toFixed(6)}, ${latestLng.toFixed(6)}`
+            : '';
+        const locationText = gpsLocationText || 'Responder GPS pending';
         const assignmentText = u.assignment || u.plate_number || u.driver_name || '';
         const card = document.createElement('div');
         card.className = 'unit-card available';
