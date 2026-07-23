@@ -3794,11 +3794,52 @@ $pageTitle = 'Inter-Agency Conversations';
                     return;
                 }
                 if (action === 'unsend') {
-                    alert('Unsend is ready in the menu, but it still needs a backend endpoint before it can remove the message for everyone.');
+                    if (!confirm('Unsend this message for everyone?')) {
+                        return;
+                    }
+                    try {
+                        const res = await fetch('api/interagency_message_action.php', {
+                            method: 'POST',
+                            credentials: 'same-origin',
+                            headers: {
+                                Accept: 'application/json',
+                                'Content-Type': 'application/json',
+                            },
+                            body: JSON.stringify({ action: 'unsend', message_id: Number(messageId) || 0 }),
+                        });
+                        const data = await res.json();
+                        if (!res.ok || !data.ok) {
+                            throw new Error(data.error || 'Unable to unsend message.');
+                        }
+                        await loadMessages(false, false);
+                    } catch (error) {
+                        alert((error && error.message) ? error.message : 'Unable to unsend message.');
+                    }
                     return;
                 }
                 if (action === 'report') {
-                    alert('Report is ready in the menu, but it still needs backend handling before it can submit a report.');
+                    const reason = window.prompt('Reason for reporting this message:', 'Needs admin review');
+                    if (reason === null) {
+                        return;
+                    }
+                    try {
+                        const res = await fetch('api/interagency_message_action.php', {
+                            method: 'POST',
+                            credentials: 'same-origin',
+                            headers: {
+                                Accept: 'application/json',
+                                'Content-Type': 'application/json',
+                            },
+                            body: JSON.stringify({ action: 'report', message_id: Number(messageId) || 0, reason }),
+                        });
+                        const data = await res.json();
+                        if (!res.ok || !data.ok) {
+                            throw new Error(data.error || 'Unable to report message.');
+                        }
+                        alert('Message reported for review.');
+                    } catch (error) {
+                        alert((error && error.message) ? error.message : 'Unable to report message.');
+                    }
                 }
             }
 

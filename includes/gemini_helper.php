@@ -181,6 +181,63 @@ if (!function_exists('ers_gemini_url_candidates')) {
     }
 }
 
+if (!function_exists('ers_gemini_cache_dir')) {
+    function ers_gemini_cache_dir() {
+        return dirname(__DIR__) . '/data/cache/gemini';
+    }
+}
+
+if (!function_exists('ers_gemini_cache_path')) {
+    function ers_gemini_cache_path($prompt) {
+        return ers_gemini_cache_dir() . '/' . hash('sha256', (string)$prompt) . '.json';
+    }
+}
+
+if (!function_exists('ers_gemini_read_cached_response')) {
+    function ers_gemini_read_cached_response($prompt, $maxAgeSeconds = 900) {
+        $cachePath = ers_gemini_cache_path($prompt);
+        if (!is_file($cachePath)) {
+            return '';
+        }
+
+        $raw = @file_get_contents($cachePath);
+        $payload = is_string($raw) ? json_decode($raw, true) : null;
+        if (!is_array($payload)) {
+            return '';
+        }
+
+        $createdAt = (int)($payload['created_at'] ?? 0);
+        if ($maxAgeSeconds > 0 && ($createdAt <= 0 || (time() - $createdAt) > $maxAgeSeconds)) {
+            return '';
+        }
+
+        return trim((string)($payload['text'] ?? ''));
+    }
+}
+
+if (!function_exists('ers_gemini_write_cached_response')) {
+    function ers_gemini_write_cached_response($prompt, $text) {
+        $text = trim((string)$text);
+        if ($text === '') {
+            return;
+        }
+
+        $cacheDir = ers_gemini_cache_dir();
+        if (!is_dir($cacheDir)) {
+            @mkdir($cacheDir, 0775, true);
+        }
+        if (!is_dir($cacheDir) || !is_writable($cacheDir)) {
+            return;
+        }
+
+        $payload = [
+            'created_at' => time(),
+            'text' => $text,
+        ];
+        @file_put_contents(ers_gemini_cache_path($prompt), json_encode($payload, JSON_UNESCAPED_SLASHES));
+    }
+}
+
 if (!function_exists('ers_should_retry_gemini_with_fallback_model')) {
     function ers_should_retry_gemini_with_fallback_model($httpCode, $apiError) {
         $apiError = strtolower(trim((string)$apiError));
@@ -240,6 +297,11 @@ function callGeminiAPI($prompt) {
         return null;
     }
 
+    $cachedText = ers_gemini_read_cached_response($prompt, 900);
+    if ($cachedText !== '') {
+        return $cachedText;
+    }
+
     $apiUrl = $apiBaseUrl . '?key=' . urlencode($apiKey);
 
     $data = [
@@ -281,7 +343,9 @@ function callGeminiAPI($prompt) {
 
     if ($httpCode === 200) {
         if (isset($responseData['candidates'][0]['content']['parts'][0]['text'])) {
-            return ers_clean_ai_text($responseData['candidates'][0]['content']['parts'][0]['text']);
+            $text = ers_clean_ai_text($responseData['candidates'][0]['content']['parts'][0]['text']);
+            ers_gemini_write_cached_response($prompt, $text);
+            return $text;
         }
 
         setGeminiLastError('Gemini returned an empty response.');
@@ -295,6 +359,12 @@ function callGeminiAPI($prompt) {
     }
 
     if ($httpCode === 429) {
+        $staleText = ers_gemini_read_cached_response($prompt, 86400);
+        if ($staleText !== '') {
+            setGeminiLastError('Gemini quota exceeded. Showing the latest cached response.');
+            error_log('Gemini API quota exceeded; served cached response.');
+            return $staleText;
+        }
         $friendly = 'Gemini quota exceeded. Check API plan/billing or wait then retry.';
     } elseif ($httpCode === 401 || $httpCode === 403) {
         $friendly = 'Gemini key is invalid or not authorized for this API/project.';
