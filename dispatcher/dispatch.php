@@ -408,24 +408,57 @@ function haversine(lat1, lon1, lat2, lon2) {
     const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
     return R * c;
 }
+function numberOrNull(value) {
+    const number = Number(value);
+    return Number.isFinite(number) ? number : null;
+}
+function unitResponderLatLng(unit) {
+    const candidates = [
+        [unit && unit.latest_latitude, unit && unit.latest_longitude],
+        [unit && unit.latitude, unit && unit.longitude]
+    ];
+    for (const pair of candidates) {
+        const lat = numberOrNull(pair[0]);
+        const lng = numberOrNull(pair[1]);
+        if (lat !== null && lng !== null && !(Math.abs(lat) < 0.000001 && Math.abs(lng) < 0.000001)) {
+            return { lat, lng };
+        }
+    }
+    return null;
+}
+function selectedUnitDistanceKm(unit) {
+    const apiDistance = numberOrNull(unit && unit.distance_km);
+    if (apiDistance !== null) return apiDistance;
+    const incidentLat = numberOrNull(currentIncidentLat);
+    const incidentLng = numberOrNull(currentIncidentLng);
+    const unitPoint = unitResponderLatLng(unit);
+    if (incidentLat === null || incidentLng === null || !unitPoint) return null;
+    return haversine(unitPoint.lat, unitPoint.lng, incidentLat, incidentLng);
+}
+function formatDistanceKm(distanceKm) {
+    if (!Number.isFinite(distanceKm)) return '';
+    return distanceKm < 1
+        ? `${Math.round(distanceKm * 1000)} m`
+        : `${distanceKm.toFixed(2)} km`;
+}
 function formatSelectedUnitDetails(unit) {
     const sampleProfile = getSampleUnitProfile(unit.unit_type);
     const vehicleName = getUnitVehicleName(unit) || 'Selected Vehicle';
     const unitCode = String(unit.identifier || '').trim();
+    const unitPoint = unitResponderLatLng(unit);
+    const distanceKm = selectedUnitDistanceKm(unit);
     const lines = [
         `<strong>${escapeHtml(vehicleName)}</strong>`,
         unitCode && unitCode !== vehicleName ? `<strong>Unit Code:</strong> ${escapeHtml(unitCode)}` : '',
         `<strong>Operator:</strong> ${escapeHtml(unit.driver_name || sampleProfile.driver)}`,
         `<strong>Plate #:</strong> ${escapeHtml(unit.plate_number || sampleProfile.plate)}`,
         `<strong>Type:</strong> ${escapeHtml(unit.unit_type || '')}`,
-        `<strong>Status:</strong> ${escapeHtml(unit.status || '')}`
+        `<strong>Status:</strong> ${escapeHtml(unit.status || '')}`,
+        unitPoint ? `<strong>Responder GPS:</strong> ${unitPoint.lat.toFixed(6)}, ${unitPoint.lng.toFixed(6)}` : '<strong>Responder GPS:</strong> Pending',
+        distanceKm !== null
+            ? `<strong>Distance to Incident:</strong> ${escapeHtml(formatDistanceKm(distanceKm))}`
+            : '<strong>Distance to Incident:</strong> Unavailable until responder GPS and incident coordinates are available'
     ].filter(Boolean);
-    if (currentIncidentLat && currentIncidentLng && unit.latitude && unit.longitude) {
-        const distKm = haversine(Number(unit.latitude), Number(unit.longitude), currentIncidentLat, currentIncidentLng).toFixed(2);
-        lines.push(`<strong>Distance to Incident:</strong> ${distKm} km`);
-    } else if (typeof unit.distance_km === 'number' && isFinite(unit.distance_km)) {
-        lines.push(`<strong>Distance to Incident:</strong> ${unit.distance_km.toFixed(2)} km`);
-    }
     return `<div style="padding:0.55rem 0; border-bottom:1px solid #dbe3ea;">${lines.join('<br>')}</div>`;
 }
 function renderSelectedUnitDetails(select) {
@@ -508,13 +541,14 @@ function openDispatchModal(incidentId) {
             if (data.units && data.units.length) {
                 data.units.forEach(u => {
                     currentAvailableUnitsById[String(u.id)] = u;
-                    const dist = (typeof u.distance_km === 'number' && isFinite(u.distance_km)) ? `${u.distance_km.toFixed(1)} km` : '';
+                    const distKm = selectedUnitDistanceKm(u);
+                    const dist = distKm !== null ? `Distance: ${formatDistanceKm(distKm)}` : 'Distance pending';
                     const vehicleName = getUnitVehicleName(u);
                     const unitCode = String(u.identifier || '').trim();
                     const detailParts = [];
                     if (unitCode && unitCode !== vehicleName) detailParts.push(unitCode);
                     if (u.unit_type) detailParts.push(u.unit_type);
-                    if (dist) detailParts.push(dist);
+                    detailParts.push(dist);
                     const suffix = detailParts.join(', ');
                     select.innerHTML += `
                         <label style="display:flex; align-items:flex-start; gap:0.65rem; padding:0.55rem 0.65rem; border:1px solid #e2e8f0; border-radius:6px; background:#fff; cursor:pointer;">
