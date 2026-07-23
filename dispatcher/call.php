@@ -462,6 +462,7 @@ $pageTitle = 'Emergency Call Center';
     const DISMISSED_TRANSFER_QUEUE_LIMIT = 200;
     let transferQueueItems = [];
     let activeTransferCall = null;
+    let endingTransferCall = false;
     let incomingCallQueue = [];
     let incomingCallSequence = 0;
     let incomingTransferPollTimer = null;
@@ -733,6 +734,11 @@ $pageTitle = 'Emergency Call Center';
         }
 
         panel.classList.add('active');
+        const endButton = panel.querySelector('.end-call-btn');
+        if (endButton) {
+            endButton.disabled = false;
+            endButton.innerHTML = '<i class="fas fa-phone-slash"></i> End Call';
+        }
         document.getElementById('activeCallerName').textContent = 'Caller: ' + activeCall.name;
         document.getElementById('activeCallerPhone').textContent = activeCall.phone;
         document.getElementById('callerName').value = activeCall.name;
@@ -966,16 +972,86 @@ $pageTitle = 'Emergency Call Center';
         showNextQueuedIncomingCall();
     }
 
-    function endCall() {
+    function transferHangupPayload(call, reason) {
+        const callIdValue = String((call && (call.callId || call.call_id || call.transferId || call.transfer_id)) || '').trim();
+        return {
+            callId: callIdValue,
+            call_id: callIdValue,
+            transferId: String((call && (call.transferId || call.transfer_id)) || '').trim(),
+            transfer_id: String((call && (call.transferId || call.transfer_id)) || '').trim(),
+            conversationId: String((call && (call.conversationId || call.conversation_id)) || '').trim(),
+            conversation_id: String((call && (call.conversationId || call.conversation_id)) || '').trim(),
+            room: String((call && call.room) || '').trim(),
+            endedBy: 'response_team',
+            reason: reason || 'response-team-ended',
+            endedAt: new Date().toISOString()
+        };
+    }
+
+    function notifyTransferredCallerHangup(call, reason = 'response-team-ended') {
+        const payload = transferHangupPayload(call, reason);
+        if (!transferSocket || !payload.room) return;
+        transferSocket.emit('hangup', payload, payload.room);
+    }
+
+    function showEndedCallForm(call, reason = 'call-ended') {
+        const panel = document.getElementById('activeCallPanel');
+        if (!panel) return;
+        panel.classList.add('active');
+        const name = String((call && call.name) || 'Caller').trim();
+        const phone = String((call && call.phone) || '').trim();
+        const nameEl = document.getElementById('activeCallerName');
+        const phoneEl = document.getElementById('activeCallerPhone');
+        const timerEl = document.getElementById('callTimer');
+        const endButton = panel.querySelector('.end-call-btn');
+        if (nameEl) nameEl.textContent = 'Caller: ' + name;
+        if (phoneEl) phoneEl.textContent = phone;
+        if (timerEl) timerEl.textContent = 'Ended';
+        if (endButton) {
+            endButton.disabled = true;
+            endButton.innerHTML = '<i class="fas fa-phone-slash"></i> Call Ended';
+        }
+        setVoiceState(reason === 'caller-ended'
+            ? 'Caller ended the live audio. Finish the incident form when ready.'
+            : 'Live audio ended. Finish the incident form when ready.');
+    }
+
+    function closeTransferVoiceSession(options = {}) {
+        if (endingTransferCall) return;
+        endingTransferCall = true;
+        const keepForm = options.keepForm !== false;
+        const reason = options.reason || 'call-ended';
+        const call = activeTransferCall || getSharedCallSession() || activeCall || {};
+
+        if (options.notifyPeer === true) {
+            notifyTransferredCallerHangup(call, reason);
+        }
+
         stopVoiceTools();
         disconnectTransferCall();
         const sessionApi = getSharedCallSessionApi();
         if (sessionApi) {
             sessionApi.end();
         }
-        activeTransferCall = null;
-        renderActiveCallPanel(null);
+        activeCall = null;
+        activeTransferCall = keepForm && call && call.isTransfer === true ? call : null;
+        stopTimer();
+        updateStats();
+
+        if (keepForm) {
+            showEndedCallForm(call, reason);
+        } else {
+            renderActiveCallPanel(null);
+        }
+
+        window.setTimeout(() => {
+            endingTransferCall = false;
+        }, 250);
         showNextQueuedIncomingCall();
+    }
+
+    function endCall() {
+        closeTransferVoiceSession({ notifyPeer: true, reason: 'response-team-ended', keepForm: true });
     }
 
     function renderIncomingTransferDetails(call) {
@@ -1439,7 +1515,15 @@ $pageTitle = 'Emergency Call Center';
                     }
                 }
             });
+            const handleTransferHangup = (payload) => {
+                if (!transferPayloadMatchesCall(payload, callId, call.room)) return;
+                closeTransferVoiceSession({ notifyPeer: false, reason: 'caller-ended', keepForm: true });
+            };
+            transferSocket.on('hangup', handleTransferHangup);
+            transferSocket.on('call-ended', handleTransferHangup);
+            transferSocket.on('call_ended', handleTransferHangup);
             transferSocket.on('disconnect', () => {
+                if (endingTransferCall) return;
                 setVoiceState('AlertaraQC transfer socket disconnected.');
             });
             transferSocket.on('connect_error', (error) => {
