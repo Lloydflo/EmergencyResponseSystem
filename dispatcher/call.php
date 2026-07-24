@@ -186,6 +186,25 @@ $pageTitle = 'Emergency Call Center';
                             </div>
                         </div>
 
+                        <div class="call-chat-panel" id="transferCallChatPanel">
+                            <div class="call-chat-head">
+                                <div>
+                                    <div class="panel-eyebrow">Live Chat</div>
+                                    <strong>Caller Messages</strong>
+                                </div>
+                                <span id="transferCallChatStatus">Socket ready</span>
+                            </div>
+                            <div class="call-chat-messages" id="transferCallMessages" aria-live="polite">
+                                <div class="call-chat-empty">Messages between dispatcher and caller will appear here.</div>
+                            </div>
+                            <div class="call-chat-input-row">
+                                <input type="text" id="transferCallMessageInput" placeholder="Type a message to the caller..." autocomplete="off">
+                                <button type="button" id="transferCallMessageSend" onclick="sendTransferCallMessage()">
+                                    <i class="fas fa-paper-plane"></i> Send
+                                </button>
+                            </div>
+                        </div>
+
                         <form class="incident-form" id="incidentForm" onsubmit="submitIncident(event)">
                             <div class="form-section">
                                 <div class="section-title">
@@ -466,6 +485,7 @@ $pageTitle = 'Emergency Call Center';
     let incomingCallQueue = [];
     let incomingCallSequence = 0;
     let incomingTransferPollTimer = null;
+    let transferCallMessages = [];
     const INCOMING_TRANSFER_POLL_MS = 1500;
     const PRIORITY_ORDER = { critical: 0, high: 1, urgent: 2, moderate: 3, medium: 3, low: 4 };
     const PRIORITY_RULES = {
@@ -959,6 +979,7 @@ $pageTitle = 'Emergency Call Center';
             activeCall = { active: true, name, phone, start, isTransfer: incomingCall.isTransfer === true };
         }
         applyIncomingCallToForm(incomingCall);
+        resetTransferCallChat(incomingCall);
         connectTransferSocket(incomingCall);
         prepareTransferLocalAudio(incomingCall);
         renderActiveCallPanel(getSharedCallSession() || activeCall);
@@ -1515,6 +1536,11 @@ $pageTitle = 'Emergency Call Center';
                     addTransferIceCandidate(data.candidate);
                 }
             });
+            transferSocket.on('call-message', (payload) => {
+                if (!transferPayloadMatchesCall(payload, callId, call.room)) return;
+                if (!payload || payload.sender === 'response_team') return;
+                addTransferCallMessage(payload.text || payload.message || '', 'caller', payload.timestamp, payload.senderName || call.name || 'Caller');
+            });
             const handleTransferHangup = (payload) => {
                 if (!transferPayloadMatchesCall(payload, callId, call.room)) return;
                 closeTransferVoiceSession({ notifyPeer: false, reason: 'caller-ended', keepForm: true });
@@ -1600,7 +1626,7 @@ $pageTitle = 'Emergency Call Center';
             if (transferPeerConnection.connectionState === 'connected') return;
             transferSocket.emit('request-transfer-offer', transferAcceptedPayload(call, 'response-team-offer-timeout'), call.room);
             setVoiceState('Requesting fresh caller audio connection...');
-        }, 1800);
+        }, 700);
     }
 
     async function addTransferIceCandidate(candidate) {
@@ -1632,6 +1658,79 @@ $pageTitle = 'Emergency Call Center';
         document.body.appendChild(audio);
         return audio;
     }
+
+    function setTransferCallChatStatus(text) {
+        const el = document.getElementById('transferCallChatStatus');
+        if (el) el.textContent = text;
+    }
+
+    function resetTransferCallChat(call = null) {
+        transferCallMessages = [];
+        const messages = document.getElementById('transferCallMessages');
+        const input = document.getElementById('transferCallMessageInput');
+        if (messages) {
+            messages.innerHTML = '<div class="call-chat-empty">Messages between dispatcher and caller will appear here.</div>';
+        }
+        if (input) input.value = '';
+        setTransferCallChatStatus(call && call.room ? 'Connected to room' : 'Waiting for call');
+    }
+
+    function addTransferCallMessage(text, sender = 'caller', timestamp = Date.now(), senderName = '') {
+        const cleanText = String(text || '').trim();
+        if (!cleanText) return;
+        const messages = document.getElementById('transferCallMessages');
+        if (!messages) return;
+        if (!transferCallMessages.length) messages.innerHTML = '';
+        const time = new Date(timestamp || Date.now()).toLocaleTimeString('en-US', {
+            hour: 'numeric',
+            minute: '2-digit',
+            hour12: true
+        });
+        const item = document.createElement('div');
+        item.className = 'call-chat-bubble ' + (sender === 'dispatcher' ? 'is-dispatcher' : 'is-caller');
+        item.innerHTML = `
+            <div class="call-chat-meta">${escapeHtml(senderName || (sender === 'dispatcher' ? 'Response Team' : 'Caller'))} &bull; ${escapeHtml(time)}</div>
+            <div>${escapeHtml(cleanText)}</div>
+        `;
+        messages.appendChild(item);
+        messages.scrollTop = messages.scrollHeight;
+        transferCallMessages.push({ text: cleanText, sender, timestamp, senderName });
+    }
+
+    function sendTransferCallMessage() {
+        const input = document.getElementById('transferCallMessageInput');
+        const text = String(input && input.value ? input.value : '').trim();
+        const call = activeTransferCall || getSharedCallSession();
+        if (!text || !call || !call.room) return;
+        if (input) input.value = '';
+        const payload = {
+            text,
+            callId: call.callId || call.transferId || '',
+            call_id: call.callId || call.transferId || '',
+            transferId: call.transferId || '',
+            transfer_id: call.transferId || '',
+            room: call.room,
+            sender: 'response_team',
+            senderName: 'Response Team',
+            timestamp: Date.now()
+        };
+        addTransferCallMessage(text, 'dispatcher', payload.timestamp, payload.senderName);
+        if (transferSocket && transferSocket.connected) {
+            transferSocket.emit('call-message', payload, call.room);
+            setTransferCallChatStatus('Sent');
+        } else {
+            setTransferCallChatStatus('Socket reconnecting. Message shown locally only.');
+        }
+    }
+
+    document.addEventListener('keydown', (event) => {
+        if (event.key !== 'Enter' || event.shiftKey) return;
+        const target = event.target;
+        if (target && target.id === 'transferCallMessageInput') {
+            event.preventDefault();
+            sendTransferCallMessage();
+        }
+    });
 
     function transferPayloadMatchesCall(payload, callId, room) {
         const payloadRoom = String((payload && payload.room) || '');
