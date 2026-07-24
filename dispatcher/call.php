@@ -436,9 +436,9 @@ $pageTitle = 'Emergency Call Center';
     let currentFilter = 'all';
     const RECENT_INCIDENTS_ENABLED = true; // enable Recent Incidents data
     const RESET_RECENT_ON_LOAD = false; // localStorage no longer used
-    const API_LIST_URL = 'api/incidents_list.php';
-    const API_CREATE_CALL_URL = 'api/calls_create.php';
-    const API_INCOMING_TRANSFERS_URL = 'api/incoming_transfers.php';
+    const API_LIST_URL = '../api/incidents_list.php';
+    const API_CREATE_CALL_URL = '../api/calls_create.php';
+    const API_INCOMING_TRANSFERS_URL = '../api/incoming_transfers.php';
     const ALERTARA_SOCKET_URL = 'https://emergency-comm.alertaraqc.com';
     const ALERTARA_SOCKET_PATH = '/socket.io';
     const TRANSFER_INBOX_ROOM = 'ers-transfer-inbox';
@@ -1963,7 +1963,7 @@ $pageTitle = 'Emergency Call Center';
             }
         } catch (error) {
             console.warn('Incoming transfer polling failed:', error);
-            setTransferQueueStatus('Transfer feed is not reachable. Check api/incoming_transfers.php.', 'error');
+            setTransferQueueStatus('Transfer feed is not reachable. Check ../api/incoming_transfers.php.', 'error');
         } finally {
             incomingTransferPollInFlight = false;
         }
