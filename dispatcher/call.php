@@ -23,13 +23,19 @@ $pageTitle = 'Emergency Call Center';
     <link rel="stylesheet" href="css/sidebar-footer.css">
     <link rel="stylesheet" href="css/cards.css">
     <link rel="stylesheet" href="css/call.css?v=<?php echo filemtime($rootDir . '/css/call.css'); ?>">
-    <script src="node_modules/socket.io-client/dist/socket.io.min.js"></script>
     <script>
-        if (typeof window.io !== 'function') {
-            document.write('<script src="https://cdn.socket.io/4.7.5/socket.io.min.js"><\/script>');
-        }
+        window.__loadSocketIoFallback = function () {
+            if (typeof window.io === 'function' || document.getElementById('socket-io-fallback')) return;
+            var script = document.createElement('script');
+            script.id = 'socket-io-fallback';
+            script.src = 'https://cdn.socket.io/4.7.5/socket.io.min.js';
+            script.async = true;
+            script.onload = function () { window.dispatchEvent(new Event('ers:socket-io-ready')); };
+            document.head.appendChild(script);
+        };
     </script>
-    <script src="js/place-autocomplete.js"></script>
+    <script defer src="node_modules/socket.io-client/dist/socket.io.min.js" onerror="window.__loadSocketIoFallback()"></script>
+    <script defer src="js/place-autocomplete.js"></script>
 </head>
 <body>
     <!-- Include Sidebar Component -->
@@ -485,6 +491,8 @@ $pageTitle = 'Emergency Call Center';
     let incomingCallQueue = [];
     let incomingCallSequence = 0;
     let incomingTransferPollTimer = null;
+    let transferInboxSocketRetryTimer = null;
+    let transferInboxSocketRetryCount = 0;
     let transferCallMessages = [];
     const INCOMING_TRANSFER_POLL_MS = 1500;
     const PRIORITY_ORDER = { critical: 0, high: 1, urgent: 2, moderate: 3, medium: 3, low: 4 };
@@ -799,18 +807,19 @@ $pageTitle = 'Emergency Call Center';
         } catch (e) {}
     }
 
+    function runAfterFirstPaint(callback, delay = 250) {
+        if (typeof window.requestIdleCallback === 'function') {
+            window.requestIdleCallback(callback, { timeout: 1200 });
+            return;
+        }
+        window.setTimeout(callback, delay);
+    }
+
     document.addEventListener('DOMContentLoaded', () => {
         initPrioritySelect();
         initIncidentTypeChecklist();
         initIncidentPriorityIndicator();
         initIncidentSidebarControls();
-        if (RECENT_INCIDENTS_ENABLED) {
-            loadIncidentsFromServer();
-        } else {
-            incidentItems = [];
-            renderIncidents();
-            updateStats();
-        }
         // Hook suggestion on description input
         const descEl = document.getElementById('incidentDescription');
         if (descEl) {
@@ -831,9 +840,17 @@ $pageTitle = 'Emergency Call Center';
         document.addEventListener('ers:incoming-call', (event) => {
             showIncomingCallModal(event.detail || {});
         });
+        window.addEventListener('ers:socket-io-ready', startTransferInboxSocket);
         renderTransferredQueue();
         startTransferInboxSocket();
-        startIncomingTransferPolling();
+        window.setTimeout(startIncomingTransferPolling, 350);
+        if (RECENT_INCIDENTS_ENABLED) {
+            runAfterFirstPaint(loadIncidentsFromServer, 450);
+        } else {
+            incidentItems = [];
+            renderIncidents();
+            updateStats();
+        }
     });
 
     function normalizeIncomingCallDetail(call) {
@@ -1959,9 +1976,20 @@ $pageTitle = 'Emergency Call Center';
     }
 
     function startTransferInboxSocket() {
-        if (transferInboxSocket || typeof window.io !== 'function') {
-            if (typeof window.io !== 'function') {
-                setTransferQueueStatus('Live socket unavailable. Falling back to transfer feed polling.', 'active');
+        if (transferInboxSocket) {
+            return;
+        }
+        if (typeof window.io !== 'function') {
+            setTransferQueueStatus('Live socket client is loading. Backup feed polling is available.', 'active');
+            if (typeof window.__loadSocketIoFallback === 'function') {
+                window.__loadSocketIoFallback();
+            }
+            if (transferInboxSocketRetryCount < 8) {
+                if (transferInboxSocketRetryTimer) window.clearTimeout(transferInboxSocketRetryTimer);
+                transferInboxSocketRetryTimer = window.setTimeout(() => {
+                    transferInboxSocketRetryCount += 1;
+                    startTransferInboxSocket();
+                }, 600);
             }
             return;
         }
@@ -1972,6 +2000,7 @@ $pageTitle = 'Emergency Call Center';
                 query: { role: 'ers-dispatcher', inbox: TRANSFER_INBOX_ROOM }
             });
             transferInboxSocket.on('connect', () => {
+                transferInboxSocketRetryCount = 0;
                 transferInboxSocket.emit('join', TRANSFER_INBOX_ROOM);
                 setTransferQueueStatus('Live transfer socket connected. Waiting for transferred calls and reports...', 'active');
             });
