@@ -40,7 +40,12 @@ try {
     $vehiclePlateSelect = ers_unit_location_column_exists($pdo, 'users', 'vehicle_plate') ? 'vehicle_plate' : 'NULL AS vehicle_plate';
 
      $stmt = $pdo->prepare("
-        SELECT id, email, password, name, role, status, department, profile_image_path,
+        SELECT
+            id,
+            email,
+            password,
+            name,
+            username, role, status, department, profile_image_path,
                {$unitCodeSelect}, {$unitTypeSelect}, {$unitStatusSelect}, {$vehiclePlateSelect}
         FROM users
         WHERE email = ?
@@ -122,6 +127,7 @@ try {
         "user" => [
             "id" => (int)$user["id"],
             "name" => (string)$user["name"],
+            "username" => (string)($user["username"] ?? ""),
             "email" => (string)$user["email"],
             "role" => (string)$user["role"],
             "department" => (string)($user["department"] ?? ""),

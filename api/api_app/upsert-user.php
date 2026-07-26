@@ -55,6 +55,15 @@ try {
         $params[] = (string)$input["name"];
     }
 
+    if (array_key_exists("username", $input)) {
+    $username = trim((string)$input["username"]);
+
+    if ($username !== "") {
+        $updateFields[] = "username = ?";
+        $params[] = $username;
+        }
+    }
+
     if (!empty($input["department"])) {
         $updateFields[] = "department = ?";
         $params[] = (string)$input["department"];
@@ -121,9 +130,24 @@ try {
 
     // Fetch and return updated user
     $fetchStmt = $pdo->prepare("
-        SELECT id, email, name, department, profile_image_path, role, status,
-               is_active, unit_code, unit_type, vehicle_plate, unit_status, last_login, updated_at
-        FROM users WHERE id = ?
+        SELECT
+            id,
+            email,
+            name,
+            username,
+            department,
+            profile_image_path,
+            role,
+            status,
+            is_active,
+            unit_code,
+            unit_type,
+            vehicle_plate,
+            unit_status,
+            last_login,
+            updated_at
+            FROM users
+            WHERE id = ?`
     ");
     $fetchStmt->execute([$id]);
     $user = $fetchStmt->fetch();
