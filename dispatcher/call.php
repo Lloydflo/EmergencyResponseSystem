@@ -1,10 +1,14 @@
 <?php
 $rootDir = dirname(__DIR__);
+require_once $rootDir . '/includes/config.php';
 require_once $rootDir . '/includes/auth.php';
 // Require full login (including OTP verification) before loading page
 require_role('dispatcher', 'dispatcher/call.php');
 
 $pageTitle = 'Emergency Call Center';
+$turnUrl = (string) ers_env('WEBRTC_TURN_URL', '');
+$turnUsername = (string) ers_env('WEBRTC_TURN_USERNAME', '');
+$turnCredential = (string) ers_env('WEBRTC_TURN_CREDENTIAL', '');
 ?>
 
 <!DOCTYPE html>
@@ -466,6 +470,17 @@ $pageTitle = 'Emergency Call Center';
     const API_INCOMING_TRANSFERS_URL = '../api/incoming_transfers.php';
     const ALERTARA_SOCKET_URL = 'https://emergency-comm.alertaraqc.com';
     const ALERTARA_SOCKET_PATH = '/socket.io';
+    const TRANSFER_ICE_SERVERS = [
+        { urls: 'stun:stun.l.google.com:19302' },
+        { urls: 'stun:global.stun.twilio.com:3478' }
+        <?php if ($turnUrl !== ''): ?>,
+        {
+            urls: <?php echo json_encode($turnUrl, JSON_UNESCAPED_SLASHES); ?>,
+            username: <?php echo json_encode($turnUsername); ?>,
+            credential: <?php echo json_encode($turnCredential); ?>
+        }
+        <?php endif; ?>
+    ];
     const TRANSFER_INBOX_ROOM = 'ers-transfer-inbox';
     let priorityAuto = true; // keeps transferred/manual fallback priority until indicator fields calculate a score
     let prioritySuggestTimer = null; // debounce timer for suggestion updates
@@ -1581,16 +1596,16 @@ $pageTitle = 'Emergency Call Center';
 
     function createTransferPeerConnection(call) {
         const pc = new RTCPeerConnection({
-            iceServers: [
-                { urls: 'stun:stun.l.google.com:19302' }
-            ]
+            iceServers: TRANSFER_ICE_SERVERS
         });
         pc.onicecandidate = (event) => {
             if (!event.candidate || !transferSocket) return;
             transferSocket.emit('candidate', {
                 candidate: event.candidate,
                 callId: call.callId || call.transferId || '',
-                room: call.room
+                room: call.room,
+                transferred: true,
+                target: 'ers'
             }, call.room);
         };
         pc.ontrack = (event) => {
@@ -1839,7 +1854,9 @@ $pageTitle = 'Emergency Call Center';
             call_id: call.callId || call.transferId || '',
             transferId: call.transferId || '',
             transfer_id: call.transferId || '',
-            room: call.room
+            room: call.room,
+            transferred: true,
+            target: 'ers'
         }, call.room);
         setVoiceState('Answered AlertaraQC live call. Two-way audio is connecting.');
     }
