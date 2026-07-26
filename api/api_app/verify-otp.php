@@ -60,6 +60,7 @@ try {
     SELECT
         id,
         name,
+        username,
         email,
         role,
         department,
@@ -111,6 +112,7 @@ try {
     "user" => [
     "id"          => (int)$responder["id"],
     "name"        => (string)$responder["name"],
+    "username"    => (string)($responder["username"] ?? ""),
     "email"       => (string)$responder["email"],
     "role"        => (string)($responder["role"] ?? ""),
     "department"  => (string)($responder["department"] ?? ""),
