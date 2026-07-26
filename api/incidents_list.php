@@ -159,6 +159,9 @@ if (ers_table_exists($pdo, 'resource_records')) {
 }
 $hasIncidentNotes = ers_table_exists($pdo, 'incident_notes');
 $hasRatingColumn = $hasIncidentNotes && ers_column_exists($pdo, 'incident_notes', 'rating');
+$hasIncidentSurveys = ers_table_exists($pdo, 'incident_surveys')
+    && ers_column_exists($pdo, 'incident_surveys', 'incident_id')
+    && ers_column_exists($pdo, 'incident_surveys', 'response_rating');
 $hasAdminReviewTable = ers_ensure_incident_admin_reviews($pdo);
 $hasPriorityScore = ers_column_exists($pdo, 'incidents', 'priority_score');
 $hasPriorityLabel = ers_column_exists($pdo, 'incidents', 'priority_label');
@@ -177,18 +180,33 @@ if ($resourceRecordsTable !== null) {
     $resourceJoin = ' LEFT JOIN `' . $resourceRecordsTable . '` ar ON ar.code = u.identifier ';
 }
 
-$feedbackSelect = ', 0 AS feedback_count, NULL AS avg_rating, 0 AS rating_count';
-if ($hasIncidentNotes && $hasRatingColumn) {
-    $feedbackSelect = ',
-        (SELECT COUNT(*) FROM incident_notes n WHERE n.incident_id = i.id AND n.note NOT LIKE \'Resolution proof uploaded:%\') AS feedback_count,
-        (SELECT ROUND(AVG(n.rating), 1) FROM incident_notes n WHERE n.incident_id = i.id AND n.rating IS NOT NULL AND n.note NOT LIKE \'Resolution proof uploaded:%\') AS avg_rating,
-        (SELECT COUNT(*) FROM incident_notes n WHERE n.incident_id = i.id AND n.rating IS NOT NULL AND n.note NOT LIKE \'Resolution proof uploaded:%\') AS rating_count';
-} elseif ($hasIncidentNotes) {
-    $feedbackSelect = ',
-        (SELECT COUNT(*) FROM incident_notes n WHERE n.incident_id = i.id AND n.note NOT LIKE \'Resolution proof uploaded:%\') AS feedback_count,
-        NULL AS avg_rating,
-        0 AS rating_count';
-}
+$noteCountExpr = $hasIncidentNotes
+    ? "(SELECT COUNT(*) FROM incident_notes n WHERE n.incident_id = i.id AND n.note NOT LIKE 'Resolution proof uploaded:%')"
+    : '0';
+$noteRatingCountExpr = ($hasIncidentNotes && $hasRatingColumn)
+    ? "(SELECT COUNT(*) FROM incident_notes n WHERE n.incident_id = i.id AND n.rating IS NOT NULL AND n.note NOT LIKE 'Resolution proof uploaded:%')"
+    : '0';
+$noteRatingSumExpr = ($hasIncidentNotes && $hasRatingColumn)
+    ? "(SELECT COALESCE(SUM(n.rating), 0) FROM incident_notes n WHERE n.incident_id = i.id AND n.rating IS NOT NULL AND n.note NOT LIKE 'Resolution proof uploaded:%')"
+    : '0';
+$surveyCountExpr = $hasIncidentSurveys
+    ? "(SELECT COUNT(*) FROM incident_surveys s WHERE s.incident_id = i.id)"
+    : '0';
+$surveyRatingCountExpr = $hasIncidentSurveys
+    ? "(SELECT COUNT(*) FROM incident_surveys s WHERE s.incident_id = i.id AND s.response_rating IS NOT NULL)"
+    : '0';
+$surveyRatingSumExpr = $hasIncidentSurveys
+    ? "(SELECT COALESCE(SUM(s.response_rating), 0) FROM incident_surveys s WHERE s.incident_id = i.id AND s.response_rating IS NOT NULL)"
+    : '0';
+$ratingCountExpr = "({$noteRatingCountExpr} + {$surveyRatingCountExpr})";
+$feedbackSelect = ",
+        ({$noteCountExpr} + {$surveyCountExpr}) AS feedback_count,
+        CASE
+            WHEN {$ratingCountExpr} > 0
+                THEN ROUND(({$noteRatingSumExpr} + {$surveyRatingSumExpr}) / {$ratingCountExpr}, 1)
+            ELSE NULL
+        END AS avg_rating,
+        {$ratingCountExpr} AS rating_count";
 
 $adminReviewSelect = ',
             NULL AS admin_review_sent_at,

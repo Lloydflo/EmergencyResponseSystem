@@ -29,6 +29,7 @@
         incidentId: 0,
         room: null,
         loading: false,
+        expanded: true,
         timer: null
     };
 
@@ -78,10 +79,15 @@
     function renderShell() {
         root.innerHTML = `
             <div class="ia-command-head">
-                <div>
-                    <h2 class="ia-command-title">Inter-Agency Command Center</h2>
-                    <p class="ia-command-sub">Incident room, tasking, critical broadcasts, acknowledgement, map link, and audit trail.</p>
-                </div>
+                <button type="button" class="ia-command-toggle" id="iaCommandToggle" aria-expanded="false" aria-controls="iaCommandDropdown">
+                    <span class="ia-command-title-wrap">
+                        <span class="ia-command-title">Inter-Agency Command Center</span>
+                        <span class="ia-command-sub">Incident intelligence, agency ownership, tasking, broadcasts, acknowledgements, and audit trail.</span>
+                    </span>
+                    <span class="ia-command-chevron" aria-hidden="true"><i class="fas fa-chevron-down"></i></span>
+                </button>
+            </div>
+            <div class="ia-command-dropdown" id="iaCommandDropdown" hidden>
                 <div class="ia-command-controls">
                     <select class="ia-command-select" id="iaCommandIncidentSelect" aria-label="Select incident">
                         <option value="">Loading active incidents...</option>
@@ -90,14 +96,18 @@
                         <i class="fas fa-rotate"></i> Refresh
                     </button>
                 </div>
-            </div>
-            <div class="ia-command-body" id="iaCommandBody">
-                <div class="ia-command-empty">Choose an active incident to open the command room.</div>
+                <div class="ia-command-body" id="iaCommandBody">
+                    <div class="ia-command-empty">Choose an active incident to open the command room.</div>
+                </div>
             </div>
         `;
 
+        const toggle = document.getElementById('iaCommandToggle');
         const select = document.getElementById('iaCommandIncidentSelect');
         const refresh = document.getElementById('iaCommandRefreshBtn');
+        if (toggle) {
+            toggle.addEventListener('click', () => setExpanded(!state.expanded));
+        }
         if (select) {
             select.addEventListener('change', () => {
                 state.incidentId = Number(select.value || 0);
@@ -111,6 +121,23 @@
         }
         if (refresh) {
             refresh.addEventListener('click', () => refreshAll());
+        }
+
+        setExpanded(state.expanded);
+    }
+
+    function setExpanded(expanded) {
+        state.expanded = Boolean(expanded);
+        root.classList.toggle('is-open', state.expanded);
+        root.classList.toggle('is-collapsed', !state.expanded);
+
+        const toggle = document.getElementById('iaCommandToggle');
+        const dropdown = document.getElementById('iaCommandDropdown');
+        if (toggle) {
+            toggle.setAttribute('aria-expanded', state.expanded ? 'true' : 'false');
+        }
+        if (dropdown) {
+            dropdown.hidden = !state.expanded;
         }
     }
 
@@ -161,50 +188,57 @@
                 <div class="ia-command-kpi"><span>Open Tasks</span><strong>${escapeHtml(summary.task_open || 0)} / ${escapeHtml(summary.task_total || 0)}</strong></div>
                 <div class="ia-command-kpi"><span>Critical Ack</span><strong>${escapeHtml(summary.critical_unacked || 0)} pending</strong></div>
             </div>
-            <div class="ia-command-incident">
-                <div class="ia-command-kpi"><span>Type</span><strong>${escapeHtml(incident.type || 'N/A')}</strong></div>
-                <div class="ia-command-kpi"><span>Priority</span><strong>${escapeHtml(incident.priority || 'N/A')}</strong></div>
-                <div class="ia-command-kpi"><span>Location</span><strong>${escapeHtml(incident.location || 'N/A')}</strong></div>
-                <div class="ia-command-kpi"><span>Map</span><strong>${maps ? `<a class="ia-command-map" href="${escapeAttr(maps)}" target="_blank" rel="noopener">View map</a>` : 'N/A'}</strong></div>
-            </div>
-            <div class="ia-command-grid">
-                <div class="ia-command-panel">
+            <div class="ia-command-room-layout">
+                <aside class="ia-command-panel ia-command-intel">
                     <div class="ia-command-panel-head">
-                        <h3 class="ia-command-panel-title">Agency Task Checklist</h3>
+                        <h3 class="ia-command-panel-title">Incident Intelligence</h3>
                     </div>
                     <div class="ia-command-panel-body">
-                        ${renderTaskForm()}
-                        <div class="ia-command-task-list">${renderTasks(room.tasks || [])}</div>
-                    </div>
-                </div>
-                <div class="ia-command-panel">
-                    <div class="ia-command-panel-head">
-                        <h3 class="ia-command-panel-title">Broadcast and Acknowledgement</h3>
-                    </div>
-                    <div class="ia-command-panel-body">
-                        ${renderBroadcastForm()}
-                        <div class="ia-command-broadcast-list">${renderBroadcasts(room.broadcasts || [])}</div>
-                    </div>
-                </div>
-                <div class="ia-command-panel">
-                    <div class="ia-command-panel-head">
-                        <h3 class="ia-command-panel-title">Audit Trail</h3>
-                    </div>
-                    <div class="ia-command-panel-body">
-                        <div class="ia-command-audit-list">${renderAudit(room.audit || [])}</div>
-                    </div>
-                </div>
-                <div class="ia-command-panel">
-                    <div class="ia-command-panel-head">
-                        <h3 class="ia-command-panel-title">Incident Room Notes</h3>
-                    </div>
-                    <div class="ia-command-panel-body">
+                        <div class="ia-command-intel-hero">
+                            <span class="ia-command-priority ${escapeAttr(String(incident.priority || 'routine').toLowerCase())}">${escapeHtml(incident.priority || 'N/A')}</span>
+                            <strong>${escapeHtml(incident.type || 'Emergency')}</strong>
+                            <p>${escapeHtml(incident.location || 'Location not provided')}</p>
+                            ${maps ? `<a class="ia-command-map-btn" href="${escapeAttr(maps)}" target="_blank" rel="noopener"><i class="fas fa-map-location-dot"></i> Open map</a>` : ''}
+                        </div>
+                        <div class="ia-command-readiness">
+                            <div><span>Lead</span><strong>Command</strong></div>
+                            <div><span>Tasks</span><strong>${escapeHtml(summary.task_open || 0)} open</strong></div>
+                            <div><span>Ack</span><strong>${escapeHtml(summary.critical_unacked || 0)} pending</strong></div>
+                        </div>
                         <div class="ia-command-audit">
                             <strong>${escapeHtml(incident.title || 'Operational coordination')}</strong>
                             <p>${escapeHtml(incident.description || 'No additional incident description provided.')}</p>
                         </div>
                     </div>
-                </div>
+                </aside>
+                <section class="ia-command-main-stack">
+                    <div class="ia-command-panel">
+                        <div class="ia-command-panel-head">
+                            <h3 class="ia-command-panel-title">Agency Task Checklist</h3>
+                        </div>
+                        <div class="ia-command-panel-body">
+                            ${renderTaskForm()}
+                            <div class="ia-command-task-list">${renderTasks(room.tasks || [])}</div>
+                        </div>
+                    </div>
+                    <div class="ia-command-panel">
+                        <div class="ia-command-panel-head">
+                            <h3 class="ia-command-panel-title">Broadcast and Acknowledgement</h3>
+                        </div>
+                        <div class="ia-command-panel-body">
+                            ${renderBroadcastForm()}
+                            <div class="ia-command-broadcast-list">${renderBroadcasts(room.broadcasts || [])}</div>
+                        </div>
+                    </div>
+                </section>
+                <aside class="ia-command-panel">
+                    <div class="ia-command-panel-head">
+                        <h3 class="ia-command-panel-title">Decision Timeline</h3>
+                    </div>
+                    <div class="ia-command-panel-body">
+                        <div class="ia-command-audit-list">${renderAudit(room.audit || [])}</div>
+                    </div>
+                </aside>
             </div>
         `;
 

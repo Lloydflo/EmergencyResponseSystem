@@ -11,6 +11,16 @@ function addRouteToIncident(fromLat, fromLng, toLat, toLng, options) {
       console.warn('Leaflet or map not initialized');
       return;
     }
+    const startLat = Number(fromLat);
+    const startLng = Number(fromLng);
+    const endLat = Number(toLat);
+    const endLng = Number(toLng);
+    if (![startLat, startLng, endLat, endLng].every(Number.isFinite)) {
+      if (!silent) {
+        showNotification('Unable to plot route: invalid coordinates', 'error');
+      }
+      return;
+    }
     if (currentRoutingControl) {
       try { currentRoutingControl.remove(); } catch (e) {}
       currentRoutingControl = null;
@@ -18,15 +28,27 @@ function addRouteToIncident(fromLat, fromLng, toLat, toLng, options) {
     }
     currentRoutingControl = L.Routing.control({
       waypoints: [
-        L.latLng(fromLat, fromLng),
-        L.latLng(toLat, toLng)
+        L.latLng(startLat, startLng),
+        L.latLng(endLat, endLng)
       ],
       routeWhileDragging: false,
       show: false,
       addWaypoints: false,
       draggableWaypoints: false,
-      fitSelectedRoutes: true
-    }).addTo(map);
+      showAlternatives: false,
+      fitSelectedRoutes: true,
+      lineOptions: {
+        styles: [
+          { color: '#0f172a', opacity: 0.25, weight: 8 },
+          { color: '#2563eb', opacity: 0.95, weight: 5 }
+        ]
+      }
+    }).addTo(window.map);
+    currentRoutingControl.on('routingerror', () => {
+      if (!silent) {
+        showNotification('Unable to plot road route', 'error');
+      }
+    });
     window.currentRoutingControl = currentRoutingControl;
     if (!silent) {
       showNotification('Route plotted to incident', 'success');

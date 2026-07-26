@@ -408,24 +408,57 @@ function haversine(lat1, lon1, lat2, lon2) {
     const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
     return R * c;
 }
+function numberOrNull(value) {
+    const number = Number(value);
+    return Number.isFinite(number) ? number : null;
+}
+function unitResponderLatLng(unit) {
+    const candidates = [
+        [unit && unit.latest_latitude, unit && unit.latest_longitude],
+        [unit && unit.latitude, unit && unit.longitude]
+    ];
+    for (const pair of candidates) {
+        const lat = numberOrNull(pair[0]);
+        const lng = numberOrNull(pair[1]);
+        if (lat !== null && lng !== null && !(Math.abs(lat) < 0.000001 && Math.abs(lng) < 0.000001)) {
+            return { lat, lng };
+        }
+    }
+    return null;
+}
+function selectedUnitDistanceKm(unit) {
+    const apiDistance = numberOrNull(unit && unit.distance_km);
+    if (apiDistance !== null) return apiDistance;
+    const incidentLat = numberOrNull(currentIncidentLat);
+    const incidentLng = numberOrNull(currentIncidentLng);
+    const unitPoint = unitResponderLatLng(unit);
+    if (incidentLat === null || incidentLng === null || !unitPoint) return null;
+    return haversine(unitPoint.lat, unitPoint.lng, incidentLat, incidentLng);
+}
+function formatDistanceKm(distanceKm) {
+    if (!Number.isFinite(distanceKm)) return '';
+    return distanceKm < 1
+        ? `${Math.round(distanceKm * 1000)} m`
+        : `${distanceKm.toFixed(2)} km`;
+}
 function formatSelectedUnitDetails(unit) {
     const sampleProfile = getSampleUnitProfile(unit.unit_type);
     const vehicleName = getUnitVehicleName(unit) || 'Selected Vehicle';
     const unitCode = String(unit.identifier || '').trim();
+    const unitPoint = unitResponderLatLng(unit);
+    const distanceKm = selectedUnitDistanceKm(unit);
     const lines = [
         `<strong>${escapeHtml(vehicleName)}</strong>`,
         unitCode && unitCode !== vehicleName ? `<strong>Unit Code:</strong> ${escapeHtml(unitCode)}` : '',
         `<strong>Operator:</strong> ${escapeHtml(unit.driver_name || sampleProfile.driver)}`,
         `<strong>Plate #:</strong> ${escapeHtml(unit.plate_number || sampleProfile.plate)}`,
         `<strong>Type:</strong> ${escapeHtml(unit.unit_type || '')}`,
-        `<strong>Status:</strong> ${escapeHtml(unit.status || '')}`
+        `<strong>Status:</strong> ${escapeHtml(unit.status || '')}`,
+        unitPoint ? `<strong>Responder GPS:</strong> ${unitPoint.lat.toFixed(6)}, ${unitPoint.lng.toFixed(6)}` : '<strong>Responder GPS:</strong> Pending',
+        distanceKm !== null
+            ? `<strong>Distance to Incident:</strong> ${escapeHtml(formatDistanceKm(distanceKm))}`
+            : '<strong>Distance to Incident:</strong> Unavailable until responder GPS and incident coordinates are available'
     ].filter(Boolean);
-    if (currentIncidentLat && currentIncidentLng && unit.latitude && unit.longitude) {
-        const distKm = haversine(Number(unit.latitude), Number(unit.longitude), currentIncidentLat, currentIncidentLng).toFixed(2);
-        lines.push(`<strong>Distance to Incident:</strong> ${distKm} km`);
-    } else if (typeof unit.distance_km === 'number' && isFinite(unit.distance_km)) {
-        lines.push(`<strong>Distance to Incident:</strong> ${unit.distance_km.toFixed(2)} km`);
-    }
     return `<div style="padding:0.55rem 0; border-bottom:1px solid #dbe3ea;">${lines.join('<br>')}</div>`;
 }
 function renderSelectedUnitDetails(select) {
@@ -508,13 +541,14 @@ function openDispatchModal(incidentId) {
             if (data.units && data.units.length) {
                 data.units.forEach(u => {
                     currentAvailableUnitsById[String(u.id)] = u;
-                    const dist = (typeof u.distance_km === 'number' && isFinite(u.distance_km)) ? `${u.distance_km.toFixed(1)} km` : '';
+                    const distKm = selectedUnitDistanceKm(u);
+                    const dist = distKm !== null ? `Distance: ${formatDistanceKm(distKm)}` : 'Distance pending';
                     const vehicleName = getUnitVehicleName(u);
                     const unitCode = String(u.identifier || '').trim();
                     const detailParts = [];
                     if (unitCode && unitCode !== vehicleName) detailParts.push(unitCode);
                     if (u.unit_type) detailParts.push(u.unit_type);
-                    if (dist) detailParts.push(dist);
+                    detailParts.push(dist);
                     const suffix = detailParts.join(', ');
                     select.innerHTML += `
                         <label style="display:flex; align-items:flex-start; gap:0.65rem; padding:0.55rem 0.65rem; border:1px solid #e2e8f0; border-radius:6px; background:#fff; cursor:pointer;">
@@ -594,14 +628,18 @@ document.addEventListener('DOMContentLoaded', function() {
         window.location.href = 'dispatcher/gps.php?' + qp.toString();
     }
     function getUnitRoutePoint(unit, selectedOption) {
-        if (unit.latitude && unit.longitude) {
-            return { lat: Number(unit.latitude), lng: Number(unit.longitude) };
+        const candidates = [
+            [unit.latest_latitude, unit.latest_longitude],
+            [unit.latitude, unit.longitude]
+        ];
+        for (const pair of candidates) {
+            const lat = Number(pair[0]);
+            const lng = Number(pair[1]);
+            if (Number.isFinite(lat) && Number.isFinite(lng) && !(Math.abs(lat) < 0.000001 && Math.abs(lng) < 0.000001)) {
+                return { lat, lng };
+            }
         }
-        const type = selectedOption ? selectedOption.getAttribute('data-type') : (unit.unit_type || 'other');
-        if (type === 'police') return { lat: 14.7338, lng: 121.0368 };
-        if (type === 'fire') return { lat: 14.7295, lng: 121.0342 };
-        if (type === 'ambulance') return { lat: 14.7351, lng: 121.0380 };
-        return { lat: 14.7320, lng: 121.0351 };
+        return null;
     }
     document.getElementById('confirm-dispatch-btn').onclick = function() {
         const btn = document.getElementById('confirm-dispatch-btn');
@@ -630,10 +668,6 @@ document.addEventListener('DOMContentLoaded', function() {
                 const parts = inc.location_address.split(',').map(Number);
                 toLat = parts[0];
                 toLng = parts[1];
-            } else {
-                // Default fallback: Barangay San Agustin center.
-                toLat = 14.7320;
-                toLng = 121.0351;
             }
 
             const routeUnits = unitResponses.map((unitRes, index) => {
@@ -643,21 +677,12 @@ document.addEventListener('DOMContentLoaded', function() {
                 return {
                     id: unitIds[index],
                     identifier: selectedOption ? selectedOption.getAttribute('data-identifier') : (unit.identifier || ''),
-                    fromLat: point.lat,
-                    fromLng: point.lng
+                    fromLat: point ? point.lat : null,
+                    fromLng: point ? point.lng : null
                 };
             });
 
-            const ensureUnitLocations = routeUnits.map(routeUnit => (routeUnit.fromLat && routeUnit.fromLng)
-                ? fetch('api/unit_location_update.php', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ unit_id: routeUnit.id, latitude: routeUnit.fromLat, longitude: routeUnit.fromLng })
-                }).catch(() => null)
-                : Promise.resolve());
-
-            return Promise.allSettled(ensureUnitLocations).then(() => {
-                return fetch('api/dispatch_unit.php', {
+            return fetch('api/dispatch_unit.php', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ incident_id: currentIncidentId, unit_ids: unitIds })
@@ -696,11 +721,6 @@ document.addEventListener('DOMContentLoaded', function() {
                         btn.textContent = 'Confirm Dispatch';
                     }
                 });
-            }).catch(() => {
-                alert('Network error.');
-                btn.disabled = false;
-                btn.textContent = 'Confirm Dispatch';
-            });
         }).catch(() => {
             alert('Network error.');
             btn.disabled = false;
@@ -749,6 +769,10 @@ const SAN_AGUSTIN_BOUNDS = [
     [14.7415, 121.0415]
 ];
 const SAN_AGUSTIN_GEOJSON = 'dispatcher/san_agustin.geojson';
+const MARKER_SMOOTHING_MS = 900;
+const MAX_ACCEPTED_ACCURACY_M = 180;
+const MAX_REASONABLE_SPEED_KPH = 160;
+const MAX_FIRST_JUMP_M = 800;
 
 // ===============================
 // LEAFLET MAP INITIALIZATION
@@ -759,6 +783,7 @@ function initMap() {
         center: SAN_AGUSTIN_CENTER,
         zoom: 15
     });
+    window.map = map;
     L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
         attribution: "© OpenStreetMap contributors"
     }).addTo(map);
@@ -825,6 +850,7 @@ function initFirebaseLiveTracking() {
             const lat = parseFloat(r.lat);
             const lng = parseFloat(r.lng);
             if (isNaN(lat) || isNaN(lng)) return;
+            const accuracyM = parseFiniteNumber(r.accuracy ?? r.accuracy_m);
 
             const key = String(r.unitCode || r.responderId || '').trim();
             if (!key) return;
@@ -847,11 +873,13 @@ function initFirebaseLiveTracking() {
             const type = isEnRoute ? dept : `idle_${dept}`;
 
             if (markers[key]) {
-                markers[key].marker.setLatLng([lat, lng]);
+                const accepted = moveUnitMarker(key, lat, lng, { speedKph, accuracyM, animate: true });
+                if (!accepted) return;
                 markers[key].marker.setIcon(getIcon(type));
                 markers[key].marker.bindPopup(`
                     <strong>${label}</strong><br>
                     Status: ${r.status || 'unknown'}<br>
+                    ${accuracyM !== null ? `Accuracy: ${accuracyM.toFixed(0)} m<br>` : ''}
                     ${speedKph !== null ? `Speed: ${speedKph.toFixed(1)} km/h<br>` : ''}
                     Coords: ${lat.toFixed(5)}, ${lng.toFixed(5)}<br>
                     <em>Live GPS</em>
@@ -948,7 +976,15 @@ function addUnitMarker(id, lat, lng, label, type, speedKph) {
                         ${typeof speedKph === 'number' && isFinite(speedKph) ? `Speed: ${speedKph.toFixed(1)} km/h<br>` : ''}
                         Coords: ${lat.toFixed(5)}, ${lng.toFixed(5)}
                 `);
-        markers[id] = { marker, type: "unit", unitType: (type || '').toLowerCase(), speedKph: speedKph };
+        markers[id] = {
+            marker,
+            type: "unit",
+            unitType: (type || '').toLowerCase(),
+            speedKph: speedKph,
+            lastAcceptedLatLng: L.latLng(lat, lng),
+            lastLocationAt: Date.now(),
+            ignoredGpsSpikes: 0
+        };
 }
 
 function addIncidentMarker(id, lat, lng, label) {
@@ -1034,6 +1070,91 @@ function canRenderLiveUnitMarker(identifier) {
     return !!id && authoritativeOnlineUnitKeysReady && authoritativeOnlineUnitKeys.has(id);
 }
 
+function parseFiniteNumber(value) {
+    const number = Number(value);
+    return Number.isFinite(number) ? number : null;
+}
+
+function distanceMeters(a, b) {
+    if (!a || !b) return 0;
+    if (map && typeof map.distance === 'function') {
+        return map.distance(a, b);
+    }
+    return haversine(a.lat, a.lng, b.lat, b.lng) * 1000;
+}
+
+function isPlausibleUnitMove(entry, nextLatLng, options) {
+    if (!entry || !entry.marker) return true;
+    const now = Date.now();
+    const previous = entry.lastAcceptedLatLng || entry.marker.getLatLng();
+    const distance = distanceMeters(previous, nextLatLng);
+    const accuracyM = parseFiniteNumber(options.accuracyM);
+
+    if (accuracyM !== null && accuracyM > MAX_ACCEPTED_ACCURACY_M && distance > 20) {
+        return false;
+    }
+
+    const elapsedSeconds = entry.lastLocationAt ? Math.max((now - entry.lastLocationAt) / 1000, 1) : null;
+    if (elapsedSeconds) {
+        const impliedSpeedKph = (distance / elapsedSeconds) * 3.6;
+        if (distance > 80 && impliedSpeedKph > MAX_REASONABLE_SPEED_KPH) {
+            return false;
+        }
+    } else if (distance > MAX_FIRST_JUMP_M) {
+        return false;
+    }
+
+    return true;
+}
+
+function moveUnitMarker(id, lat, lng, options) {
+    const entry = markers[id];
+    if (!entry || !entry.marker || !Number.isFinite(lat) || !Number.isFinite(lng)) return false;
+
+    const nextLatLng = L.latLng(lat, lng);
+    if (!isPlausibleUnitMove(entry, nextLatLng, options || {})) {
+        const sameRejectedArea = entry.lastRejectedLatLng && distanceMeters(entry.lastRejectedLatLng, nextLatLng) < 60;
+        entry.ignoredGpsSpikes = sameRejectedArea ? ((entry.ignoredGpsSpikes || 0) + 1) : 1;
+        entry.lastRejectedLatLng = nextLatLng;
+        if (entry.ignoredGpsSpikes < 3) {
+            return false;
+        }
+    }
+
+    const previous = entry.marker.getLatLng();
+    entry.ignoredGpsSpikes = 0;
+    entry.lastRejectedLatLng = null;
+    entry.lastAcceptedLatLng = nextLatLng;
+    entry.lastLocationAt = Date.now();
+
+    if (entry.moveAnimationFrame) {
+        cancelAnimationFrame(entry.moveAnimationFrame);
+        entry.moveAnimationFrame = null;
+    }
+
+    if (!(options && options.animate) || distanceMeters(previous, nextLatLng) < 3) {
+        entry.marker.setLatLng(nextLatLng);
+        return true;
+    }
+
+    const startTime = performance.now();
+    const duration = MARKER_SMOOTHING_MS;
+    const animateMove = (time) => {
+        const progress = Math.min((time - startTime) / duration, 1);
+        const eased = 1 - Math.pow(1 - progress, 3);
+        const latNow = previous.lat + (nextLatLng.lat - previous.lat) * eased;
+        const lngNow = previous.lng + (nextLatLng.lng - previous.lng) * eased;
+        entry.marker.setLatLng([latNow, lngNow]);
+        if (progress < 1) {
+            entry.moveAnimationFrame = requestAnimationFrame(animateMove);
+        } else {
+            entry.moveAnimationFrame = null;
+        }
+    };
+    entry.moveAnimationFrame = requestAnimationFrame(animateMove);
+    return true;
+}
+
 function updateMapVisibility() {
         Object.values(markers).forEach(item => {
             let visible = true;
@@ -1046,7 +1167,7 @@ function updateMapVisibility() {
 // LOADERS (sync with gps.php)
 // ===============================
 function loadDispatchedUnits() {
-    fetch('api/units_list.php?status=dispatched')
+    return fetch('api/units_list.php?status=dispatched')
         .then(r => r.json())
         .then(res => {
             if (!res.ok) return;
@@ -1071,7 +1192,7 @@ function syncUnitMarkers(items) {
         if (!isNaN(lat) && !isNaN(lng)) {
             const label = `${id}`;
             if (markers[id]) {
-                markers[id].marker.setLatLng([lat, lng]);
+                moveUnitMarker(id, lat, lng, { speedKph: speed, animate: true });
                 markers[id].marker.setIcon(getIcon(type));
                 const popupHtml = `
                     <strong>${label}</strong><br>
@@ -1108,7 +1229,7 @@ function syncAvailableUnitMarkers(items) {
         const speed = (u.speed_kph !== undefined && u.speed_kph !== null) ? parseFloat(u.speed_kph) : null;
         if (!isNaN(lat) && !isNaN(lng)) {
             if (markers[id]) {
-                markers[id].marker.setLatLng([lat, lng]);
+                moveUnitMarker(id, lat, lng, { speedKph: speed, animate: true });
                 markers[id].marker.setIcon(getIcon(type));
                 markers[id].marker.bindPopup(`
                     <strong>${id}</strong><br>
@@ -1167,15 +1288,15 @@ function startLivePolling() {
 // MAP ACTIONS
 // ===============================
 function refreshMap() {
-  Object.values(markers).forEach(item => {
-    if (!item || !item.marker) return;
-    const pos = item.marker.getLatLng();
-    const newLat = pos.lat + (Math.random() - 0.5) * 0.001;
-    const newLng = pos.lng + (Math.random() - 0.5) * 0.001;
-    const clamped = clampToBounds(newLat, newLng);
-    item.marker.setLatLng(clamped);
+  Promise.allSettled([
+    pruneOfflineUnitMarkers(),
+    loadDispatchedUnits(),
+    loadAvailableUnits(),
+    loadIncidentMarkers()
+  ]).finally(() => {
+    updateMapVisibility();
+    showNotification("Live map refreshed", "info");
   });
-  showNotification("Live map refreshed", "info");
 }
 
 function clampToBounds(lat, lng) {
@@ -1210,7 +1331,12 @@ function renderAvailableUnits(items) {
         const meta = [];
         if (u.unit_type) meta.push(u.unit_type.charAt(0).toUpperCase() + u.unit_type.slice(1));
         const displayName = u.resource_name || u.identifier;
-        const locationText = u.resource_location || (u.latitude && u.longitude ? `${u.latitude}, ${u.longitude}` : 'Location pending');
+        const latestLat = Number(u.latest_latitude ?? u.latitude);
+        const latestLng = Number(u.latest_longitude ?? u.longitude);
+        const gpsLocationText = Number.isFinite(latestLat) && Number.isFinite(latestLng)
+            ? `Responder GPS: ${latestLat.toFixed(6)}, ${latestLng.toFixed(6)}`
+            : '';
+        const locationText = gpsLocationText || 'Responder GPS pending';
         const assignmentText = u.assignment || u.plate_number || u.driver_name || '';
         const card = document.createElement('div');
         card.className = 'unit-card available';
@@ -1282,7 +1408,7 @@ function ensureUnitMarkerFromApiUnit(unit) {
     const type = unit.unit_type || 'other';
     const speed = (unit.speed_kph !== undefined && unit.speed_kph !== null) ? parseFloat(unit.speed_kph) : null;
     if (markers[id] && markers[id].marker) {
-        markers[id].marker.setLatLng([lat, lng]);
+        moveUnitMarker(id, lat, lng, { speedKph: speed, animate: true });
         markers[id].marker.setIcon(getIcon(type));
     } else {
         addUnitMarker(id, lat, lng, id, type, speed);

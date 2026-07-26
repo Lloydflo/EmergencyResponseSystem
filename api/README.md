@@ -44,6 +44,26 @@ POST /ERS/api/?action=incoming-transfer
 PATCH /ERS/api/?action=incident_status
 ```
 
+System-to-system modules under `api/system_API` also have one consolidated
+entry point:
+
+```http
+GET  /ERS/api/system_API/?action=anonymous_tip
+POST /ERS/api/system_API/?action=anonymous_tip
+GET  /ERS/api/system_API/?action=event_coordination
+POST /ERS/api/system_API/?action=event_coordination
+POST /ERS/api/system_API/?action=interagency_external_incident_send
+GET  /ERS/api/system_API/?action=receive_survey
+POST /ERS/api/system_API/?action=receive_survey
+POST /ERS/api/system_API/?action=send_analytics
+POST /ERS/api/system_API/?action=send_incident
+POST /ERS/api/system_API/?action=send_route
+POST /ERS/api/system_API/?action=tracking_data
+```
+
+The older direct files such as
+`/ERS/api/system_API/anonymous_tip.php` still work for backward compatibility.
+
 Create incident body. This saves the incident and sends it as an incident card in Interagency chat:
 
 ```json

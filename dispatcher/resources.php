@@ -717,13 +717,13 @@ try {
                     if (actionSet.has('service')) btns.push(`<button class=\"resource-action-btn service\" title=\"Service\" aria-label=\"Service\" onclick=\"serviceResource(this)\"><i class=\"fas fa-wrench\"></i></button>`);
                     if (actionSet.has('details')) btns.push(`<button class=\"resource-action-btn details\" title=\"Details\" aria-label=\"Details\" onclick=\"resourceDetails(this)\"><i class=\"fas fa-info-circle\"></i></button>`);
                     if (actionSet.has('contact')) btns.push(`<button class=\"resource-action-btn contact\" title=\"Contact\" aria-label=\"Contact\" onclick=\"contactPersonnel(this)\"><i class=\"fas fa-phone\"></i></button>`);
-                    if (actionSet.has('schedule')) btns.push(`<form style=\"display:inline;\" onsubmit=\"event.preventDefault(); openScheduleModal('${r.name}');\"><button type=\"submit\" class=\"resource-action-btn schedule\" title=\"Schedule\" aria-label=\"Schedule\"><i class=\"fas fa-calendar\"></i></button></form>`);
+                    if (actionSet.has('schedule')) btns.push(`<button class=\"resource-action-btn schedule\" title=\"Schedule\" aria-label=\"Schedule\" onclick=\"scheduleResource(this)\"><i class=\"fas fa-calendar\"></i></button>`);
                     if (actionSet.has('assign')) btns.push(`<button class=\"resource-action-btn assign\" title=\"Assign\" aria-label=\"Assign\" onclick=\"assignEquipment(this)\"><i class=\"fas fa-link\"></i></button>`);
                     if (actionSet.has('check')) btns.push(`<button class=\"resource-action-btn check\" title=\"Check\" aria-label=\"Check\" onclick=\"checkEquipment(this)\"><i class=\"fas fa-check-circle\"></i></button>`);
                     if (actionSet.has('calibrate')) btns.push(`<button class=\"resource-action-btn calibrate\" title=\"Calibrate\" aria-label=\"Calibrate\" onclick=\"calibrateEquipment(this)\"><i class=\"fas fa-tools\"></i></button>`);
                     const visibleBtns = btns.slice(0, Math.min(btns.length, 4));
                     const actionsHtml = `<div class=\"actions-inline\">${visibleBtns.join('')}</div>`;
-                    return `<tr data-type=\"${r.type}\" data-status=\"${r.status}\" data-location=\"${escapeAttrValue(r.location || '')}\" data-resource-id=\"${escapeAttrValue(r.id)}\" data-resource-name=\"${escapeAttrValue(resourceName)}\" data-resource-code=\"${escapeAttrValue(resourceCode)}\" data-unit-identifier=\"${escapeAttrValue(unitIdentifier)}\" data-resource-source=\"${escapeAttrValue(r.source || '')}\" data-resource-details=\"${escapeAttrValue(r.details || '')}\" data-resource-role=\"${escapeAttrValue(r.role || '')}\" data-resource-updated=\"${escapeAttrValue(r.updatedAt || '')}\" data-resource-assignment=\"${escapeAttrValue(r.assignment || '')}\" data-resource-notes=\"${escapeAttrValue(r.notes || '')}\" data-resource-quantity=\"${safeQuantity}\">\n`+
+                    return `<tr data-type=\"${r.type}\" data-status=\"${r.status}\" data-location=\"${escapeAttrValue(r.location || '')}\" data-resource-id=\"${escapeAttrValue(r.id)}\" data-resource-name=\"${escapeAttrValue(resourceName)}\" data-resource-code=\"${escapeAttrValue(resourceCode)}\" data-unit-identifier=\"${escapeAttrValue(unitIdentifier)}\" data-resource-source=\"${escapeAttrValue(r.source || '')}\" data-resource-details=\"${escapeAttrValue(r.details || '')}\" data-resource-role=\"${escapeAttrValue(r.role || '')}\" data-resource-updated=\"${escapeAttrValue(r.updatedAt || '')}\" data-resource-assignment=\"${escapeAttrValue(r.assignment || '')}\" data-resource-notes=\"${escapeAttrValue(r.notes || '')}\" data-resource-phone=\"${escapeAttrValue(r.phone || '')}\" data-resource-email=\"${escapeAttrValue(r.email || '')}\" data-resource-quantity=\"${safeQuantity}\">\n`+
                         `<td>${safeResourceCode}</td>`+
                         `<td class=\"name-cell resource-title\"><strong>${safeResourceName}</strong><span>${safeSubtitle}</span></td>`+
                         `<td>${safeTypeLabel}</td>`+
@@ -1130,6 +1130,8 @@ try {
                     <div class="form-group">
                         <label for="schedule-personnel-name">Personnel Name</label>
                         <input type="text" id="schedule-personnel-name" name="personnel_name" readonly>
+                        <input type="hidden" id="schedule-resource-id" name="resource_id">
+                        <input type="hidden" id="schedule-resource-source" name="resource_source">
                     </div>
                     <div class="form-group">
                         <label for="schedule-date">Date <span class="required">*</span></label>
@@ -1207,11 +1209,54 @@ try {
             }, 600);
         });
 
+        const RESOURCE_ACTION_ENDPOINT = 'api/resource_action.php';
+
+        function resourceRowPayload(button) {
+            const row = button ? button.closest('tr') : null;
+            if (!row) {
+                return null;
+            }
+            return {
+                resource_id: Number(row.getAttribute('data-resource-id') || '0'),
+                resource_source: row.getAttribute('data-resource-source') || '',
+                resource_name: row.getAttribute('data-resource-name') || 'Resource',
+                phone: row.getAttribute('data-resource-phone') || '',
+                email: row.getAttribute('data-resource-email') || ''
+            };
+        }
+
+        async function postResourceAction(payload) {
+            const response = await fetch(RESOURCE_ACTION_ENDPOINT, {
+                method: 'POST',
+                credentials: 'same-origin',
+                headers: {
+                    'Accept': 'application/json',
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify(payload)
+            });
+            const data = await response.json().catch(() => ({}));
+            if (!response.ok || !data.ok) {
+                throw new Error(data.error || 'Unable to record resource action');
+            }
+            return data;
+        }
+
         // Scheduling Modal Logic
-        function openScheduleModal(personnelName) {
+        function openScheduleModal(personnelName, resourceId, resourceSource) {
             document.getElementById('schedule-personnel-name').value = personnelName;
+            document.getElementById('schedule-resource-id').value = resourceId || '';
+            document.getElementById('schedule-resource-source').value = resourceSource || '';
             document.getElementById('scheduleModal').classList.add('show');
             document.body.style.overflow = 'hidden';
+        }
+        function scheduleResource(button) {
+            const payload = resourceRowPayload(button);
+            if (!payload || !payload.resource_id) {
+                showNotification('Missing personnel record.', 'error');
+                return;
+            }
+            openScheduleModal(payload.resource_name, payload.resource_id, payload.resource_source);
         }
         function closeScheduleModal() {
             document.getElementById('scheduleModal').classList.remove('show');
@@ -1222,9 +1267,30 @@ try {
             event.preventDefault();
             const formData = new FormData(event.target);
             const data = Object.fromEntries(formData);
-            showNotification(`Scheduled ${data.personnel_name} for ${data.shift} shift on ${data.date}`, 'success');
-            setTimeout(() => { closeScheduleModal(); }, 1500);
-            // In production, send data to backend here
+            const submitBtn = event.target.querySelector('button[type="submit"]');
+            if (submitBtn) {
+                submitBtn.disabled = true;
+                submitBtn.textContent = 'Scheduling...';
+            }
+            postResourceAction({
+                action: 'schedule',
+                resource_id: data.resource_id,
+                resource_source: data.resource_source,
+                resource_name: data.personnel_name,
+                date: data.date,
+                shift: data.shift,
+                notes: data.notes
+            }).then(() => {
+                showNotification(`Scheduled ${data.personnel_name} for ${data.shift} shift on ${data.date}`, 'success');
+                closeScheduleModal();
+            }).catch((error) => {
+                showNotification(error.message || 'Unable to schedule personnel.', 'error');
+            }).finally(() => {
+                if (submitBtn) {
+                    submitBtn.disabled = false;
+                    submitBtn.textContent = 'Schedule';
+                }
+            });
         }
         // Close modal on outside click or Escape
         document.addEventListener('DOMContentLoaded', function() {
@@ -1317,10 +1383,14 @@ try {
 
         // Resource service functionality - removed (maintenance removed per requirements)
         function serviceResource(button) {
-            const resourceCard = button.closest('.resource-card');
-            const resourceName = resourceCard.querySelector('.resource-title').textContent;
-            
-            showNotification(`Service information for ${resourceName} - Feature removed`, 'info');
+            const payload = resourceRowPayload(button);
+            if (!payload || !payload.resource_id) {
+                showNotification('Missing resource record.', 'error');
+                return;
+            }
+            postResourceAction({ ...payload, action: 'service', notes: 'Service review opened from dispatcher resources.' })
+                .then(() => showNotification(`Service review logged for ${payload.resource_name}`, 'success'))
+                .catch((error) => showNotification(error.message || 'Unable to log service review.', 'error'));
         }
 
         // Complete maintenance functionality - removed (maintenance feature removed)
@@ -1367,17 +1437,35 @@ try {
             const personnelName = row ? (row.getAttribute('data-resource-name') || 'Personnel') : 'Personnel';
             const assignment = prompt(`Assign ${personnelName} to which incident/unit?`);
             if (assignment) {
-                button.classList.add('active');
-                showNotification(`${personnelName} assigned to ${assignment}`, 'success');
+                const payload = resourceRowPayload(button);
+                if (!payload || !payload.resource_id) {
+                    showNotification('Missing personnel record.', 'error');
+                    return;
+                }
+                postResourceAction({ ...payload, action: 'assign', assignment })
+                    .then(() => {
+                        button.classList.add('active');
+                        showNotification(`${personnelName} assigned to ${assignment}`, 'success');
+                        if (typeof loadResources === 'function') {
+                            loadResources(false);
+                        }
+                    })
+                    .catch((error) => showNotification(error.message || 'Unable to assign personnel.', 'error'));
             }
         }
 
         function contactPersonnel(button) {
-            const row = button.closest('tr');
-            const personnelName = row ? (row.getAttribute('data-resource-name') || 'Personnel') : 'Personnel';
-            if (confirm(`Call ${personnelName}?`)) {
-                showNotification(`Calling ${personnelName}...`, 'info');
+            const payload = resourceRowPayload(button);
+            if (!payload) return;
+            if (payload.phone && confirm(`Call ${payload.resource_name}?`)) {
+                postResourceAction({ ...payload, action: 'contact', notes: 'Call started from dispatcher resources.' })
+                    .catch(() => {});
+                window.location.href = 'tel:' + encodeURIComponent(payload.phone);
+                return;
             }
+            postResourceAction({ ...payload, action: 'contact', notes: 'Contact requested but no phone number is recorded.' })
+                .then(() => showNotification(`No phone number recorded for ${payload.resource_name}. Contact request logged.`, 'info'))
+                .catch((error) => showNotification(error.message || 'Unable to log contact request.', 'error'));
         }
 
         function personnelSchedule(button) {
@@ -1392,21 +1480,42 @@ try {
             const equipmentName = row ? (row.getAttribute('data-resource-name') || 'Equipment') : 'Equipment';
             const assignment = prompt(`Assign ${equipmentName} to which unit/personnel?`);
             if (assignment) {
-                showNotification(`${equipmentName} assigned to ${assignment}`, 'success');
+                const payload = resourceRowPayload(button);
+                if (!payload || !payload.resource_id) {
+                    showNotification('Missing equipment record.', 'error');
+                    return;
+                }
+                postResourceAction({ ...payload, action: 'assign', assignment })
+                    .then(() => {
+                        showNotification(`${equipmentName} assigned to ${assignment}`, 'success');
+                        if (typeof loadResources === 'function') {
+                            loadResources(false);
+                        }
+                    })
+                    .catch((error) => showNotification(error.message || 'Unable to assign equipment.', 'error'));
             }
         }
 
         function checkEquipment(button) {
-            const row = button.closest('tr');
-            const equipmentName = row ? (row.getAttribute('data-resource-name') || 'Equipment') : 'Equipment';
-            showNotification(`${equipmentName} status check: All systems operational`, 'success');
+            const payload = resourceRowPayload(button);
+            if (!payload) return;
+            postResourceAction({ ...payload, action: 'check', notes: 'Manual readiness check recorded from dispatcher resources.' })
+                .then(() => showNotification(`${payload.resource_name} readiness check recorded`, 'success'))
+                .catch((error) => showNotification(error.message || 'Unable to record status check.', 'error'));
         }
 
         function calibrateEquipment(button) {
             const row = button.closest('tr');
             const equipmentName = row ? (row.getAttribute('data-resource-name') || 'Equipment') : 'Equipment';
             if (confirm(`Calibrate ${equipmentName}? This may take several minutes.`)) {
-                showNotification(`Calibration started for ${equipmentName}`, 'info');
+                const payload = resourceRowPayload(button);
+                if (!payload || !payload.resource_id) {
+                    showNotification('Missing equipment record.', 'error');
+                    return;
+                }
+                postResourceAction({ ...payload, action: 'calibrate', notes: 'Calibration started from dispatcher resources.' })
+                    .then(() => showNotification(`Calibration started for ${equipmentName}`, 'info'))
+                    .catch((error) => showNotification(error.message || 'Unable to start calibration.', 'error'));
             }
         }
 

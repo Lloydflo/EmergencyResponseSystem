@@ -23,13 +23,19 @@ $pageTitle = 'Emergency Call Center';
     <link rel="stylesheet" href="css/sidebar-footer.css">
     <link rel="stylesheet" href="css/cards.css">
     <link rel="stylesheet" href="css/call.css?v=<?php echo filemtime($rootDir . '/css/call.css'); ?>">
-    <script src="node_modules/socket.io-client/dist/socket.io.min.js"></script>
     <script>
-        if (typeof window.io !== 'function') {
-            document.write('<script src="https://cdn.socket.io/4.7.5/socket.io.min.js"><\/script>');
-        }
+        window.__loadSocketIoFallback = function () {
+            if (typeof window.io === 'function' || document.getElementById('socket-io-fallback')) return;
+            var script = document.createElement('script');
+            script.id = 'socket-io-fallback';
+            script.src = 'https://cdn.socket.io/4.7.5/socket.io.min.js';
+            script.async = true;
+            script.onload = function () { window.dispatchEvent(new Event('ers:socket-io-ready')); };
+            document.head.appendChild(script);
+        };
     </script>
-    <script src="js/place-autocomplete.js"></script>
+    <script defer src="node_modules/socket.io-client/dist/socket.io.min.js" onerror="window.__loadSocketIoFallback()"></script>
+    <script defer src="js/place-autocomplete.js"></script>
 </head>
 <body>
     <!-- Include Sidebar Component -->
@@ -183,6 +189,25 @@ $pageTitle = 'Emergency Call Center';
                             <div class="transcript-panel">
                                 <div class="transcript-label">Live Transcript</div>
                                 <div class="transcript-output" id="speechTranscript">No transcript yet.</div>
+                            </div>
+                        </div>
+
+                        <div class="call-chat-panel" id="transferCallChatPanel">
+                            <div class="call-chat-head">
+                                <div>
+                                    <div class="panel-eyebrow">Live Chat</div>
+                                    <strong>Caller Messages</strong>
+                                </div>
+                                <span id="transferCallChatStatus">Socket ready</span>
+                            </div>
+                            <div class="call-chat-messages" id="transferCallMessages" aria-live="polite">
+                                <div class="call-chat-empty">Messages between dispatcher and caller will appear here.</div>
+                            </div>
+                            <div class="call-chat-input-row">
+                                <input type="text" id="transferCallMessageInput" placeholder="Type a message to the caller..." autocomplete="off">
+                                <button type="button" id="transferCallMessageSend" onclick="sendTransferCallMessage()">
+                                    <i class="fas fa-paper-plane"></i> Send
+                                </button>
                             </div>
                         </div>
 
@@ -436,9 +461,9 @@ $pageTitle = 'Emergency Call Center';
     let currentFilter = 'all';
     const RECENT_INCIDENTS_ENABLED = true; // enable Recent Incidents data
     const RESET_RECENT_ON_LOAD = false; // localStorage no longer used
-    const API_LIST_URL = 'api/incidents_list.php';
-    const API_CREATE_CALL_URL = 'api/calls_create.php';
-    const API_INCOMING_TRANSFERS_URL = 'api/incoming_transfers.php';
+    const API_LIST_URL = '../api/incidents_list.php';
+    const API_CREATE_CALL_URL = '../api/calls_create.php';
+    const API_INCOMING_TRANSFERS_URL = '../api/incoming_transfers.php';
     const ALERTARA_SOCKET_URL = 'https://emergency-comm.alertaraqc.com';
     const ALERTARA_SOCKET_PATH = '/socket.io';
     const TRANSFER_INBOX_ROOM = 'ers-transfer-inbox';
@@ -462,9 +487,13 @@ $pageTitle = 'Emergency Call Center';
     const DISMISSED_TRANSFER_QUEUE_LIMIT = 200;
     let transferQueueItems = [];
     let activeTransferCall = null;
+    let endingTransferCall = false;
     let incomingCallQueue = [];
     let incomingCallSequence = 0;
     let incomingTransferPollTimer = null;
+    let transferInboxSocketRetryTimer = null;
+    let transferInboxSocketRetryCount = 0;
+    let transferCallMessages = [];
     const INCOMING_TRANSFER_POLL_MS = 1500;
     const PRIORITY_ORDER = { critical: 0, high: 1, urgent: 2, moderate: 3, medium: 3, low: 4 };
     const PRIORITY_RULES = {
@@ -695,6 +724,8 @@ $pageTitle = 'Emergency Call Center';
     let transferLocalStreamPromise = null;
     let transferRemoteAudio = null;
     let transferInboxSocket = null;
+    let transferOfferRequestTimer = null;
+    let pendingTransferIceCandidates = [];
     const SpeechRecognitionApi = window.SpeechRecognition || window.webkitSpeechRecognition || null;
 
     function getSharedCallSessionApi() {
@@ -733,6 +764,11 @@ $pageTitle = 'Emergency Call Center';
         }
 
         panel.classList.add('active');
+        const endButton = panel.querySelector('.end-call-btn');
+        if (endButton) {
+            endButton.disabled = false;
+            endButton.innerHTML = '<i class="fas fa-phone-slash"></i> End Call';
+        }
         document.getElementById('activeCallerName').textContent = 'Caller: ' + activeCall.name;
         document.getElementById('activeCallerPhone').textContent = activeCall.phone;
         document.getElementById('callerName').value = activeCall.name;
@@ -771,18 +807,19 @@ $pageTitle = 'Emergency Call Center';
         } catch (e) {}
     }
 
+    function runAfterFirstPaint(callback, delay = 250) {
+        if (typeof window.requestIdleCallback === 'function') {
+            window.requestIdleCallback(callback, { timeout: 1200 });
+            return;
+        }
+        window.setTimeout(callback, delay);
+    }
+
     document.addEventListener('DOMContentLoaded', () => {
         initPrioritySelect();
         initIncidentTypeChecklist();
         initIncidentPriorityIndicator();
         initIncidentSidebarControls();
-        if (RECENT_INCIDENTS_ENABLED) {
-            loadIncidentsFromServer();
-        } else {
-            incidentItems = [];
-            renderIncidents();
-            updateStats();
-        }
         // Hook suggestion on description input
         const descEl = document.getElementById('incidentDescription');
         if (descEl) {
@@ -803,9 +840,17 @@ $pageTitle = 'Emergency Call Center';
         document.addEventListener('ers:incoming-call', (event) => {
             showIncomingCallModal(event.detail || {});
         });
+        window.addEventListener('ers:socket-io-ready', startTransferInboxSocket);
         renderTransferredQueue();
         startTransferInboxSocket();
-        startIncomingTransferPolling();
+        window.setTimeout(startIncomingTransferPolling, 350);
+        if (RECENT_INCIDENTS_ENABLED) {
+            runAfterFirstPaint(loadIncidentsFromServer, 450);
+        } else {
+            incidentItems = [];
+            renderIncidents();
+            updateStats();
+        }
     });
 
     function normalizeIncomingCallDetail(call) {
@@ -951,6 +996,7 @@ $pageTitle = 'Emergency Call Center';
             activeCall = { active: true, name, phone, start, isTransfer: incomingCall.isTransfer === true };
         }
         applyIncomingCallToForm(incomingCall);
+        resetTransferCallChat(incomingCall);
         connectTransferSocket(incomingCall);
         prepareTransferLocalAudio(incomingCall);
         renderActiveCallPanel(getSharedCallSession() || activeCall);
@@ -966,16 +1012,86 @@ $pageTitle = 'Emergency Call Center';
         showNextQueuedIncomingCall();
     }
 
-    function endCall() {
+    function transferHangupPayload(call, reason) {
+        const callIdValue = String((call && (call.callId || call.call_id || call.transferId || call.transfer_id)) || '').trim();
+        return {
+            callId: callIdValue,
+            call_id: callIdValue,
+            transferId: String((call && (call.transferId || call.transfer_id)) || '').trim(),
+            transfer_id: String((call && (call.transferId || call.transfer_id)) || '').trim(),
+            conversationId: String((call && (call.conversationId || call.conversation_id)) || '').trim(),
+            conversation_id: String((call && (call.conversationId || call.conversation_id)) || '').trim(),
+            room: String((call && call.room) || '').trim(),
+            endedBy: 'response_team',
+            reason: reason || 'response-team-ended',
+            endedAt: new Date().toISOString()
+        };
+    }
+
+    function notifyTransferredCallerHangup(call, reason = 'response-team-ended') {
+        const payload = transferHangupPayload(call, reason);
+        if (!transferSocket || !payload.room) return;
+        transferSocket.emit('hangup', payload, payload.room);
+    }
+
+    function showEndedCallForm(call, reason = 'call-ended') {
+        const panel = document.getElementById('activeCallPanel');
+        if (!panel) return;
+        panel.classList.add('active');
+        const name = String((call && call.name) || 'Caller').trim();
+        const phone = String((call && call.phone) || '').trim();
+        const nameEl = document.getElementById('activeCallerName');
+        const phoneEl = document.getElementById('activeCallerPhone');
+        const timerEl = document.getElementById('callTimer');
+        const endButton = panel.querySelector('.end-call-btn');
+        if (nameEl) nameEl.textContent = 'Caller: ' + name;
+        if (phoneEl) phoneEl.textContent = phone;
+        if (timerEl) timerEl.textContent = 'Ended';
+        if (endButton) {
+            endButton.disabled = true;
+            endButton.innerHTML = '<i class="fas fa-phone-slash"></i> Call Ended';
+        }
+        setVoiceState(reason === 'caller-ended'
+            ? 'Caller ended the live audio. Finish the incident form when ready.'
+            : 'Live audio ended. Finish the incident form when ready.');
+    }
+
+    function closeTransferVoiceSession(options = {}) {
+        if (endingTransferCall) return;
+        endingTransferCall = true;
+        const keepForm = options.keepForm !== false;
+        const reason = options.reason || 'call-ended';
+        const call = activeTransferCall || getSharedCallSession() || activeCall || {};
+
+        if (options.notifyPeer === true) {
+            notifyTransferredCallerHangup(call, reason);
+        }
+
         stopVoiceTools();
         disconnectTransferCall();
         const sessionApi = getSharedCallSessionApi();
         if (sessionApi) {
             sessionApi.end();
         }
-        activeTransferCall = null;
-        renderActiveCallPanel(null);
+        activeCall = null;
+        activeTransferCall = keepForm && call && call.isTransfer === true ? call : null;
+        stopTimer();
+        updateStats();
+
+        if (keepForm) {
+            showEndedCallForm(call, reason);
+        } else {
+            renderActiveCallPanel(null);
+        }
+
+        window.setTimeout(() => {
+            endingTransferCall = false;
+        }, 250);
         showNextQueuedIncomingCall();
+    }
+
+    function endCall() {
+        closeTransferVoiceSession({ notifyPeer: true, reason: 'response-team-ended', keepForm: true });
     }
 
     function renderIncomingTransferDetails(call) {
@@ -1418,10 +1534,12 @@ $pageTitle = 'Emergency Call Center';
             transferSocket.on('connect', () => {
                 transferSocket.emit('join', call.room);
                 emitTransferAccepted(call);
+                scheduleTransferOfferRequest(call);
                 setVoiceState('Connected to AlertaraQC transfer room ' + call.room + '. Waiting for caller audio.');
             });
             transferSocket.on('offer', async (offerPayload) => {
                 if (!transferPayloadMatchesCall(offerPayload, callId, call.room)) return;
+                clearTransferOfferRequestTimer();
                 try {
                     await answerTransferOffer(call, offerPayload);
                 } catch (error) {
@@ -1432,14 +1550,23 @@ $pageTitle = 'Emergency Call Center';
             transferSocket.on('candidate', async (data) => {
                 if (!transferPayloadMatchesCall(data, callId, call.room)) return;
                 if (data && data.candidate && transferPeerConnection) {
-                    try {
-                        await transferPeerConnection.addIceCandidate(data.candidate);
-                    } catch (error) {
-                        console.warn('Unable to add transfer ICE candidate:', error);
-                    }
+                    addTransferIceCandidate(data.candidate);
                 }
             });
+            transferSocket.on('call-message', (payload) => {
+                if (!transferPayloadMatchesCall(payload, callId, call.room)) return;
+                if (!payload || payload.sender === 'response_team') return;
+                addTransferCallMessage(payload.text || payload.message || '', 'caller', payload.timestamp, payload.senderName || call.name || 'Caller');
+            });
+            const handleTransferHangup = (payload) => {
+                if (!transferPayloadMatchesCall(payload, callId, call.room)) return;
+                closeTransferVoiceSession({ notifyPeer: false, reason: 'caller-ended', keepForm: true });
+            };
+            transferSocket.on('hangup', handleTransferHangup);
+            transferSocket.on('call-ended', handleTransferHangup);
+            transferSocket.on('call_ended', handleTransferHangup);
             transferSocket.on('disconnect', () => {
+                if (endingTransferCall) return;
                 setVoiceState('AlertaraQC transfer socket disconnected.');
             });
             transferSocket.on('connect_error', (error) => {
@@ -1479,9 +1606,65 @@ $pageTitle = 'Emergency Call Center';
         };
         pc.onconnectionstatechange = () => {
             if (!transferPeerConnection) return;
+            if (transferPeerConnection.connectionState === 'connected') {
+                clearTransferOfferRequestTimer();
+            }
             setVoiceState('AlertaraQC voice connection: ' + transferPeerConnection.connectionState + '.');
         };
         return pc;
+    }
+
+    function clearTransferOfferRequestTimer() {
+        if (transferOfferRequestTimer) {
+            window.clearTimeout(transferOfferRequestTimer);
+            transferOfferRequestTimer = null;
+        }
+    }
+
+    function transferAcceptedPayload(call, reason = 'response-team-ready') {
+        return {
+            callId: call.callId || call.transferId || '',
+            call_id: call.callId || call.transferId || '',
+            transferId: call.transferId || '',
+            transfer_id: call.transferId || '',
+            conversationId: call.conversationId || '',
+            conversation_id: call.conversationId || '',
+            room: call.room,
+            role: 'dispatcher',
+            reason
+        };
+    }
+
+    function scheduleTransferOfferRequest(call) {
+        clearTransferOfferRequestTimer();
+        if (!transferSocket || !call || !call.room) return;
+        transferOfferRequestTimer = window.setTimeout(() => {
+            if (!transferSocket || !call.room || !transferPeerConnection) return;
+            if (transferPeerConnection.connectionState === 'connected') return;
+            transferSocket.emit('request-transfer-offer', transferAcceptedPayload(call, 'response-team-offer-timeout'), call.room);
+            setVoiceState('Requesting fresh caller audio connection...');
+        }, 700);
+    }
+
+    async function addTransferIceCandidate(candidate) {
+        if (!transferPeerConnection || !candidate) return;
+        if (!transferPeerConnection.remoteDescription) {
+            pendingTransferIceCandidates.push(candidate);
+            return;
+        }
+        try {
+            await transferPeerConnection.addIceCandidate(candidate);
+        } catch (error) {
+            console.warn('Unable to add transfer ICE candidate:', error);
+        }
+    }
+
+    async function flushPendingTransferIceCandidates() {
+        if (!transferPeerConnection || !transferPeerConnection.remoteDescription || !pendingTransferIceCandidates.length) return;
+        const queued = pendingTransferIceCandidates.splice(0);
+        for (const candidate of queued) {
+            await addTransferIceCandidate(candidate);
+        }
     }
 
     function createTransferRemoteAudio() {
@@ -1492,6 +1675,79 @@ $pageTitle = 'Emergency Call Center';
         document.body.appendChild(audio);
         return audio;
     }
+
+    function setTransferCallChatStatus(text) {
+        const el = document.getElementById('transferCallChatStatus');
+        if (el) el.textContent = text;
+    }
+
+    function resetTransferCallChat(call = null) {
+        transferCallMessages = [];
+        const messages = document.getElementById('transferCallMessages');
+        const input = document.getElementById('transferCallMessageInput');
+        if (messages) {
+            messages.innerHTML = '<div class="call-chat-empty">Messages between dispatcher and caller will appear here.</div>';
+        }
+        if (input) input.value = '';
+        setTransferCallChatStatus(call && call.room ? 'Connected to room' : 'Waiting for call');
+    }
+
+    function addTransferCallMessage(text, sender = 'caller', timestamp = Date.now(), senderName = '') {
+        const cleanText = String(text || '').trim();
+        if (!cleanText) return;
+        const messages = document.getElementById('transferCallMessages');
+        if (!messages) return;
+        if (!transferCallMessages.length) messages.innerHTML = '';
+        const time = new Date(timestamp || Date.now()).toLocaleTimeString('en-US', {
+            hour: 'numeric',
+            minute: '2-digit',
+            hour12: true
+        });
+        const item = document.createElement('div');
+        item.className = 'call-chat-bubble ' + (sender === 'dispatcher' ? 'is-dispatcher' : 'is-caller');
+        item.innerHTML = `
+            <div class="call-chat-meta">${escapeHtml(senderName || (sender === 'dispatcher' ? 'Response Team' : 'Caller'))} &bull; ${escapeHtml(time)}</div>
+            <div>${escapeHtml(cleanText)}</div>
+        `;
+        messages.appendChild(item);
+        messages.scrollTop = messages.scrollHeight;
+        transferCallMessages.push({ text: cleanText, sender, timestamp, senderName });
+    }
+
+    function sendTransferCallMessage() {
+        const input = document.getElementById('transferCallMessageInput');
+        const text = String(input && input.value ? input.value : '').trim();
+        const call = activeTransferCall || getSharedCallSession();
+        if (!text || !call || !call.room) return;
+        if (input) input.value = '';
+        const payload = {
+            text,
+            callId: call.callId || call.transferId || '',
+            call_id: call.callId || call.transferId || '',
+            transferId: call.transferId || '',
+            transfer_id: call.transferId || '',
+            room: call.room,
+            sender: 'response_team',
+            senderName: 'Response Team',
+            timestamp: Date.now()
+        };
+        addTransferCallMessage(text, 'dispatcher', payload.timestamp, payload.senderName);
+        if (transferSocket && transferSocket.connected) {
+            transferSocket.emit('call-message', payload, call.room);
+            setTransferCallChatStatus('Sent');
+        } else {
+            setTransferCallChatStatus('Socket reconnecting. Message shown locally only.');
+        }
+    }
+
+    document.addEventListener('keydown', (event) => {
+        if (event.key !== 'Enter' || event.shiftKey) return;
+        const target = event.target;
+        if (target && target.id === 'transferCallMessageInput') {
+            event.preventDefault();
+            sendTransferCallMessage();
+        }
+    });
 
     function transferPayloadMatchesCall(payload, callId, room) {
         const payloadRoom = String((payload && payload.room) || '');
@@ -1553,33 +1809,25 @@ $pageTitle = 'Emergency Call Center';
 
     function emitTransferAccepted(call) {
         if (!transferSocket || !call || !call.room) return;
-        const payload = {
-            callId: call.callId || call.transferId || '',
-            call_id: call.callId || call.transferId || '',
-            transferId: call.transferId || '',
-            transfer_id: call.transferId || '',
-            conversationId: call.conversationId || '',
-            conversation_id: call.conversationId || '',
-            room: call.room,
-            role: 'dispatcher'
-        };
+        const payload = transferAcceptedPayload(call);
         ['dispatcher-ready', 'call-accepted', 'accepted'].forEach((eventName) => {
             transferSocket.emit(eventName, payload, call.room);
         });
-        transferSocket.emit('request-transfer-offer', {
-            ...payload,
-            reason: 'response-team-ready'
-        }, call.room);
     }
 
     async function answerTransferOffer(call, offerPayload) {
         if (!transferPeerConnection) {
             transferPeerConnection = createTransferPeerConnection(call);
         }
+        if (transferPeerConnection.signalingState !== 'stable') {
+            console.warn('Ignoring duplicate transfer offer while peer is', transferPeerConnection.signalingState);
+            return;
+        }
         const remoteDescription = typeof offerPayload.sdp === 'string'
             ? { type: 'offer', sdp: offerPayload.sdp }
             : offerPayload.sdp;
         await transferPeerConnection.setRemoteDescription(remoteDescription);
+        await flushPendingTransferIceCandidates();
         await prepareTransferLocalAudio(call);
         addLocalAudioTracksToPeerConnection();
         const answer = await transferPeerConnection.createAnswer();
@@ -1597,6 +1845,8 @@ $pageTitle = 'Emergency Call Center';
     }
 
     function disconnectTransferCall() {
+        clearTransferOfferRequestTimer();
+        pendingTransferIceCandidates = [];
         if (transferSocket && typeof transferSocket.disconnect === 'function') {
             transferSocket.disconnect();
         }
@@ -1726,9 +1976,20 @@ $pageTitle = 'Emergency Call Center';
     }
 
     function startTransferInboxSocket() {
-        if (transferInboxSocket || typeof window.io !== 'function') {
-            if (typeof window.io !== 'function') {
-                setTransferQueueStatus('Live socket unavailable. Falling back to transfer feed polling.', 'active');
+        if (transferInboxSocket) {
+            return;
+        }
+        if (typeof window.io !== 'function') {
+            setTransferQueueStatus('Live socket client is loading. Backup feed polling is available.', 'active');
+            if (typeof window.__loadSocketIoFallback === 'function') {
+                window.__loadSocketIoFallback();
+            }
+            if (transferInboxSocketRetryCount < 8) {
+                if (transferInboxSocketRetryTimer) window.clearTimeout(transferInboxSocketRetryTimer);
+                transferInboxSocketRetryTimer = window.setTimeout(() => {
+                    transferInboxSocketRetryCount += 1;
+                    startTransferInboxSocket();
+                }, 600);
             }
             return;
         }
@@ -1739,6 +2000,7 @@ $pageTitle = 'Emergency Call Center';
                 query: { role: 'ers-dispatcher', inbox: TRANSFER_INBOX_ROOM }
             });
             transferInboxSocket.on('connect', () => {
+                transferInboxSocketRetryCount = 0;
                 transferInboxSocket.emit('join', TRANSFER_INBOX_ROOM);
                 setTransferQueueStatus('Live transfer socket connected. Waiting for transferred calls and reports...', 'active');
             });
@@ -1879,7 +2141,7 @@ $pageTitle = 'Emergency Call Center';
             }
         } catch (error) {
             console.warn('Incoming transfer polling failed:', error);
-            setTransferQueueStatus('Transfer feed is not reachable. Check api/incoming_transfers.php.', 'error');
+            setTransferQueueStatus('Transfer feed is not reachable. Check ../api/incoming_transfers.php.', 'error');
         } finally {
             incomingTransferPollInFlight = false;
         }

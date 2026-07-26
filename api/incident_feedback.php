@@ -23,6 +23,23 @@ function feedback_column_exists(PDO $pdo, string $table, string $column): bool
     }
 }
 
+function feedback_table_exists(PDO $pdo, string $table): bool
+{
+    try {
+        $stmt = $pdo->prepare(
+            "SELECT 1
+             FROM INFORMATION_SCHEMA.TABLES
+             WHERE TABLE_SCHEMA = DATABASE()
+               AND TABLE_NAME = ?
+             LIMIT 1"
+        );
+        $stmt->execute([$table]);
+        return (bool)$stmt->fetchColumn();
+    } catch (Throwable $e) {
+        return false;
+    }
+}
+
 function ensure_feedback_table(PDO $pdo): void
 {
     try {
@@ -220,6 +237,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET') {
     }
 
     try {
+        $notes = [];
         if ($hasRatingColumn) {
             $stmt = $pdo->prepare("SELECT author_name, rating, note, created_at FROM incident_notes WHERE incident_id = ? AND note NOT LIKE 'Resolution proof uploaded:%' ORDER BY created_at DESC");
             $stmt->execute([$incidentId]);
@@ -229,6 +247,36 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET') {
         }
 
         $notes = $stmt->fetchAll();
+
+        $hasIncidentSurveys = feedback_table_exists($pdo, 'incident_surveys')
+            && feedback_column_exists($pdo, 'incident_surveys', 'incident_id')
+            && feedback_column_exists($pdo, 'incident_surveys', 'response_rating');
+        if ($hasIncidentSurveys) {
+            $surveyStmt = $pdo->prepare(
+                "SELECT
+                    COALESCE(NULLIF(TRIM(source_system), ''), 'Group 6 Feedback System') AS author_name,
+                    response_rating AS rating,
+                    CONCAT_WS(' | ',
+                        CONCAT('Survey ID: ', survey_id),
+                        IF(citizen_satisfaction IS NOT NULL AND citizen_satisfaction <> '', CONCAT('Satisfaction: ', citizen_satisfaction), NULL),
+                        IF(score IS NOT NULL, CONCAT('Score: ', score), NULL),
+                        IF(response_rating IS NOT NULL, CONCAT('Response rating: ', response_rating, '/5'), NULL)
+                    ) AS note,
+                    received_at AS created_at
+                 FROM incident_surveys
+                 WHERE incident_id = ?"
+            );
+            $surveyStmt->execute([$incidentId]);
+            $surveyNotes = $surveyStmt->fetchAll();
+            if ($surveyNotes) {
+                $notes = array_merge($notes, $surveyNotes);
+            }
+        }
+
+        usort($notes, static function (array $a, array $b): int {
+            return strcmp((string)($b['created_at'] ?? ''), (string)($a['created_at'] ?? ''));
+        });
+
         $ratingValues = [];
         foreach ($notes as &$noteRow) {
             $ratingValue = null;

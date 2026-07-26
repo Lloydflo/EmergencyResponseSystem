@@ -379,7 +379,7 @@ $pageTitle = 'System Settings';
     <div id="settingsToast" class="toast" role="status" aria-live="polite"></div>
 
     <script>
-        const STORAGE_KEY = 'ers_basic_system_settings_v1';
+        const SETTINGS_API = 'api/system_settings.php';
         const form = document.getElementById('settingsForm');
         const resetBtn = document.getElementById('resetBtn');
         const saveState = document.getElementById('saveState');
@@ -446,22 +446,23 @@ $pageTitle = 'System Settings';
             document.documentElement.setAttribute('data-theme', theme === 'system' ? 'light' : theme);
         }
 
-        function loadSettings() {
-            const raw = localStorage.getItem(STORAGE_KEY);
+        async function loadSettings() {
             const currentTheme = localStorage.getItem('ers-theme') || 'system';
             themeMode.value = currentTheme;
 
-            if (!raw) {
-                applyThemeMode(themeMode.value);
-                updateSummary();
-                setSavedState(true);
-                return;
-            }
-
             try {
-                applyPayload(JSON.parse(raw));
+                const response = await fetch(SETTINGS_API, {
+                    cache: 'no-store',
+                    headers: { 'Accept': 'application/json' }
+                });
+                const data = await response.json();
+                if (!response.ok || !data.ok || !data.settings) {
+                    throw new Error(data.error || 'Unable to load settings.');
+                }
+                applyPayload(data.settings);
             } catch (error) {
-                console.warn('Failed to parse saved system settings.', error);
+                console.warn('Failed to load system settings.', error);
+                showToast('Using default settings. Server settings unavailable.');
             }
 
             if (!themeMode.value) {
@@ -486,21 +487,51 @@ $pageTitle = 'System Settings';
 
         form.addEventListener('submit', (event) => {
             event.preventDefault();
-            localStorage.setItem(STORAGE_KEY, JSON.stringify(getPayload()));
-            applyThemeMode(themeMode.value);
-            setSavedState(true);
-            updateSummary();
-            showToast('Basic system settings saved locally.');
+            const submitBtn = form.querySelector('button[type="submit"]');
+            const originalText = submitBtn ? submitBtn.innerHTML : '';
+            if (submitBtn) {
+                submitBtn.disabled = true;
+                submitBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Saving...';
+            }
+            fetch(SETTINGS_API, {
+                method: 'POST',
+                headers: {
+                    'Accept': 'application/json',
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify(getPayload())
+            })
+                .then((response) => response.json().then((data) => ({ response, data })))
+                .then(({ response, data }) => {
+                    if (!response.ok || !data.ok) {
+                        throw new Error(data.error || 'Unable to save settings.');
+                    }
+                    if (data.settings) {
+                        applyPayload(data.settings);
+                    }
+                    applyThemeMode(themeMode.value);
+                    setSavedState(true);
+                    updateSummary();
+                    showToast('System settings saved to server.');
+                })
+                .catch((error) => {
+                    showToast(error.message || 'Unable to save settings.');
+                })
+                .finally(() => {
+                    if (submitBtn) {
+                        submitBtn.disabled = false;
+                        submitBtn.innerHTML = originalText || '<i class="fas fa-save"></i> Save Settings';
+                    }
+                });
         });
 
         resetBtn.addEventListener('click', () => {
             form.reset();
             themeMode.value = 'system';
-            localStorage.removeItem(STORAGE_KEY);
             applyThemeMode('system');
             setSavedState(false);
             updateSummary();
-            showToast('Default settings restored.');
+            showToast('Default settings restored. Click Save Settings to apply.');
         });
 
         loadSettings();

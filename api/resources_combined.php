@@ -437,10 +437,12 @@ try {
         ];
     }
 
-    $sqlStaff = 'SELECT s.id, s.name, s.role, s.status, s.assigned_resource_id, r.name AS assigned_resource_name, r.location AS assigned_resource_location
+    $staffPhoneSelect = table_column_exists($pdo, 'staff', 'phone') ? 's.phone' : "'' AS phone";
+    $staffEmailSelect = table_column_exists($pdo, 'staff', 'email') ? 's.email' : "'' AS email";
+    $sqlStaff = "SELECT s.id, s.name, s.role, {$staffPhoneSelect}, {$staffEmailSelect}, s.status, s.assigned_resource_id, r.name AS assigned_resource_name, r.location AS assigned_resource_location
                  FROM staff s
                  LEFT JOIN resources r ON r.id = s.assigned_resource_id
-                 ORDER BY s.name';
+                 ORDER BY s.name";
     foreach ($pdo->query($sqlStaff)->fetchAll(PDO::FETCH_ASSOC) as $row) {
         $details = 'Not assigned';
         if (!empty($row['assigned_resource_id'])) {
@@ -465,6 +467,8 @@ try {
             'quantity' => 1,
             'driverName' => '',
             'plateNumber' => '',
+            'phone' => (string)($row['phone'] ?? ''),
+            'email' => (string)($row['email'] ?? ''),
             'positionTitle' => '',
             'role' => (string)($row['role'] ?? ''),
             'updatedAt' => '',
@@ -491,6 +495,8 @@ try {
             'quantity' => 1,
             'driverName' => '',
             'plateNumber' => '',
+            'phone' => '',
+            'email' => '',
             'positionTitle' => '',
             'role' => 'Medical Equipment',
             'updatedAt' => '',

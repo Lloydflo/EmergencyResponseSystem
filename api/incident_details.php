@@ -92,6 +92,9 @@ try {
             $incidentId = (int)$incident['id'];
             $hasIncidentNotes = ers_table_exists($pdo, 'incident_notes');
             $hasRatingColumn = $hasIncidentNotes && ers_column_exists($pdo, 'incident_notes', 'rating');
+            $hasIncidentSurveys = ers_table_exists($pdo, 'incident_surveys')
+                && ers_column_exists($pdo, 'incident_surveys', 'incident_id')
+                && ers_column_exists($pdo, 'incident_surveys', 'response_rating');
 
             $dispatchSelect = 'NULL AS vehicle_name, NULL AS driver_name, NULL AS plate_number';
             $dispatchJoin = '';
@@ -186,34 +189,54 @@ try {
                 }
             }
 
+            $noteCount = 0;
+            $ratingCount = 0;
+            $ratingSum = 0.0;
             if ($hasIncidentNotes) {
-                if ($hasRatingColumn) {
-                    $feedbackStmt = $pdo->prepare(
-                        "SELECT COUNT(*) AS feedback_count,
-                                COUNT(rating) AS rating_count,
-                                ROUND(AVG(rating), 1) AS avg_rating
-                         FROM incident_notes
-                         WHERE incident_id = ?
-                           AND note NOT LIKE 'Resolution proof uploaded:%'"
-                    );
-                } else {
-                    $feedbackStmt = $pdo->prepare(
-                        "SELECT COUNT(*) AS feedback_count,
-                                0 AS rating_count,
-                                NULL AS avg_rating
-                         FROM incident_notes
-                         WHERE incident_id = ?
-                           AND note NOT LIKE 'Resolution proof uploaded:%'"
-                    );
-                }
+                $noteSql = $hasRatingColumn
+                    ? "SELECT COUNT(*) AS feedback_count,
+                              COUNT(rating) AS rating_count,
+                              COALESCE(SUM(rating), 0) AS rating_sum
+                       FROM incident_notes
+                       WHERE incident_id = ?
+                         AND note NOT LIKE 'Resolution proof uploaded:%'"
+                    : "SELECT COUNT(*) AS feedback_count,
+                              0 AS rating_count,
+                              0 AS rating_sum
+                       FROM incident_notes
+                       WHERE incident_id = ?
+                         AND note NOT LIKE 'Resolution proof uploaded:%'";
+                $feedbackStmt = $pdo->prepare($noteSql);
                 $feedbackStmt->execute([$incidentId]);
                 $feedback = $feedbackStmt->fetch(PDO::FETCH_ASSOC) ?: null;
                 if ($feedback) {
-                    $incident['feedback_count'] = isset($feedback['feedback_count']) ? (int)$feedback['feedback_count'] : 0;
-                    $incident['rating_count'] = isset($feedback['rating_count']) ? (int)$feedback['rating_count'] : 0;
-                    $incident['avg_rating'] = isset($feedback['avg_rating']) && $feedback['avg_rating'] !== null ? (float)$feedback['avg_rating'] : null;
+                    $noteCount = isset($feedback['feedback_count']) ? (int)$feedback['feedback_count'] : 0;
+                    $ratingCount += isset($feedback['rating_count']) ? (int)$feedback['rating_count'] : 0;
+                    $ratingSum += isset($feedback['rating_sum']) ? (float)$feedback['rating_sum'] : 0.0;
                 }
             }
+
+            $surveyCount = 0;
+            if ($hasIncidentSurveys) {
+                $surveyStmt = $pdo->prepare(
+                    "SELECT COUNT(*) AS feedback_count,
+                            COUNT(response_rating) AS rating_count,
+                            COALESCE(SUM(response_rating), 0) AS rating_sum
+                     FROM incident_surveys
+                     WHERE incident_id = ?"
+                );
+                $surveyStmt->execute([$incidentId]);
+                $survey = $surveyStmt->fetch(PDO::FETCH_ASSOC) ?: null;
+                if ($survey) {
+                    $surveyCount = isset($survey['feedback_count']) ? (int)$survey['feedback_count'] : 0;
+                    $ratingCount += isset($survey['rating_count']) ? (int)$survey['rating_count'] : 0;
+                    $ratingSum += isset($survey['rating_sum']) ? (float)$survey['rating_sum'] : 0.0;
+                }
+            }
+
+            $incident['feedback_count'] = $noteCount + $surveyCount;
+            $incident['rating_count'] = $ratingCount;
+            $incident['avg_rating'] = $ratingCount > 0 ? round($ratingSum / $ratingCount, 1) : null;
 
             $out['incident'] = $incident;
             $out['ok'] = true;
@@ -268,14 +291,71 @@ try {
                                 ORDER BY usr.id DESC
                                 LIMIT 1)";
     }
-    $unitSelect = 'u.*, NULL AS vehicle_name, ' . $responderDriverExpr . ' AS driver_name, NULL AS plate_number';
+
+    $hasUnitLocations = ers_table_exists($pdo, 'unit_locations');
+    $hasLocationLatitude = $hasUnitLocations && ers_column_exists($pdo, 'unit_locations', 'latitude');
+    $hasLocationLongitude = $hasUnitLocations && ers_column_exists($pdo, 'unit_locations', 'longitude');
+    $hasLocationRecordedAt = $hasUnitLocations && ers_column_exists($pdo, 'unit_locations', 'recorded_at');
+    $hasLocationId = $hasUnitLocations && ers_column_exists($pdo, 'unit_locations', 'id');
+    $hasLocationAccuracy = $hasUnitLocations && ers_column_exists($pdo, 'unit_locations', 'accuracy_m');
+    $hasLocationSource = $hasUnitLocations && ers_column_exists($pdo, 'unit_locations', 'source');
+    $hasUnitLatitude = ers_column_exists($pdo, 'units', 'latitude');
+    $hasUnitLongitude = ers_column_exists($pdo, 'units', 'longitude');
+    $latestLocationOrderExpr = $hasLocationId ? 'ul.recorded_at DESC, ul.id DESC' : 'ul.recorded_at DESC';
+    $ignoredFallbackGpsWhere = ($hasLocationLatitude && $hasLocationLongitude) ? " AND NOT (
+        (ABS(ul.latitude - 14.7338) < 0.000001 AND ABS(ul.longitude - 121.0368) < 0.000001)
+        OR (ABS(ul.latitude - 14.7295) < 0.000001 AND ABS(ul.longitude - 121.0342) < 0.000001)
+        OR (ABS(ul.latitude - 14.7351) < 0.000001 AND ABS(ul.longitude - 121.0380) < 0.000001)
+        OR (ABS(ul.latitude - 14.7320) < 0.000001 AND ABS(ul.longitude - 121.0351) < 0.000001)
+    )" : '';
+    $storedUnitLatRawExpr = $hasUnitLatitude ? 'u.latitude' : 'NULL';
+    $storedUnitLngRawExpr = $hasUnitLongitude ? 'u.longitude' : 'NULL';
+    $storedFallbackCoordinateSql = ($hasUnitLatitude && $hasUnitLongitude) ? "(
+        (ABS(u.latitude - 14.7338) < 0.000001 AND ABS(u.longitude - 121.0368) < 0.000001)
+        OR (ABS(u.latitude - 14.7295) < 0.000001 AND ABS(u.longitude - 121.0342) < 0.000001)
+        OR (ABS(u.latitude - 14.7351) < 0.000001 AND ABS(u.longitude - 121.0380) < 0.000001)
+        OR (ABS(u.latitude - 14.7320) < 0.000001 AND ABS(u.longitude - 121.0351) < 0.000001)
+    )" : '0 = 1';
+    $storedUnitLatExpr = ($hasUnitLatitude && $hasUnitLongitude) ? "CASE WHEN {$storedFallbackCoordinateSql} THEN NULL ELSE u.latitude END" : $storedUnitLatRawExpr;
+    $storedUnitLngExpr = ($hasUnitLatitude && $hasUnitLongitude) ? "CASE WHEN {$storedFallbackCoordinateSql} THEN NULL ELSE u.longitude END" : $storedUnitLngRawExpr;
+    $latestLocationLatExpr = 'NULL';
+    $latestLocationLngExpr = 'NULL';
+    $latestLocationRecordedExpr = 'NULL';
+    $latestLocationAccuracyExpr = 'NULL';
+    $latestLocationSourceExpr = 'NULL';
+    if ($hasLocationLatitude && $hasLocationRecordedAt) {
+        $latestLocationLatExpr = "(SELECT ul.latitude FROM unit_locations ul WHERE ul.unit_id = u.id {$ignoredFallbackGpsWhere} ORDER BY {$latestLocationOrderExpr} LIMIT 1)";
+    }
+    if ($hasLocationLongitude && $hasLocationRecordedAt) {
+        $latestLocationLngExpr = "(SELECT ul.longitude FROM unit_locations ul WHERE ul.unit_id = u.id {$ignoredFallbackGpsWhere} ORDER BY {$latestLocationOrderExpr} LIMIT 1)";
+    }
+    if ($hasLocationRecordedAt) {
+        $latestLocationRecordedExpr = "(SELECT ul.recorded_at FROM unit_locations ul WHERE ul.unit_id = u.id {$ignoredFallbackGpsWhere} ORDER BY {$latestLocationOrderExpr} LIMIT 1)";
+    }
+    if ($hasLocationAccuracy && $hasLocationRecordedAt) {
+        $latestLocationAccuracyExpr = "(SELECT ul.accuracy_m FROM unit_locations ul WHERE ul.unit_id = u.id {$ignoredFallbackGpsWhere} ORDER BY {$latestLocationOrderExpr} LIMIT 1)";
+    }
+    if ($hasLocationSource && $hasLocationRecordedAt) {
+        $latestLocationSourceExpr = "(SELECT ul.source FROM unit_locations ul WHERE ul.unit_id = u.id {$ignoredFallbackGpsWhere} ORDER BY {$latestLocationOrderExpr} LIMIT 1)";
+    }
+    $unitLocationSelect = "{$latestLocationLatExpr} AS latitude,
+        {$latestLocationLngExpr} AS longitude,
+        {$latestLocationLatExpr} AS latest_latitude,
+        {$latestLocationLngExpr} AS latest_longitude,
+        {$storedUnitLatExpr} AS stored_latitude,
+        {$storedUnitLngExpr} AS stored_longitude,
+        {$latestLocationRecordedExpr} AS last_recorded_at,
+        {$latestLocationAccuracyExpr} AS accuracy_m,
+        {$latestLocationSourceExpr} AS location_source";
+
+    $unitSelect = 'u.*, ' . $unitLocationSelect . ', NULL AS vehicle_name, ' . $responderDriverExpr . ' AS driver_name, NULL AS plate_number';
     $unitFrom = 'units u';
     $unitAlias = 'u.';
     $unitJoin = '';
     $driverNameExpr = $responderDriverExpr;
     if ($resourceRecordsTable !== null) {
         $driverNameExpr = 'COALESCE(NULLIF(TRIM(rr.driver_name), \'\'), ' . $responderDriverExpr . ')';
-        $unitSelect = 'u.*, rr.name AS vehicle_name, ' . $driverNameExpr . ' AS driver_name, rr.plate_number';
+        $unitSelect = 'u.*, ' . $unitLocationSelect . ', rr.name AS vehicle_name, ' . $driverNameExpr . ' AS driver_name, rr.plate_number';
         $unitFrom = 'units u';
         $unitAlias = 'u.';
         $unitJoin = " INNER JOIN `" . $resourceRecordsTable . "` rr
@@ -309,6 +389,16 @@ try {
         )->fetchAll(PDO::FETCH_ASSOC);
     }
 
+    foreach ($units as &$unit) {
+        if (($unit['latest_latitude'] ?? null) !== null && ($unit['latest_latitude'] ?? '') !== '') {
+            $unit['latitude'] = $unit['latest_latitude'];
+        }
+        if (($unit['latest_longitude'] ?? null) !== null && ($unit['latest_longitude'] ?? '') !== '') {
+            $unit['longitude'] = $unit['latest_longitude'];
+        }
+    }
+    unset($unit);
+
     $incidentLat = isset($out['incident']['latitude']) ? (float)$out['incident']['latitude'] : null;
     $incidentLng = isset($out['incident']['longitude']) ? (float)$out['incident']['longitude'] : null;
     $hasCoords = ($incidentLat !== null && $incidentLng !== null);
@@ -320,9 +410,13 @@ try {
         };
 
         foreach ($units as &$unit) {
-            $unitLat = isset($unit['latitude']) ? (float)$unit['latitude'] : null;
-            $unitLng = isset($unit['longitude']) ? (float)$unit['longitude'] : null;
+            $unitLatRaw = $unit['latest_latitude'] ?? $unit['latitude'] ?? null;
+            $unitLngRaw = $unit['latest_longitude'] ?? $unit['longitude'] ?? null;
+            $unitLat = ($unitLatRaw !== null && $unitLatRaw !== '') ? (float)$unitLatRaw : null;
+            $unitLng = ($unitLngRaw !== null && $unitLngRaw !== '') ? (float)$unitLngRaw : null;
             if ($unitLat !== null && $unitLng !== null) {
+                $unit['latitude'] = $unitLat;
+                $unit['longitude'] = $unitLng;
                 $dLat = $toRad($incidentLat - $unitLat);
                 $dLon = $toRad($incidentLng - $unitLng);
                 $a = sin($dLat / 2) * sin($dLat / 2)
