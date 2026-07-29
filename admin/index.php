@@ -939,13 +939,7 @@ try {
             window.open(url, '_blank');
         }
 
-        // Initial load + auto-refresh every 15s
-        document.addEventListener('DOMContentLoaded', () => {
-            loadActivityFeed();
-            loadAlertsPanel();
-            setInterval(loadActivityFeed, 15000);
-            setInterval(loadAlertsPanel, 15000);
-        });
+        // Initial dashboard loading is handled by the consolidated DOMContentLoaded block below.
         // Emergency Response System Dashboard Functionality
         // Dashboard action functions
         function refreshDashboard() {

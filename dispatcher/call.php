@@ -509,7 +509,7 @@ $turnCredential = (string) ers_env('WEBRTC_TURN_CREDENTIAL', '');
     let transferInboxSocketRetryTimer = null;
     let transferInboxSocketRetryCount = 0;
     let transferCallMessages = [];
-    const INCOMING_TRANSFER_POLL_MS = 1500;
+    const INCOMING_TRANSFER_POLL_MS = 5000;
     const PRIORITY_ORDER = { critical: 0, high: 1, urgent: 2, moderate: 3, medium: 3, low: 4 };
     const PRIORITY_RULES = {
         incident_type: {
@@ -2035,20 +2035,21 @@ $turnCredential = (string) ers_env('WEBRTC_TURN_CREDENTIAL', '');
 
     function startIncomingTransferPolling() {
         setTransferQueueStatus('Listening for transferred calls and reports...', 'active');
-        pollIncomingTransfers(true);
+        pollIncomingTransfers(true, true);
         if (incomingTransferPollTimer) {
             window.clearInterval(incomingTransferPollTimer);
         }
-        incomingTransferPollTimer = window.setInterval(pollIncomingTransfers, INCOMING_TRANSFER_POLL_MS);
+        incomingTransferPollTimer = window.setInterval(() => pollIncomingTransfers(false, false), INCOMING_TRANSFER_POLL_MS);
         document.addEventListener('visibilitychange', () => {
             if (!document.hidden) {
-                pollIncomingTransfers();
+                pollIncomingTransfers(false, true);
             }
         });
-        window.addEventListener('focus', () => pollIncomingTransfers());
+        window.addEventListener('focus', () => pollIncomingTransfers(false, true));
     }
 
-    async function pollIncomingTransfers(loadLatest = false) {
+    async function pollIncomingTransfers(loadLatest = false, force = false) {
+        if (!force && !loadLatest && (document.hidden || (transferInboxSocket && transferInboxSocket.connected))) return;
         if (incomingTransferPollInFlight) return;
         incomingTransferPollInFlight = true;
         try {

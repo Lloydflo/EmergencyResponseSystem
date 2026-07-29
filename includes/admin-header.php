@@ -1355,7 +1355,14 @@ document.addEventListener('DOMContentLoaded', function() {
     window.closeModal = closeModal;
     window.closeAllModals = closeAllModals;
 
+    const pollHeaderSummary = () => {
+        if (document.hidden) return;
+        loadHeaderSummary();
+    };
     loadHeaderSummary();
-    state.poller = window.setInterval(loadHeaderSummary, 5000);
+    state.poller = window.setInterval(pollHeaderSummary, 15000);
+    document.addEventListener('visibilitychange', () => {
+        if (!document.hidden) loadHeaderSummary();
+    });
 });
 </script>
