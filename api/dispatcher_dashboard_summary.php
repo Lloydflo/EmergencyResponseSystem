@@ -50,9 +50,6 @@ if (!$pdo) {
 
 try {
     $vehicleResourceTable = ers_vehicle_resource_units_table($pdo);
-    if ($vehicleResourceTable !== null) {
-        ers_sync_all_vehicle_resource_units($pdo, $vehicleResourceTable);
-    }
 
     $pendingIncidents = (int)($pdo->query("SELECT COUNT(*) AS c FROM incidents WHERE status = 'pending'")->fetch()['c'] ?? 0);
     $activeDispatches = (int)($pdo->query("SELECT COUNT(*) AS c FROM incidents WHERE status IN ('dispatched', 'active', 'in_progress')")->fetch()['c'] ?? 0);

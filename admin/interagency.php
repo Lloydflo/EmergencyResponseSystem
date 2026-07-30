@@ -5460,19 +5460,31 @@ $pageTitle = 'Inter-Agency Conversations';
                     if (state.activeId) await selectThread(state.activeId);
                 } catch (_) {}
 
+                let interagencyPollInFlight = false;
                 state.poller = setInterval(async () => {
+                    if (document.hidden || interagencyPollInFlight) return;
+                    interagencyPollInFlight = true;
                     try {
                         await loadActiveIncidentBanner();
                         await loadThreads();
                         await loadMessages(false, false);
                         await loadTypingIndicator();
-                    } catch (_) {}
+                    } catch (_) {
+                    } finally {
+                        interagencyPollInFlight = false;
+                    }
                 }, 5000);
 
+                let presencePollInFlight = false;
                 state.presencePoller = setInterval(async () => {
+                    if (document.hidden || presencePollInFlight) return;
+                    presencePollInFlight = true;
                     try {
                         await loadUserStatuses();
-                    } catch (_) {}
+                    } catch (_) {
+                    } finally {
+                        presencePollInFlight = false;
+                    }
                 }, 2000);
             });
         })();

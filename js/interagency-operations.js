@@ -87,8 +87,19 @@
         openSection(String(button.getAttribute('data-ops-open') || ''));
     });
 
-    updateOperations();
+    let updateOperationsInFlight = false;
+    const guardedUpdateOperations = async () => {
+        if (updateOperationsInFlight) return;
+        updateOperationsInFlight = true;
+        try {
+            await updateOperations();
+        } finally {
+            updateOperationsInFlight = false;
+        }
+    };
+
+    guardedUpdateOperations();
     window.setInterval(() => {
-        if (document.visibilityState === 'visible') updateOperations();
+        if (document.visibilityState === 'visible') guardedUpdateOperations();
     }, 15000);
 })();

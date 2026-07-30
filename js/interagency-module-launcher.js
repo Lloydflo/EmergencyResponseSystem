@@ -155,8 +155,19 @@
         }
     });
 
-    refreshCounts();
+    let refreshCountsInFlight = false;
+    const guardedRefreshCounts = async () => {
+        if (refreshCountsInFlight) return;
+        refreshCountsInFlight = true;
+        try {
+            await refreshCounts();
+        } finally {
+            refreshCountsInFlight = false;
+        }
+    };
+
+    guardedRefreshCounts();
     window.setInterval(() => {
-        if (document.visibilityState === 'visible') refreshCounts();
+        if (document.visibilityState === 'visible') guardedRefreshCounts();
     }, 12000);
 })();
