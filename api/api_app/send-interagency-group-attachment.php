@@ -27,7 +27,11 @@ try {
     if (!op_is_group_member($pdo, $groupId, $senderId)) {
         op_error('You do not have access to this department channel.', 403);
     }
-    touch_user_presence($pdo, $senderId);
+    try {
+        touch_user_presence($pdo, $senderId);
+    } catch (Throwable $presenceError) {
+        error_log('send-interagency-group-attachment presence update skipped: ' . $presenceError->getMessage());
+    }
 
     $groupStatement = $pdo->prepare('SELECT name FROM interagency_group_threads WHERE id = ? LIMIT 1');
     $groupStatement->execute([$groupId]);

@@ -1609,15 +1609,18 @@ $turnCredential = (string) ers_env('WEBRTC_TURN_CREDENTIAL', '');
             }, call.room);
         };
         pc.ontrack = (event) => {
-            const stream = event.streams && event.streams[0] ? event.streams[0] : null;
+            if (event.track && event.track.kind === 'audio') {
+                event.track.enabled = true;
+            }
+            const stream = event.streams && event.streams[0]
+                ? event.streams[0]
+                : (event.track ? new MediaStream([event.track]) : null);
             if (!stream) return;
             transferRemoteAudio = transferRemoteAudio || createTransferRemoteAudio();
             transferRemoteAudio.srcObject = stream;
             transferRemoteAudio.muted = false;
             transferRemoteAudio.volume = 1;
-            transferRemoteAudio.play()
-                .then(() => setVoiceState('Caller audio connected. Your microphone is sending.'))
-                .catch(() => setVoiceState('Caller audio is ready. Tap the page if the browser blocks playback.'));
+            playTransferRemoteAudio();
         };
         pc.onconnectionstatechange = () => {
             if (!transferPeerConnection) return;
@@ -1686,10 +1689,24 @@ $turnCredential = (string) ers_env('WEBRTC_TURN_CREDENTIAL', '');
         const audio = document.createElement('audio');
         audio.autoplay = true;
         audio.playsInline = true;
+        audio.setAttribute('playsinline', '');
         audio.hidden = true;
         document.body.appendChild(audio);
         return audio;
     }
+
+    function playTransferRemoteAudio() {
+        if (!transferRemoteAudio || !transferRemoteAudio.srcObject) return;
+        transferRemoteAudio.muted = false;
+        transferRemoteAudio.volume = 1;
+        transferRemoteAudio.play()
+            .then(() => setVoiceState('Caller audio connected. Your microphone is sending.'))
+            .catch(() => setVoiceState('Caller audio is ready. Tap anywhere once to enable sound.'));
+    }
+
+    // Browsers can block remote audio if the WebRTC track arrives after the
+    // Answer button's user-activation window. Any later tap safely retries it.
+    document.addEventListener('pointerdown', playTransferRemoteAudio, { passive: true });
 
     function setTransferCallChatStatus(text) {
         const el = document.getElementById('transferCallChatStatus');

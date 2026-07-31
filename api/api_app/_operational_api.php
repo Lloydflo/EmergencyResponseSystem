@@ -1,20 +1,18 @@
 <?php
 declare(strict_types=1);
 
-/**
- * Shared helper for the additive responder-app endpoints.
- *
- * This file intentionally reuses the live api/api_app/connect.php and its db()
- * PDO factory. Do not replace the existing connect.php when deploying this pack.
- */
+/** Shared request, validation, database, and response helpers. */
 require_once __DIR__ . '/connect.php';
 
 date_default_timezone_set('Asia/Manila');
 header('Content-Type: application/json; charset=utf-8');
 header('Cache-Control: no-store, no-cache, must-revalidate, max-age=0');
+header('Pragma: no-cache');
+header('X-Content-Type-Options: nosniff');
+header('Referrer-Policy: no-referrer');
 
 /** @param array<string,mixed> $payload */
-function op_json(array $payload, int $status = 200): void
+function op_json(array $payload, int $status = 200): never
 {
     http_response_code($status);
     echo json_encode(
@@ -27,23 +25,29 @@ function op_json(array $payload, int $status = 200): void
 }
 
 /** @param array<string,mixed> $payload */
-function op_success(array $payload = [], int $status = 200): void
+function op_success(array $payload = [], int $status = 200): never
 {
     op_json(['success' => true] + $payload, $status);
 }
 
 /** @param array<string,mixed> $payload */
-function op_error(string $message, int $status = 400, array $payload = []): void
+function op_error(string $message, int $status = 400, array $payload = []): never
 {
     op_json(['success' => false, 'message' => $message] + $payload, $status);
 }
 
-function op_require_method(string $method): void
+/** @param string|list<string> $methods */
+function op_require_method(string|array $methods): void
 {
-    $expected = strtoupper($method);
+    $allowed = is_array($methods) ? $methods : [$methods];
+    $allowed = array_values(array_unique(array_map(
+        static fn(string $method): string => strtoupper(trim($method)),
+        $allowed
+    )));
     $actual = strtoupper((string)($_SERVER['REQUEST_METHOD'] ?? 'GET'));
-    if ($actual !== $expected) {
-        header('Allow: ' . $expected);
+
+    if (!in_array($actual, $allowed, true)) {
+        header('Allow: ' . implode(', ', $allowed));
         op_error('Method not allowed.', 405);
     }
 }
@@ -56,19 +60,36 @@ function op_request_data(): array
         return $data;
     }
 
-    $data = is_array($_POST) ? $_POST : [];
-    $contentType = strtolower((string)($_SERVER['CONTENT_TYPE'] ?? ''));
-    if (str_contains($contentType, 'application/json')) {
-        $raw = file_get_contents('php://input');
-        if (is_string($raw) && trim($raw) !== '') {
-            $decoded = json_decode($raw, true);
-            if (!is_array($decoded)) {
-                op_error('Invalid JSON request body.', 400);
-            }
-            $data = $decoded + $data;
-        }
+    $data = is_array($_POST ?? null) ? $_POST : [];
+    $raw = file_get_contents('php://input');
+    if (!is_string($raw) || trim($raw) === '') {
+        return $data;
     }
 
+    $trimmed = trim($raw);
+    $contentType = strtolower((string)($_SERVER['CONTENT_TYPE'] ?? ''));
+    $looksJson = str_contains($contentType, 'application/json')
+        || str_starts_with($trimmed, '{')
+        || str_starts_with($trimmed, '[');
+
+    if ($looksJson) {
+        try {
+            $decoded = json_decode($trimmed, true, 64, JSON_THROW_ON_ERROR);
+        } catch (JsonException) {
+            op_error('Invalid JSON request body.', 400);
+        }
+        if (!is_array($decoded)) {
+            op_error('Invalid JSON request body.', 400);
+        }
+        $data = $decoded + $data;
+        return $data;
+    }
+
+    $form = [];
+    parse_str($raw, $form);
+    if (is_array($form)) {
+        $data = $form + $data;
+    }
     return $data;
 }
 
@@ -118,15 +139,35 @@ function op_post_bool(string $name, bool $default = false): bool
     return $value ?? $default;
 }
 
+function op_query_bool(string $name, bool $default = false): bool
+{
+    if (!array_key_exists($name, $_GET)) {
+        return $default;
+    }
+    $value = filter_var($_GET[$name], FILTER_VALIDATE_BOOLEAN, FILTER_NULL_ON_FAILURE);
+    return $value ?? $default;
+}
+
 function op_post_nullable_float(string $name, float $min, float $max): ?float
 {
     $data = op_request_data();
     if (!array_key_exists($name, $data) || trim((string)$data[$name]) === '') {
         return null;
     }
-
     $value = filter_var($data[$name], FILTER_VALIDATE_FLOAT);
-    if ($value === false || $value < $min || $value > $max) {
+    if ($value === false || (float)$value < $min || (float)$value > $max) {
+        op_error($name . ' is outside the valid range.', 422);
+    }
+    return (float)$value;
+}
+
+function op_query_nullable_float(string $name, float $min, float $max): ?float
+{
+    if (!array_key_exists($name, $_GET) || trim((string)$_GET[$name]) === '') {
+        return null;
+    }
+    $value = filter_var($_GET[$name], FILTER_VALIDATE_FLOAT);
+    if ($value === false || (float)$value < $min || (float)$value > $max) {
         op_error($name . ' is outside the valid range.', 422);
     }
     return (float)$value;
@@ -146,6 +187,25 @@ function op_require_text(string $value, string $name): void
     }
 }
 
+/** @param list<string> $allowed */
+function op_require_one_of(string $value, array $allowed, string $name): string
+{
+    $normalized = strtolower(trim($value));
+    if (!in_array($normalized, $allowed, true)) {
+        op_error($name . ' is invalid.', 422);
+    }
+    return $normalized;
+}
+
+function op_require_email(string $email, string $name = 'email'): string
+{
+    $email = strtolower(trim($email));
+    if ($email === '' || filter_var($email, FILTER_VALIDATE_EMAIL) === false || strlen($email) > 254) {
+        op_error($name . ' is invalid.', 422);
+    }
+    return $email;
+}
+
 /** @return array<string,mixed>|null */
 function op_fetch_one(PDOStatement $statement): ?array
 {
@@ -162,25 +222,111 @@ function op_fetch_all(PDOStatement $statement): array
 
 function op_table_exists(PDO $pdo, string $tableName): bool
 {
+    static $cache = [];
+    $key = spl_object_id($pdo) . ':' . strtolower($tableName);
+    if (array_key_exists($key, $cache)) {
+        return $cache[$key];
+    }
     $statement = $pdo->prepare(
         'SELECT 1 FROM INFORMATION_SCHEMA.TABLES '
         . 'WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = ? LIMIT 1'
     );
     $statement->execute([$tableName]);
-    return (bool)$statement->fetchColumn();
+    return $cache[$key] = (bool)$statement->fetchColumn();
+}
+
+function op_column_exists(PDO $pdo, string $tableName, string $columnName): bool
+{
+    static $cache = [];
+    $key = spl_object_id($pdo) . ':' . strtolower($tableName) . ':' . strtolower($columnName);
+    if (array_key_exists($key, $cache)) {
+        return $cache[$key];
+    }
+    $statement = $pdo->prepare(
+        'SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS '
+        . 'WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = ? AND COLUMN_NAME = ? LIMIT 1'
+    );
+    $statement->execute([$tableName, $columnName]);
+    return $cache[$key] = (bool)$statement->fetchColumn();
+}
+
+/** @param list<string> $tableNames */
+function op_require_tables(PDO $pdo, array $tableNames): void
+{
+    $missing = [];
+    foreach ($tableNames as $tableName) {
+        if (!op_table_exists($pdo, $tableName)) {
+            $missing[] = $tableName;
+        }
+    }
+    if ($missing !== []) {
+        error_log('[api_app] missing database tables: ' . implode(', ', $missing));
+        op_error('This feature is not installed on the database yet.', 503);
+    }
+}
+
+/** @param list<string> $columns */
+function op_require_columns(PDO $pdo, string $tableName, array $columns): void
+{
+    $missing = [];
+    foreach ($columns as $column) {
+        if (!op_column_exists($pdo, $tableName, $column)) {
+            $missing[] = $tableName . '.' . $column;
+        }
+    }
+    if ($missing !== []) {
+        error_log('[api_app] missing database columns: ' . implode(', ', $missing));
+        op_error('This feature requires a database update.', 503);
+    }
+}
+
+/** @param list<string> $columns */
+function op_has_columns(PDO $pdo, string $tableName, array $columns): bool
+{
+    if (!op_table_exists($pdo, $tableName)) {
+        return false;
+    }
+    foreach ($columns as $column) {
+        if (!op_column_exists($pdo, $tableName, $column)) {
+            return false;
+        }
+    }
+    return true;
 }
 
 /** @return array<string,mixed>|null */
 function op_active_responder(PDO $pdo, int $userId): ?array
 {
+    if ($userId <= 0 || !op_table_exists($pdo, 'users')) {
+        return null;
+    }
+
+    $wanted = [
+        'id', 'name', 'email', 'role', 'department', 'unit_code', 'unit_type',
+        'vehicle_plate', 'unit_status', 'status', 'profile_image_path', 'username',
+        'is_active', 'last_login',
+    ];
+    $select = [];
+    foreach ($wanted as $column) {
+        $select[] = op_column_exists($pdo, 'users', $column)
+            ? '`' . $column . '`'
+            : 'NULL AS `' . $column . '`';
+    }
+
+    $where = ['id = ?'];
+    if (op_column_exists($pdo, 'users', 'role')) {
+        $where[] = "LOWER(COALESCE(role, '')) = 'responder'";
+    }
+    if (op_column_exists($pdo, 'users', 'status')) {
+        $where[] = "LOWER(COALESCE(status, '')) = 'active'";
+    }
+    if (op_column_exists($pdo, 'users', 'is_active')) {
+        $where[] = 'COALESCE(is_active, 1) = 1';
+    }
+
     $statement = $pdo->prepare(
-        "SELECT id, name, email, role, department, unit_code, unit_type, unit_status
-         FROM users
-         WHERE id = ?
-           AND role = 'responder'
-           AND status = 'active'
-           AND is_active = 1
-         LIMIT 1"
+        'SELECT ' . implode(', ', $select) . ' FROM users WHERE '
+        . implode(' AND ', $where) . ' LIMIT 1'
     );
     $statement->execute([$userId]);
     return op_fetch_one($statement);
@@ -201,14 +347,27 @@ function op_require_active_responder(PDO $pdo, int $userId): array
 function op_require_active_reviewer(PDO $pdo, int $userId): array
 {
     op_require_positive($userId, 'reviewer_id');
+    op_require_tables($pdo, ['users']);
+
+    $select = ['id'];
+    foreach (['name', 'email', 'role', 'department', 'status', 'is_active'] as $column) {
+        $select[] = op_column_exists($pdo, 'users', $column)
+            ? '`' . $column . '`'
+            : 'NULL AS `' . $column . '`';
+    }
+    $where = ['id = ?'];
+    if (op_column_exists($pdo, 'users', 'role')) {
+        $where[] = "LOWER(COALESCE(role, '')) IN ('admin','dispatcher','operator')";
+    }
+    if (op_column_exists($pdo, 'users', 'status')) {
+        $where[] = "LOWER(COALESCE(status, '')) = 'active'";
+    }
+    if (op_column_exists($pdo, 'users', 'is_active')) {
+        $where[] = 'COALESCE(is_active, 1) = 1';
+    }
     $statement = $pdo->prepare(
-        "SELECT id, name, email, role, department
-         FROM users
-         WHERE id = ?
-           AND role IN ('admin', 'dispatcher', 'operator')
-           AND status = 'active'
-           AND is_active = 1
-         LIMIT 1"
+        'SELECT ' . implode(', ', $select) . ' FROM users WHERE '
+        . implode(' AND ', $where) . ' LIMIT 1'
     );
     $statement->execute([$userId]);
     $reviewer = op_fetch_one($statement);
@@ -220,6 +379,9 @@ function op_require_active_reviewer(PDO $pdo, int $userId): array
 
 function op_active_group_exists(PDO $pdo, int $groupId): bool
 {
+    if ($groupId <= 0 || !op_table_exists($pdo, 'interagency_group_threads')) {
+        return false;
+    }
     $statement = $pdo->prepare(
         'SELECT 1 FROM interagency_group_threads WHERE id = ? AND is_active = 1 LIMIT 1'
     );
@@ -229,6 +391,9 @@ function op_active_group_exists(PDO $pdo, int $groupId): bool
 
 function op_is_group_member(PDO $pdo, int $groupId, int $userId): bool
 {
+    if (!op_table_exists($pdo, 'interagency_group_members')) {
+        return false;
+    }
     $statement = $pdo->prepare(
         'SELECT 1 FROM interagency_group_members '
         . 'WHERE group_id = ? AND user_id = ? AND is_active = 1 LIMIT 1'
@@ -239,23 +404,154 @@ function op_is_group_member(PDO $pdo, int $groupId, int $userId): bool
 
 function op_responder_can_report_incident(PDO $pdo, int $incidentId, int $responderId): bool
 {
+    if (!op_table_exists($pdo, 'incidents')) {
+        return false;
+    }
+    $clauses = [];
+    $params = [$incidentId];
+    if (op_column_exists($pdo, 'incidents', 'completed_by_responder_id')) {
+        $clauses[] = 'i.completed_by_responder_id = ?';
+        $params[] = $responderId;
+    }
+    if (
+        op_table_exists($pdo, 'dispatch_operator_records')
+        && op_column_exists($pdo, 'dispatch_operator_records', 'incident_id')
+        && op_column_exists($pdo, 'dispatch_operator_records', 'assigned_to')
+    ) {
+        $clauses[] = 'EXISTS (SELECT 1 FROM dispatch_operator_records d '
+            . 'WHERE d.incident_id = i.id AND d.assigned_to = ?)';
+        $params[] = $responderId;
+    }
+    if (
+        op_table_exists($pdo, 'dispatches')
+        && op_table_exists($pdo, 'units')
+        && op_column_exists($pdo, 'users', 'unit_code')
+    ) {
+        $clauses[] = 'EXISTS (SELECT 1 FROM dispatches dp '
+            . 'INNER JOIN units un ON un.id = dp.unit_id '
+            . 'INNER JOIN users usr ON UPPER(TRIM(usr.unit_code)) = UPPER(TRIM(un.identifier)) '
+            . 'WHERE dp.incident_id = i.id AND usr.id = ?)';
+        $params[] = $responderId;
+    }
+    if ($clauses === []) {
+        return false;
+    }
     $statement = $pdo->prepare(
-        'SELECT 1
-         FROM incidents i
-         WHERE i.id = ?
-           AND (
-               i.completed_by_responder_id = ?
-               OR EXISTS (
-                   SELECT 1
-                   FROM dispatch_operator_records d
-                   WHERE d.incident_id = i.id
-                     AND d.assigned_to = ?
-               )
-           )
-         LIMIT 1'
+        'SELECT 1 FROM incidents i WHERE i.id = ? AND (' . implode(' OR ', $clauses) . ') LIMIT 1'
     );
-    $statement->execute([$incidentId, $responderId, $responderId]);
+    $statement->execute($params);
     return (bool)$statement->fetchColumn();
+}
+
+/** Lightweight presence update: no DDL and no global resource synchronization. */
+function op_touch_presence(PDO $pdo, int $userId): void
+{
+    if ($userId <= 0 || !op_table_exists($pdo, 'user_presence')) {
+        return;
+    }
+    try {
+        $sessionId = null;
+        if (session_status() === PHP_SESSION_ACTIVE && session_id() !== '') {
+            $sessionId = substr(hash('sha256', session_id()), 0, 128);
+        }
+
+        $update = $pdo->prepare(
+            'UPDATE user_presence SET '
+            . 'session_id = COALESCE(?, session_id), is_online = 1, last_seen_at = NOW(), logged_out_at = NULL '
+            . 'WHERE user_id = ? AND (is_online <> 1 OR last_seen_at < NOW() - INTERVAL 20 SECOND)'
+        );
+        $update->execute([$sessionId, $userId]);
+        if ($update->rowCount() === 0) {
+            $insert = $pdo->prepare(
+                'INSERT IGNORE INTO user_presence '
+                . '(user_id, session_id, is_online, last_seen_at, logged_in_at, logged_out_at) '
+                . 'VALUES (?, ?, 1, NOW(), NOW(), NULL)'
+            );
+            $insert->execute([$userId, $sessionId]);
+        }
+    } catch (Throwable $error) {
+        error_log('[api_app] presence touch skipped: ' . $error->getMessage());
+    }
+}
+
+function op_mark_offline(PDO $pdo, int $userId): void
+{
+    if ($userId <= 0 || !op_table_exists($pdo, 'user_presence')) {
+        return;
+    }
+    $statement = $pdo->prepare(
+        'UPDATE user_presence SET is_online = 0, last_seen_at = NOW(), logged_out_at = NOW() WHERE user_id = ?'
+    );
+    $statement->execute([$userId]);
+}
+
+function op_base_url(): string
+{
+    $configured = '';
+    if (function_exists('ers_env')) {
+        $configured = trim((string)ers_env('APP_URL', ers_env('BASE_URL', '')));
+    }
+    if ($configured !== '' && preg_match('~^https?://[A-Za-z0-9.-]+(?::\d{1,5})?(?:/.*)?$~', $configured)) {
+        return rtrim($configured, '/');
+    }
+
+    $host = trim((string)($_SERVER['HTTP_HOST'] ?? ''));
+    if (!preg_match('/^[A-Za-z0-9.-]+(?::\d{1,5})?$/', $host)) {
+        return '';
+    }
+    $https = strtolower((string)($_SERVER['HTTPS'] ?? ''));
+    $scheme = ($https !== '' && $https !== 'off') ? 'https' : 'http';
+    return $scheme . '://' . $host;
+}
+
+function op_client_ip(): string
+{
+    $value = trim((string)($_SERVER['REMOTE_ADDR'] ?? ''));
+    return filter_var($value, FILTER_VALIDATE_IP) !== false ? $value : '';
+}
+
+function op_env(string $name, string $default = ''): string
+{
+    if (function_exists('ers_env')) {
+        return trim((string)ers_env($name, $default));
+    }
+    $value = $_ENV[$name] ?? $_SERVER[$name] ?? getenv($name);
+    return is_string($value) ? trim($value) : $default;
+}
+
+function op_request_header(string $name): string
+{
+    $normalized = strtoupper(str_replace('-', '_', trim($name)));
+    if ($normalized === '') {
+        return '';
+    }
+    $serverName = str_starts_with($normalized, 'HTTP_') ? $normalized : 'HTTP_' . $normalized;
+    return trim((string)($_SERVER[$serverName] ?? ''));
+}
+
+/**
+ * Protects server-to-server endpoints with a secret from the canonical app env.
+ * The secret may be supplied through the named HTTP header or request field.
+ */
+function op_require_service_key(
+    string $environmentName,
+    string $headerName,
+    string $requestField = 'service_key'
+): void {
+    $configured = op_env($environmentName);
+    if ($configured === '') {
+        error_log('[api_app] missing required service-key configuration: ' . $environmentName);
+        op_error('This server-to-server feature is not configured.', 503);
+    }
+
+    $provided = op_request_header($headerName);
+    if ($provided === '' && $requestField !== '') {
+        $data = op_request_data();
+        $provided = trim((string)($data[$requestField] ?? $_GET[$requestField] ?? ''));
+    }
+    if ($provided === '' || !hash_equals($configured, $provided)) {
+        op_error('Service authorization failed.', 403);
+    }
 }
 
 /** @return array<string,mixed> */
@@ -272,8 +568,15 @@ function op_decode_object(?string $json): array
 function op_tip_response(array $row): array
 {
     $payload = op_decode_object(isset($row['raw_payload']) ? (string)$row['raw_payload'] : null);
-    $status = trim((string)($row['status'] ?? $payload['status'] ?? 'pending'));
-
+    $sourceStatus = strtolower(trim((string)($row['status'] ?? $payload['status'] ?? 'pending')));
+    $status = match ($sourceStatus) {
+        'new' => 'pending',
+        'reviewing' => 'processing',
+        'verified' => 'approved',
+        'dismissed' => 'rejected',
+        'converted_to_incident' => 'completed',
+        default => $sourceStatus !== '' ? $sourceStatus : 'pending',
+    };
     return [
         'id' => (int)($row['id'] ?? 0),
         'reference_no' => (string)($row['tip_id'] ?? $payload['client_reference'] ?? ''),
@@ -289,7 +592,8 @@ function op_tip_response(array $row): array
         'contact_number' => (string)($payload['contact_number'] ?? ''),
         'description' => (string)($payload['description'] ?? $row['tip_description'] ?? ''),
         'police_backup_reason' => (string)($payload['police_backup_reason'] ?? ''),
-        'status' => $status !== '' ? $status : 'pending',
+        'status' => $status,
+        'source_status' => $sourceStatus,
         'created_at_ms' => (int)($row['created_at_ms'] ?? 0),
         'updated_at_ms' => (int)($row['updated_at_ms'] ?? 0),
     ];
@@ -318,7 +622,8 @@ function op_after_action_response(array $row): array
         'follow_up_details' => (string)($row['follow_up_details'] ?? ''),
         'lessons_learned' => (string)($row['lessons_learned'] ?? ''),
         'status' => (string)($row['status'] ?? 'draft'),
-        'reviewer_user_id' => isset($row['reviewer_user_id']) ? (int)$row['reviewer_user_id'] : null,
+        'reviewer_user_id' => isset($row['reviewer_user_id']) && $row['reviewer_user_id'] !== null
+            ? (int)$row['reviewer_user_id'] : null,
         'reviewer_notes' => (string)($row['reviewer_notes'] ?? ''),
         'submitted_at' => $row['submitted_at'] ?? null,
         'reviewed_at' => $row['reviewed_at'] ?? null,
@@ -328,6 +633,7 @@ function op_after_action_response(array $row): array
 }
 
 set_exception_handler(static function (Throwable $error): void {
-    error_log('[responder operational API] ' . $error->getMessage());
-    op_error('The server could not complete the request.', 500);
+    $reference = substr(bin2hex(random_bytes(8)), 0, 12);
+    error_log('[api_app][' . $reference . '] ' . get_class($error) . ': ' . $error->getMessage());
+    op_error('The server could not complete the request.', 500, ['reference' => $reference]);
 });

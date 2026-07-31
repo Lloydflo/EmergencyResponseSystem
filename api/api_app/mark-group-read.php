@@ -20,7 +20,11 @@ try {
     if (!op_is_group_member($pdo, $groupId, $userId)) {
         op_error('You do not have access to this department channel.', 403);
     }
-    touch_user_presence($pdo, $userId);
+    try {
+        touch_user_presence($pdo, $userId);
+    } catch (Throwable $presenceError) {
+        error_log('mark-group-read presence update skipped: ' . $presenceError->getMessage());
+    }
 
     // Never allow a message ID from another channel to advance this channel's
     // cursor. A value beyond the latest message is safely clamped to the latest

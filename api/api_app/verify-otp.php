@@ -1,139 +1,81 @@
 <?php
-header("Content-Type: application/json");
-require __DIR__ . "/connect.php";
-require_once __DIR__ . "/../../includes/unit_location_tracking.php";
+declare(strict_types=1);
+require_once __DIR__ . '/_location.php';
 
-$raw = file_get_contents("php://input");
-
-// Try JSON first
-$input = json_decode($raw, true);
-
-// If not JSON, try x-www-form-urlencoded (email=...&otp=...)
-if (!is_array($input)) {
-  $input = [];
-  parse_str($raw, $input);
-}
-
-$email = trim((string)($input["email"] ?? ($_POST["email"] ?? "")));
-$otp   = trim((string)($input["otp"]   ?? ($_POST["otp"]   ?? "")));
-
-if ($email === "" || $otp === "") {
-  echo json_encode(["success"=>false, "message"=>"Email and OTP are required", "user"=>null]);
-  exit;
-}
+op_require_method('POST');
+$email = op_require_email(op_post_string('email', '', 254));
+$otp = op_post_string('otp', '', 12);
+if (!preg_match('/^\d{6}$/', $otp)) op_error('A valid 6-digit OTP is required.', 422, ['user' => null]);
 
 try {
-  $pdo = db();
-
-  // latest unused OTP for this email
-  $q = $pdo->prepare("
-    SELECT id, otp, expires_at, used_at
-    FROM responder_otps
-    WHERE responder_email = ? AND used_at IS NULL
-    ORDER BY id DESC
-    LIMIT 1
-  ");
-  $q->execute([$email]);
-  $row = $q->fetch();
-
-  if (!$row) {
-    echo json_encode(["success"=>false, "message"=>"No OTP found", "user"=>null]);
-    exit;
-  }
-
-  if (strtotime($row["expires_at"]) < time()) {
-    echo json_encode(["success"=>false, "message"=>"OTP expired", "user"=>null]);
-    exit;
-  }
-
-  if ((string)$row["otp"] !== (string)$otp) {
-    echo json_encode(["success"=>false, "message"=>"Invalid OTP", "user"=>null]);
-    exit;
-  }
-
-  // mark used
-  $upd = $pdo->prepare("UPDATE responder_otps SET used_at = NOW() WHERE id = ?");
-  $upd->execute([$row["id"]]);
-
-  // return responder user
-  $u = $pdo->prepare("
-    SELECT
-        id,
-        name,
-        username,
-        email,
-        role,
-        department,
-        unit_code,
-        unit_type,
-        unit_status,
-        profile_image_path
-    FROM users
-    WHERE email=?
-    LIMIT 1
-    ");
-  $u->execute([$email]);
-  $responder = $u->fetch();
-
-  if (!$responder) {
-    echo json_encode(["success"=>false, "message"=>"Account not found", "user"=>null]);
-    exit;
-  }
-
-  mark_user_online($pdo, (int)$responder["id"]);
-
-  $locationUpdate = null;
-  $hasLocationPayload = array_key_exists("latitude", $input)
-      || array_key_exists("lat", $input)
-      || array_key_exists("longitude", $input)
-      || array_key_exists("lng", $input)
-      || array_key_exists("lon", $input);
-  if ($hasLocationPayload) {
-    $locationPayload = $input;
-    $locationPayload["responder_id"] = (int)$responder["id"];
-    $locationPayload["unit_code"] = (string)($responder["unit_code"] ?? "");
-    $locationPayload["source"] = $locationPayload["source"] ?? "responder_otp_verify";
-    try {
-      $locationUpdate = ers_unit_location_update($pdo, $locationPayload);
-    } catch (Throwable $e) {
-      error_log("responder OTP location update skipped: " . $e->getMessage());
-      $locationUpdate = ["ok" => false, "error" => "Location update skipped"];
+    $pdo = db();
+    op_require_tables($pdo, ['users','responder_otps']);
+    $pdo->beginTransaction();
+    $selectColumns = ['id','otp','expires_at','used_at'];
+    if (op_column_exists($pdo, 'responder_otps', 'attempt_count')) $selectColumns[]='attempt_count';
+    $statement = $pdo->prepare(
+        'SELECT ' . implode(',', $selectColumns) . ' FROM responder_otps '
+        . 'WHERE LOWER(responder_email) = LOWER(?) AND used_at IS NULL ORDER BY id DESC LIMIT 1 FOR UPDATE'
+    );
+    $statement->execute([$email]);
+    $row = op_fetch_one($statement);
+    if ($row === null) { $pdo->rollBack(); op_error('No active OTP was found.', 404, ['user'=>null]); }
+    if (strtotime((string)$row['expires_at']) < time()) {
+        $pdo->prepare('UPDATE responder_otps SET used_at = NOW() WHERE id = ?')->execute([(int)$row['id']]);
+        $pdo->commit();
+        op_error('OTP expired.', 410, ['user'=>null]);
     }
-  }
+    $attempts = (int)($row['attempt_count'] ?? 0);
+    if ($attempts >= 5) { $pdo->rollBack(); op_error('Too many invalid attempts. Request a new OTP.', 429, ['user'=>null]); }
+    $stored = (string)$row['otp'];
+    $valid = password_verify($otp, $stored) || (strlen($stored) <= 12 && hash_equals($stored, $otp));
+    if (!$valid) {
+        if (op_column_exists($pdo, 'responder_otps', 'attempt_count')) {
+            $pdo->prepare('UPDATE responder_otps SET attempt_count = attempt_count + 1 WHERE id = ?')->execute([(int)$row['id']]);
+        }
+        $pdo->commit();
+        op_error('Invalid OTP.', 401, ['user'=>null,'attempts_remaining'=>max(0,4-$attempts)]);
+    }
+    $updated = $pdo->prepare('UPDATE responder_otps SET used_at = NOW() WHERE id = ? AND used_at IS NULL');
+    $updated->execute([(int)$row['id']]);
+    if ($updated->rowCount() !== 1) { $pdo->rollBack(); op_error('OTP was already used.', 409, ['user'=>null]); }
 
-  $unit = ers_unit_location_resolve_unit($pdo, [
-      "responder_id" => (int)$responder["id"],
-      "unit_code" => (string)($responder["unit_code"] ?? "")
-  ]);
+    $idStatement = $pdo->prepare('SELECT id FROM users WHERE LOWER(email) = LOWER(?) ORDER BY id DESC LIMIT 1');
+    $idStatement->execute([$email]);
+    $userId = (int)$idStatement->fetchColumn();
+    $responder = op_active_responder($pdo, $userId);
+    if ($responder === null) { $pdo->rollBack(); op_error('Account not found or inactive.', 403, ['user'=>null]); }
+    if (op_column_exists($pdo, 'users', 'last_login')) {
+        $pdo->prepare('UPDATE users SET last_login = NOW() WHERE id = ?')->execute([$userId]);
+    }
+    $pdo->commit();
 
-  echo json_encode([
-    "success" => true,
-    "message" => "OTP verified",
-    "user" => [
-    "id"          => (int)$responder["id"],
-    "name"        => (string)$responder["name"],
-    "username"    => (string)($responder["username"] ?? ""),
-    "email"       => (string)$responder["email"],
-    "role"        => (string)($responder["role"] ?? ""),
-    "department"  => (string)($responder["department"] ?? ""),
-    "unit_id"     => $unit ? (int)$unit["id"] : null,
-    "unit_code"   => (string)($responder["unit_code"] ?? ""),
-    "unit_type"   => (string)($responder["unit_type"] ?? ""),
-    "unit_status" => (string)($responder["unit_status"] ?? "available"),
-    "profile_image_path" => (string)($responder["profile_image_path"] ?? "")
-],
-    "location_update" => $locationUpdate,
-    "location_tracking" => [
-      "enabled" => $unit !== null,
-      "endpoint" => "api/unit_location_update.php",
-      "api_app_endpoint" => "api/api_app/update-location.php"
-    ]
-]);
-
-} catch (Throwable $e) {
-  echo json_encode([
-    "success"=>false,
-    "message"=>"Server error: " . $e->getMessage(),
-    "user"=>null
-  ]);
+    op_touch_presence($pdo, $userId);
+    $input = op_request_data();
+    $locationUpdate = null;
+    if (array_intersect(['latitude','lat','longitude','lng','lon'], array_keys($input)) !== []) {
+        $input['responder_id']=$userId;
+        $input['unit_code']=(string)($responder['unit_code'] ?? '');
+        $input['source']=$input['source'] ?? 'responder_otp_verify';
+        $locationUpdate = app_location_update($pdo, $input);
+    }
+    $unit = app_location_resolve_unit($pdo, ['responder_id'=>$userId,'unit_code'=>(string)($responder['unit_code'] ?? '')]);
+    op_success([
+        'message'=>'OTP verified',
+        'user'=>[
+            'id'=>$userId,'name'=>(string)($responder['name'] ?? ''),'username'=>(string)($responder['username'] ?? ''),
+            'email'=>(string)($responder['email'] ?? ''),'role'=>(string)($responder['role'] ?? ''),
+            'department'=>(string)($responder['department'] ?? ''),'unit_id'=>$unit ? (int)$unit['id'] : null,
+            'unit_code'=>(string)($responder['unit_code'] ?? ($unit['identifier'] ?? '')),
+            'unit_type'=>(string)($responder['unit_type'] ?? ($unit['unit_type'] ?? '')),
+            'unit_status'=>(string)($responder['unit_status'] ?? ($unit['status'] ?? 'available')),
+            'profile_image_path'=>(string)($responder['profile_image_path'] ?? ''),
+        ],
+        'location_update'=>$locationUpdate,
+        'location_tracking'=>['enabled'=>$unit !== null,'endpoint'=>'api/unit_location_update.php','api_app_endpoint'=>'api/api_app/update-location.php'],
+    ]);
+} catch (Throwable $error) {
+    if (isset($pdo) && $pdo instanceof PDO && $pdo->inTransaction()) $pdo->rollBack();
+    error_log('[verify-otp] ' . $error->getMessage());
+    op_error('Unable to verify the OTP.', 500, ['user'=>null]);
 }
