@@ -411,6 +411,19 @@ function numberOrNull(value) {
     const number = Number(value);
     return Number.isFinite(number) ? number : null;
 }
+function isInvalidResponderCoordinate(lat, lng) {
+    if (lat === null || lng === null) return true;
+    if (Math.abs(lat) < 0.000001 && Math.abs(lng) < 0.000001) return true;
+    const ignoredPoints = [
+        [14.7338, 121.0368],
+        [14.7295, 121.0342],
+        [14.7351, 121.0380],
+        [14.7320, 121.0351]
+    ];
+    return ignoredPoints.some(([ignoredLat, ignoredLng]) => {
+        return Math.abs(lat - ignoredLat) < 0.000001 && Math.abs(lng - ignoredLng) < 0.000001;
+    });
+}
 function unitResponderLatLng(unit) {
     const candidates = [
         [unit && unit.latest_latitude, unit && unit.latest_longitude],
@@ -420,7 +433,7 @@ function unitResponderLatLng(unit) {
     for (const pair of candidates) {
         const lat = numberOrNull(pair[0]);
         const lng = numberOrNull(pair[1]);
-        if (lat !== null && lng !== null && !(Math.abs(lat) < 0.000001 && Math.abs(lng) < 0.000001)) {
+        if (!isInvalidResponderCoordinate(lat, lng)) {
             return { lat, lng };
         }
     }
@@ -650,7 +663,7 @@ document.addEventListener('DOMContentLoaded', function() {
         for (const pair of candidates) {
             const lat = Number(pair[0]);
             const lng = Number(pair[1]);
-            if (Number.isFinite(lat) && Number.isFinite(lng) && !(Math.abs(lat) < 0.000001 && Math.abs(lng) < 0.000001)) {
+            if (Number.isFinite(lat) && Number.isFinite(lng) && !isInvalidResponderCoordinate(lat, lng)) {
                 return { lat, lng };
             }
         }
@@ -774,6 +787,7 @@ let authoritativeOnlineUnitKeys = new Set();
 let authoritativeOnlineUnitKeysReady = false;
 let availableUnitsByIdentifier = {};
 let unitIdentifierById = {};
+let unitIdentifierByResponderId = {};
 let incidentMarkers = {};
 let QC_BOUNDS_GLOBAL;
 let pendingDispatchTrackUnit = '';
@@ -866,11 +880,15 @@ function initFirebaseLiveTracking() {
             const lat = parseFloat(r.lat);
             const lng = parseFloat(r.lng);
             if (isNaN(lat) || isNaN(lng)) return;
-            if (Math.abs(lat) < 0.000001 && Math.abs(lng) < 0.000001) return;
+            if (isInvalidResponderCoordinate(lat, lng)) return;
             const accuracyM = parseFiniteNumber(r.accuracy ?? r.accuracy_m);
 
-            const key = String(r.unitCode || r.responderId || '').trim();
+            const rawKey = String(r.unitCode || r.responderId || '').trim();
+            const key = resolveLiveUnitMarkerKey(rawKey);
             if (!key) return;
+            if (rawKey && rawKey !== key) {
+                removeUnitMarkerByIdentifier(rawKey);
+            }
             const status = String(r.status || 'available').trim().toLowerCase();
             if (['offline', 'logged_out', 'inactive'].includes(status)) {
                 removeUnitMarkerByIdentifier(key);
@@ -888,9 +906,12 @@ function initFirebaseLiveTracking() {
             const isEnRoute = status === 'en_route';
             const dept = String(r.department || r.unitType || 'other').toLowerCase();
             const type = isEnRoute ? dept : `idle_${dept}`;
+            const cachedUnitPoint = unitResponderLatLng(findCachedUnitByReference(key, ''));
+            const markerLat = cachedUnitPoint ? cachedUnitPoint.lat : lat;
+            const markerLng = cachedUnitPoint ? cachedUnitPoint.lng : lng;
 
             if (markers[key]) {
-                const accepted = moveUnitMarker(key, lat, lng, { speedKph, accuracyM, animate: true });
+                const accepted = moveUnitMarker(key, markerLat, markerLng, { speedKph, accuracyM, animate: true });
                 if (!accepted) return;
                 markers[key].marker.setIcon(getIcon(type));
                 markers[key].marker.bindPopup(`
@@ -898,12 +919,12 @@ function initFirebaseLiveTracking() {
                     Status: ${r.status || 'unknown'}<br>
                     ${accuracyM !== null ? `Accuracy: ${accuracyM.toFixed(0)} m<br>` : ''}
                     ${speedKph !== null ? `Speed: ${speedKph.toFixed(1)} km/h<br>` : ''}
-                    Coords: ${lat.toFixed(5)}, ${lng.toFixed(5)}<br>
-                    <em>Live GPS</em>
+                    Coords: ${markerLat.toFixed(5)}, ${markerLng.toFixed(5)}<br>
+                    <em>${cachedUnitPoint ? 'Responder GPS' : 'Live GPS'}</em>
                 `);
                 markers[key].isLive = true;
             } else {
-                addUnitMarker(key, lat, lng, label, type, speedKph);
+                addUnitMarker(key, markerLat, markerLng, label, type, speedKph);
                 markers[key].isLive = true;
             }
         });
@@ -1208,7 +1229,6 @@ function syncUnitMarkers(items) {
             removeUnitMarkerByIdentifier(id);
             return;
         }
-        if (markers[id] && markers[id].isLive) return;
         const type = u.unit_type || 'other';
         const point = unitResponderLatLng(u);
         const speed = (u.speed_kph !== undefined && u.speed_kph !== null) ? parseFloat(u.speed_kph) : null;
@@ -1251,7 +1271,6 @@ function syncAvailableUnitMarkers(items) {
             removeUnitMarkerByIdentifier(id);
             return;
         }
-        if (markers[id] && markers[id].isLive) return;
         const type = u.unit_type || 'other';
         const point = unitResponderLatLng(u);
         const speed = (u.speed_kph !== undefined && u.speed_kph !== null) ? parseFloat(u.speed_kph) : null;
@@ -1440,9 +1459,22 @@ function normalizeUnitIdentifier(value) {
 function rememberUnitIdentity(unit) {
     const identifier = normalizeUnitIdentifier(unit && unit.identifier);
     const unitId = String(unit && unit.id !== undefined && unit.id !== null ? unit.id : '').trim();
+    const responderId = String(unit && unit.responder_user_id !== undefined && unit.responder_user_id !== null ? unit.responder_user_id : '').trim();
+    if (identifier) {
+        availableUnitsByIdentifier[identifier] = unit;
+        availableUnitsByIdentifier[identifier.toUpperCase()] = unit;
+    }
     if (identifier && unitId) {
         unitIdentifierById[unitId] = identifier;
     }
+    if (identifier && responderId) {
+        unitIdentifierByResponderId[responderId] = identifier;
+    }
+}
+
+function resolveLiveUnitMarkerKey(rawKey) {
+    const key = normalizeUnitIdentifier(rawKey);
+    return unitIdentifierByResponderId[key] || unitIdentifierById[key] || key;
 }
 
 function indexUnitsByIdentifier(items) {
