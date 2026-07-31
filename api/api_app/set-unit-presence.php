@@ -65,6 +65,11 @@ try {
                     "error" => "Location update skipped"
                 ];
             }
+        } else {
+            $locationUpdate = [
+                "ok" => false,
+                "error" => "Responder GPS is required when going online to place the assigned vehicle on the dispatch map"
+            ];
         }
         $q = $pdo->prepare("
             SELECT status
@@ -142,7 +147,14 @@ try {
         "saved_unit_status" => $savedStatus,
         "affected_rows" => $stmt->rowCount(),
         "database" => $databaseName,
-        "location_update" => $locationUpdate
+        "location_update" => $locationUpdate,
+        "location_tracking" => [
+            "enabled" => true,
+            "location_required" => $presence === "online",
+            "syncs_vehicle_location" => true,
+            "endpoint" => "api/unit_location_update.php",
+            "api_app_endpoint" => "api/api_app/update-location.php"
+        ]
     ]);
 
 } catch (Throwable $e) {

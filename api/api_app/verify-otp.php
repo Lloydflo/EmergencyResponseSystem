@@ -58,6 +58,11 @@ try {
         $input['unit_code']=(string)($responder['unit_code'] ?? '');
         $input['source']=$input['source'] ?? 'responder_otp_verify';
         $locationUpdate = app_location_update($pdo, $input);
+    } else {
+        $locationUpdate = [
+            'ok'=>false,
+            'error'=>'Responder GPS is required on login to place the assigned vehicle on the dispatch map'
+        ];
     }
     $unit = app_location_resolve_unit($pdo, ['responder_id'=>$userId,'unit_code'=>(string)($responder['unit_code'] ?? '')]);
     op_success([
@@ -72,7 +77,13 @@ try {
             'profile_image_path'=>(string)($responder['profile_image_path'] ?? ''),
         ],
         'location_update'=>$locationUpdate,
-        'location_tracking'=>['enabled'=>$unit !== null,'endpoint'=>'api/unit_location_update.php','api_app_endpoint'=>'api/api_app/update-location.php'],
+        'location_tracking'=>[
+            'enabled'=>$unit !== null,
+            'location_required'=>true,
+            'syncs_vehicle_location'=>true,
+            'endpoint'=>'api/unit_location_update.php',
+            'api_app_endpoint'=>'api/api_app/update-location.php'
+        ],
     ]);
 } catch (Throwable $error) {
     if (isset($pdo) && $pdo instanceof PDO && $pdo->inTransaction()) $pdo->rollBack();
