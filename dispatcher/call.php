@@ -1455,9 +1455,48 @@ $turnCredential = (string) ers_env('WEBRTC_TURN_CREDENTIAL', '');
         };
     }
 
-    function answerTransferredQueueItem(key) {
+    function resolveOnlineTransferredCall(item) {
+        return new Promise((resolve) => {
+            if (!transferInboxSocket || !transferInboxSocket.connected) {
+                resolve(null);
+                return;
+            }
+            transferInboxSocket.timeout(6000).emit('resolve-live-call', {
+                callId: item.call_id_external || item.callId || '',
+                transferId: item.transfer_id || '',
+                conversationId: item.conversation_id || '',
+                room: item.room || ''
+            }, (error, response) => {
+                if (error || !response || !response.ok || !response.call) {
+                    resolve(null);
+                    return;
+                }
+                resolve(response.call);
+            });
+        });
+    }
+
+    function applyResolvedLiveCallToQueueItem(item, resolvedCall) {
+        if (!item || !resolvedCall || !resolvedCall.room) return false;
+        item.call_id_external = resolvedCall.callId || item.call_id_external;
+        item.transfer_id = item.transfer_id || resolvedCall.callId || '';
+        item.room = resolvedCall.room || item.room;
+        item.socket_url = resolvedCall.socketUrl || item.socket_url || ALERTARA_SOCKET_URL;
+        item.socket_path = resolvedCall.socketPath || item.socket_path || ALERTARA_SOCKET_PATH;
+        item.conversation_id = resolvedCall.conversationId || item.conversation_id;
+        item.transfer_type = 'live_call';
+        return true;
+    }
+
+    async function answerTransferredQueueItem(key) {
         const item = findTransferredQueueItem(key);
         if (!item) return;
+        const resolvedCall = await resolveOnlineTransferredCall(item);
+        applyResolvedLiveCallToQueueItem(item, resolvedCall);
+        if (!String(item.room || '').trim()) {
+            setTransferQueueStatus('This stored item has no online caller room. Ask the caller to start a new call.', 'error');
+            return;
+        }
         const activeRoom = String(activeTransferCall?.room || '').trim();
         const activeCallId = String(activeTransferCall?.callId || activeTransferCall?.transferId || '').trim();
         const itemCallId = String(item.call_id_external || item.transfer_id || '').trim();
@@ -1473,9 +1512,15 @@ $turnCredential = (string) ers_env('WEBRTC_TURN_CREDENTIAL', '');
         acceptCall();
     }
 
-    function openTransferredReportQueueItem(key) {
+    async function openTransferredReportQueueItem(key) {
         const item = findTransferredQueueItem(key);
         if (!item) return;
+        const resolvedCall = await resolveOnlineTransferredCall(item);
+        if (applyResolvedLiveCallToQueueItem(item, resolvedCall)) {
+            displayIncomingCallModal(normalizeIncomingCallDetail(incomingCallDetailFromTransfer(item)));
+            acceptCall();
+            return;
+        }
         openIncidentModal(transferredIncidentItem(item));
     }
 
