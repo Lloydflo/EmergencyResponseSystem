@@ -1554,6 +1554,21 @@ $turnCredential = (string) ers_env('WEBRTC_TURN_CREDENTIAL', '');
             });
             transferSocket.on('offer', async (offerPayload) => {
                 if (!transferPayloadMatchesCall(offerPayload, callId, call.room)) return;
+                // The signaling server may replay the caller's original lobby
+                // offer when ERS joins the private room. Request and answer a
+                // fresh transfer offer so old ICE and the ERS media leg never
+                // become mixed together.
+                const isTransferOffer = offerPayload
+                    && (offerPayload.transferred === true || offerPayload.target === 'ers');
+                if (!isTransferOffer) {
+                    transferSocket.emit(
+                        'request-transfer-offer',
+                        transferAcceptedPayload(call, 'ers-requires-fresh-media-offer'),
+                        call.room
+                    );
+                    setVoiceState('Requesting a fresh caller audio connection...');
+                    return;
+                }
                 clearTransferOfferRequestTimer();
                 try {
                     await answerTransferOffer(call, offerPayload);
@@ -1601,7 +1616,9 @@ $turnCredential = (string) ers_env('WEBRTC_TURN_CREDENTIAL', '');
         pc.onicecandidate = (event) => {
             if (!event.candidate || !transferSocket) return;
             transferSocket.emit('candidate', {
-                candidate: event.candidate,
+                candidate: typeof event.candidate.toJSON === 'function'
+                    ? event.candidate.toJSON()
+                    : event.candidate,
                 callId: call.callId || call.transferId || '',
                 room: call.room,
                 transferred: true,
@@ -1833,6 +1850,7 @@ $turnCredential = (string) ers_env('WEBRTC_TURN_CREDENTIAL', '');
             .map((sender) => sender.track ? sender.track.id : '')
             .filter(Boolean);
         transferLocalStream.getAudioTracks().forEach((track) => {
+            track.enabled = true;
             if (!existingTrackIds.includes(track.id)) {
                 transferPeerConnection.addTrack(track, transferLocalStream);
             }
