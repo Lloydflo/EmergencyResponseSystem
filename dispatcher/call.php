@@ -509,6 +509,7 @@ $turnCredential = (string) ers_env('WEBRTC_TURN_CREDENTIAL', '');
     let transferInboxSocketRetryTimer = null;
     let transferInboxSocketRetryCount = 0;
     let transferCallMessages = [];
+    let transferCallMessageIds = new Set();
     const INCOMING_TRANSFER_POLL_MS = 5000;
     const PRIORITY_ORDER = { critical: 0, high: 1, urgent: 2, moderate: 3, medium: 3, low: 4 };
     const PRIORITY_RULES = {
@@ -1210,7 +1211,16 @@ $turnCredential = (string) ers_env('WEBRTC_TURN_CREDENTIAL', '');
     }
 
     function transferQueueKey(transfer) {
-        return String(transfer.transfer_log_id || transfer.transfer_id || transfer.incident_id || transfer.call_id_external || '').trim();
+        return String(
+            transfer.transfer_id
+            || transfer.call_id_external
+            || transfer.callId
+            || transfer.call_id
+            || transfer.room
+            || transfer.transfer_log_id
+            || transfer.incident_id
+            || ''
+        ).trim();
     }
 
     function normalizeTransferQueueItem(transfer) {
@@ -1418,6 +1428,17 @@ $turnCredential = (string) ers_env('WEBRTC_TURN_CREDENTIAL', '');
     function answerTransferredQueueItem(key) {
         const item = findTransferredQueueItem(key);
         if (!item) return;
+        const activeRoom = String(activeTransferCall?.room || '').trim();
+        const activeCallId = String(activeTransferCall?.callId || activeTransferCall?.transferId || '').trim();
+        const itemCallId = String(item.call_id_external || item.transfer_id || '').trim();
+        if (
+            activeTransferCall
+            && ((activeRoom && activeRoom === String(item.room || '').trim())
+                || (activeCallId && itemCallId && activeCallId === itemCallId))
+        ) {
+            focusAcceptedCallForm();
+            return;
+        }
         displayIncomingCallModal(normalizeIncomingCallDetail(incomingCallDetailFromTransfer(item)));
         acceptCall();
     }
@@ -1548,7 +1569,11 @@ $turnCredential = (string) ers_env('WEBRTC_TURN_CREDENTIAL', '');
                 query: { room: call.room }
             });
             transferSocket.on('connect', () => {
-                transferSocket.emit('join', call.room);
+                transferSocket.emit('join', call.room, (response) => {
+                    if (response && response.ok) {
+                        setTransferCallChatStatus('Connected to caller room (' + String(response.members || 1) + ' participant(s))');
+                    }
+                });
                 emitTransferAccepted(call);
                 scheduleTransferOfferRequest(call);
                 setVoiceState('Connected to AlertaraQC transfer room ' + call.room + '. Waiting for caller audio.');
@@ -1598,7 +1623,27 @@ $turnCredential = (string) ers_env('WEBRTC_TURN_CREDENTIAL', '');
             transferSocket.on('call-message', (payload) => {
                 if (!transferPayloadMatchesCall(payload, callId, call.room)) return;
                 if (!payload || payload.sender === 'response_team') return;
-                addTransferCallMessage(payload.text || payload.message || '', 'caller', payload.timestamp, payload.senderName || call.name || 'Caller');
+                addTransferCallMessage(
+                    payload.text || payload.message || '',
+                    'caller',
+                    payload.timestamp,
+                    payload.senderName || call.name || 'Caller',
+                    payload.messageId || ''
+                );
+            });
+            transferSocket.on('call-message-history', (history) => {
+                if (!Array.isArray(history)) return;
+                history.forEach((payload) => {
+                    if (!transferPayloadMatchesCall(payload, callId, call.room)) return;
+                    if (!payload || payload.sender === 'response_team') return;
+                    addTransferCallMessage(
+                        payload.text || payload.message || '',
+                        'caller',
+                        payload.timestamp || payload.serverTimestamp,
+                        payload.senderName || call.name || 'Caller',
+                        payload.messageId || ''
+                    );
+                });
             });
             const handleTransferHangup = (payload) => {
                 if (!transferPayloadMatchesCall(payload, callId, call.room)) return;
@@ -1746,6 +1791,7 @@ $turnCredential = (string) ers_env('WEBRTC_TURN_CREDENTIAL', '');
 
     function resetTransferCallChat(call = null) {
         transferCallMessages = [];
+        transferCallMessageIds = new Set();
         const messages = document.getElementById('transferCallMessages');
         const input = document.getElementById('transferCallMessageInput');
         if (messages) {
@@ -1755,9 +1801,12 @@ $turnCredential = (string) ers_env('WEBRTC_TURN_CREDENTIAL', '');
         setTransferCallChatStatus(call && call.room ? 'Connected to room' : 'Waiting for call');
     }
 
-    function addTransferCallMessage(text, sender = 'caller', timestamp = Date.now(), senderName = '') {
+    function addTransferCallMessage(text, sender = 'caller', timestamp = Date.now(), senderName = '', messageId = '') {
         const cleanText = String(text || '').trim();
         if (!cleanText) return;
+        const stableMessageId = String(messageId || '').trim();
+        if (stableMessageId && transferCallMessageIds.has(stableMessageId)) return;
+        if (stableMessageId) transferCallMessageIds.add(stableMessageId);
         const messages = document.getElementById('transferCallMessages');
         if (!messages) return;
         if (!transferCallMessages.length) messages.innerHTML = '';
@@ -1774,7 +1823,7 @@ $turnCredential = (string) ers_env('WEBRTC_TURN_CREDENTIAL', '');
         `;
         messages.appendChild(item);
         messages.scrollTop = messages.scrollHeight;
-        transferCallMessages.push({ text: cleanText, sender, timestamp, senderName });
+        transferCallMessages.push({ text: cleanText, sender, timestamp, senderName, messageId: stableMessageId });
     }
 
     function sendTransferCallMessage() {
@@ -1792,12 +1841,18 @@ $turnCredential = (string) ers_env('WEBRTC_TURN_CREDENTIAL', '');
             room: call.room,
             sender: 'response_team',
             senderName: 'Response Team',
+            messageId: 'ers-' + String(call.callId || call.transferId || '') + '-' + String(Date.now()) + '-' + Math.random().toString(16).slice(2),
             timestamp: Date.now()
         };
-        addTransferCallMessage(text, 'dispatcher', payload.timestamp, payload.senderName);
+        addTransferCallMessage(text, 'dispatcher', payload.timestamp, payload.senderName, payload.messageId);
         if (transferSocket && transferSocket.connected) {
-            transferSocket.emit('call-message', payload, call.room);
-            setTransferCallChatStatus('Sent');
+            transferSocket.timeout(8000).emit('call-message', payload, call.room, (error, response) => {
+                if (!error && response && response.ok) {
+                    setTransferCallChatStatus(response.recipients > 0 ? 'Delivered' : 'Queued until caller reconnects');
+                } else {
+                    setTransferCallChatStatus('Message queued while caller reconnects');
+                }
+            });
         } else {
             setTransferCallChatStatus('Socket reconnecting. Message shown locally only.');
         }
