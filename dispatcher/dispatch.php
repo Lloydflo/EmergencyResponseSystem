@@ -771,6 +771,7 @@ let markers = {};
 let authoritativeOnlineUnitKeys = new Set();
 let authoritativeOnlineUnitKeysReady = false;
 let availableUnitsByIdentifier = {};
+let unitIdentifierById = {};
 let incidentMarkers = {};
 let QC_BOUNDS_GLOBAL;
 let pendingDispatchTrackUnit = '';
@@ -981,7 +982,7 @@ function addLegendControl() {
 // ===============================
 // MARKERS (sync with gps.php)
 // ===============================
-function addUnitMarker(id, lat, lng, label, type, speedKph) {
+function addUnitMarker(id, lat, lng, label, type, speedKph, unitDbId) {
         const marker = L.marker([lat, lng], { icon: getIcon(type) })
                 .addTo(map)
                 .bindPopup(`
@@ -996,7 +997,8 @@ function addUnitMarker(id, lat, lng, label, type, speedKph) {
             speedKph: speedKph,
             lastAcceptedLatLng: L.latLng(lat, lng),
             lastLocationAt: Date.now(),
-            ignoredGpsSpikes: 0
+            ignoredGpsSpikes: 0,
+            unitDbId: unitDbId !== undefined && unitDbId !== null ? String(unitDbId) : ''
         };
 }
 
@@ -1048,7 +1050,10 @@ function onlineResponderUnits(items) {
 function addAuthoritativeOnlineUnitKeys(unit, keys) {
     ['identifier', 'id', 'responder_user_id'].forEach(field => {
         const value = String(unit && unit[field] !== undefined && unit[field] !== null ? unit[field] : '').trim();
-        if (value) keys.add(value);
+        if (value) {
+            keys.add(value);
+            keys.add(value.toUpperCase());
+        }
     });
 }
 
@@ -1069,7 +1074,7 @@ function pruneOfflineUnitMarkers() {
             authoritativeOnlineUnitKeysReady = true;
             Object.entries(markers).forEach(([key, entry]) => {
                 if (!entry || entry.type !== 'unit') return;
-                if (!onlineKeys.has(String(key))) {
+                if (!onlineKeys.has(String(key)) && !onlineKeys.has(String(key).toUpperCase())) {
                     try { map.removeLayer(entry.marker); } catch (e) {}
                     delete markers[key];
                 }
@@ -1080,7 +1085,9 @@ function pruneOfflineUnitMarkers() {
 
 function canRenderLiveUnitMarker(identifier) {
     const id = String(identifier || '').trim();
-    return !!id && authoritativeOnlineUnitKeysReady && authoritativeOnlineUnitKeys.has(id);
+    return !!id
+        && authoritativeOnlineUnitKeysReady
+        && (authoritativeOnlineUnitKeys.has(id) || authoritativeOnlineUnitKeys.has(id.toUpperCase()));
 }
 
 function parseFiniteNumber(value) {
@@ -1193,6 +1200,7 @@ function loadDispatchedUnits() {
 function syncUnitMarkers(items) {
     items.forEach(u => {
         const id = u.identifier;
+        rememberUnitIdentity(u);
         if (!isResponderUnitOnline(u)) {
             removeUnitMarkerByIdentifier(id);
             return;
@@ -1215,8 +1223,9 @@ function syncUnitMarkers(items) {
                 markers[id].marker.bindPopup(popupHtml);
                 markers[id].speedKph = speed;
                 markers[id].unitType = String(type || '').toLowerCase();
+                markers[id].unitDbId = u.id !== undefined && u.id !== null ? String(u.id) : markers[id].unitDbId;
             } else {
-                addUnitMarker(id, lat, lng, label, type, speed);
+                addUnitMarker(id, lat, lng, label, type, speed, u.id);
             }
         }
     });
@@ -1231,6 +1240,7 @@ function fetchAvailableUnitsData() {
 function syncAvailableUnitMarkers(items) {
     (items || []).forEach(u => {
         const id = u.identifier;
+        rememberUnitIdentity(u);
         if (!isResponderUnitOnline(u)) {
             removeUnitMarkerByIdentifier(id);
             return;
@@ -1251,8 +1261,9 @@ function syncAvailableUnitMarkers(items) {
                 `);
                 markers[id].speedKph = speed;
                 markers[id].unitType = String(type || '').toLowerCase();
+                markers[id].unitDbId = u.id !== undefined && u.id !== null ? String(u.id) : markers[id].unitDbId;
             } else {
-                addUnitMarker(id, lat, lng, `${id}`, type, speed);
+                addUnitMarker(id, lat, lng, `${id}`, type, speed, u.id);
             }
         }
     });
@@ -1372,7 +1383,7 @@ function renderAvailableUnits(items) {
                 </div>
             </div>
             <div class="unit-actions">
-                <button class="btn-action-small" onclick="focusUnitOnMap('${escapeJs(u.identifier)}')" data-unit-id="${u.id}" data-identifier="${escapeAttr(u.identifier)}"><i class="fas fa-location-arrow"></i> Track</button>
+                <button class="btn-action-small" onclick="focusUnitOnMap('${escapeJs(u.identifier)}', '${escapeJs(u.id)}')" data-unit-id="${escapeAttr(u.id)}" data-identifier="${escapeAttr(u.identifier)}"><i class="fas fa-location-arrow"></i> Track</button>
             </div>
         `;
         container.appendChild(card);
@@ -1384,13 +1395,7 @@ function refreshAvailableUnits() {
     return fetchAvailableUnitsData()
         .then(items => {
             availableUnitsByIdentifier = {};
-            (items || []).forEach(u => {
-                if (u && u.identifier) {
-                    const id = String(u.identifier);
-                    availableUnitsByIdentifier[id] = u;
-                    availableUnitsByIdentifier[id.toUpperCase()] = u;
-                }
-            });
+            indexUnitsByIdentifier(items);
             syncAvailableUnitMarkers(items);
             if (container) {
                 renderAvailableUnits(items);
@@ -1418,6 +1423,81 @@ function escapeJs(s) {
     return String(s || '').replace(/\\/g, '\\\\').replace(/'/g, "\\'").replace(/\r?\n/g, ' ');
 }
 
+function normalizeUnitIdentifier(value) {
+    const text = String(value || '').trim();
+    if (!text) return '';
+    return text.split(/\s+/)[0].trim();
+}
+
+function rememberUnitIdentity(unit) {
+    const identifier = normalizeUnitIdentifier(unit && unit.identifier);
+    const unitId = String(unit && unit.id !== undefined && unit.id !== null ? unit.id : '').trim();
+    if (identifier && unitId) {
+        unitIdentifierById[unitId] = identifier;
+    }
+}
+
+function indexUnitsByIdentifier(items) {
+    (items || []).forEach(u => {
+        if (!u || !u.identifier) return;
+        const id = normalizeUnitIdentifier(u.identifier);
+        if (!id) return;
+        availableUnitsByIdentifier[id] = u;
+        availableUnitsByIdentifier[id.toUpperCase()] = u;
+        rememberUnitIdentity(u);
+    });
+}
+
+function findUnitMarkerByReference(unitIdentifier, unitId) {
+    const normalized = normalizeUnitIdentifier(unitIdentifier);
+    const explicitUnitId = String(unitId || '').trim();
+
+    if (normalized && markers[normalized]) {
+        return { key: normalized, markerObj: markers[normalized] };
+    }
+    if (normalized) {
+        const upperIdentifier = normalized.toUpperCase();
+        const matchedKey = Object.keys(markers).find((key) => String(key).toUpperCase() === upperIdentifier);
+        if (matchedKey) {
+            return { key: matchedKey, markerObj: markers[matchedKey] };
+        }
+    }
+    if (explicitUnitId) {
+        const mappedIdentifier = unitIdentifierById[explicitUnitId];
+        if (mappedIdentifier && markers[mappedIdentifier]) {
+            return { key: mappedIdentifier, markerObj: markers[mappedIdentifier] };
+        }
+        const markerByDbId = Object.keys(markers).find((key) => String(markers[key]?.unitDbId || '') === explicitUnitId);
+        if (markerByDbId) {
+            return { key: markerByDbId, markerObj: markers[markerByDbId] };
+        }
+    }
+
+    return { key: normalized, markerObj: null };
+}
+
+function findCachedUnitByReference(unitIdentifier, unitId) {
+    const normalized = normalizeUnitIdentifier(unitIdentifier);
+    const explicitUnitId = String(unitId || '').trim();
+    if (normalized) {
+        return availableUnitsByIdentifier[normalized]
+            || availableUnitsByIdentifier[normalized.toUpperCase()]
+            || null;
+    }
+    if (explicitUnitId && unitIdentifierById[explicitUnitId]) {
+        const mappedIdentifier = unitIdentifierById[explicitUnitId];
+        return availableUnitsByIdentifier[mappedIdentifier]
+            || availableUnitsByIdentifier[mappedIdentifier.toUpperCase()]
+            || null;
+    }
+    if (explicitUnitId) {
+        return Object.values(availableUnitsByIdentifier).find((unit) => {
+            return String(unit && unit.id !== undefined && unit.id !== null ? unit.id : '') === explicitUnitId;
+        }) || null;
+    }
+    return null;
+}
+
 function ensureUnitMarkerFromApiUnit(unit) {
     if (!unit || !unit.identifier || !isResponderUnitOnline(unit)) return null;
     const id = String(unit.identifier);
@@ -1430,9 +1510,11 @@ function ensureUnitMarkerFromApiUnit(unit) {
     if (markers[id] && markers[id].marker) {
         moveUnitMarker(id, lat, lng, { speedKph: speed, animate: true });
         markers[id].marker.setIcon(getIcon(type));
+        markers[id].unitDbId = unit.id !== undefined && unit.id !== null ? String(unit.id) : markers[id].unitDbId;
     } else {
-        addUnitMarker(id, lat, lng, id, type, speed);
+        addUnitMarker(id, lat, lng, id, type, speed, unit.id);
     }
+    rememberUnitIdentity(unit);
     return markers[id] || null;
 }
 
@@ -1510,32 +1592,39 @@ function contactCaller(btn) {
 
 
 // Focus the map on the selected unit marker
-function focusUnitOnMap(unitIdentifier) {
-    if (!unitIdentifier) return;
-    let markerObj = markers[unitIdentifier];
+function focusUnitOnMap(unitIdentifier, unitId) {
+    const normalizedIdentifier = normalizeUnitIdentifier(unitIdentifier);
+    const explicitUnitId = String(unitId || '').trim();
+    if (!normalizedIdentifier && !explicitUnitId) return;
+
+    let found = findUnitMarkerByReference(normalizedIdentifier, explicitUnitId);
+    let markerObj = found.markerObj;
     if (!markerObj) {
-        const upperIdentifier = String(unitIdentifier).toUpperCase();
-        const matchedKey = Object.keys(markers).find((key) => String(key).toUpperCase() === upperIdentifier);
-        markerObj = matchedKey ? markers[matchedKey] : null;
-    }
-    if (!markerObj) {
-        const unit = availableUnitsByIdentifier[String(unitIdentifier)] || availableUnitsByIdentifier[String(unitIdentifier).toUpperCase()];
+        const unit = findCachedUnitByReference(normalizedIdentifier, explicitUnitId);
         markerObj = ensureUnitMarkerFromApiUnit(unit);
     }
     if (focusMarkerObject(markerObj)) {
         return;
     }
-    fetchAvailableUnitsData()
-        .then(items => {
-            availableUnitsByIdentifier = {};
-            (items || []).forEach(u => {
-                if (!u || !u.identifier) return;
-                const id = String(u.identifier);
-                availableUnitsByIdentifier[id] = u;
-                availableUnitsByIdentifier[id.toUpperCase()] = u;
+
+    Promise.allSettled([
+        fetchAvailableUnitsData(),
+        fetch('api/units_list.php?status=dispatched', { cache: 'no-store' })
+            .then(r => r.json())
+            .then(res => (res && res.ok && Array.isArray(res.items)) ? onlineResponderUnits(res.items) : [])
+    ])
+        .then(results => {
+            const refreshedItems = [];
+            results.forEach(result => {
+                if (result.status === 'fulfilled' && Array.isArray(result.value)) {
+                    refreshedItems.push(...result.value);
+                }
             });
-            syncAvailableUnitMarkers(items);
-            const unit = availableUnitsByIdentifier[String(unitIdentifier)] || availableUnitsByIdentifier[String(unitIdentifier).toUpperCase()];
+            availableUnitsByIdentifier = {};
+            indexUnitsByIdentifier(refreshedItems);
+            syncAvailableUnitMarkers(refreshedItems);
+            syncUnitMarkers(refreshedItems);
+            const unit = findCachedUnitByReference(normalizedIdentifier, explicitUnitId);
             const refreshedMarkerObj = ensureUnitMarkerFromApiUnit(unit);
             if (!focusMarkerObject(refreshedMarkerObj)) {
                 alert('Unit location not available on map.');
@@ -1551,16 +1640,11 @@ function tryFocusPendingDispatchUnit() {
         return;
     }
 
-    let markerObj = markers[pendingDispatchTrackUnit];
-    if (!markerObj) {
-        const target = String(pendingDispatchTrackUnit).toUpperCase();
-        const matchedKey = Object.keys(markers).find((key) => String(key).toUpperCase() === target);
-        markerObj = matchedKey ? markers[matchedKey] : null;
-        if (matchedKey) pendingDispatchTrackUnit = matchedKey;
-    }
+    const found = findUnitMarkerByReference(pendingDispatchTrackUnit, '');
+    const markerObj = found.markerObj;
 
     if (markerObj && markerObj.marker) {
-        const label = pendingDispatchTrackUnit;
+        const label = found.key || pendingDispatchTrackUnit;
         pendingDispatchTrackUnit = '';
         pendingDispatchTrackAttempts = 0;
         map.setView(markerObj.marker.getLatLng(), 17, { animate: true });
@@ -1581,10 +1665,14 @@ function tryFocusPendingDispatchUnit() {
 }
 
 function requestDispatchUnitTracking(unitIdentifier) {
-    pendingDispatchTrackUnit = String(unitIdentifier || '').trim();
+    pendingDispatchTrackUnit = normalizeUnitIdentifier(unitIdentifier);
     pendingDispatchTrackAttempts = 0;
     if (!pendingDispatchTrackUnit) return;
-    refreshAvailableUnits().finally(() => {
+    Promise.allSettled([
+        pruneOfflineUnitMarkers(),
+        loadDispatchedUnits(),
+        refreshAvailableUnits()
+    ]).finally(() => {
         tryFocusPendingDispatchUnit();
     });
 }
