@@ -425,7 +425,12 @@ function isInvalidResponderCoordinate(lat, lng) {
     });
 }
 function unitResponderLatLng(unit) {
+    const identifier = normalizeUnitIdentifier(unit && unit.identifier);
+    const livePoint = identifier
+        ? (liveUnitLocationsByIdentifier[identifier] || liveUnitLocationsByIdentifier[identifier.toUpperCase()] || null)
+        : null;
     const candidates = [
+        [livePoint && livePoint.lat, livePoint && livePoint.lng],
         [unit && unit.latest_latitude, unit && unit.latest_longitude],
         [unit && unit.latitude, unit && unit.longitude],
         [unit && unit.stored_latitude, unit && unit.stored_longitude]
@@ -786,6 +791,7 @@ let markers = {};
 let authoritativeOnlineUnitKeys = new Set();
 let authoritativeOnlineUnitKeysReady = false;
 let availableUnitsByIdentifier = {};
+let liveUnitLocationsByIdentifier = {};
 let unitIdentifierById = {};
 let unitIdentifierByResponderId = {};
 let incidentMarkers = {};
@@ -1388,6 +1394,7 @@ function renderAvailableUnits(items) {
 
     container.innerHTML = '';
     items.forEach(u => {
+        u = mergeLiveLocationIntoUnit(u);
         const meta = [];
         if (u.unit_type) meta.push(u.unit_type.charAt(0).toUpperCase() + u.unit_type.slice(1));
         const displayName = u.resource_name || u.identifier;
@@ -1463,6 +1470,7 @@ function rememberUnitIdentity(unit) {
     const unitId = String(unit && unit.id !== undefined && unit.id !== null ? unit.id : '').trim();
     const responderId = String(unit && unit.responder_user_id !== undefined && unit.responder_user_id !== null ? unit.responder_user_id : '').trim();
     if (identifier) {
+        mergeLiveLocationIntoUnit(unit);
         availableUnitsByIdentifier[identifier] = unit;
         availableUnitsByIdentifier[identifier.toUpperCase()] = unit;
     }
@@ -1477,6 +1485,19 @@ function rememberUnitIdentity(unit) {
 function resolveLiveUnitMarkerKey(rawKey) {
     const key = normalizeUnitIdentifier(rawKey);
     return unitIdentifierByResponderId[key] || unitIdentifierById[key] || key;
+}
+
+function mergeLiveLocationIntoUnit(unit) {
+    const identifier = normalizeUnitIdentifier(unit && unit.identifier);
+    if (!identifier || !unit) return unit;
+    const livePoint = liveUnitLocationsByIdentifier[identifier] || liveUnitLocationsByIdentifier[identifier.toUpperCase()] || null;
+    if (!livePoint || isInvalidResponderCoordinate(livePoint.lat, livePoint.lng)) return unit;
+    unit.latest_latitude = livePoint.lat;
+    unit.latest_longitude = livePoint.lng;
+    unit.latitude = livePoint.lat;
+    unit.longitude = livePoint.lng;
+    unit.location_current = '1';
+    return unit;
 }
 
 function updateUnitCardGpsText(unitIdentifier, lat, lng) {
@@ -1496,12 +1517,11 @@ function updateUnitCardGpsText(unitIdentifier, lat, lng) {
 function applyLiveResponderLocationToUnit(unitIdentifier, lat, lng) {
     const normalized = normalizeUnitIdentifier(unitIdentifier);
     if (!normalized || isInvalidResponderCoordinate(lat, lng)) return;
+    const livePoint = { lat, lng, seenAt: Date.now() };
+    liveUnitLocationsByIdentifier[normalized] = livePoint;
+    liveUnitLocationsByIdentifier[normalized.toUpperCase()] = livePoint;
     const unit = findCachedUnitByReference(normalized, '') || { identifier: normalized };
-    unit.latest_latitude = lat;
-    unit.latest_longitude = lng;
-    unit.latitude = lat;
-    unit.longitude = lng;
-    unit.location_current = '1';
+    mergeLiveLocationIntoUnit(unit);
     availableUnitsByIdentifier[normalized] = unit;
     availableUnitsByIdentifier[normalized.toUpperCase()] = unit;
     updateUnitCardGpsText(normalized, lat, lng);
