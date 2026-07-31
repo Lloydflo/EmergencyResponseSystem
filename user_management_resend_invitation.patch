@@ -1,0 +1,54 @@
+diff --git a/admin/user_management.php b/admin/user_management.php
+index 08786ca..1b200df 100644
+--- a/admin/user_management.php
++++ b/admin/user_management.php
+@@ -832,6 +832,7 @@ $adminName = $_SESSION['user_name'] ?? 'Admin';
+ 
+     <script>
+         const adminUsersApiUrl = 'api/admin_users.php';
++        const responderAppInviteApiUrl = 'api/resend_responder_app_invitation.php';
+         const availableUnitsApiUrl = 'api/units_list.php?status=available&include_unassigned=1&only_unassigned_responders=1';
+         const userRows = [];
+         let availableUnits = [];
+@@ -1290,6 +1291,10 @@ $adminName = $_SESSION['user_name'] ?? 'Admin';
+                         <td>${escapeHtml(row.created)}</td>
+                         <td>
+                             <div class="um-actions">
++                                ${row.role === 'responder' ? `
++                                <button type="button" class="um-action" data-action="invite" data-id="${row.id}" title="Resend app invitation" aria-label="Resend app invitation">
++                                    <i class="fas fa-envelope"></i>
++                                </button>` : ''}
+                                 <button type="button" class="um-action edit" data-action="edit" data-id="${row.id}" title="Edit" aria-label="Edit">
+                                     <i class="fas fa-pen"></i>
+                                 </button>
+@@ -1413,6 +1418,30 @@ $adminName = $_SESSION['user_name'] ?? 'Admin';
+             const target = userRows.find((row) => row.id === id);
+             if (!target) return;
+ 
++            if (action === 'invite') {
++                button.disabled = true;
++                try {
++                    const response = await fetch(responderAppInviteApiUrl, {
++                        method: 'POST',
++                        headers: {
++                            'Accept': 'application/json',
++                            'Content-Type': 'application/json'
++                        },
++                        body: JSON.stringify({ user_id: id })
++                    });
++                    const result = await response.json();
++                    if (!response.ok || !result.success) {
++                        throw new Error(result.message || 'Unable to send the app invitation.');
++                    }
++                    showToast(result.message || 'App invitation email sent.');
++                } catch (error) {
++                    showToast(error.message || 'Unable to send the app invitation.');
++                } finally {
++                    button.disabled = false;
++                }
++                return;
++            }
++
+             if (action === 'edit') {
+                 editingId = id;
+                 addUserForm.reset();
