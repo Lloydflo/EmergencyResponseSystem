@@ -889,6 +889,7 @@ function initFirebaseLiveTracking() {
             if (rawKey && rawKey !== key) {
                 removeUnitMarkerByIdentifier(rawKey);
             }
+            applyLiveResponderLocationToUnit(key, lat, lng);
             const status = String(r.status || 'available').trim().toLowerCase();
             if (['offline', 'logged_out', 'inactive'].includes(status)) {
                 removeUnitMarkerByIdentifier(key);
@@ -1398,6 +1399,7 @@ function renderAvailableUnits(items) {
         const assignmentText = u.assignment || u.plate_number || u.driver_name || '';
         const card = document.createElement('div');
         card.className = 'unit-card available';
+        card.setAttribute('data-unit-identifier', u.identifier || '');
         card.innerHTML = `
             <div class="unit-info">
                 <div class="unit-details">
@@ -1475,6 +1477,34 @@ function rememberUnitIdentity(unit) {
 function resolveLiveUnitMarkerKey(rawKey) {
     const key = normalizeUnitIdentifier(rawKey);
     return unitIdentifierByResponderId[key] || unitIdentifierById[key] || key;
+}
+
+function updateUnitCardGpsText(unitIdentifier, lat, lng) {
+    const normalized = normalizeUnitIdentifier(unitIdentifier);
+    if (!normalized || isInvalidResponderCoordinate(lat, lng)) return;
+    const text = `Responder GPS: ${lat.toFixed(6)}, ${lng.toFixed(6)}`;
+    document.querySelectorAll('#available-units-container .unit-card').forEach(card => {
+        const cardIdentifier = normalizeUnitIdentifier(card.getAttribute('data-unit-identifier') || '');
+        if (cardIdentifier.toUpperCase() !== normalized.toUpperCase()) return;
+        const locationSpan = card.querySelector('.unit-meta span:first-child');
+        if (locationSpan) {
+            locationSpan.innerHTML = `<i class="fas fa-map-marker-alt"></i> ${escapeHtml(text)}`;
+        }
+    });
+}
+
+function applyLiveResponderLocationToUnit(unitIdentifier, lat, lng) {
+    const normalized = normalizeUnitIdentifier(unitIdentifier);
+    if (!normalized || isInvalidResponderCoordinate(lat, lng)) return;
+    const unit = findCachedUnitByReference(normalized, '') || { identifier: normalized };
+    unit.latest_latitude = lat;
+    unit.latest_longitude = lng;
+    unit.latitude = lat;
+    unit.longitude = lng;
+    unit.location_current = '1';
+    availableUnitsByIdentifier[normalized] = unit;
+    availableUnitsByIdentifier[normalized.toUpperCase()] = unit;
+    updateUnitCardGpsText(normalized, lat, lng);
 }
 
 function indexUnitsByIdentifier(items) {
