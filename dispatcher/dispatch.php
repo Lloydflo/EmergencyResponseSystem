@@ -411,6 +411,22 @@ function numberOrNull(value) {
     const number = Number(value);
     return Number.isFinite(number) ? number : null;
 }
+function normalizeLatLngPair(latValue, lngValue) {
+    let lat = numberOrNull(latValue);
+    let lng = numberOrNull(lngValue);
+    if (lat === null || lng === null) return null;
+
+    const inPhilippines = (candidateLat, candidateLng) => {
+        return candidateLat >= 4 && candidateLat <= 22 && candidateLng >= 116 && candidateLng <= 127;
+    };
+
+    if (!inPhilippines(lat, lng) && inPhilippines(lng, lat)) {
+        [lat, lng] = [lng, lat];
+    }
+
+    if (!inPhilippines(lat, lng)) return null;
+    return { lat, lng };
+}
 function isInvalidResponderCoordinate(lat, lng) {
     if (lat === null || lng === null) return true;
     if (Math.abs(lat) < 0.000001 && Math.abs(lng) < 0.000001) return true;
@@ -436,22 +452,18 @@ function unitResponderLatLng(unit) {
         [unit && unit.stored_latitude, unit && unit.stored_longitude]
     ];
     for (const pair of candidates) {
-        const lat = numberOrNull(pair[0]);
-        const lng = numberOrNull(pair[1]);
-        if (!isInvalidResponderCoordinate(lat, lng)) {
-            return { lat, lng };
+        const point = normalizeLatLngPair(pair[0], pair[1]);
+        if (point && !isInvalidResponderCoordinate(point.lat, point.lng)) {
+            return point;
         }
     }
     return null;
 }
 function selectedUnitDistanceKm(unit) {
-    const apiDistance = numberOrNull(unit && unit.distance_km);
-    if (apiDistance !== null) return apiDistance;
-    const incidentLat = numberOrNull(currentIncidentLat);
-    const incidentLng = numberOrNull(currentIncidentLng);
+    const incidentPoint = normalizeLatLngPair(currentIncidentLat, currentIncidentLng);
     const unitPoint = unitResponderLatLng(unit);
-    if (incidentLat === null || incidentLng === null || !unitPoint) return null;
-    return haversine(unitPoint.lat, unitPoint.lng, incidentLat, incidentLng);
+    if (!incidentPoint || !unitPoint) return null;
+    return haversine(unitPoint.lat, unitPoint.lng, incidentPoint.lat, incidentPoint.lng);
 }
 function formatDistanceKm(distanceKm) {
     if (!Number.isFinite(distanceKm)) return '';
@@ -459,12 +471,52 @@ function formatDistanceKm(distanceKm) {
         ? `${Math.round(distanceKm * 1000)} m`
         : `${distanceKm.toFixed(2)} km`;
 }
+const routeDistanceCache = {};
+function selectedUnitDistanceKey(unit) {
+    return String((unit && (unit.id || unit.identifier)) || '').replace(/[^A-Za-z0-9_-]/g, '_');
+}
+function routeDistanceKm(fromPoint, toPoint) {
+    if (!fromPoint || !toPoint) return Promise.resolve(null);
+    const cacheKey = [
+        fromPoint.lat.toFixed(6), fromPoint.lng.toFixed(6),
+        toPoint.lat.toFixed(6), toPoint.lng.toFixed(6)
+    ].join(',');
+    if (Object.prototype.hasOwnProperty.call(routeDistanceCache, cacheKey)) {
+        return Promise.resolve(routeDistanceCache[cacheKey]);
+    }
+    const url = `https://router.project-osrm.org/route/v1/driving/${fromPoint.lng},${fromPoint.lat};${toPoint.lng},${toPoint.lat}?overview=false&alternatives=false&steps=false`;
+    return fetch(url)
+        .then(r => r.ok ? r.json() : null)
+        .then(data => {
+            const meters = data && data.routes && data.routes[0] && Number(data.routes[0].distance);
+            const km = Number.isFinite(meters) ? meters / 1000 : null;
+            routeDistanceCache[cacheKey] = km;
+            return km;
+        })
+        .catch(() => null);
+}
+function updateSelectedUnitRouteDistances(units) {
+    const incidentPoint = normalizeLatLngPair(currentIncidentLat, currentIncidentLng);
+    if (!incidentPoint) return;
+    (units || []).forEach(unit => {
+        const unitPoint = unitResponderLatLng(unit);
+        const key = selectedUnitDistanceKey(unit);
+        if (!unitPoint || !key) return;
+        routeDistanceKm(unitPoint, incidentPoint).then(distanceKm => {
+            if (distanceKm === null) return;
+            document.querySelectorAll(`[data-distance-key="${key}"]`).forEach(el => {
+                el.textContent = formatDistanceKm(distanceKm);
+            });
+        });
+    });
+}
 function formatSelectedUnitDetails(unit) {
     const sampleProfile = getSampleUnitProfile(unit.unit_type);
     const vehicleName = getUnitVehicleName(unit) || 'Selected Vehicle';
     const unitCode = String(unit.identifier || '').trim();
     const unitPoint = unitResponderLatLng(unit);
     const distanceKm = selectedUnitDistanceKm(unit);
+    const distanceKey = selectedUnitDistanceKey(unit);
     const lines = [
         `<strong>${escapeHtml(vehicleName)}</strong>`,
         unitCode && unitCode !== vehicleName ? `<strong>Unit Code:</strong> ${escapeHtml(unitCode)}` : '',
@@ -474,7 +526,7 @@ function formatSelectedUnitDetails(unit) {
         `<strong>Status:</strong> ${escapeHtml(unit.status || '')}`,
         unitPoint ? `<strong>Responder GPS:</strong> ${unitPoint.lat.toFixed(6)}, ${unitPoint.lng.toFixed(6)}` : '<strong>Responder GPS:</strong> Pending',
         distanceKm !== null
-            ? `<strong>Distance to Incident:</strong> ${escapeHtml(formatDistanceKm(distanceKm))}`
+            ? `<strong>Distance to Incident:</strong> <span data-distance-key="${escapeAttr(distanceKey)}">${escapeHtml(formatDistanceKm(distanceKm))}</span>`
             : '<strong>Distance to Incident:</strong> Unavailable until responder GPS and incident coordinates are available'
     ].filter(Boolean);
     return `<div style="padding:0.55rem 0; border-bottom:1px solid #dbe3ea;">${lines.join('<br>')}</div>`;
@@ -518,6 +570,7 @@ function renderSelectedUnitDetails(select) {
             : `${selectedOptions.length} units selected`;
     }
     detailsEl.innerHTML = selectedUnits.map(formatSelectedUnitDetails).join('');
+    updateSelectedUnitRouteDistances(selectedUnits);
     if (btn) btn.disabled = false;
 }
 function formatIncidentTypeLabel(value) {
@@ -554,13 +607,14 @@ function openDispatchModal(incidentId) {
         .then(data => {
             if (data.incident) {
                 const inc = data.incident;
-                currentIncidentLat = inc && inc.latitude ? Number(inc.latitude) : null;
-                currentIncidentLng = inc && inc.longitude ? Number(inc.longitude) : null;
+                const incidentPoint = normalizeLatLngPair(inc && inc.latitude, inc && inc.longitude);
+                currentIncidentLat = incidentPoint ? incidentPoint.lat : null;
+                currentIncidentLng = incidentPoint ? incidentPoint.lng : null;
                 document.getElementById('modal-incident-details').innerHTML =
                     `<strong>Type:</strong> ${formatIncidentTypeLabel(inc.type) || inc.type || ''}<br>` +
                     `<strong>Title:</strong> ${inc.title || ''}<br>` +
                     `<strong>Location:</strong> ${inc.location_address || 'N/A'}<br>` +
-                    (inc.latitude && inc.longitude ? `<strong>Coordinates:</strong> ${inc.latitude}, ${inc.longitude}<br>` : '') +
+                    (currentIncidentLat !== null && currentIncidentLng !== null ? `<strong>Coordinates:</strong> ${currentIncidentLat}, ${currentIncidentLng}<br>` : '') +
                     `<strong>Priority:</strong> ${inc.priority || ''}`;
             } else {
                 document.getElementById('modal-incident-details').innerHTML = '<span style="color:red">Incident not found.</span>';
@@ -666,10 +720,9 @@ document.addEventListener('DOMContentLoaded', function() {
             [unit.stored_latitude, unit.stored_longitude]
         ];
         for (const pair of candidates) {
-            const lat = Number(pair[0]);
-            const lng = Number(pair[1]);
-            if (Number.isFinite(lat) && Number.isFinite(lng) && !isInvalidResponderCoordinate(lat, lng)) {
-                return { lat, lng };
+            const point = normalizeLatLngPair(pair[0], pair[1]);
+            if (point && !isInvalidResponderCoordinate(point.lat, point.lng)) {
+                return point;
             }
         }
         return null;
@@ -694,13 +747,15 @@ document.addEventListener('DOMContentLoaded', function() {
         ]).then(([incRes, unitResponses]) => {
             const inc = incRes.incident || {};
             let toLat = null, toLng = null;
-            if (inc.latitude && inc.longitude) {
-                toLat = Number(inc.latitude);
-                toLng = Number(inc.longitude);
+            const incidentPoint = normalizeLatLngPair(inc.latitude, inc.longitude);
+            if (incidentPoint) {
+                toLat = incidentPoint.lat;
+                toLng = incidentPoint.lng;
             } else if (inc.location_address && inc.location_address.match(/\d+\.\d+,[ ]*\d+\.\d+/)) {
                 const parts = inc.location_address.split(',').map(Number);
-                toLat = parts[0];
-                toLng = parts[1];
+                const addressPoint = normalizeLatLngPair(parts[0], parts[1]);
+                toLat = addressPoint ? addressPoint.lat : null;
+                toLng = addressPoint ? addressPoint.lng : null;
             }
 
             const routeUnits = unitResponses.map((unitRes, index) => {
