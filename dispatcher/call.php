@@ -741,6 +741,7 @@ $turnCredential = (string) ers_env('WEBRTC_TURN_CREDENTIAL', '');
     let transferInboxSocket = null;
     let transferOfferRequestTimer = null;
     let pendingTransferIceCandidates = [];
+    let transferNegotiationId = '';
     const SpeechRecognitionApi = window.SpeechRecognition || window.webkitSpeechRecognition || null;
 
     function getSharedCallSessionApi() {
@@ -1579,6 +1580,17 @@ $turnCredential = (string) ers_env('WEBRTC_TURN_CREDENTIAL', '');
             });
             transferSocket.on('candidate', async (data) => {
                 if (!transferPayloadMatchesCall(data, callId, call.room)) return;
+                // Ignore ICE from the original Emergency-Com/admin discovery
+                // peer. ERS must only add candidates belonging to the fresh
+                // mobile-to-ERS transfer offer answered above.
+                const isTransferCandidate = data
+                    && (data.transferred === true || data.target === 'ers');
+                if (!isTransferCandidate) return;
+                if (
+                    transferNegotiationId
+                    && data.negotiationId
+                    && String(data.negotiationId) !== transferNegotiationId
+                ) return;
                 if (data && data.candidate && transferPeerConnection) {
                     addTransferIceCandidate(data.candidate);
                 }
@@ -1622,7 +1634,8 @@ $turnCredential = (string) ers_env('WEBRTC_TURN_CREDENTIAL', '');
                 callId: call.callId || call.transferId || '',
                 room: call.room,
                 transferred: true,
-                target: 'ers'
+                target: 'ers',
+                negotiationId: transferNegotiationId
             }, call.room);
         };
         pc.ontrack = (event) => {
@@ -1676,6 +1689,7 @@ $turnCredential = (string) ers_env('WEBRTC_TURN_CREDENTIAL', '');
         transferOfferRequestTimer = window.setTimeout(() => {
             if (!transferSocket || !call.room || !transferPeerConnection) return;
             if (transferPeerConnection.connectionState === 'connected') return;
+            if (transferPeerConnection.remoteDescription) return;
             transferSocket.emit('request-transfer-offer', transferAcceptedPayload(call, 'response-team-offer-timeout'), call.room);
             setVoiceState('Requesting fresh caller audio connection...');
         }, 700);
@@ -1876,6 +1890,7 @@ $turnCredential = (string) ers_env('WEBRTC_TURN_CREDENTIAL', '');
         const remoteDescription = typeof offerPayload.sdp === 'string'
             ? { type: 'offer', sdp: offerPayload.sdp }
             : offerPayload.sdp;
+        transferNegotiationId = String(offerPayload.negotiationId || '');
         await transferPeerConnection.setRemoteDescription(remoteDescription);
         await flushPendingTransferIceCandidates();
         await prepareTransferLocalAudio(call);
@@ -1891,7 +1906,8 @@ $turnCredential = (string) ers_env('WEBRTC_TURN_CREDENTIAL', '');
             transfer_id: call.transferId || '',
             room: call.room,
             transferred: true,
-            target: 'ers'
+            target: 'ers',
+            negotiationId: transferNegotiationId
         }, call.room);
         setVoiceState('Answered AlertaraQC live call. Two-way audio is connecting.');
     }
@@ -1899,6 +1915,7 @@ $turnCredential = (string) ers_env('WEBRTC_TURN_CREDENTIAL', '');
     function disconnectTransferCall() {
         clearTransferOfferRequestTimer();
         pendingTransferIceCandidates = [];
+        transferNegotiationId = '';
         if (transferSocket && typeof transferSocket.disconnect === 'function') {
             transferSocket.disconnect();
         }
