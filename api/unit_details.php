@@ -58,7 +58,8 @@ if ($pdo && $id) {
     $hasUnitLongitude = unit_details_column_exists($pdo, 'units', 'longitude');
     $latestLocationOrderExpr = $hasLocationId ? 'ul.recorded_at DESC, ul.id DESC' : 'ul.recorded_at DESC';
     $ignoredFallbackGpsWhere = ($hasLocationLatitude && $hasLocationLongitude) ? " AND NOT (
-        (ABS(ul.latitude - 14.7338) < 0.000001 AND ABS(ul.longitude - 121.0368) < 0.000001)
+        (ABS(ul.latitude) < 0.000001 AND ABS(ul.longitude) < 0.000001)
+        OR (ABS(ul.latitude - 14.7338) < 0.000001 AND ABS(ul.longitude - 121.0368) < 0.000001)
         OR (ABS(ul.latitude - 14.7295) < 0.000001 AND ABS(ul.longitude - 121.0342) < 0.000001)
         OR (ABS(ul.latitude - 14.7351) < 0.000001 AND ABS(ul.longitude - 121.0380) < 0.000001)
         OR (ABS(ul.latitude - 14.7320) < 0.000001 AND ABS(ul.longitude - 121.0351) < 0.000001)
@@ -67,7 +68,8 @@ if ($pdo && $id) {
     $storedUnitLatRawExpr = $hasUnitLatitude ? 'u.latitude' : 'NULL';
     $storedUnitLngRawExpr = $hasUnitLongitude ? 'u.longitude' : 'NULL';
     $storedFallbackCoordinateSql = ($hasUnitLatitude && $hasUnitLongitude) ? "(
-        (ABS(u.latitude - 14.7338) < 0.000001 AND ABS(u.longitude - 121.0368) < 0.000001)
+        (ABS(u.latitude) < 0.000001 AND ABS(u.longitude) < 0.000001)
+        OR (ABS(u.latitude - 14.7338) < 0.000001 AND ABS(u.longitude - 121.0368) < 0.000001)
         OR (ABS(u.latitude - 14.7295) < 0.000001 AND ABS(u.longitude - 121.0342) < 0.000001)
         OR (ABS(u.latitude - 14.7351) < 0.000001 AND ABS(u.longitude - 121.0380) < 0.000001)
         OR (ABS(u.latitude - 14.7320) < 0.000001 AND ABS(u.longitude - 121.0351) < 0.000001)

@@ -414,7 +414,8 @@ function numberOrNull(value) {
 function unitResponderLatLng(unit) {
     const candidates = [
         [unit && unit.latest_latitude, unit && unit.latest_longitude],
-        [unit && unit.latitude, unit && unit.longitude]
+        [unit && unit.latitude, unit && unit.longitude],
+        [unit && unit.stored_latitude, unit && unit.stored_longitude]
     ];
     for (const pair of candidates) {
         const lat = numberOrNull(pair[0]);
@@ -643,7 +644,8 @@ document.addEventListener('DOMContentLoaded', function() {
     function getUnitRoutePoint(unit, selectedOption) {
         const candidates = [
             [unit.latest_latitude, unit.latest_longitude],
-            [unit.latitude, unit.longitude]
+            [unit.latitude, unit.longitude],
+            [unit.stored_latitude, unit.stored_longitude]
         ];
         for (const pair of candidates) {
             const lat = Number(pair[0]);
@@ -864,6 +866,7 @@ function initFirebaseLiveTracking() {
             const lat = parseFloat(r.lat);
             const lng = parseFloat(r.lng);
             if (isNaN(lat) || isNaN(lng)) return;
+            if (Math.abs(lat) < 0.000001 && Math.abs(lng) < 0.000001) return;
             const accuracyM = parseFiniteNumber(r.accuracy ?? r.accuracy_m);
 
             const key = String(r.unitCode || r.responderId || '').trim();
@@ -1207,10 +1210,11 @@ function syncUnitMarkers(items) {
         }
         if (markers[id] && markers[id].isLive) return;
         const type = u.unit_type || 'other';
-        const lat = parseFloat(u.latitude);
-        const lng = parseFloat(u.longitude);
+        const point = unitResponderLatLng(u);
         const speed = (u.speed_kph !== undefined && u.speed_kph !== null) ? parseFloat(u.speed_kph) : null;
-        if (!isNaN(lat) && !isNaN(lng)) {
+        if (point) {
+            const lat = point.lat;
+            const lng = point.lng;
             const label = `${id}`;
             if (markers[id]) {
                 moveUnitMarker(id, lat, lng, { speedKph: speed, animate: true });
@@ -1227,6 +1231,8 @@ function syncUnitMarkers(items) {
             } else {
                 addUnitMarker(id, lat, lng, label, type, speed, u.id);
             }
+        } else {
+            removeUnitMarkerByIdentifier(id);
         }
     });
 }
@@ -1247,10 +1253,11 @@ function syncAvailableUnitMarkers(items) {
         }
         if (markers[id] && markers[id].isLive) return;
         const type = u.unit_type || 'other';
-        const lat = parseFloat(u.latitude);
-        const lng = parseFloat(u.longitude);
+        const point = unitResponderLatLng(u);
         const speed = (u.speed_kph !== undefined && u.speed_kph !== null) ? parseFloat(u.speed_kph) : null;
-        if (!isNaN(lat) && !isNaN(lng)) {
+        if (point) {
+            const lat = point.lat;
+            const lng = point.lng;
             if (markers[id]) {
                 moveUnitMarker(id, lat, lng, { speedKph: speed, animate: true });
                 markers[id].marker.setIcon(getIcon(type));
@@ -1265,6 +1272,8 @@ function syncAvailableUnitMarkers(items) {
             } else {
                 addUnitMarker(id, lat, lng, `${id}`, type, speed, u.id);
             }
+        } else {
+            removeUnitMarkerByIdentifier(id);
         }
     });
 }
@@ -1362,10 +1371,9 @@ function renderAvailableUnits(items) {
         const meta = [];
         if (u.unit_type) meta.push(u.unit_type.charAt(0).toUpperCase() + u.unit_type.slice(1));
         const displayName = u.resource_name || u.identifier;
-        const latestLat = Number(u.latest_latitude ?? u.latitude);
-        const latestLng = Number(u.latest_longitude ?? u.longitude);
-        const gpsLocationText = Number.isFinite(latestLat) && Number.isFinite(latestLng)
-            ? `Responder GPS: ${latestLat.toFixed(6)}, ${latestLng.toFixed(6)}`
+        const unitPoint = unitResponderLatLng(u);
+        const gpsLocationText = unitPoint
+            ? `Responder GPS: ${unitPoint.lat.toFixed(6)}, ${unitPoint.lng.toFixed(6)}`
             : '';
         const locationText = gpsLocationText || 'Responder GPS pending';
         const assignmentText = u.assignment || u.plate_number || u.driver_name || '';
@@ -1501,9 +1509,10 @@ function findCachedUnitByReference(unitIdentifier, unitId) {
 function ensureUnitMarkerFromApiUnit(unit) {
     if (!unit || !unit.identifier || !isResponderUnitOnline(unit)) return null;
     const id = String(unit.identifier);
-    const lat = parseFloat(unit.latitude);
-    const lng = parseFloat(unit.longitude);
-    if (isNaN(lat) || isNaN(lng)) return null;
+    const point = unitResponderLatLng(unit);
+    if (!point) return null;
+    const lat = point.lat;
+    const lng = point.lng;
 
     const type = unit.unit_type || 'other';
     const speed = (unit.speed_kph !== undefined && unit.speed_kph !== null) ? parseFloat(unit.speed_kph) : null;

@@ -128,6 +128,8 @@ function ers_units_fallback_coordinate_condition(string $alias): string
     $safeAlias = preg_replace('/[^A-Za-z0-9_]/', '', $alias) ?: 'u';
 
     return "(
+        (ABS({$safeAlias}.latitude) < 0.000001 AND ABS({$safeAlias}.longitude) < 0.000001)
+        OR
         (ABS({$safeAlias}.latitude - 14.7338) < 0.000001 AND ABS({$safeAlias}.longitude - 121.0368) < 0.000001)
         OR (ABS({$safeAlias}.latitude - 14.7295) < 0.000001 AND ABS({$safeAlias}.longitude - 121.0342) < 0.000001)
         OR (ABS({$safeAlias}.latitude - 14.7351) < 0.000001 AND ABS({$safeAlias}.longitude - 121.0380) < 0.000001)
