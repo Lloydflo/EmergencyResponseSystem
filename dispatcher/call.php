@@ -1287,7 +1287,19 @@ $turnCredential = (string) ers_env('WEBRTC_TURN_CREDENTIAL', '');
         }
         const existingIndex = transferQueueItems.findIndex((existing) => existing.queue_key === item.queue_key);
         if (existingIndex >= 0) {
-            transferQueueItems[existingIndex] = { ...transferQueueItems[existingIndex], ...item };
+            const existing = transferQueueItems[existingIndex];
+            const merged = { ...existing, ...item };
+            // Polling may return the database copy before its live signaling
+            // fields are populated. Never erase the room/call identity from
+            // the realtime notification, otherwise Answer opens a form but
+            // cannot join the caller's Socket.IO room.
+            ['room', 'socket_url', 'socket_path', 'call_id_external', 'conversation_id', 'transfer_id'].forEach((field) => {
+                if (!String(item[field] || '').trim() && String(existing[field] || '').trim()) {
+                    merged[field] = existing[field];
+                }
+            });
+            if (existing.transfer_type === 'live_call') merged.transfer_type = 'live_call';
+            transferQueueItems[existingIndex] = merged;
         } else {
             transferQueueItems.unshift(item);
         }
