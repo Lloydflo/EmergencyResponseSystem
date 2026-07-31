@@ -908,7 +908,9 @@ function initFirebaseLiveTracking() {
             seenKeys.add(key);
 
             const label = `${key} — ${r.responderName || 'Responder'}`;
-            const speedKph = typeof r.speed === 'number' ? r.speed * 3.6 : null;
+            const rawSpeedKph = parseFiniteNumber(r.speed_kph ?? r.speedKph);
+            const speedMetersPerSecond = parseFiniteNumber(r.speed);
+            const speedKph = rawSpeedKph !== null ? rawSpeedKph : (speedMetersPerSecond !== null ? speedMetersPerSecond * 3.6 : null);
 
             const isEnRoute = status === 'en_route';
             const dept = String(r.department || r.unitType || 'other').toLowerCase();
@@ -916,28 +918,30 @@ function initFirebaseLiveTracking() {
             const cachedUnitPoint = unitResponderLatLng(findCachedUnitByReference(key, ''));
             const markerLat = cachedUnitPoint ? cachedUnitPoint.lat : lat;
             const markerLng = cachedUnitPoint ? cachedUnitPoint.lng : lng;
+            const livePopupHtml = `
+                <strong>${label}</strong><br>
+                Status: ${r.status || 'unknown'}<br>
+                ${accuracyM !== null ? `Accuracy: ${accuracyM.toFixed(0)} m<br>` : ''}
+                Speed: ${speedKph !== null ? speedKph.toFixed(1) + ' km/h' : 'pending'}<br>
+                Coords: ${markerLat.toFixed(5)}, ${markerLng.toFixed(5)}<br>
+                <em>${cachedUnitPoint ? 'Responder GPS' : 'Live GPS'}</em>
+            `;
 
             if (markers[key]) {
                 const accepted = moveUnitMarker(key, markerLat, markerLng, { speedKph, accuracyM, animate: true });
                 if (!accepted) return;
                 markers[key].marker.setIcon(getIcon(type));
-                markers[key].marker.bindPopup(`
-                    <strong>${label}</strong><br>
-                    Status: ${r.status || 'unknown'}<br>
-                    ${accuracyM !== null ? `Accuracy: ${accuracyM.toFixed(0)} m<br>` : ''}
-                    ${speedKph !== null ? `Speed: ${speedKph.toFixed(1)} km/h<br>` : ''}
-                    Coords: ${markerLat.toFixed(5)}, ${markerLng.toFixed(5)}<br>
-                    <em>${cachedUnitPoint ? 'Responder GPS' : 'Live GPS'}</em>
-                `);
+                markers[key].marker.bindPopup(livePopupHtml);
                 markers[key].isLive = true;
             } else {
                 addUnitMarker(key, markerLat, markerLng, label, type, speedKph);
+                markers[key].marker.bindPopup(livePopupHtml);
                 markers[key].isLive = true;
             }
         });
 
         Object.keys(markers).forEach((key) => {
-            if (markers[key].isLive && !seenKeys.has(key)) {
+            if (markers[key].isLive && !seenKeys.has(key) && !hasLiveUnitLocation(key)) {
                 map.removeLayer(markers[key].marker);
                 delete markers[key];
             }
@@ -1047,6 +1051,21 @@ function removeUnitMarkerByIdentifier(identifier) {
     delete markers[id];
 }
 
+function hasLiveUnitLocation(identifier) {
+    const id = normalizeUnitIdentifier(identifier);
+    if (!id) return false;
+    const livePoint = liveUnitLocationsByIdentifier[id] || liveUnitLocationsByIdentifier[id.toUpperCase()] || null;
+    return !!livePoint && !isInvalidResponderCoordinate(livePoint.lat, livePoint.lng);
+}
+
+function removeUnitMarkerIfNotLive(identifier) {
+    const id = normalizeUnitIdentifier(identifier);
+    if (!id) return;
+    const entry = markers[id] || markers[Object.keys(markers).find((key) => String(key).toUpperCase() === id.toUpperCase())];
+    if (entry && entry.isLive && hasLiveUnitLocation(id)) return;
+    removeUnitMarkerByIdentifier(id);
+}
+
 function isResponderUnitOnline(unit) {
     const online = String(unit && unit.presence_status ? unit.presence_status : '').trim().toLowerCase() === 'online';
     return online && isRenderableResponderUnit(unit);
@@ -1073,7 +1092,7 @@ function isRenderableResponderUnit(unit) {
 function onlineResponderUnits(items) {
     return (items || []).filter(u => {
         if (isResponderUnitOnline(u)) return true;
-        removeUnitMarkerByIdentifier(u && u.identifier);
+        removeUnitMarkerIfNotLive(u && u.identifier);
         return false;
     });
 }
@@ -1106,6 +1125,7 @@ function pruneOfflineUnitMarkers() {
             Object.entries(markers).forEach(([key, entry]) => {
                 if (!entry || entry.type !== 'unit') return;
                 if (!onlineKeys.has(String(key)) && !onlineKeys.has(String(key).toUpperCase())) {
+                    if (entry.isLive && hasLiveUnitLocation(key)) return;
                     try { map.removeLayer(entry.marker); } catch (e) {}
                     delete markers[key];
                 }
@@ -1116,6 +1136,7 @@ function pruneOfflineUnitMarkers() {
 
 function canRenderLiveUnitMarker(identifier) {
     const id = String(identifier || '').trim();
+    if (hasLiveUnitLocation(id)) return true;
     return !!id
         && authoritativeOnlineUnitKeysReady
         && (authoritativeOnlineUnitKeys.has(id) || authoritativeOnlineUnitKeys.has(id.toUpperCase()));
@@ -1233,7 +1254,7 @@ function syncUnitMarkers(items) {
         const id = u.identifier;
         rememberUnitIdentity(u);
         if (!isResponderUnitOnline(u)) {
-            removeUnitMarkerByIdentifier(id);
+            removeUnitMarkerIfNotLive(id);
             return;
         }
         const type = u.unit_type || 'other';
@@ -1246,12 +1267,14 @@ function syncUnitMarkers(items) {
             if (markers[id]) {
                 moveUnitMarker(id, lat, lng, { speedKph: speed, animate: true });
                 markers[id].marker.setIcon(getIcon(type));
-                const popupHtml = `
-                    <strong>${label}</strong><br>
-                    ${typeof speed === 'number' && isFinite(speed) ? `Speed: ${speed.toFixed(1)} km/h<br>` : ''}
-                    Coords: ${lat.toFixed(5)}, ${lng.toFixed(5)}
-                `;
-                markers[id].marker.bindPopup(popupHtml);
+                if (!markers[id].isLive) {
+                    const popupHtml = `
+                        <strong>${label}</strong><br>
+                        ${typeof speed === 'number' && isFinite(speed) ? `Speed: ${speed.toFixed(1)} km/h<br>` : ''}
+                        Coords: ${lat.toFixed(5)}, ${lng.toFixed(5)}
+                    `;
+                    markers[id].marker.bindPopup(popupHtml);
+                }
                 markers[id].speedKph = speed;
                 markers[id].unitType = String(type || '').toLowerCase();
                 markers[id].unitDbId = u.id !== undefined && u.id !== null ? String(u.id) : markers[id].unitDbId;
@@ -1259,7 +1282,7 @@ function syncUnitMarkers(items) {
                 addUnitMarker(id, lat, lng, label, type, speed, u.id);
             }
         } else {
-            removeUnitMarkerByIdentifier(id);
+            removeUnitMarkerIfNotLive(id);
         }
     });
 }
@@ -1275,7 +1298,7 @@ function syncAvailableUnitMarkers(items) {
         const id = u.identifier;
         rememberUnitIdentity(u);
         if (!isResponderUnitOnline(u)) {
-            removeUnitMarkerByIdentifier(id);
+            removeUnitMarkerIfNotLive(id);
             return;
         }
         const type = u.unit_type || 'other';
@@ -1287,11 +1310,13 @@ function syncAvailableUnitMarkers(items) {
             if (markers[id]) {
                 moveUnitMarker(id, lat, lng, { speedKph: speed, animate: true });
                 markers[id].marker.setIcon(getIcon(type));
-                markers[id].marker.bindPopup(`
-                    <strong>${id}</strong><br>
-                    ${typeof speed === 'number' && isFinite(speed) ? `Speed: ${speed.toFixed(1)} km/h<br>` : ''}
-                    Coords: ${lat.toFixed(5)}, ${lng.toFixed(5)}
-                `);
+                if (!markers[id].isLive) {
+                    markers[id].marker.bindPopup(`
+                        <strong>${id}</strong><br>
+                        ${typeof speed === 'number' && isFinite(speed) ? `Speed: ${speed.toFixed(1)} km/h<br>` : ''}
+                        Coords: ${lat.toFixed(5)}, ${lng.toFixed(5)}
+                    `);
+                }
                 markers[id].speedKph = speed;
                 markers[id].unitType = String(type || '').toLowerCase();
                 markers[id].unitDbId = u.id !== undefined && u.id !== null ? String(u.id) : markers[id].unitDbId;
@@ -1299,7 +1324,7 @@ function syncAvailableUnitMarkers(items) {
                 addUnitMarker(id, lat, lng, `${id}`, type, speed, u.id);
             }
         } else {
-            removeUnitMarkerByIdentifier(id);
+            removeUnitMarkerIfNotLive(id);
         }
     });
 }
