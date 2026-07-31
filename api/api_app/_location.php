@@ -2,6 +2,7 @@
 declare(strict_types=1);
 
 require_once __DIR__ . '/_operational_api.php';
+require_once __DIR__ . '/../../includes/unit_location_tracking.php';
 
 /** @return string */
 function app_location_unit_select(PDO $pdo): string
@@ -190,9 +191,20 @@ function app_location_distance_meters(
 /** @return array<string,mixed> */
 function app_location_update(PDO $pdo, array $input): array
 {
-    if (!op_table_exists($pdo, 'units') || !op_table_exists($pdo, 'unit_locations')) {
+    if (!op_table_exists($pdo, 'units')) {
         return ['ok' => false, 'error' => 'Location tracking is not installed on the database.'];
     }
+
+    try {
+        ers_unit_location_ensure_schema($pdo);
+    } catch (Throwable $schemaError) {
+        error_log('[api_app location] schema ensure skipped: ' . $schemaError->getMessage());
+    }
+
+    if (!op_table_exists($pdo, 'unit_locations')) {
+        return ['ok' => false, 'error' => 'Location tracking is not installed on the database.'];
+    }
+
     foreach (['unit_id', 'latitude', 'longitude'] as $column) {
         if (!op_column_exists($pdo, 'unit_locations', $column)) {
             return ['ok' => false, 'error' => 'Location tracking requires a database update.'];

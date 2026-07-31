@@ -411,28 +411,59 @@ function numberOrNull(value) {
     const number = Number(value);
     return Number.isFinite(number) ? number : null;
 }
+function normalizeLatLngPair(latValue, lngValue) {
+    let lat = numberOrNull(latValue);
+    let lng = numberOrNull(lngValue);
+    if (lat === null || lng === null) return null;
+
+    const inPhilippines = (candidateLat, candidateLng) => {
+        return candidateLat >= 4 && candidateLat <= 22 && candidateLng >= 116 && candidateLng <= 127;
+    };
+
+    if (!inPhilippines(lat, lng) && inPhilippines(lng, lat)) {
+        [lat, lng] = [lng, lat];
+    }
+
+    if (!inPhilippines(lat, lng)) return null;
+    return { lat, lng };
+}
+function isInvalidResponderCoordinate(lat, lng) {
+    if (lat === null || lng === null) return true;
+    if (Math.abs(lat) < 0.000001 && Math.abs(lng) < 0.000001) return true;
+    const ignoredPoints = [
+        [14.7338, 121.0368],
+        [14.7295, 121.0342],
+        [14.7351, 121.0380],
+        [14.7320, 121.0351]
+    ];
+    return ignoredPoints.some(([ignoredLat, ignoredLng]) => {
+        return Math.abs(lat - ignoredLat) < 0.000001 && Math.abs(lng - ignoredLng) < 0.000001;
+    });
+}
 function unitResponderLatLng(unit) {
+    const identifier = normalizeUnitIdentifier(unit && unit.identifier);
+    const livePoint = identifier
+        ? (liveUnitLocationsByIdentifier[identifier] || liveUnitLocationsByIdentifier[identifier.toUpperCase()] || null)
+        : null;
     const candidates = [
+        [livePoint && livePoint.lat, livePoint && livePoint.lng],
         [unit && unit.latest_latitude, unit && unit.latest_longitude],
-        [unit && unit.latitude, unit && unit.longitude]
+        [unit && unit.latitude, unit && unit.longitude],
+        [unit && unit.stored_latitude, unit && unit.stored_longitude]
     ];
     for (const pair of candidates) {
-        const lat = numberOrNull(pair[0]);
-        const lng = numberOrNull(pair[1]);
-        if (lat !== null && lng !== null && !(Math.abs(lat) < 0.000001 && Math.abs(lng) < 0.000001)) {
-            return { lat, lng };
+        const point = normalizeLatLngPair(pair[0], pair[1]);
+        if (point && !isInvalidResponderCoordinate(point.lat, point.lng)) {
+            return point;
         }
     }
     return null;
 }
 function selectedUnitDistanceKm(unit) {
-    const apiDistance = numberOrNull(unit && unit.distance_km);
-    if (apiDistance !== null) return apiDistance;
-    const incidentLat = numberOrNull(currentIncidentLat);
-    const incidentLng = numberOrNull(currentIncidentLng);
+    const incidentPoint = normalizeLatLngPair(currentIncidentLat, currentIncidentLng);
     const unitPoint = unitResponderLatLng(unit);
-    if (incidentLat === null || incidentLng === null || !unitPoint) return null;
-    return haversine(unitPoint.lat, unitPoint.lng, incidentLat, incidentLng);
+    if (!incidentPoint || !unitPoint) return null;
+    return haversine(unitPoint.lat, unitPoint.lng, incidentPoint.lat, incidentPoint.lng);
 }
 function formatDistanceKm(distanceKm) {
     if (!Number.isFinite(distanceKm)) return '';
@@ -440,12 +471,56 @@ function formatDistanceKm(distanceKm) {
         ? `${Math.round(distanceKm * 1000)} m`
         : `${distanceKm.toFixed(2)} km`;
 }
+const routeDistanceCache = {};
+function selectedUnitDistanceKey(unit) {
+    return String((unit && (unit.id || unit.identifier)) || '').replace(/[^A-Za-z0-9_-]/g, '_');
+}
+function routeDistanceKm(fromPoint, toPoint) {
+    if (!fromPoint || !toPoint) return Promise.resolve(null);
+    const cacheKey = [
+        fromPoint.lat.toFixed(6), fromPoint.lng.toFixed(6),
+        toPoint.lat.toFixed(6), toPoint.lng.toFixed(6)
+    ].join(',');
+    if (Object.prototype.hasOwnProperty.call(routeDistanceCache, cacheKey)) {
+        return Promise.resolve(routeDistanceCache[cacheKey]);
+    }
+    const url = `https://router.project-osrm.org/route/v1/driving/${fromPoint.lng},${fromPoint.lat};${toPoint.lng},${toPoint.lat}?overview=false&alternatives=false&steps=false`;
+    return fetch(url)
+        .then(r => r.ok ? r.json() : null)
+        .then(data => {
+            const meters = data && data.routes && data.routes[0] && Number(data.routes[0].distance);
+            const km = Number.isFinite(meters) ? meters / 1000 : null;
+            routeDistanceCache[cacheKey] = km;
+            return km;
+        })
+        .catch(() => null);
+}
+function updateSelectedUnitRouteDistances(units) {
+    const incidentPoint = normalizeLatLngPair(currentIncidentLat, currentIncidentLng);
+    if (!incidentPoint) return;
+    (units || []).forEach(unit => {
+        const unitPoint = unitResponderLatLng(unit);
+        const key = selectedUnitDistanceKey(unit);
+        if (!unitPoint || !key) return;
+        routeDistanceKm(unitPoint, incidentPoint).then(distanceKm => {
+            if (distanceKm === null) return;
+            document.querySelectorAll(`[data-distance-key="${key}"]`).forEach(el => {
+                el.textContent = formatDistanceKm(distanceKm);
+            });
+        });
+    });
+}
 function formatSelectedUnitDetails(unit) {
     const sampleProfile = getSampleUnitProfile(unit.unit_type);
     const vehicleName = getUnitVehicleName(unit) || 'Selected Vehicle';
     const unitCode = String(unit.identifier || '').trim();
     const unitPoint = unitResponderLatLng(unit);
     const distanceKm = selectedUnitDistanceKm(unit);
+    const distanceKey = selectedUnitDistanceKey(unit);
+    const incidentPoint = normalizeLatLngPair(currentIncidentLat, currentIncidentLng);
+    const distanceUnavailableText = !incidentPoint
+        ? 'Incident coordinates are not available'
+        : 'Responder GPS is not available';
     const lines = [
         `<strong>${escapeHtml(vehicleName)}</strong>`,
         unitCode && unitCode !== vehicleName ? `<strong>Unit Code:</strong> ${escapeHtml(unitCode)}` : '',
@@ -455,8 +530,8 @@ function formatSelectedUnitDetails(unit) {
         `<strong>Status:</strong> ${escapeHtml(unit.status || '')}`,
         unitPoint ? `<strong>Responder GPS:</strong> ${unitPoint.lat.toFixed(6)}, ${unitPoint.lng.toFixed(6)}` : '<strong>Responder GPS:</strong> Pending',
         distanceKm !== null
-            ? `<strong>Distance to Incident:</strong> ${escapeHtml(formatDistanceKm(distanceKm))}`
-            : '<strong>Distance to Incident:</strong> Unavailable until responder GPS and incident coordinates are available'
+            ? `<strong>Distance to Incident:</strong> <span data-distance-key="${escapeAttr(distanceKey)}">${escapeHtml(formatDistanceKm(distanceKm))}</span>`
+            : `<strong>Distance to Incident:</strong> ${escapeHtml(distanceUnavailableText)}`
     ].filter(Boolean);
     return `<div style="padding:0.55rem 0; border-bottom:1px solid #dbe3ea;">${lines.join('<br>')}</div>`;
 }
@@ -499,6 +574,7 @@ function renderSelectedUnitDetails(select) {
             : `${selectedOptions.length} units selected`;
     }
     detailsEl.innerHTML = selectedUnits.map(formatSelectedUnitDetails).join('');
+    updateSelectedUnitRouteDistances(selectedUnits);
     if (btn) btn.disabled = false;
 }
 function formatIncidentTypeLabel(value) {
@@ -518,6 +594,30 @@ function formatIncidentTypeLabel(value) {
     if (!parts.length) return '';
     return parts.map((part) => labels[part] || part.replace(/\b\w/g, (c) => c.toUpperCase())).join(', ');
 }
+function parseLatLngFromText(text) {
+    const raw = String(text || '');
+    const match = raw.match(/(?:lat(?:itude)?\s*[:=]?\s*)?(-?\d{1,3}(?:\.\d+)?)\s*[, ]\s*(?:lon(?:gitude)?|lng)?\s*[:=]?\s*(-?\d{1,3}(?:\.\d+)?)/i);
+    if (!match) return null;
+    return normalizeLatLngPair(match[1], match[2]);
+}
+function renderIncidentDetails(inc) {
+    const hasPoint = currentIncidentLat !== null && currentIncidentLng !== null;
+    document.getElementById('modal-incident-details').innerHTML =
+        `<strong>Type:</strong> ${formatIncidentTypeLabel(inc.type) || inc.type || ''}<br>` +
+        `<strong>Title:</strong> ${inc.title || ''}<br>` +
+        `<strong>Location:</strong> ${inc.location_address || 'N/A'}<br>` +
+        (hasPoint ? `<strong>Coordinates:</strong> ${currentIncidentLat}, ${currentIncidentLng}<br>` : '<strong>Coordinates:</strong> Not available<br>') +
+        `<strong>Priority:</strong> ${inc.priority || ''}`;
+}
+function resolveIncidentPoint(inc) {
+    const savedPoint = normalizeLatLngPair(inc && inc.latitude, inc && inc.longitude);
+    if (savedPoint) return Promise.resolve(savedPoint);
+
+    const textPoint = parseLatLngFromText((inc && inc.location_address) || '');
+    if (textPoint) return Promise.resolve(textPoint);
+
+    return Promise.resolve(null);
+}
 function openDispatchModal(incidentId) {
     currentIncidentId = toIncidentId(incidentId);
     document.getElementById('dispatch-modal').style.display = 'flex';
@@ -533,16 +633,15 @@ function openDispatchModal(incidentId) {
     fetch('api/incident_details.php?id=' + encodeURIComponent(currentIncidentId))
         .then(r => r.json())
         .then(data => {
+            const incidentReady = data.incident
+                ? resolveIncidentPoint(data.incident)
+                : Promise.resolve(null);
+            return incidentReady.then(incidentPoint => {
             if (data.incident) {
                 const inc = data.incident;
-                currentIncidentLat = inc && inc.latitude ? Number(inc.latitude) : null;
-                currentIncidentLng = inc && inc.longitude ? Number(inc.longitude) : null;
-                document.getElementById('modal-incident-details').innerHTML =
-                    `<strong>Type:</strong> ${formatIncidentTypeLabel(inc.type) || inc.type || ''}<br>` +
-                    `<strong>Title:</strong> ${inc.title || ''}<br>` +
-                    `<strong>Location:</strong> ${inc.location_address || 'N/A'}<br>` +
-                    (inc.latitude && inc.longitude ? `<strong>Coordinates:</strong> ${inc.latitude}, ${inc.longitude}<br>` : '') +
-                    `<strong>Priority:</strong> ${inc.priority || ''}`;
+                currentIncidentLat = incidentPoint ? incidentPoint.lat : null;
+                currentIncidentLng = incidentPoint ? incidentPoint.lng : null;
+                renderIncidentDetails(inc);
             } else {
                 document.getElementById('modal-incident-details').innerHTML = '<span style="color:red">Incident not found.</span>';
             }
@@ -555,7 +654,10 @@ function openDispatchModal(incidentId) {
                 dispatchableUnits.forEach(u => {
                     currentAvailableUnitsById[String(u.id)] = u;
                     const distKm = selectedUnitDistanceKm(u);
-                    const dist = distKm !== null ? `Distance: ${formatDistanceKm(distKm)}` : 'Distance pending';
+                    const incidentPoint = normalizeLatLngPair(currentIncidentLat, currentIncidentLng);
+                    const dist = distKm !== null
+                        ? `Distance: ${formatDistanceKm(distKm)}`
+                        : (incidentPoint ? 'Responder GPS pending' : 'Incident coordinates missing');
                     const vehicleName = getUnitVehicleName(u);
                     const unitCode = String(u.identifier || '').trim();
                     const detailParts = [];
@@ -580,6 +682,7 @@ function openDispatchModal(incidentId) {
                 document.getElementById('unit-details').innerHTML = 'No online available responder vehicles are ready for dispatch.';
                 document.getElementById('confirm-dispatch-btn').disabled = true;
             }
+            });
         });
 }
 function closeDispatchModal() {
@@ -643,13 +746,13 @@ document.addEventListener('DOMContentLoaded', function() {
     function getUnitRoutePoint(unit, selectedOption) {
         const candidates = [
             [unit.latest_latitude, unit.latest_longitude],
-            [unit.latitude, unit.longitude]
+            [unit.latitude, unit.longitude],
+            [unit.stored_latitude, unit.stored_longitude]
         ];
         for (const pair of candidates) {
-            const lat = Number(pair[0]);
-            const lng = Number(pair[1]);
-            if (Number.isFinite(lat) && Number.isFinite(lng) && !(Math.abs(lat) < 0.000001 && Math.abs(lng) < 0.000001)) {
-                return { lat, lng };
+            const point = normalizeLatLngPair(pair[0], pair[1]);
+            if (point && !isInvalidResponderCoordinate(point.lat, point.lng)) {
+                return point;
             }
         }
         return null;
@@ -674,13 +777,15 @@ document.addEventListener('DOMContentLoaded', function() {
         ]).then(([incRes, unitResponses]) => {
             const inc = incRes.incident || {};
             let toLat = null, toLng = null;
-            if (inc.latitude && inc.longitude) {
-                toLat = Number(inc.latitude);
-                toLng = Number(inc.longitude);
+            const incidentPoint = normalizeLatLngPair(inc.latitude, inc.longitude);
+            if (incidentPoint) {
+                toLat = incidentPoint.lat;
+                toLng = incidentPoint.lng;
             } else if (inc.location_address && inc.location_address.match(/\d+\.\d+,[ ]*\d+\.\d+/)) {
                 const parts = inc.location_address.split(',').map(Number);
-                toLat = parts[0];
-                toLng = parts[1];
+                const addressPoint = normalizeLatLngPair(parts[0], parts[1]);
+                toLat = addressPoint ? addressPoint.lat : null;
+                toLng = addressPoint ? addressPoint.lng : null;
             }
 
             const routeUnits = unitResponses.map((unitRes, index) => {
@@ -771,6 +876,9 @@ let markers = {};
 let authoritativeOnlineUnitKeys = new Set();
 let authoritativeOnlineUnitKeysReady = false;
 let availableUnitsByIdentifier = {};
+let liveUnitLocationsByIdentifier = {};
+let unitIdentifierById = {};
+let unitIdentifierByResponderId = {};
 let incidentMarkers = {};
 let QC_BOUNDS_GLOBAL;
 let pendingDispatchTrackUnit = '';
@@ -863,10 +971,16 @@ function initFirebaseLiveTracking() {
             const lat = parseFloat(r.lat);
             const lng = parseFloat(r.lng);
             if (isNaN(lat) || isNaN(lng)) return;
+            if (isInvalidResponderCoordinate(lat, lng)) return;
             const accuracyM = parseFiniteNumber(r.accuracy ?? r.accuracy_m);
 
-            const key = String(r.unitCode || r.responderId || '').trim();
+            const rawKey = String(r.unitCode || r.responderId || '').trim();
+            const key = resolveLiveUnitMarkerKey(rawKey);
             if (!key) return;
+            if (rawKey && rawKey !== key) {
+                removeUnitMarkerByIdentifier(rawKey);
+            }
+            applyLiveResponderLocationToUnit(key, lat, lng);
             const status = String(r.status || 'available').trim().toLowerCase();
             if (['offline', 'logged_out', 'inactive'].includes(status)) {
                 removeUnitMarkerByIdentifier(key);
@@ -879,33 +993,40 @@ function initFirebaseLiveTracking() {
             seenKeys.add(key);
 
             const label = `${key} — ${r.responderName || 'Responder'}`;
-            const speedKph = typeof r.speed === 'number' ? r.speed * 3.6 : null;
+            const rawSpeedKph = parseFiniteNumber(r.speed_kph ?? r.speedKph);
+            const speedMetersPerSecond = parseFiniteNumber(r.speed);
+            const speedKph = rawSpeedKph !== null ? rawSpeedKph : (speedMetersPerSecond !== null ? speedMetersPerSecond * 3.6 : null);
 
             const isEnRoute = status === 'en_route';
             const dept = String(r.department || r.unitType || 'other').toLowerCase();
             const type = isEnRoute ? dept : `idle_${dept}`;
+            const cachedUnitPoint = unitResponderLatLng(findCachedUnitByReference(key, ''));
+            const markerLat = cachedUnitPoint ? cachedUnitPoint.lat : lat;
+            const markerLng = cachedUnitPoint ? cachedUnitPoint.lng : lng;
+            const livePopupHtml = `
+                <strong>${label}</strong><br>
+                Status: ${r.status || 'unknown'}<br>
+                ${accuracyM !== null ? `Accuracy: ${accuracyM.toFixed(0)} m<br>` : ''}
+                Speed: ${speedKph !== null ? speedKph.toFixed(1) + ' km/h' : 'pending'}<br>
+                Coords: ${markerLat.toFixed(5)}, ${markerLng.toFixed(5)}<br>
+                <em>${cachedUnitPoint ? 'Responder GPS' : 'Live GPS'}</em>
+            `;
 
             if (markers[key]) {
-                const accepted = moveUnitMarker(key, lat, lng, { speedKph, accuracyM, animate: true });
+                const accepted = moveUnitMarker(key, markerLat, markerLng, { speedKph, accuracyM, animate: true });
                 if (!accepted) return;
                 markers[key].marker.setIcon(getIcon(type));
-                markers[key].marker.bindPopup(`
-                    <strong>${label}</strong><br>
-                    Status: ${r.status || 'unknown'}<br>
-                    ${accuracyM !== null ? `Accuracy: ${accuracyM.toFixed(0)} m<br>` : ''}
-                    ${speedKph !== null ? `Speed: ${speedKph.toFixed(1)} km/h<br>` : ''}
-                    Coords: ${lat.toFixed(5)}, ${lng.toFixed(5)}<br>
-                    <em>Live GPS</em>
-                `);
+                markers[key].marker.bindPopup(livePopupHtml);
                 markers[key].isLive = true;
             } else {
-                addUnitMarker(key, lat, lng, label, type, speedKph);
+                addUnitMarker(key, markerLat, markerLng, label, type, speedKph);
+                markers[key].marker.bindPopup(livePopupHtml);
                 markers[key].isLive = true;
             }
         });
 
         Object.keys(markers).forEach((key) => {
-            if (markers[key].isLive && !seenKeys.has(key)) {
+            if (markers[key].isLive && !seenKeys.has(key) && !hasLiveUnitLocation(key)) {
                 map.removeLayer(markers[key].marker);
                 delete markers[key];
             }
@@ -981,7 +1102,7 @@ function addLegendControl() {
 // ===============================
 // MARKERS (sync with gps.php)
 // ===============================
-function addUnitMarker(id, lat, lng, label, type, speedKph) {
+function addUnitMarker(id, lat, lng, label, type, speedKph, unitDbId) {
         const marker = L.marker([lat, lng], { icon: getIcon(type) })
                 .addTo(map)
                 .bindPopup(`
@@ -996,7 +1117,8 @@ function addUnitMarker(id, lat, lng, label, type, speedKph) {
             speedKph: speedKph,
             lastAcceptedLatLng: L.latLng(lat, lng),
             lastLocationAt: Date.now(),
-            ignoredGpsSpikes: 0
+            ignoredGpsSpikes: 0,
+            unitDbId: unitDbId !== undefined && unitDbId !== null ? String(unitDbId) : ''
         };
 }
 
@@ -1012,6 +1134,21 @@ function removeUnitMarkerByIdentifier(identifier) {
     if (!id || !markers[id] || markers[id].type !== 'unit') return;
     try { map.removeLayer(markers[id].marker); } catch (e) {}
     delete markers[id];
+}
+
+function hasLiveUnitLocation(identifier) {
+    const id = normalizeUnitIdentifier(identifier);
+    if (!id) return false;
+    const livePoint = liveUnitLocationsByIdentifier[id] || liveUnitLocationsByIdentifier[id.toUpperCase()] || null;
+    return !!livePoint && !isInvalidResponderCoordinate(livePoint.lat, livePoint.lng);
+}
+
+function removeUnitMarkerIfNotLive(identifier) {
+    const id = normalizeUnitIdentifier(identifier);
+    if (!id) return;
+    const entry = markers[id] || markers[Object.keys(markers).find((key) => String(key).toUpperCase() === id.toUpperCase())];
+    if (entry && entry.isLive && hasLiveUnitLocation(id)) return;
+    removeUnitMarkerByIdentifier(id);
 }
 
 function isResponderUnitOnline(unit) {
@@ -1040,7 +1177,7 @@ function isRenderableResponderUnit(unit) {
 function onlineResponderUnits(items) {
     return (items || []).filter(u => {
         if (isResponderUnitOnline(u)) return true;
-        removeUnitMarkerByIdentifier(u && u.identifier);
+        removeUnitMarkerIfNotLive(u && u.identifier);
         return false;
     });
 }
@@ -1048,7 +1185,10 @@ function onlineResponderUnits(items) {
 function addAuthoritativeOnlineUnitKeys(unit, keys) {
     ['identifier', 'id', 'responder_user_id'].forEach(field => {
         const value = String(unit && unit[field] !== undefined && unit[field] !== null ? unit[field] : '').trim();
-        if (value) keys.add(value);
+        if (value) {
+            keys.add(value);
+            keys.add(value.toUpperCase());
+        }
     });
 }
 
@@ -1069,7 +1209,8 @@ function pruneOfflineUnitMarkers() {
             authoritativeOnlineUnitKeysReady = true;
             Object.entries(markers).forEach(([key, entry]) => {
                 if (!entry || entry.type !== 'unit') return;
-                if (!onlineKeys.has(String(key))) {
+                if (!onlineKeys.has(String(key)) && !onlineKeys.has(String(key).toUpperCase())) {
+                    if (entry.isLive && hasLiveUnitLocation(key)) return;
                     try { map.removeLayer(entry.marker); } catch (e) {}
                     delete markers[key];
                 }
@@ -1080,7 +1221,10 @@ function pruneOfflineUnitMarkers() {
 
 function canRenderLiveUnitMarker(identifier) {
     const id = String(identifier || '').trim();
-    return !!id && authoritativeOnlineUnitKeysReady && authoritativeOnlineUnitKeys.has(id);
+    if (hasLiveUnitLocation(id)) return true;
+    return !!id
+        && authoritativeOnlineUnitKeysReady
+        && (authoritativeOnlineUnitKeys.has(id) || authoritativeOnlineUnitKeys.has(id.toUpperCase()));
 }
 
 function parseFiniteNumber(value) {
@@ -1193,31 +1337,37 @@ function loadDispatchedUnits() {
 function syncUnitMarkers(items) {
     items.forEach(u => {
         const id = u.identifier;
+        rememberUnitIdentity(u);
         if (!isResponderUnitOnline(u)) {
-            removeUnitMarkerByIdentifier(id);
+            removeUnitMarkerIfNotLive(id);
             return;
         }
-        if (markers[id] && markers[id].isLive) return;
         const type = u.unit_type || 'other';
-        const lat = parseFloat(u.latitude);
-        const lng = parseFloat(u.longitude);
+        const point = unitResponderLatLng(u);
         const speed = (u.speed_kph !== undefined && u.speed_kph !== null) ? parseFloat(u.speed_kph) : null;
-        if (!isNaN(lat) && !isNaN(lng)) {
+        if (point) {
+            const lat = point.lat;
+            const lng = point.lng;
             const label = `${id}`;
             if (markers[id]) {
                 moveUnitMarker(id, lat, lng, { speedKph: speed, animate: true });
                 markers[id].marker.setIcon(getIcon(type));
-                const popupHtml = `
-                    <strong>${label}</strong><br>
-                    ${typeof speed === 'number' && isFinite(speed) ? `Speed: ${speed.toFixed(1)} km/h<br>` : ''}
-                    Coords: ${lat.toFixed(5)}, ${lng.toFixed(5)}
-                `;
-                markers[id].marker.bindPopup(popupHtml);
+                if (!markers[id].isLive) {
+                    const popupHtml = `
+                        <strong>${label}</strong><br>
+                        ${typeof speed === 'number' && isFinite(speed) ? `Speed: ${speed.toFixed(1)} km/h<br>` : ''}
+                        Coords: ${lat.toFixed(5)}, ${lng.toFixed(5)}
+                    `;
+                    markers[id].marker.bindPopup(popupHtml);
+                }
                 markers[id].speedKph = speed;
                 markers[id].unitType = String(type || '').toLowerCase();
+                markers[id].unitDbId = u.id !== undefined && u.id !== null ? String(u.id) : markers[id].unitDbId;
             } else {
-                addUnitMarker(id, lat, lng, label, type, speed);
+                addUnitMarker(id, lat, lng, label, type, speed, u.id);
             }
+        } else {
+            removeUnitMarkerIfNotLive(id);
         }
     });
 }
@@ -1231,29 +1381,35 @@ function fetchAvailableUnitsData() {
 function syncAvailableUnitMarkers(items) {
     (items || []).forEach(u => {
         const id = u.identifier;
+        rememberUnitIdentity(u);
         if (!isResponderUnitOnline(u)) {
-            removeUnitMarkerByIdentifier(id);
+            removeUnitMarkerIfNotLive(id);
             return;
         }
-        if (markers[id] && markers[id].isLive) return;
         const type = u.unit_type || 'other';
-        const lat = parseFloat(u.latitude);
-        const lng = parseFloat(u.longitude);
+        const point = unitResponderLatLng(u);
         const speed = (u.speed_kph !== undefined && u.speed_kph !== null) ? parseFloat(u.speed_kph) : null;
-        if (!isNaN(lat) && !isNaN(lng)) {
+        if (point) {
+            const lat = point.lat;
+            const lng = point.lng;
             if (markers[id]) {
                 moveUnitMarker(id, lat, lng, { speedKph: speed, animate: true });
                 markers[id].marker.setIcon(getIcon(type));
-                markers[id].marker.bindPopup(`
-                    <strong>${id}</strong><br>
-                    ${typeof speed === 'number' && isFinite(speed) ? `Speed: ${speed.toFixed(1)} km/h<br>` : ''}
-                    Coords: ${lat.toFixed(5)}, ${lng.toFixed(5)}
-                `);
+                if (!markers[id].isLive) {
+                    markers[id].marker.bindPopup(`
+                        <strong>${id}</strong><br>
+                        ${typeof speed === 'number' && isFinite(speed) ? `Speed: ${speed.toFixed(1)} km/h<br>` : ''}
+                        Coords: ${lat.toFixed(5)}, ${lng.toFixed(5)}
+                    `);
+                }
                 markers[id].speedKph = speed;
                 markers[id].unitType = String(type || '').toLowerCase();
+                markers[id].unitDbId = u.id !== undefined && u.id !== null ? String(u.id) : markers[id].unitDbId;
             } else {
-                addUnitMarker(id, lat, lng, `${id}`, type, speed);
+                addUnitMarker(id, lat, lng, `${id}`, type, speed, u.id);
             }
+        } else {
+            removeUnitMarkerIfNotLive(id);
         }
     });
 }
@@ -1348,18 +1504,19 @@ function renderAvailableUnits(items) {
 
     container.innerHTML = '';
     items.forEach(u => {
+        u = mergeLiveLocationIntoUnit(u);
         const meta = [];
         if (u.unit_type) meta.push(u.unit_type.charAt(0).toUpperCase() + u.unit_type.slice(1));
         const displayName = u.resource_name || u.identifier;
-        const latestLat = Number(u.latest_latitude ?? u.latitude);
-        const latestLng = Number(u.latest_longitude ?? u.longitude);
-        const gpsLocationText = Number.isFinite(latestLat) && Number.isFinite(latestLng)
-            ? `Responder GPS: ${latestLat.toFixed(6)}, ${latestLng.toFixed(6)}`
+        const unitPoint = unitResponderLatLng(u);
+        const gpsLocationText = unitPoint
+            ? `Responder GPS: ${unitPoint.lat.toFixed(6)}, ${unitPoint.lng.toFixed(6)}`
             : '';
         const locationText = gpsLocationText || 'Responder GPS pending';
         const assignmentText = u.assignment || u.plate_number || u.driver_name || '';
         const card = document.createElement('div');
         card.className = 'unit-card available';
+        card.setAttribute('data-unit-identifier', u.identifier || '');
         card.innerHTML = `
             <div class="unit-info">
                 <div class="unit-details">
@@ -1372,7 +1529,7 @@ function renderAvailableUnits(items) {
                 </div>
             </div>
             <div class="unit-actions">
-                <button class="btn-action-small" onclick="focusUnitOnMap('${escapeJs(u.identifier)}')" data-unit-id="${u.id}" data-identifier="${escapeAttr(u.identifier)}"><i class="fas fa-location-arrow"></i> Track</button>
+                <button class="btn-action-small" onclick="focusUnitOnMap('${escapeJs(u.identifier)}', '${escapeJs(u.id)}')" data-unit-id="${escapeAttr(u.id)}" data-identifier="${escapeAttr(u.identifier)}"><i class="fas fa-location-arrow"></i> Track</button>
             </div>
         `;
         container.appendChild(card);
@@ -1384,13 +1541,7 @@ function refreshAvailableUnits() {
     return fetchAvailableUnitsData()
         .then(items => {
             availableUnitsByIdentifier = {};
-            (items || []).forEach(u => {
-                if (u && u.identifier) {
-                    const id = String(u.identifier);
-                    availableUnitsByIdentifier[id] = u;
-                    availableUnitsByIdentifier[id.toUpperCase()] = u;
-                }
-            });
+            indexUnitsByIdentifier(items);
             syncAvailableUnitMarkers(items);
             if (container) {
                 renderAvailableUnits(items);
@@ -1418,21 +1569,153 @@ function escapeJs(s) {
     return String(s || '').replace(/\\/g, '\\\\').replace(/'/g, "\\'").replace(/\r?\n/g, ' ');
 }
 
+function normalizeUnitIdentifier(value) {
+    const text = String(value || '').trim();
+    if (!text) return '';
+    return text.split(/\s+/)[0].trim();
+}
+
+function rememberUnitIdentity(unit) {
+    const identifier = normalizeUnitIdentifier(unit && unit.identifier);
+    const unitId = String(unit && unit.id !== undefined && unit.id !== null ? unit.id : '').trim();
+    const responderId = String(unit && unit.responder_user_id !== undefined && unit.responder_user_id !== null ? unit.responder_user_id : '').trim();
+    if (identifier) {
+        mergeLiveLocationIntoUnit(unit);
+        availableUnitsByIdentifier[identifier] = unit;
+        availableUnitsByIdentifier[identifier.toUpperCase()] = unit;
+    }
+    if (identifier && unitId) {
+        unitIdentifierById[unitId] = identifier;
+    }
+    if (identifier && responderId) {
+        unitIdentifierByResponderId[responderId] = identifier;
+    }
+}
+
+function resolveLiveUnitMarkerKey(rawKey) {
+    const key = normalizeUnitIdentifier(rawKey);
+    return unitIdentifierByResponderId[key] || unitIdentifierById[key] || key;
+}
+
+function mergeLiveLocationIntoUnit(unit) {
+    const identifier = normalizeUnitIdentifier(unit && unit.identifier);
+    if (!identifier || !unit) return unit;
+    const livePoint = liveUnitLocationsByIdentifier[identifier] || liveUnitLocationsByIdentifier[identifier.toUpperCase()] || null;
+    if (!livePoint || isInvalidResponderCoordinate(livePoint.lat, livePoint.lng)) return unit;
+    unit.latest_latitude = livePoint.lat;
+    unit.latest_longitude = livePoint.lng;
+    unit.latitude = livePoint.lat;
+    unit.longitude = livePoint.lng;
+    unit.location_current = '1';
+    return unit;
+}
+
+function updateUnitCardGpsText(unitIdentifier, lat, lng) {
+    const normalized = normalizeUnitIdentifier(unitIdentifier);
+    if (!normalized || isInvalidResponderCoordinate(lat, lng)) return;
+    const text = `Responder GPS: ${lat.toFixed(6)}, ${lng.toFixed(6)}`;
+    document.querySelectorAll('#available-units-container .unit-card').forEach(card => {
+        const cardIdentifier = normalizeUnitIdentifier(card.getAttribute('data-unit-identifier') || '');
+        if (cardIdentifier.toUpperCase() !== normalized.toUpperCase()) return;
+        const locationSpan = card.querySelector('.unit-meta span:first-child');
+        if (locationSpan) {
+            locationSpan.innerHTML = `<i class="fas fa-map-marker-alt"></i> ${escapeHtml(text)}`;
+        }
+    });
+}
+
+function applyLiveResponderLocationToUnit(unitIdentifier, lat, lng) {
+    const normalized = normalizeUnitIdentifier(unitIdentifier);
+    if (!normalized || isInvalidResponderCoordinate(lat, lng)) return;
+    const livePoint = { lat, lng, seenAt: Date.now() };
+    liveUnitLocationsByIdentifier[normalized] = livePoint;
+    liveUnitLocationsByIdentifier[normalized.toUpperCase()] = livePoint;
+    const unit = findCachedUnitByReference(normalized, '') || { identifier: normalized };
+    mergeLiveLocationIntoUnit(unit);
+    availableUnitsByIdentifier[normalized] = unit;
+    availableUnitsByIdentifier[normalized.toUpperCase()] = unit;
+    updateUnitCardGpsText(normalized, lat, lng);
+}
+
+function indexUnitsByIdentifier(items) {
+    (items || []).forEach(u => {
+        if (!u || !u.identifier) return;
+        const id = normalizeUnitIdentifier(u.identifier);
+        if (!id) return;
+        availableUnitsByIdentifier[id] = u;
+        availableUnitsByIdentifier[id.toUpperCase()] = u;
+        rememberUnitIdentity(u);
+    });
+}
+
+function findUnitMarkerByReference(unitIdentifier, unitId) {
+    const normalized = normalizeUnitIdentifier(unitIdentifier);
+    const explicitUnitId = String(unitId || '').trim();
+
+    if (normalized && markers[normalized]) {
+        return { key: normalized, markerObj: markers[normalized] };
+    }
+    if (normalized) {
+        const upperIdentifier = normalized.toUpperCase();
+        const matchedKey = Object.keys(markers).find((key) => String(key).toUpperCase() === upperIdentifier);
+        if (matchedKey) {
+            return { key: matchedKey, markerObj: markers[matchedKey] };
+        }
+    }
+    if (explicitUnitId) {
+        const mappedIdentifier = unitIdentifierById[explicitUnitId];
+        if (mappedIdentifier && markers[mappedIdentifier]) {
+            return { key: mappedIdentifier, markerObj: markers[mappedIdentifier] };
+        }
+        const markerByDbId = Object.keys(markers).find((key) => String(markers[key]?.unitDbId || '') === explicitUnitId);
+        if (markerByDbId) {
+            return { key: markerByDbId, markerObj: markers[markerByDbId] };
+        }
+    }
+
+    return { key: normalized, markerObj: null };
+}
+
+function findCachedUnitByReference(unitIdentifier, unitId) {
+    const normalized = normalizeUnitIdentifier(unitIdentifier);
+    const explicitUnitId = String(unitId || '').trim();
+    if (normalized) {
+        return availableUnitsByIdentifier[normalized]
+            || availableUnitsByIdentifier[normalized.toUpperCase()]
+            || null;
+    }
+    if (explicitUnitId && unitIdentifierById[explicitUnitId]) {
+        const mappedIdentifier = unitIdentifierById[explicitUnitId];
+        return availableUnitsByIdentifier[mappedIdentifier]
+            || availableUnitsByIdentifier[mappedIdentifier.toUpperCase()]
+            || null;
+    }
+    if (explicitUnitId) {
+        return Object.values(availableUnitsByIdentifier).find((unit) => {
+            return String(unit && unit.id !== undefined && unit.id !== null ? unit.id : '') === explicitUnitId;
+        }) || null;
+    }
+    return null;
+}
+
 function ensureUnitMarkerFromApiUnit(unit) {
     if (!unit || !unit.identifier || !isResponderUnitOnline(unit)) return null;
     const id = String(unit.identifier);
-    const lat = parseFloat(unit.latitude);
-    const lng = parseFloat(unit.longitude);
-    if (isNaN(lat) || isNaN(lng)) return null;
+    const point = unitResponderLatLng(unit);
+    if (!point) return null;
+    const lat = point.lat;
+    const lng = point.lng;
 
     const type = unit.unit_type || 'other';
     const speed = (unit.speed_kph !== undefined && unit.speed_kph !== null) ? parseFloat(unit.speed_kph) : null;
     if (markers[id] && markers[id].marker) {
         moveUnitMarker(id, lat, lng, { speedKph: speed, animate: true });
         markers[id].marker.setIcon(getIcon(type));
+        markers[id].unitDbId = unit.id !== undefined && unit.id !== null ? String(unit.id) : markers[id].unitDbId;
     } else {
-        addUnitMarker(id, lat, lng, id, type, speed);
+        addUnitMarker(id, lat, lng, id, type, speed, unit.id);
     }
+    rememberUnitIdentity(unit);
     return markers[id] || null;
 }
 
@@ -1510,32 +1793,39 @@ function contactCaller(btn) {
 
 
 // Focus the map on the selected unit marker
-function focusUnitOnMap(unitIdentifier) {
-    if (!unitIdentifier) return;
-    let markerObj = markers[unitIdentifier];
+function focusUnitOnMap(unitIdentifier, unitId) {
+    const normalizedIdentifier = normalizeUnitIdentifier(unitIdentifier);
+    const explicitUnitId = String(unitId || '').trim();
+    if (!normalizedIdentifier && !explicitUnitId) return;
+
+    let found = findUnitMarkerByReference(normalizedIdentifier, explicitUnitId);
+    let markerObj = found.markerObj;
     if (!markerObj) {
-        const upperIdentifier = String(unitIdentifier).toUpperCase();
-        const matchedKey = Object.keys(markers).find((key) => String(key).toUpperCase() === upperIdentifier);
-        markerObj = matchedKey ? markers[matchedKey] : null;
-    }
-    if (!markerObj) {
-        const unit = availableUnitsByIdentifier[String(unitIdentifier)] || availableUnitsByIdentifier[String(unitIdentifier).toUpperCase()];
+        const unit = findCachedUnitByReference(normalizedIdentifier, explicitUnitId);
         markerObj = ensureUnitMarkerFromApiUnit(unit);
     }
     if (focusMarkerObject(markerObj)) {
         return;
     }
-    fetchAvailableUnitsData()
-        .then(items => {
-            availableUnitsByIdentifier = {};
-            (items || []).forEach(u => {
-                if (!u || !u.identifier) return;
-                const id = String(u.identifier);
-                availableUnitsByIdentifier[id] = u;
-                availableUnitsByIdentifier[id.toUpperCase()] = u;
+
+    Promise.allSettled([
+        fetchAvailableUnitsData(),
+        fetch('api/units_list.php?status=dispatched', { cache: 'no-store' })
+            .then(r => r.json())
+            .then(res => (res && res.ok && Array.isArray(res.items)) ? onlineResponderUnits(res.items) : [])
+    ])
+        .then(results => {
+            const refreshedItems = [];
+            results.forEach(result => {
+                if (result.status === 'fulfilled' && Array.isArray(result.value)) {
+                    refreshedItems.push(...result.value);
+                }
             });
-            syncAvailableUnitMarkers(items);
-            const unit = availableUnitsByIdentifier[String(unitIdentifier)] || availableUnitsByIdentifier[String(unitIdentifier).toUpperCase()];
+            availableUnitsByIdentifier = {};
+            indexUnitsByIdentifier(refreshedItems);
+            syncAvailableUnitMarkers(refreshedItems);
+            syncUnitMarkers(refreshedItems);
+            const unit = findCachedUnitByReference(normalizedIdentifier, explicitUnitId);
             const refreshedMarkerObj = ensureUnitMarkerFromApiUnit(unit);
             if (!focusMarkerObject(refreshedMarkerObj)) {
                 alert('Unit location not available on map.');
@@ -1551,16 +1841,11 @@ function tryFocusPendingDispatchUnit() {
         return;
     }
 
-    let markerObj = markers[pendingDispatchTrackUnit];
-    if (!markerObj) {
-        const target = String(pendingDispatchTrackUnit).toUpperCase();
-        const matchedKey = Object.keys(markers).find((key) => String(key).toUpperCase() === target);
-        markerObj = matchedKey ? markers[matchedKey] : null;
-        if (matchedKey) pendingDispatchTrackUnit = matchedKey;
-    }
+    const found = findUnitMarkerByReference(pendingDispatchTrackUnit, '');
+    const markerObj = found.markerObj;
 
     if (markerObj && markerObj.marker) {
-        const label = pendingDispatchTrackUnit;
+        const label = found.key || pendingDispatchTrackUnit;
         pendingDispatchTrackUnit = '';
         pendingDispatchTrackAttempts = 0;
         map.setView(markerObj.marker.getLatLng(), 17, { animate: true });
@@ -1581,10 +1866,14 @@ function tryFocusPendingDispatchUnit() {
 }
 
 function requestDispatchUnitTracking(unitIdentifier) {
-    pendingDispatchTrackUnit = String(unitIdentifier || '').trim();
+    pendingDispatchTrackUnit = normalizeUnitIdentifier(unitIdentifier);
     pendingDispatchTrackAttempts = 0;
     if (!pendingDispatchTrackUnit) return;
-    refreshAvailableUnits().finally(() => {
+    Promise.allSettled([
+        pruneOfflineUnitMarkers(),
+        loadDispatchedUnits(),
+        refreshAvailableUnits()
+    ]).finally(() => {
         tryFocusPendingDispatchUnit();
     });
 }

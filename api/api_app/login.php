@@ -114,6 +114,11 @@ try {
             error_log('responder login location update skipped: ' . $e->getMessage());
             $locationUpdate = ['ok' => false, 'error' => 'Location update skipped'];
         }
+    } else {
+        $locationUpdate = [
+            'ok' => false,
+            'error' => 'Responder GPS is required on login to place the assigned vehicle on the dispatch map'
+        ];
     }
 
     $unit = ers_unit_location_resolve_unit($pdo, [
@@ -141,6 +146,8 @@ try {
         "location_update" => $locationUpdate,
         "location_tracking" => [
             "enabled" => $unit !== null,
+            "location_required" => true,
+            "syncs_vehicle_location" => true,
             "endpoint" => "api/unit_location_update.php",
             "api_app_endpoint" => "api/api_app/update-location.php"
         ]
