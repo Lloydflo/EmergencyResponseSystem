@@ -735,6 +735,9 @@ $turnCredential = (string) ers_env('WEBRTC_TURN_CREDENTIAL', '');
     }
     let alertAudioContext = null;
     let transferSocket = null;
+    let transferSocketUsesInbox = false;
+    let transferSocketRoom = '';
+    let transferSocketCallHandlers = [];
     let transferPeerConnection = null;
     let transferLocalStream = null;
     let transferLocalStreamPromise = null;
@@ -744,6 +747,21 @@ $turnCredential = (string) ers_env('WEBRTC_TURN_CREDENTIAL', '');
     let pendingTransferIceCandidates = [];
     let transferNegotiationId = '';
     const SpeechRecognitionApi = window.SpeechRecognition || window.webkitSpeechRecognition || null;
+
+    function bindTransferCallSocketHandler(eventName, handler) {
+        if (!transferSocket || typeof handler !== 'function') return;
+        transferSocket.on(eventName, handler);
+        transferSocketCallHandlers.push({ eventName, handler });
+    }
+
+    function clearTransferCallSocketHandlers(socketInstance = transferSocket) {
+        if (socketInstance && typeof socketInstance.off === 'function') {
+            transferSocketCallHandlers.forEach(({ eventName, handler }) => {
+                socketInstance.off(eventName, handler);
+            });
+        }
+        transferSocketCallHandlers = [];
+    }
 
     function getSharedCallSessionApi() {
         return window.ersCallSession && typeof window.ersCallSession.getState === 'function'
@@ -1575,12 +1593,18 @@ $turnCredential = (string) ers_env('WEBRTC_TURN_CREDENTIAL', '');
         try {
             const callId = String(call.callId || call.transferId || '');
             transferPeerConnection = createTransferPeerConnection(call);
-            transferSocket = window.io(call.socketUrl || ALERTARA_SOCKET_URL, {
-                path: call.socketPath || ALERTARA_SOCKET_PATH,
-                transports: ['websocket', 'polling'],
-                query: { room: call.room }
-            });
-            transferSocket.on('connect', () => {
+            const requestedSocketUrl = String(call.socketUrl || ALERTARA_SOCKET_URL).replace(/\/$/, '');
+            const inboxSocketUrl = String(ALERTARA_SOCKET_URL).replace(/\/$/, '');
+            transferSocketUsesInbox = !!transferInboxSocket && requestedSocketUrl === inboxSocketUrl;
+            transferSocketRoom = String(call.room || '');
+            transferSocket = transferSocketUsesInbox
+                ? transferInboxSocket
+                : window.io(requestedSocketUrl, {
+                    path: call.socketPath || ALERTARA_SOCKET_PATH,
+                    transports: ['websocket', 'polling'],
+                    query: { role: 'ers-response-team', room: call.room, callId }
+                });
+            const handleTransferSocketConnected = () => {
                 transferSocket.emit('join', call.room, (response) => {
                     if (response && response.ok) {
                         setTransferCallChatStatus('Connected to caller room (' + String(response.members || 1) + ' participant(s))');
@@ -1589,8 +1613,9 @@ $turnCredential = (string) ers_env('WEBRTC_TURN_CREDENTIAL', '');
                 emitTransferAccepted(call);
                 scheduleTransferOfferRequest(call);
                 setVoiceState('Connected to AlertaraQC transfer room ' + call.room + '. Waiting for caller audio.');
-            });
-            transferSocket.on('offer', async (offerPayload) => {
+            };
+            bindTransferCallSocketHandler('connect', handleTransferSocketConnected);
+            bindTransferCallSocketHandler('offer', async (offerPayload) => {
                 if (!transferPayloadMatchesCall(offerPayload, callId, call.room)) return;
                 // The signaling server may replay the caller's original lobby
                 // offer when ERS joins the private room. Request and answer a
@@ -1615,7 +1640,7 @@ $turnCredential = (string) ers_env('WEBRTC_TURN_CREDENTIAL', '');
                     setVoiceState('Could not connect the live caller audio.');
                 }
             });
-            transferSocket.on('candidate', async (data) => {
+            bindTransferCallSocketHandler('candidate', async (data) => {
                 if (!transferPayloadMatchesCall(data, callId, call.room)) return;
                 // Ignore ICE from the original Emergency-Com/admin discovery
                 // peer. ERS must only add candidates belonging to the fresh
@@ -1632,7 +1657,7 @@ $turnCredential = (string) ers_env('WEBRTC_TURN_CREDENTIAL', '');
                     addTransferIceCandidate(data.candidate);
                 }
             });
-            transferSocket.on('call-message', (payload) => {
+            bindTransferCallSocketHandler('call-message', (payload) => {
                 if (!transferPayloadMatchesCall(payload, callId, call.room)) return;
                 if (!payload || payload.sender === 'response_team') return;
                 addTransferCallMessage(
@@ -1643,7 +1668,7 @@ $turnCredential = (string) ers_env('WEBRTC_TURN_CREDENTIAL', '');
                     payload.messageId || ''
                 );
             });
-            transferSocket.on('call-message-history', (history) => {
+            bindTransferCallSocketHandler('call-message-history', (history) => {
                 if (!Array.isArray(history)) return;
                 history.forEach((payload) => {
                     if (!transferPayloadMatchesCall(payload, callId, call.room)) return;
@@ -1661,17 +1686,20 @@ $turnCredential = (string) ers_env('WEBRTC_TURN_CREDENTIAL', '');
                 if (!transferPayloadMatchesCall(payload, callId, call.room)) return;
                 closeTransferVoiceSession({ notifyPeer: false, reason: 'caller-ended', keepForm: true });
             };
-            transferSocket.on('hangup', handleTransferHangup);
-            transferSocket.on('call-ended', handleTransferHangup);
-            transferSocket.on('call_ended', handleTransferHangup);
-            transferSocket.on('disconnect', () => {
+            bindTransferCallSocketHandler('hangup', handleTransferHangup);
+            bindTransferCallSocketHandler('call-ended', handleTransferHangup);
+            bindTransferCallSocketHandler('call_ended', handleTransferHangup);
+            bindTransferCallSocketHandler('disconnect', () => {
                 if (endingTransferCall) return;
                 setVoiceState('AlertaraQC transfer socket disconnected.');
             });
-            transferSocket.on('connect_error', (error) => {
+            bindTransferCallSocketHandler('connect_error', (error) => {
                 console.warn('Transfer socket connection failed:', error);
                 setVoiceState('Could not reach the AlertaraQC live call socket.');
             });
+            if (transferSocket.connected) {
+                handleTransferSocketConnected();
+            }
         } catch (error) {
             console.warn('Unable to connect transfer socket:', error);
             setVoiceState('Unable to connect to the transferred live call.');
@@ -1983,10 +2011,20 @@ $turnCredential = (string) ers_env('WEBRTC_TURN_CREDENTIAL', '');
         clearTransferOfferRequestTimer();
         pendingTransferIceCandidates = [];
         transferNegotiationId = '';
-        if (transferSocket && typeof transferSocket.disconnect === 'function') {
-            transferSocket.disconnect();
+        const socketToRelease = transferSocket;
+        const sharedInboxSocket = transferSocketUsesInbox;
+        const joinedRoom = transferSocketRoom;
+        clearTransferCallSocketHandlers(socketToRelease);
+        if (socketToRelease && sharedInboxSocket) {
+            if (joinedRoom && socketToRelease.connected) {
+                socketToRelease.emit('leave', joinedRoom);
+            }
+        } else if (socketToRelease && typeof socketToRelease.disconnect === 'function') {
+            socketToRelease.disconnect();
         }
         transferSocket = null;
+        transferSocketUsesInbox = false;
+        transferSocketRoom = '';
         transferLocalStreamPromise = null;
         if (transferPeerConnection) {
             transferPeerConnection.close();
