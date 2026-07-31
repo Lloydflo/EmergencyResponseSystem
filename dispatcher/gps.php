@@ -1780,19 +1780,26 @@ function loadAvailableUnits() {
 let livePollTimer = null;
 function startLivePolling() {
     if (livePollTimer) return;
+    let livePollInFlight = false;
     pruneOfflineUnitMarkers();
     livePollTimer = setInterval(() => {
-        pruneOfflineUnitMarkers();
-        fetch('api/units_list.php?status=dispatched')
+        if (document.hidden || livePollInFlight) return;
+        livePollInFlight = true;
+        Promise.all([
+            pruneOfflineUnitMarkers(),
+            fetch('api/units_list.php?status=dispatched')
             .then(r => r.json())
             .then(res => {
                 if (!res.ok) return;
                 const items = onlineResponderUnits(res.items || []);
                 indexDispatchedUnits(items);
                 syncUnitMarkers(items);
-                loadAvailableUnits();
+                return loadAvailableUnits();
             })
-            .catch(() => {});
+            .catch(() => {})
+        ]).finally(() => {
+            livePollInFlight = false;
+        });
     }, 5000);
 }
 </script>

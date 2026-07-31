@@ -806,7 +806,10 @@ try {
             renderIncidentsPriorityChart();
         });
 
+        let dashboardSummaryInFlight = false;
         async function refreshDashboardSummary() {
+            if (dashboardSummaryInFlight) return;
+            dashboardSummaryInFlight = true;
             try {
                 const r = await fetch('api/admin_dashboard_summary.php', { cache: 'no-store' });
                 const j = await r.json();
@@ -844,6 +847,8 @@ try {
                 renderIncidentsPriorityChart();
             } catch (e) {
                 console.error('refreshDashboardSummary failed', e);
+            } finally {
+                dashboardSummaryInFlight = false;
             }
         }
 
@@ -877,9 +882,12 @@ try {
             } catch(e){ return String(ts || ''); }
         }
 
+        let activityFeedInFlight = false;
         async function loadActivityFeed(){
             const container = document.getElementById('activity-feed-list');
             if (!container) return;
+            if (activityFeedInFlight) return;
+            activityFeedInFlight = true;
             try {
                 const r = await fetch('api/activity_feed.php');
                 const j = await r.json();
@@ -899,12 +907,17 @@ try {
                 container.innerHTML = items.join('');
             } catch(e){
                 container.innerHTML = '<div class="activity-item"><div class="activity-content" style="color:#b91c1c;">Failed to load activity.</div></div>';
+            } finally {
+                activityFeedInFlight = false;
             }
         }
 
+        let alertsPanelInFlight = false;
         async function loadAlertsPanel(){
             const container = document.getElementById('alerts-panel-list');
             if (!container) return;
+            if (alertsPanelInFlight) return;
+            alertsPanelInFlight = true;
             try {
                 const condition = <?php echo json_encode($condition ?? null); ?>;
                 const url = 'api/alerts_active.php' + (condition? ('?condition=' + encodeURIComponent(condition)) : '');
@@ -926,6 +939,8 @@ try {
                 container.innerHTML = items.join('');
             } catch(e){
                 container.innerHTML = '<div class="alert-item error"><div class="alert-content" style="color:#b91c1c;">Failed to load alerts.</div></div>';
+            } finally {
+                alertsPanelInFlight = false;
             }
         }
 
@@ -939,13 +954,7 @@ try {
             window.open(url, '_blank');
         }
 
-        // Initial load + auto-refresh every 15s
-        document.addEventListener('DOMContentLoaded', () => {
-            loadActivityFeed();
-            loadAlertsPanel();
-            setInterval(loadActivityFeed, 15000);
-            setInterval(loadAlertsPanel, 15000);
-        });
+        // Initial dashboard loading is handled by the consolidated DOMContentLoaded block below.
         // Emergency Response System Dashboard Functionality
         // Dashboard action functions
         function refreshDashboard() {
@@ -1247,7 +1256,10 @@ try {
         }
 
         // Load recent activity
+        let legacyActivityFeedInFlight = false;
         function loadActivityFeed() {
+            if (legacyActivityFeedInFlight) return;
+            legacyActivityFeedInFlight = true;
             fetch('api/activity_feed.php')
                 .then(r => r.json())
                 .then(data => {
@@ -1262,6 +1274,9 @@ try {
                 .catch(() => {
                     const el = document.getElementById('activity-feed-list');
                     if (el) el.innerHTML = '<div class="activity-item"><div class="activity-content">Failed to load activity.</div></div>';
+                })
+                .finally(() => {
+                    legacyActivityFeedInFlight = false;
                 });
         }
 
@@ -1283,7 +1298,10 @@ try {
         }
 
         // Load active alerts
+        let legacyAlertsPanelInFlight = false;
         function loadAlertsPanel() {
+            if (legacyAlertsPanelInFlight) return;
+            legacyAlertsPanelInFlight = true;
             const condition = encodeURIComponent('<?php echo $condition; ?>');
             fetch('api/alerts_active.php?condition=' + condition)
                 .then(r => r.json())
@@ -1299,6 +1317,9 @@ try {
                 .catch(() => {
                     const el = document.getElementById('alerts-panel-list');
                     if (el) el.innerHTML = '<div class="alert-item info"><div class="alert-content">Failed to load alerts.</div></div>';
+                })
+                .finally(() => {
+                    legacyAlertsPanelInFlight = false;
                 });
         }
         // Initial load
@@ -1314,9 +1335,9 @@ try {
             loadAlertsPanel();
             refreshDashboardSummary();
             // Auto-refresh panels periodically
-            setInterval(() => { try { loadActivityFeed(); } catch(e){} }, 15000);
-            setInterval(() => { try { loadAlertsPanel(); } catch(e){} }, 15000);
-            setInterval(() => { try { refreshDashboardSummary(); } catch(e){} }, 10000);
+            setInterval(() => { if (!document.hidden) { try { loadActivityFeed(); } catch(e){} } }, 15000);
+            setInterval(() => { if (!document.hidden) { try { loadAlertsPanel(); } catch(e){} } }, 15000);
+            setInterval(() => { if (!document.hidden) { try { refreshDashboardSummary(); } catch(e){} } }, 10000);
         });
         </script>
 </body>

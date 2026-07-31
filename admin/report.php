@@ -717,34 +717,41 @@ try {
         showNotification(`${alert.title}: ${alert.details}`, alert.type || 'info');
     }
 
+    let renderAlertsInFlight = false;
     async function renderAlerts() {
         const container = document.getElementById('alerts-dynamic');
         if (!container) return;
+        if (renderAlertsInFlight) return;
+        renderAlertsInFlight = true;
 
-        const [alerts, activities] = await Promise.all([
-            fetchAlerts(),
-            fetchSystemActivity()
-        ]);
+        try {
+            const [alerts, activities] = await Promise.all([
+                fetchAlerts(),
+                fetchSystemActivity()
+            ]);
 
-        const combinedFeed = normalizeSystemFeed(alerts, activities);
-        LAST_SYSTEM_FEED = combinedFeed;
+            const combinedFeed = normalizeSystemFeed(alerts, activities);
+            LAST_SYSTEM_FEED = combinedFeed;
 
-        if (!combinedFeed.length) {
-            container.innerHTML = '<div class="alerts-empty-state">No system alerts or recent activity at this time.</div>';
-        } else {
-            container.innerHTML = combinedFeed.map(systemFeedItemHtml).join('');
+            if (!combinedFeed.length) {
+                container.innerHTML = '<div class="alerts-empty-state">No system alerts or recent activity at this time.</div>';
+            } else {
+                container.innerHTML = combinedFeed.map(systemFeedItemHtml).join('');
+            }
+
+            if (LAST_ALERTS.length) {
+                alerts.forEach(a => {
+                    if (!LAST_ALERTS.find(b => b.title === a.title && b.details === a.details)) {
+                        showAlertPopup(a);
+                    }
+                });
+            } else {
+                alerts.forEach(showAlertPopup);
+            }
+            LAST_ALERTS = alerts;
+        } finally {
+            renderAlertsInFlight = false;
         }
-
-        if (LAST_ALERTS.length) {
-            alerts.forEach(a => {
-                if (!LAST_ALERTS.find(b => b.title === a.title && b.details === a.details)) {
-                    showAlertPopup(a);
-                }
-            });
-        } else {
-            alerts.forEach(showAlertPopup);
-        }
-        LAST_ALERTS = alerts;
     }
 
     function exportSystemFeed() {
@@ -803,7 +810,9 @@ try {
 
     document.addEventListener('DOMContentLoaded', function() {
         renderAlerts();
-        setInterval(renderAlerts, 10000);
+        setInterval(() => {
+            if (!document.hidden) renderAlerts();
+        }, 10000);
     });
     </script>
 

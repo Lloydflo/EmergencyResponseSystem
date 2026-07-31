@@ -500,7 +500,10 @@ try {
             return !!(modal && modal.style.display !== 'none');
         }
 
+        let resolvedNoticePollInFlight = false;
         async function pollResolvedIncidentNotifications() {
+            if (document.hidden || resolvedNoticePollInFlight) return;
+            resolvedNoticePollInFlight = true;
             try {
                 const res = await fetch(API_RESOLVED_NOTIFICATIONS_URL + '?limit=5', {
                     cache: 'no-store',
@@ -533,7 +536,10 @@ try {
                     const label = incident.label || incident.reference_no || (incident.id ? ('#' + incident.id) : 'Incident');
                     showNotification(`${label} moved to View Resolved.`, 'success');
                 }
-            } catch (e) {}
+            } catch (e) {
+            } finally {
+                resolvedNoticePollInFlight = false;
+            }
         }
 
         // Update statistics
@@ -703,7 +709,15 @@ try {
             updateStats();
         }
 
+        let fetchIncidentsInFlight = false;
+        let fetchIncidentsQueued = false;
         async function fetchIncidents() {
+            if (document.hidden) return;
+            if (fetchIncidentsInFlight) {
+                fetchIncidentsQueued = true;
+                return;
+            }
+            fetchIncidentsInFlight = true;
             // Gather filter values
             const params = new URLSearchParams();
             const priorityValue = (priorityFilter.value || '').toLowerCase();
@@ -725,8 +739,14 @@ try {
             } catch (e) {
                 console.warn('Failed to fetch incidents', e);
                 INCIDENTS = [];
+            } finally {
+                fetchIncidentsInFlight = false;
             }
             renderDynamicIncidents();
+            if (fetchIncidentsQueued) {
+                fetchIncidentsQueued = false;
+                fetchIncidents();
+            }
         }
 
         // Notification system

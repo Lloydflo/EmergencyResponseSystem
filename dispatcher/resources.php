@@ -585,7 +585,10 @@ try {
                     if (equipmentEl) equipmentEl.textContent = String(counts.equipment);
                 }
 
+                let resourcesLoadInFlight = false;
                 async function loadResources(showLoading = false) {
+                    if (resourcesLoadInFlight) return;
+                    resourcesLoadInFlight = true;
                     const container = document.getElementById('resource-list-dynamic');
                     if (showLoading && container) {
                         container.innerHTML = '<tr><td colspan="7" style="text-align:center;color:#888;">Loading resources...</td></tr>';
@@ -610,6 +613,8 @@ try {
                         RESOURCES = [];
                         updateOverviewCounts();
                         renderDynamicResources();
+                    } finally {
+                        resourcesLoadInFlight = false;
                     }
                 }
 

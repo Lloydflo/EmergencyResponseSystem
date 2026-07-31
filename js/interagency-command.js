@@ -439,9 +439,16 @@
         }
     }
 
+    let refreshAllInFlight = false;
     async function refreshAll(silent) {
-        await loadIncidents();
-        await loadRoom(!!silent);
+        if (refreshAllInFlight) return;
+        refreshAllInFlight = true;
+        try {
+            await loadIncidents();
+            await loadRoom(!!silent);
+        } finally {
+            refreshAllInFlight = false;
+        }
     }
 
     renderShell();

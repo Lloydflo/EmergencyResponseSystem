@@ -27,7 +27,6 @@ try {
         $vehicleResourceTable = ers_vehicle_resource_units_table($pdo);
         if ($vehicleResourceTable !== null) {
             ers_sync_responder_vehicle_resources($pdo);
-            ers_sync_all_vehicle_resource_units($pdo, $vehicleResourceTable);
         }
 
         // Get active incidents (pending or dispatched)
@@ -1255,7 +1254,7 @@ function loadAvailableUnits() {
 }
 
 function loadIncidentMarkers() {
-    fetch('api/incidents_list.php?status=active')
+    return fetch('api/incidents_list.php?status=active')
         .then(r => r.json())
         .then(res => {
             if (!res.ok) return;
@@ -1276,11 +1275,18 @@ function loadIncidentMarkers() {
 
 function startLivePolling() {
     pruneOfflineUnitMarkers();
+    let livePollInFlight = false;
     setInterval(() => {
-        pruneOfflineUnitMarkers();
-        loadDispatchedUnits();
-        refreshAvailableUnits();
-        loadIncidentMarkers();
+        if (document.hidden || livePollInFlight) return;
+        livePollInFlight = true;
+        Promise.all([
+            pruneOfflineUnitMarkers(),
+            loadDispatchedUnits(),
+            refreshAvailableUnits(),
+            loadIncidentMarkers()
+        ]).finally(() => {
+            livePollInFlight = false;
+        });
     }, 10000); // 10 seconds
 }
 

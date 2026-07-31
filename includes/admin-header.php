@@ -1208,11 +1208,29 @@ document.addEventListener('DOMContentLoaded', function() {
         } catch (_) {}
     }
 
+    let headerSummaryRequest = null;
+    let headerSummaryLimit = 0;
     async function loadHeaderSummary(limit) {
-        await loadBackupRequestSummary(limit);
-        await loadResolvedIncidentSummary(limit);
-        await loadIncidentCardSummary(limit);
-        await loadInteragencySummary();
+        const requestedLimit = Math.max(0, Number(limit) || 0);
+        if (headerSummaryRequest) {
+            if (requestedLimit <= headerSummaryLimit) {
+                return headerSummaryRequest;
+            }
+            await headerSummaryRequest.catch(() => {});
+        }
+
+        headerSummaryLimit = requestedLimit;
+        headerSummaryRequest = Promise.all([
+            loadBackupRequestSummary(limit),
+            loadResolvedIncidentSummary(limit),
+            loadIncidentCardSummary(limit),
+            loadInteragencySummary()
+        ]).finally(() => {
+            headerSummaryRequest = null;
+            headerSummaryLimit = 0;
+        });
+
+        return headerSummaryRequest;
     }
 
     if (menuToggle) {
@@ -1355,7 +1373,14 @@ document.addEventListener('DOMContentLoaded', function() {
     window.closeModal = closeModal;
     window.closeAllModals = closeAllModals;
 
+    const pollHeaderSummary = () => {
+        if (document.hidden) return;
+        loadHeaderSummary();
+    };
     loadHeaderSummary();
-    state.poller = window.setInterval(loadHeaderSummary, 5000);
+    state.poller = window.setInterval(pollHeaderSummary, 15000);
+    document.addEventListener('visibilitychange', () => {
+        if (!document.hidden) loadHeaderSummary();
+    });
 });
 </script>
