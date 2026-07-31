@@ -99,6 +99,7 @@
     };
 
     guardedUpdateOperations();
+    window.addEventListener('ers:anonymous-tips-updated', guardedUpdateOperations);
     window.setInterval(() => {
         if (document.visibilityState === 'visible') guardedUpdateOperations();
     }, 15000);

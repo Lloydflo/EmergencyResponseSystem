@@ -138,6 +138,13 @@
     background: #1d4ed8;
 }
 
+.ia-tip-icon:disabled,
+.ia-tip-primary:disabled,
+.ia-tip-secondary:disabled {
+    cursor: not-allowed;
+    opacity: 0.55;
+}
+
 .ia-tip-stats {
     display: grid;
     grid-template-columns: repeat(4, minmax(0, 1fr));
@@ -408,6 +415,12 @@
     overflow-wrap: anywhere;
 }
 
+.ia-tip-detail-note {
+    color: var(--ia-muted, #5f7286);
+    font-size: 0.78rem;
+    line-height: 1.35;
+}
+
 .ia-tip-detail select {
     height: 38px;
     padding: 0 10px;
@@ -427,7 +440,8 @@
 
 .ia-tip-empty,
 .ia-tip-loading,
-.ia-tip-error {
+.ia-tip-error,
+.ia-tip-notice {
     padding: 32px 18px;
     text-align: center;
     color: var(--ia-muted, #5f7286);
@@ -435,6 +449,14 @@
 
 .ia-tip-error {
     color: var(--ia-danger, #b91c1c);
+}
+
+.ia-tip-notice {
+    padding: 12px 18px;
+    border-bottom: 1px solid var(--ia-border, #dfe6ee);
+    background: #ecfdf5;
+    color: #166534;
+    font-weight: 800;
 }
 
 html[data-theme="dark"] .ia-tip-section {
@@ -503,6 +525,7 @@ html[data-theme="dark"] .ia-tip-kicker,
 html[data-theme="dark"] .ia-tip-meta,
 html[data-theme="dark"] .ia-tip-description,
 html[data-theme="dark"] .ia-tip-detail-label,
+html[data-theme="dark"] .ia-tip-detail-note,
 html[data-theme="dark"] .ia-tip-empty,
 html[data-theme="dark"] .ia-tip-loading,
 html[data-theme="dark"] .ia-tip-flow span {
@@ -584,6 +607,12 @@ html[data-theme="dark"] .ia-tip-chip.status-converted_to_incident {
 
 html[data-theme="dark"] .ia-tip-error {
     color: #fca5a5;
+}
+
+html[data-theme="dark"] .ia-tip-notice {
+    background: #052e16;
+    border-color: #15803d;
+    color: #bbf7d0;
 }
 
 @media (max-width: 980px) {

@@ -167,6 +167,7 @@
     };
 
     guardedRefreshCounts();
+    window.addEventListener('ers:anonymous-tips-updated', guardedRefreshCounts);
     window.setInterval(() => {
         if (document.visibilityState === 'visible') guardedRefreshCounts();
     }, 12000);
