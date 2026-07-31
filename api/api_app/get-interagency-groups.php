@@ -2,8 +2,6 @@
 declare(strict_types=1);
 
 require_once __DIR__ . '/_operational_api.php';
-require_once __DIR__ . '/../../includes/user_presence.php';
-
 op_require_method('GET');
 $userId = op_query_int('user_id');
 op_require_positive($userId, 'user_id');
@@ -53,7 +51,7 @@ try {
     // Presence updates must not prevent department channels from loading.
     // A presence-table/resource-sync issue is logged independently instead.
     try {
-        touch_user_presence($pdo, $userId);
+        op_touch_presence($pdo, $userId);
     } catch (Throwable $presenceError) {
         error_log('get-interagency-groups presence update skipped: ' . $presenceError->getMessage());
     }
@@ -88,9 +86,21 @@ try {
         );
     }
 
-    $hasRequests = isset($existingTables['interagency_group_member_requests']);
-    $hasReads = isset($existingTables['interagency_group_thread_reads']);
-    $hasMessages = isset($existingTables['interagency_groups_threads_read']);
+    op_require_columns($pdo, 'interagency_group_threads', ['id', 'name', 'is_active']);
+    op_require_columns($pdo, 'interagency_group_members', ['id', 'group_id', 'user_id', 'is_active']);
+
+    $hasRequests = isset($existingTables['interagency_group_member_requests'])
+        && op_has_columns($pdo, 'interagency_group_member_requests', [
+            'id', 'group_id', 'requested_user_id', 'status',
+        ]);
+    $hasReads = isset($existingTables['interagency_group_thread_reads'])
+        && op_has_columns($pdo, 'interagency_group_thread_reads', [
+            'group_id', 'user_id', 'last_read_id',
+        ]);
+    $hasMessages = isset($existingTables['interagency_groups_threads_read'])
+        && op_has_columns($pdo, 'interagency_groups_threads_read', [
+            'id', 'group_id', 'sender_user_id', 'message_details', 'created_at',
+        ]);
 
     $requestSelect = $hasRequests
         ? 'CASE WHEN req.id IS NULL THEN 0 ELSE 1 END AS request_pending'
