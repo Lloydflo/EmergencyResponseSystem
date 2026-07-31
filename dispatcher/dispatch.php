@@ -460,6 +460,19 @@ function formatSelectedUnitDetails(unit) {
     ].filter(Boolean);
     return `<div style="padding:0.55rem 0; border-bottom:1px solid #dbe3ea;">${lines.join('<br>')}</div>`;
 }
+function isDispatchableModalUnit(unit) {
+    if (!unit) return false;
+    const vehicleStatus = normalizedUnitStatus(unit.status);
+    const responderStatus = normalizedUnitStatus(unit.responder_unit_status);
+    const presenceStatus = normalizedUnitStatus(unit.presence_status);
+    const hasPresenceField = Object.prototype.hasOwnProperty.call(unit, 'presence_status');
+    const hasResponder = String(unit.driver_name || unit.responder_user_id || '').trim() !== '';
+    const responderReady = responderStatus === '' || responderStatus === 'available' || responderStatus === 'ready' || responderStatus === 'on_duty';
+    return vehicleStatus === 'available'
+        && hasResponder
+        && responderReady
+        && (!hasPresenceField || presenceStatus === 'online');
+}
 function renderSelectedUnitDetails(select) {
     const detailsEl = document.getElementById('unit-details');
     const btn = document.getElementById('confirm-dispatch-btn');
@@ -537,8 +550,9 @@ function openDispatchModal(incidentId) {
             const select = document.getElementById('unit-select');
             select.innerHTML = '';
             currentAvailableUnitsById = {};
-            if (data.units && data.units.length) {
-                data.units.forEach(u => {
+            const dispatchableUnits = Array.isArray(data.units) ? data.units.filter(isDispatchableModalUnit) : [];
+            if (dispatchableUnits.length) {
+                dispatchableUnits.forEach(u => {
                     currentAvailableUnitsById[String(u.id)] = u;
                     const distKm = selectedUnitDistanceKm(u);
                     const dist = distKm !== null ? `Distance: ${formatDistanceKm(distKm)}` : 'Distance pending';
@@ -563,7 +577,7 @@ function openDispatchModal(incidentId) {
                 select.innerHTML = '<div style="padding:0.55rem 0.65rem; color:#64748b;">No available units</div>';
                 const label = document.getElementById('unit-dropdown-label');
                 if (label) label.textContent = 'No available units';
-                document.getElementById('unit-details').innerHTML = 'No real available vehicles ready for dispatch.';
+                document.getElementById('unit-details').innerHTML = 'No online available responder vehicles are ready for dispatch.';
                 document.getElementById('confirm-dispatch-btn').disabled = true;
             }
         });

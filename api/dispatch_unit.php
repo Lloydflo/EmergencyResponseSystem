@@ -171,6 +171,74 @@ function dispatch_index_exists(PDO $pdo, string $tableName, string $indexName): 
     }
 }
 
+function dispatch_responder_is_available(PDO $pdo, int $responderId): bool
+{
+    if ($responderId <= 0 || !dispatch_table_exists($pdo, 'users')) {
+        return false;
+    }
+
+    $select = ['u.id'];
+    $join = '';
+    if (dispatch_column_exists($pdo, 'users', 'status')) {
+        $select[] = 'u.status AS account_status';
+    } else {
+        $select[] = "'active' AS account_status";
+    }
+    if (dispatch_column_exists($pdo, 'users', 'unit_status')) {
+        $select[] = 'u.unit_status';
+    } else {
+        $select[] = "'available' AS unit_status";
+    }
+
+    $hasPresence = dispatch_table_exists($pdo, 'user_presence')
+        && dispatch_column_exists($pdo, 'user_presence', 'user_id')
+        && dispatch_column_exists($pdo, 'user_presence', 'is_online')
+        && dispatch_column_exists($pdo, 'user_presence', 'last_seen_at');
+    if ($hasPresence) {
+        $select[] = 'up.is_online';
+        $select[] = 'up.last_seen_at';
+        $join = ' LEFT JOIN user_presence up ON up.user_id = u.id';
+    } else {
+        $select[] = '1 AS is_online';
+        $select[] = 'NOW() AS last_seen_at';
+    }
+
+    $roleWhere = dispatch_column_exists($pdo, 'users', 'role')
+        ? " AND LOWER(COALESCE(u.role, '')) = 'responder'"
+        : '';
+    $stmt = $pdo->prepare(
+        'SELECT ' . implode(', ', $select) . "
+         FROM users u
+         {$join}
+         WHERE u.id = ?{$roleWhere}
+         LIMIT 1"
+    );
+    $stmt->execute([$responderId]);
+    $row = $stmt->fetch(PDO::FETCH_ASSOC);
+    if (!$row) {
+        return false;
+    }
+
+    $accountStatus = strtolower(trim((string)($row['account_status'] ?? 'active')));
+    if ($accountStatus !== '' && $accountStatus !== 'active') {
+        return false;
+    }
+
+    $unitStatus = strtolower(trim((string)($row['unit_status'] ?? 'available')));
+    if (!in_array($unitStatus, ['', 'available', 'ready', 'on_duty'], true)) {
+        return false;
+    }
+
+    if (!$hasPresence) {
+        return true;
+    }
+
+    $lastSeen = strtotime((string)($row['last_seen_at'] ?? ''));
+    return (int)($row['is_online'] ?? 0) === 1
+        && $lastSeen !== false
+        && $lastSeen >= time() - 180;
+}
+
 try {
     $dispatchIds = [];
     $dispatchedUnits = [];
@@ -258,6 +326,14 @@ try {
             echo json_encode([
                 'ok' => false,
                 'error' => 'Unit ' . (string)($unitRow['identifier'] ?? $unitRow['id']) . ' has no assigned responder'
+            ]);
+            exit;
+        }
+        if (!dispatch_responder_is_available($pdo, (int)$unitRow['assigned_user_id'])) {
+            $pdo->rollBack();
+            echo json_encode([
+                'ok' => false,
+                'error' => 'Unit ' . (string)($unitRow['identifier'] ?? $unitRow['id']) . ' responder is not online and available'
             ]);
             exit;
         }

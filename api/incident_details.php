@@ -54,6 +54,7 @@ $resourceRecordsTable = ers_vehicle_resource_units_table($pdo);
 if ($resourceRecordsTable !== null) {
     ers_sync_all_vehicle_resource_units($pdo, $resourceRecordsTable);
 }
+$responderPresenceMap = ers_vehicle_resource_responder_presence_map($pdo);
 
 try {
     if ($hasId) {
@@ -387,6 +388,28 @@ try {
              WHERE {$unitAlias}status = 'available'
              {$assignedDriverWhere}"
         )->fetchAll(PDO::FETCH_ASSOC);
+    }
+
+    if ($responderPresenceMap !== []) {
+        $units = array_values(array_filter($units, static function (array $unit) use ($responderPresenceMap): bool {
+            $unitCode = strtoupper(trim((string)($unit['identifier'] ?? '')));
+            if ($unitCode === '' || !isset($responderPresenceMap[$unitCode])) {
+                return false;
+            }
+            return ers_vehicle_resource_status_from_responder_state($responderPresenceMap[$unitCode]) === 'available';
+        }));
+
+        foreach ($units as &$unit) {
+            $unitCode = strtoupper(trim((string)($unit['identifier'] ?? '')));
+            $presence = $responderPresenceMap[$unitCode] ?? [];
+            $unit['responder_user_id'] = (int)($presence['responder_id'] ?? 0);
+            $unit['presence_status'] = (string)($presence['presence_status'] ?? '');
+            $unit['responder_unit_status'] = (string)($presence['unit_status'] ?? '');
+            if (trim((string)($unit['driver_name'] ?? '')) === '' && trim((string)($presence['responder_name'] ?? '')) !== '') {
+                $unit['driver_name'] = trim((string)$presence['responder_name']);
+            }
+        }
+        unset($unit);
     }
 
     foreach ($units as &$unit) {
