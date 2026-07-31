@@ -4,6 +4,7 @@ header("Content-Type: application/json");
 
 require __DIR__ . "/connect.php";
 require_once __DIR__ . "/../../includes/user_presence.php";
+require_once __DIR__ . "/_location.php";
 
 $raw = file_get_contents("php://input");
 $input = json_decode($raw, true);
@@ -34,6 +35,7 @@ if (!in_array($presence, ["online", "offline"], true)) {
 
 try {
     $pdo = db();
+    $locationUpdate = null;
 
     // Para malaman kung anong database talaga ang ginagamit
     $databaseName = $pdo
@@ -45,6 +47,25 @@ try {
         mark_user_offline($pdo, $responder_id);
     } else {
         mark_user_online($pdo, $responder_id);
+        $hasLocationPayload = array_key_exists("latitude", $input)
+            || array_key_exists("lat", $input)
+            || array_key_exists("longitude", $input)
+            || array_key_exists("lng", $input)
+            || array_key_exists("lon", $input);
+        if ($hasLocationPayload) {
+            $locationPayload = $input;
+            $locationPayload["responder_id"] = $responder_id;
+            $locationPayload["source"] = $locationPayload["source"] ?? "responder_online";
+            try {
+                $locationUpdate = app_location_update($pdo, $locationPayload);
+            } catch (Throwable $locationError) {
+                error_log("[set-unit-presence] location update skipped: " . $locationError->getMessage());
+                $locationUpdate = [
+                    "ok" => false,
+                    "error" => "Location update skipped"
+                ];
+            }
+        }
         $q = $pdo->prepare("
             SELECT status
             FROM dispatch_operator_records
@@ -120,7 +141,8 @@ try {
         "unit_status" => $unitStatus,
         "saved_unit_status" => $savedStatus,
         "affected_rows" => $stmt->rowCount(),
-        "database" => $databaseName
+        "database" => $databaseName,
+        "location_update" => $locationUpdate
     ]);
 
 } catch (Throwable $e) {
