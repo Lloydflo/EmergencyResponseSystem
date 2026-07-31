@@ -517,6 +517,10 @@ function formatSelectedUnitDetails(unit) {
     const unitPoint = unitResponderLatLng(unit);
     const distanceKm = selectedUnitDistanceKm(unit);
     const distanceKey = selectedUnitDistanceKey(unit);
+    const incidentPoint = normalizeLatLngPair(currentIncidentLat, currentIncidentLng);
+    const distanceUnavailableText = !incidentPoint
+        ? 'Incident coordinates are not available'
+        : 'Responder GPS is not available';
     const lines = [
         `<strong>${escapeHtml(vehicleName)}</strong>`,
         unitCode && unitCode !== vehicleName ? `<strong>Unit Code:</strong> ${escapeHtml(unitCode)}` : '',
@@ -527,7 +531,7 @@ function formatSelectedUnitDetails(unit) {
         unitPoint ? `<strong>Responder GPS:</strong> ${unitPoint.lat.toFixed(6)}, ${unitPoint.lng.toFixed(6)}` : '<strong>Responder GPS:</strong> Pending',
         distanceKm !== null
             ? `<strong>Distance to Incident:</strong> <span data-distance-key="${escapeAttr(distanceKey)}">${escapeHtml(formatDistanceKm(distanceKm))}</span>`
-            : '<strong>Distance to Incident:</strong> Unavailable until responder GPS and incident coordinates are available'
+            : `<strong>Distance to Incident:</strong> ${escapeHtml(distanceUnavailableText)}`
     ].filter(Boolean);
     return `<div style="padding:0.55rem 0; border-bottom:1px solid #dbe3ea;">${lines.join('<br>')}</div>`;
 }
@@ -590,6 +594,30 @@ function formatIncidentTypeLabel(value) {
     if (!parts.length) return '';
     return parts.map((part) => labels[part] || part.replace(/\b\w/g, (c) => c.toUpperCase())).join(', ');
 }
+function parseLatLngFromText(text) {
+    const raw = String(text || '');
+    const match = raw.match(/(?:lat(?:itude)?\s*[:=]?\s*)?(-?\d{1,3}(?:\.\d+)?)\s*[, ]\s*(?:lon(?:gitude)?|lng)?\s*[:=]?\s*(-?\d{1,3}(?:\.\d+)?)/i);
+    if (!match) return null;
+    return normalizeLatLngPair(match[1], match[2]);
+}
+function renderIncidentDetails(inc) {
+    const hasPoint = currentIncidentLat !== null && currentIncidentLng !== null;
+    document.getElementById('modal-incident-details').innerHTML =
+        `<strong>Type:</strong> ${formatIncidentTypeLabel(inc.type) || inc.type || ''}<br>` +
+        `<strong>Title:</strong> ${inc.title || ''}<br>` +
+        `<strong>Location:</strong> ${inc.location_address || 'N/A'}<br>` +
+        (hasPoint ? `<strong>Coordinates:</strong> ${currentIncidentLat}, ${currentIncidentLng}<br>` : '<strong>Coordinates:</strong> Not available<br>') +
+        `<strong>Priority:</strong> ${inc.priority || ''}`;
+}
+function resolveIncidentPoint(inc) {
+    const savedPoint = normalizeLatLngPair(inc && inc.latitude, inc && inc.longitude);
+    if (savedPoint) return Promise.resolve(savedPoint);
+
+    const textPoint = parseLatLngFromText((inc && inc.location_address) || '');
+    if (textPoint) return Promise.resolve(textPoint);
+
+    return Promise.resolve(null);
+}
 function openDispatchModal(incidentId) {
     currentIncidentId = toIncidentId(incidentId);
     document.getElementById('dispatch-modal').style.display = 'flex';
@@ -605,17 +633,15 @@ function openDispatchModal(incidentId) {
     fetch('api/incident_details.php?id=' + encodeURIComponent(currentIncidentId))
         .then(r => r.json())
         .then(data => {
+            const incidentReady = data.incident
+                ? resolveIncidentPoint(data.incident)
+                : Promise.resolve(null);
+            return incidentReady.then(incidentPoint => {
             if (data.incident) {
                 const inc = data.incident;
-                const incidentPoint = normalizeLatLngPair(inc && inc.latitude, inc && inc.longitude);
                 currentIncidentLat = incidentPoint ? incidentPoint.lat : null;
                 currentIncidentLng = incidentPoint ? incidentPoint.lng : null;
-                document.getElementById('modal-incident-details').innerHTML =
-                    `<strong>Type:</strong> ${formatIncidentTypeLabel(inc.type) || inc.type || ''}<br>` +
-                    `<strong>Title:</strong> ${inc.title || ''}<br>` +
-                    `<strong>Location:</strong> ${inc.location_address || 'N/A'}<br>` +
-                    (currentIncidentLat !== null && currentIncidentLng !== null ? `<strong>Coordinates:</strong> ${currentIncidentLat}, ${currentIncidentLng}<br>` : '') +
-                    `<strong>Priority:</strong> ${inc.priority || ''}`;
+                renderIncidentDetails(inc);
             } else {
                 document.getElementById('modal-incident-details').innerHTML = '<span style="color:red">Incident not found.</span>';
             }
@@ -628,7 +654,10 @@ function openDispatchModal(incidentId) {
                 dispatchableUnits.forEach(u => {
                     currentAvailableUnitsById[String(u.id)] = u;
                     const distKm = selectedUnitDistanceKm(u);
-                    const dist = distKm !== null ? `Distance: ${formatDistanceKm(distKm)}` : 'Distance pending';
+                    const incidentPoint = normalizeLatLngPair(currentIncidentLat, currentIncidentLng);
+                    const dist = distKm !== null
+                        ? `Distance: ${formatDistanceKm(distKm)}`
+                        : (incidentPoint ? 'Responder GPS pending' : 'Incident coordinates missing');
                     const vehicleName = getUnitVehicleName(u);
                     const unitCode = String(u.identifier || '').trim();
                     const detailParts = [];
@@ -653,6 +682,7 @@ function openDispatchModal(incidentId) {
                 document.getElementById('unit-details').innerHTML = 'No online available responder vehicles are ready for dispatch.';
                 document.getElementById('confirm-dispatch-btn').disabled = true;
             }
+            });
         });
 }
 function closeDispatchModal() {
