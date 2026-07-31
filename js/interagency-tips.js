@@ -11,6 +11,8 @@
         items: [],
         loading: true,
         error: '',
+        notice: '',
+        action: '',
         selectedId: null,
         search: '',
         status: 'all',
@@ -24,7 +26,18 @@
         .replace(/"/g, '&quot;')
         .replace(/'/g, '&#039;');
 
-    const statusLabel = (status) => String(status || 'new').replace(/_/g, ' ');
+    const statusLabel = (status) => String(status || 'new')
+        .replace(/_/g, ' ')
+        .replace(/\b\w/g, (letter) => letter.toUpperCase());
+
+    const actionLabel = {
+        reviewing: 'Marked for review.',
+        verified: 'Verified as actionable.',
+        dismissed: 'Dismissed after review.',
+    };
+
+    const incidentTypes = ['other', 'medical', 'fire', 'police', 'traffic', 'rescue'];
+    const priorities = ['moderate', 'low', 'urgent', 'high', 'critical'];
 
     const formatDate = (value) => {
         if (!value) {
@@ -45,6 +58,22 @@
     const isEvidenceLink = (value) => {
         const text = String(value || '').trim();
         return /^https?:\/\//i.test(text) || /^data:image\//i.test(text) || /\.(png|jpe?g|gif|webp)$/i.test(text);
+    };
+
+    const incidentUrl = (referenceNo) => {
+        const ref = encodeURIComponent(String(referenceNo || '').trim());
+        const path = String(window.location.pathname || '').toLowerCase();
+        if (path.includes('/admin/')) {
+            return `../dispatcher/incident.php?code=${ref}`;
+        }
+        if (path.includes('/dispatcher/')) {
+            return `incident.php?code=${ref}`;
+        }
+        return `dispatcher/incident.php?code=${ref}`;
+    };
+
+    const notifyCountsChanged = () => {
+        window.dispatchEvent(new CustomEvent('ers:anonymous-tips-updated'));
     };
 
     const filteredItems = () => state.items.filter((item) => {
@@ -98,6 +127,7 @@
             return;
         }
         const submit = form.querySelector('[data-tip-save]');
+        const selectedStatus = form.elements.status.value;
         if (submit) {
             submit.disabled = true;
         }
@@ -113,7 +143,7 @@
                 body: JSON.stringify({
                     action: 'update_status',
                     id: item.id,
-                    status: form.elements.status.value,
+                    status: selectedStatus,
                     outcome: form.elements.outcome.value.trim(),
                 }),
             });
@@ -122,6 +152,9 @@
                 throw new Error(data.error || 'Unable to update anonymous tip');
             }
             await loadTips();
+            state.notice = `${item.tip_id || 'Tip'} saved as ${statusLabel(selectedStatus)}.`;
+            render();
+            notifyCountsChanged();
         } catch (error) {
             state.error = error.message || 'Unable to update anonymous tip';
             render();
@@ -133,6 +166,16 @@
         if (!item) {
             return;
         }
+        if (item.status === 'converted_to_incident') {
+            state.error = 'Converted tips are locked to their linked incident.';
+            render();
+            return;
+        }
+
+        state.action = status;
+        state.error = '';
+        state.notice = '';
+        render();
 
         try {
             const response = await fetch(apiUrl, {
@@ -146,7 +189,7 @@
                     action: 'update_status',
                     id: item.id,
                     status,
-                    outcome: outcome || item.outcome || '',
+                    outcome: outcome || actionLabel[status] || item.outcome || '',
                 }),
             });
             const data = await response.json();
@@ -154,8 +197,60 @@
                 throw new Error(data.error || 'Unable to update anonymous tip');
             }
             await loadTips();
+            state.notice = `${item.tip_id || 'Tip'} ${String(actionLabel[status] || 'updated.').toLowerCase()}`;
+            render();
+            notifyCountsChanged();
         } catch (error) {
             state.error = error.message || 'Unable to update anonymous tip';
+            render();
+        } finally {
+            state.action = '';
+            render();
+        }
+    };
+
+    const convertTip = async () => {
+        const item = selectedItem();
+        if (!item || item.status === 'converted_to_incident') {
+            return;
+        }
+
+        const form = root.querySelector('[data-tip-status-form]');
+        state.action = 'converted_to_incident';
+        state.error = '';
+        state.notice = '';
+        render();
+
+        try {
+            const response = await fetch(apiUrl, {
+                method: 'POST',
+                credentials: 'same-origin',
+                headers: {
+                    Accept: 'application/json',
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    action: 'convert_to_incident',
+                    id: item.id,
+                    incident_type: form?.elements.incident_type?.value || 'other',
+                    priority: form?.elements.priority?.value || 'moderate',
+                    outcome: form?.elements.outcome?.value.trim() || '',
+                }),
+            });
+            const data = await response.json();
+            if (!response.ok || !data.success) {
+                throw new Error(data.error || 'Unable to convert anonymous tip');
+            }
+            const reference = data.incident && data.incident.reference_no ? data.incident.reference_no : 'incident';
+            await loadTips();
+            state.notice = `${item.tip_id || 'Tip'} converted to ${reference}.`;
+            render();
+            notifyCountsChanged();
+        } catch (error) {
+            state.error = error.message || 'Unable to convert anonymous tip';
+            render();
+        } finally {
+            state.action = '';
             render();
         }
     };
@@ -243,11 +338,25 @@
         }
 
         const photo = String(item.photo_of_evidence || '').trim();
+        const convertedReference = String(item.converted_reference_no || '').trim();
+        const convertedId = Number(item.converted_incident_id || 0);
+        const isConverted = item.status === 'converted_to_incident';
         const evidence = photo
             ? (isEvidenceLink(photo)
                 ? `<a class="ia-tip-secondary" href="${escapeHtml(photo)}" target="_blank" rel="noopener"><i class="fas fa-image"></i> Evidence</a>`
                 : `<div class="ia-tip-detail-value">${escapeHtml(photo)}</div>`)
             : '<div class="ia-tip-detail-value">None</div>';
+        const incidentLink = convertedReference
+            ? `<a class="ia-tip-secondary" href="${escapeHtml(incidentUrl(convertedReference))}"><i class="fas fa-arrow-up-right-from-square"></i> ${escapeHtml(convertedReference)}</a>`
+            : '<div class="ia-tip-detail-value">Not converted</div>';
+        const actionDisabled = (status) => state.action !== '' || isConverted || item.status === status;
+        const actionButtonText = (status, label) => state.action === status
+            ? '<i class="fas fa-spinner fa-spin"></i> Working'
+            : label;
+        const statusOptions = editableStatuses
+            .filter((status) => status !== 'converted_to_incident' || item.status === 'converted_to_incident')
+            .map((status) => `<option value="${status}" ${item.status === status ? 'selected' : ''}>${statusLabel(status)}</option>`)
+            .join('');
 
         return `
             <aside class="ia-tip-detail">
@@ -273,28 +382,47 @@
                         <div class="ia-tip-detail-label">Photo of Evidence</div>
                         ${evidence}
                     </div>
+                    <div class="ia-tip-detail-item">
+                        <div class="ia-tip-detail-label">Linked Incident</div>
+                        ${incidentLink}
+                        ${convertedId > 0 ? `<div class="ia-tip-detail-note">Incident #${convertedId}${item.converted_incident_status ? `, ${escapeHtml(statusLabel(item.converted_incident_status))}` : ''}</div>` : ''}
+                    </div>
                 </div>
                 <div class="ia-tip-quick-actions" aria-label="Tip quick actions">
-                    <button type="button" class="ia-tip-secondary" data-tip-quick-status="reviewing"><i class="fas fa-magnifying-glass"></i> Review</button>
-                    <button type="button" class="ia-tip-secondary" data-tip-quick-status="verified"><i class="fas fa-check-circle"></i> Verify</button>
-                    <button type="button" class="ia-tip-secondary" data-tip-quick-status="converted_to_incident"><i class="fas fa-file-circle-plus"></i> Convert</button>
-                    <button type="button" class="ia-tip-secondary" data-tip-quick-status="dismissed"><i class="fas fa-ban"></i> Dismiss</button>
+                    <button type="button" class="ia-tip-secondary" data-tip-quick-status="reviewing" ${actionDisabled('reviewing') ? 'disabled' : ''}>${actionButtonText('reviewing', '<i class="fas fa-magnifying-glass"></i> Review')}</button>
+                    <button type="button" class="ia-tip-secondary" data-tip-quick-status="verified" ${actionDisabled('verified') ? 'disabled' : ''}>${actionButtonText('verified', '<i class="fas fa-check-circle"></i> Verify')}</button>
+                    ${isConverted && convertedReference
+                        ? `<a class="ia-tip-secondary" href="${escapeHtml(incidentUrl(convertedReference))}"><i class="fas fa-arrow-up-right-from-square"></i> Open Incident</a>`
+                        : `<button type="button" class="ia-tip-secondary" data-tip-convert ${state.action !== '' ? 'disabled' : ''}>${actionButtonText('converted_to_incident', '<i class="fas fa-file-circle-plus"></i> Convert')}</button>`}
+                    <button type="button" class="ia-tip-secondary" data-tip-quick-status="dismissed" ${actionDisabled('dismissed') ? 'disabled' : ''}>${actionButtonText('dismissed', '<i class="fas fa-ban"></i> Dismiss')}</button>
                 </div>
                 <form data-tip-status-form>
                     <div class="ia-tip-detail-grid ia-tip-detail-form-grid">
                         <div class="ia-tip-detail-item">
                             <label class="ia-tip-detail-label" for="iaTipStatus">Status</label>
-                            <select id="iaTipStatus" name="status">
-                                ${editableStatuses.map((status) => `<option value="${status}" ${item.status === status ? 'selected' : ''}>${statusLabel(status)}</option>`).join('')}
+                            <select id="iaTipStatus" name="status" ${isConverted ? 'disabled' : ''}>
+                                ${statusOptions}
+                            </select>
+                        </div>
+                        <div class="ia-tip-detail-item">
+                            <label class="ia-tip-detail-label" for="iaTipIncidentType">Incident Type</label>
+                            <select id="iaTipIncidentType" name="incident_type" ${isConverted ? 'disabled' : ''}>
+                                ${incidentTypes.map((type) => `<option value="${type}">${statusLabel(type)}</option>`).join('')}
+                            </select>
+                        </div>
+                        <div class="ia-tip-detail-item">
+                            <label class="ia-tip-detail-label" for="iaTipPriority">Priority</label>
+                            <select id="iaTipPriority" name="priority" ${isConverted ? 'disabled' : ''}>
+                                ${priorities.map((priority) => `<option value="${priority}" ${priority === 'moderate' ? 'selected' : ''}>${statusLabel(priority)}</option>`).join('')}
                             </select>
                         </div>
                         <div class="ia-tip-detail-item">
                             <label class="ia-tip-detail-label" for="iaTipOutcome">Outcome</label>
-                            <textarea id="iaTipOutcome" name="outcome">${escapeHtml(item.outcome || '')}</textarea>
+                            <textarea id="iaTipOutcome" name="outcome" ${isConverted ? 'readonly' : ''}>${escapeHtml(item.outcome || '')}</textarea>
                         </div>
                     </div>
                     <div class="ia-tip-detail-actions">
-                        <button type="submit" class="ia-tip-primary" data-tip-save><i class="fas fa-floppy-disk"></i> Save</button>
+                        <button type="submit" class="ia-tip-primary" data-tip-save ${state.action !== '' || isConverted ? 'disabled' : ''}><i class="fas fa-floppy-disk"></i> Save</button>
                     </div>
                 </form>
             </aside>
@@ -320,6 +448,7 @@
                         </button>
                     </div>
                     ${renderStats()}
+                    ${state.notice ? `<div class="ia-tip-notice">${escapeHtml(state.notice)}</div>` : ''}
                     ${state.error ? `<div class="ia-tip-error">${escapeHtml(state.error)}</div>` : ''}
                     <div class="ia-tip-body">
                         <section class="ia-tip-list" aria-label="Anonymous tip records">
@@ -361,10 +490,16 @@
             return;
         }
 
+        const convert = event.target.closest('[data-tip-convert]');
+        if (convert) {
+            convertTip();
+            return;
+        }
+
         const quick = event.target.closest('[data-tip-quick-status]');
         if (quick) {
             const status = String(quick.getAttribute('data-tip-quick-status') || 'reviewing');
-            quickStatus(status, statusLabel(status));
+            quickStatus(status, actionLabel[status]);
             return;
         }
 
@@ -397,6 +532,9 @@
     root.addEventListener('submit', (event) => {
         if (event.target.matches('[data-tip-status-form]')) {
             event.preventDefault();
+            if (event.target.elements.status.disabled) {
+                return;
+            }
             saveStatus(event.target);
         }
     });

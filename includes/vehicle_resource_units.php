@@ -812,6 +812,7 @@ if (!function_exists('ers_sync_all_vehicle_resource_units')) {
             return;
         }
 
+        $presenceMap = ers_vehicle_resource_responder_presence_map($pdo);
         $latitudeSelect = ers_vehicle_resource_column_exists($pdo, $tableName, 'latitude') ? 'latitude' : 'NULL AS latitude';
         $longitudeSelect = ers_vehicle_resource_column_exists($pdo, $tableName, 'longitude') ? 'longitude' : 'NULL AS longitude';
         $stmt = $pdo->query(
@@ -828,14 +829,18 @@ if (!function_exists('ers_sync_all_vehicle_resource_units')) {
                 continue;
             }
 
+            if (isset($presenceMap[$unitCode])) {
+                $resourceStatus = ers_vehicle_resource_status_from_responder_state($presenceMap[$unitCode]);
+                $resource['status'] = $resourceStatus;
+                ers_update_vehicle_resource_status_by_identifier($pdo, $unitCode, $resourceStatus);
+                ers_sync_vehicle_resource_unit($pdo, $resource);
+                continue;
+            }
+
             $hasAssignedResponder = ers_vehicle_resource_has_assigned_responder($pdo, $unitCode);
             if ($resourceStatus === 'available' && !$hasAssignedResponder) {
                 ers_update_vehicle_resource_status_by_identifier($pdo, $unitCode, 'offline');
                 $resource['status'] = 'offline';
-            }
-            if ($resourceStatus === 'offline' && $hasAssignedResponder) {
-                ers_update_vehicle_resource_status_by_identifier($pdo, $unitCode, 'available');
-                $resource['status'] = 'available';
             }
             ers_sync_vehicle_resource_unit($pdo, $resource);
         }
@@ -850,16 +855,28 @@ if (!function_exists('ers_count_available_vehicle_resource_units')) {
             ers_sync_all_vehicle_resource_units($pdo, $tableName);
 
             if (ers_units_table_available($pdo)) {
+                $presenceMap = ers_vehicle_resource_responder_presence_map($pdo);
                 $stmt = $pdo->query(
-                    "SELECT COUNT(DISTINCT u.id) AS c
+                    "SELECT DISTINCT u.id, u.identifier
                      FROM `units` u
                      INNER JOIN `" . $tableName . "` rr
                         ON rr.code = u.identifier
                        AND LOWER(rr.category) = 'vehicles'
                      WHERE u.status = 'available'"
                 );
-                $row = $stmt->fetch(PDO::FETCH_ASSOC);
-                return (int) ($row['c'] ?? 0);
+                $rows = $stmt ? $stmt->fetchAll(PDO::FETCH_ASSOC) : [];
+                if ($presenceMap === []) {
+                    return count($rows);
+                }
+
+                $count = 0;
+                foreach ($rows as $row) {
+                    $unitCode = strtoupper(trim((string) ($row['identifier'] ?? '')));
+                    if ($unitCode !== '' && isset($presenceMap[$unitCode]) && ers_vehicle_resource_status_from_responder_state($presenceMap[$unitCode]) === 'available') {
+                        $count++;
+                    }
+                }
+                return $count;
             }
 
             $stmt = $pdo->query(

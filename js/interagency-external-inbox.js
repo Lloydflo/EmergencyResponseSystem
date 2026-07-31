@@ -206,7 +206,10 @@
         `;
     }
 
+    let inboxLoadInFlight = false;
     async function loadInbox() {
+        if (inboxLoadInFlight) return;
+        inboxLoadInFlight = true;
         state.loading = true;
         render();
         if (refreshBtn) refreshBtn.disabled = true;
@@ -224,6 +227,7 @@
             }
         } finally {
             state.loading = false;
+            inboxLoadInFlight = false;
             if (refreshBtn) refreshBtn.disabled = false;
             render();
         }
@@ -351,6 +355,8 @@
         bindEvents();
         setExpanded(state.expanded);
         loadInbox();
-        window.setInterval(loadInbox, 30000);
+        window.setInterval(() => {
+            if (!document.hidden) loadInbox();
+        }, 30000);
     });
 })();
