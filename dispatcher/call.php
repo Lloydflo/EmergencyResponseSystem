@@ -1662,17 +1662,24 @@ $turnIsConfigured = preg_match('/^turns?:/i', $turnUrl) === 1
                     query: { role: 'ers-response-team', room: call.room, callId }
                 });
             const handleTransferSocketConnected = () => {
-                transferSocket.emit('join', call.room, (response) => {
-                    if (response && response.ok) {
-                        setTransferCallChatStatus('Connected to caller room (' + String(response.members || 1) + ' participant(s))');
-                        flushPendingTransferCallMessages();
-                    } else {
+                const activeSocket = transferSocket;
+                const joinCallerRoom = () => {
+                    if (!activeSocket || transferSocket !== activeSocket || !activeSocket.connected) return;
+                    activeSocket.emit('join', call.room, (response) => {
+                        if (transferSocket !== activeSocket) return;
+                        if (response && response.ok) {
+                            setTransferCallChatStatus('Connected to caller room (' + String(response.members || 1) + ' participant(s))');
+                            emitTransferAccepted(call);
+                            scheduleTransferOfferRequest(call);
+                            flushPendingTransferCallMessages();
+                            setVoiceState('Emergency call accepted. Waiting for the caller audio offer.');
+                            return;
+                        }
                         setTransferCallChatStatus('Could not join the caller room. Retrying...');
-                    }
-                });
-                emitTransferAccepted(call);
-                scheduleTransferOfferRequest(call);
-                setVoiceState('Connected to AlertaraQC transfer room ' + call.room + '. Waiting for caller audio.');
+                        window.setTimeout(joinCallerRoom, 600);
+                    });
+                };
+                joinCallerRoom();
             };
             bindTransferCallSocketHandler('connect', handleTransferSocketConnected);
             bindTransferCallSocketHandler('offer', async (offerPayload) => {
