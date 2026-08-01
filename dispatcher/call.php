@@ -17,6 +17,18 @@ $turnCredential = trim((string) ers_env('WEBRTC_TURN_CREDENTIAL', ''));
 $turnIsConfigured = preg_match('/^turns?:/i', $turnUrl) === 1
     && $turnUsername !== ''
     && $turnCredential !== '';
+$turnUrls = [$turnUrl];
+if ($turnIsConfigured && preg_match('/^turns?:(?:\/\/)?([^:\/?]+)/i', $turnUrl, $turnHostMatch)) {
+    $turnHost = strtolower($turnHostMatch[1]);
+    if ($turnHost === 'global.relay.metered.ca') {
+        $turnUrls = [
+            'turn:' . $turnHost . ':80',
+            'turn:' . $turnHost . ':80?transport=tcp',
+            'turn:' . $turnHost . ':443',
+            'turns:' . $turnHost . ':443?transport=tcp',
+        ];
+    }
+}
 ?>
 
 <!DOCTYPE html>
@@ -486,7 +498,7 @@ $turnIsConfigured = preg_match('/^turns?:/i', $turnUrl) === 1
         ...TRANSFER_STUN_SERVERS
         <?php if ($turnIsConfigured): ?>,
         {
-            urls: <?php echo json_encode($turnUrl, JSON_UNESCAPED_SLASHES); ?>,
+            urls: <?php echo json_encode($turnUrls, JSON_UNESCAPED_SLASHES); ?>,
             username: <?php echo json_encode($turnUsername); ?>,
             credential: <?php echo json_encode($turnCredential); ?>
         }
