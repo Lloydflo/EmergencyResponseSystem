@@ -6,9 +6,17 @@ require_once $rootDir . '/includes/auth.php';
 require_role('dispatcher', 'dispatcher/call.php');
 
 $pageTitle = 'Emergency Call Center';
-$turnUrl = (string) ers_env('WEBRTC_TURN_URL', '');
-$turnUsername = (string) ers_env('WEBRTC_TURN_USERNAME', '');
-$turnCredential = (string) ers_env('WEBRTC_TURN_CREDENTIAL', '');
+$turnUrl = trim((string) ers_env('WEBRTC_TURN_URL', ''));
+$turnUsername = trim((string) ers_env('WEBRTC_TURN_USERNAME', ''));
+$turnCredential = trim((string) ers_env('WEBRTC_TURN_CREDENTIAL', ''));
+// A malformed TURN value makes the browser throw while constructing
+// RTCPeerConnection. That also prevents the ERS page from joining the
+// Socket.IO room, so chat and hang-up incorrectly appear to be local only.
+// Keep STUN available, but only publish TURN when the complete credential
+// triplet is valid enough for a browser to parse.
+$turnIsConfigured = preg_match('/^turns?:/i', $turnUrl) === 1
+    && $turnUsername !== ''
+    && $turnCredential !== '';
 ?>
 
 <!DOCTYPE html>
@@ -470,10 +478,13 @@ $turnCredential = (string) ers_env('WEBRTC_TURN_CREDENTIAL', '');
     const API_INCOMING_TRANSFERS_URL = '../api/incoming_transfers.php';
     const ALERTARA_SOCKET_URL = 'https://emergency-comm.alertaraqc.com';
     const ALERTARA_SOCKET_PATH = '/socket.io';
-    const TRANSFER_ICE_SERVERS = [
+    const TRANSFER_STUN_SERVERS = [
         { urls: 'stun:stun.l.google.com:19302' },
         { urls: 'stun:global.stun.twilio.com:3478' }
-        <?php if ($turnUrl !== ''): ?>,
+    ];
+    const TRANSFER_ICE_SERVERS = [
+        ...TRANSFER_STUN_SERVERS
+        <?php if ($turnIsConfigured): ?>,
         {
             urls: <?php echo json_encode($turnUrl, JSON_UNESCAPED_SLASHES); ?>,
             username: <?php echo json_encode($turnUsername); ?>,
@@ -1761,9 +1772,16 @@ $turnCredential = (string) ers_env('WEBRTC_TURN_CREDENTIAL', '');
     }
 
     function createTransferPeerConnection(call) {
-        const pc = new RTCPeerConnection({
-            iceServers: TRANSFER_ICE_SERVERS
-        });
+        let pc;
+        try {
+            pc = new RTCPeerConnection({ iceServers: TRANSFER_ICE_SERVERS });
+        } catch (error) {
+            // Never let a bad deployment-time TURN value stop the ERS from
+            // joining its Socket.IO call room. STUN keeps signaling, chat and
+            // both-side hang-up available while TURN is corrected.
+            console.warn('Invalid TURN configuration; continuing with STUN only.', error);
+            pc = new RTCPeerConnection({ iceServers: TRANSFER_STUN_SERVERS });
+        }
         pc.onicecandidate = (event) => {
             if (!event.candidate || !transferSocket) return;
             transferSocket.emit('candidate', {
