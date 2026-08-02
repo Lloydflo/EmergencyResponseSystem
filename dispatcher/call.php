@@ -174,6 +174,16 @@ if ($turnIsConfigured && preg_match('/^turns?:(?:\/\/)?([^:\/?]+)/i', $turnUrl, 
 
                     <div class="transfer-report-stack" id="transferReportNotifications" aria-live="assertive" aria-label="Incoming transferred reports"></div>
 
+                    <div class="create-incident-panel">
+                        <div>
+                            <div class="panel-eyebrow">Manual Incident</div>
+                            <strong>Create a new incident log</strong>
+                        </div>
+                        <button type="button" class="create-incident-btn" id="createIncidentBtn" onclick="openCreateIncidentForm()">
+                            <i class="fas fa-plus"></i> Create
+                        </button>
+                    </div>
+
                     <div class="active-call-panel" id="activeCallPanel">
                         <div class="call-header">
                             <div class="call-status-wrap">
@@ -292,89 +302,17 @@ if ($turnIsConfigured && preg_match('/^turns?:(?:\/\/)?([^:\/?]+)/i', $turnUrl, 
                                     <label for="incidentDescription">Description</label>
                                     <textarea id="incidentDescription" name="incidentDescription" placeholder="Brief description of the situation" required></textarea>
                                 </div>
-                                <div class="indicator-section">
-                                    <div class="section-title indicator-title">
+                                <div class="priority-section">
+                                    <div class="section-title priority-title">
                                         <i class="fas fa-triangle-exclamation"></i>
-                                        Incident Indicator
+                                        Priority
                                         <span id="prioritySuggestion" class="priority-suggestion"></span>
                                     </div>
-                                    <div class="indicator-grid">
-                                        <div class="form-group">
-                                            <label for="indicatorIncidentType">Incident Type</label>
-                                            <select id="indicatorIncidentType" name="indicatorIncidentType" required>
-                                                <option value="">Select incident type</option>
-                                                <option value="bomb_threat">Bomb Threat - 40</option>
-                                                <option value="active_shooter">Active Shooter - 40</option>
-                                                <option value="major_structural_fire">Major Structural Fire - 38</option>
-                                                <option value="building_collapse">Building Collapse - 38</option>
-                                                <option value="chemical_spill_hazardous_material">Chemical Spill / Hazardous Material - 35</option>
-                                                <option value="earthquake">Earthquake - 35</option>
-                                                <option value="landslide">Landslide - 33</option>
-                                                <option value="flash_flood">Flash Flood - 32</option>
-                                                <option value="typhoon_damage">Typhoon Damage - 30</option>
-                                                <option value="gas_leak">Gas Leak - 30</option>
-                                                <option value="medical_emergency">Medical Emergency - 28</option>
-                                                <option value="vehicular_accident">Vehicular Accident - 25</option>
-                                                <option value="missing_person">Missing Person - 20</option>
-                                                <option value="animal_rescue">Animal Rescue - 10</option>
-                                                <option value="power_outage">Power Outage - 8</option>
-                                                <option value="noise_complaint_minor_disturbance">Noise Complaint / Minor Disturbance - 3</option>
-                                            </select>
-                                        </div>
-                                        <div class="form-group">
-                                            <label for="threatToLife">Threat to Human Life</label>
-                                            <select id="threatToLife" name="threatToLife" required>
-                                                <option value="">Select threat level</option>
-                                                <option value="multiple_lives_immediate_danger">Multiple lives in immediate danger - 30</option>
-                                                <option value="trapped_or_seriously_injured">People trapped or seriously injured - 25</option>
-                                                <option value="possible_danger_nearby_people">Possible danger nearby - 15</option>
-                                                <option value="no_immediate_danger">No immediate danger - 5</option>
-                                                <option value="false_alarm_hoax">False alarm / Hoax - 0</option>
-                                            </select>
-                                        </div>
-                                        <div class="form-group">
-                                            <label for="severityLevel">Severity</label>
-                                            <select id="severityLevel" name="severityLevel" required>
-                                                <option value="">Select severity</option>
-                                                <option value="catastrophic">Catastrophic - 20</option>
-                                                <option value="major">Major - 15</option>
-                                                <option value="moderate">Moderate - 10</option>
-                                                <option value="minor">Minor - 5</option>
-                                                <option value="very_minor">Very Minor - 2</option>
-                                            </select>
-                                        </div>
-                                        <div class="form-group">
-                                            <label for="populationAffected">Population Affected</label>
-                                            <select id="populationAffected" name="populationAffected" required>
-                                                <option value="">Select population</option>
-                                                <option value="more_than_500">More than 500 people - 10</option>
-                                                <option value="100_500">100-500 people - 8</option>
-                                                <option value="20_99">20-99 people - 6</option>
-                                                <option value="5_19">5-19 people - 4</option>
-                                                <option value="1_4">1-4 people - 2</option>
-                                            </select>
-                                        </div>
-                                        <div class="form-group">
-                                            <label for="verificationStatus">Report Verification</label>
-                                            <select id="verificationStatus" name="verificationStatus" required>
-                                                <option value="">Select verification</option>
-                                                <option value="verified_emergency_personnel_cctv_official">Verified by emergency personnel / CCTV / official - 10</option>
-                                                <option value="confirmed_multiple_witnesses">Confirmed by multiple witnesses - 8</option>
-                                                <option value="one_identified_witness">One identified witness - 5</option>
-                                                <option value="anonymous_unverified">Anonymous or unverified - 2</option>
-                                                <option value="confirmed_false_report">Confirmed false report - 0</option>
-                                            </select>
-                                        </div>
-                                        <div class="priority-score-card" id="priorityIndicatorPreview">
-                                            <div>
-                                                <span>Priority Score</span>
-                                                <strong id="priorityScoreValue">0</strong>
-                                            </div>
-                                            <div class="priority-score-meta">
-                                                <span id="priorityLevelBadge" class="incident-priority low">LOW</span>
-                                                <small id="priorityActionText">Complete the indicator fields.</small>
-                                            </div>
-                                        </div>
+                                    <div class="priority-select" id="prioritySelect" role="radiogroup" aria-label="Incident priority">
+                                        <button type="button" class="priority-option low active" data-value="low" role="radio" aria-checked="true">Low</button>
+                                        <button type="button" class="priority-option medium" data-value="medium" role="radio" aria-checked="false">Medium</button>
+                                        <button type="button" class="priority-option high" data-value="high" role="radio" aria-checked="false">High</button>
+                                        <button type="button" class="priority-option critical" data-value="critical" role="radio" aria-checked="false">Critical</button>
                                     </div>
                                     <input type="hidden" id="incidentPriority" name="incidentPriority" value="low" required>
                                 </div>
@@ -505,7 +443,7 @@ if ($turnIsConfigured && preg_match('/^turns?:(?:\/\/)?([^:\/?]+)/i', $turnUrl, 
         <?php endif; ?>
     ];
     const TRANSFER_INBOX_ROOM = 'ers-transfer-inbox';
-    let priorityAuto = true; // keeps transferred/manual fallback priority until indicator fields calculate a score
+    let priorityAuto = true; // keeps transferred/manual fallback priority until the user chooses one
     let prioritySuggestTimer = null; // debounce timer for suggestion updates
     let currentSearch = '';
     let filterDay = '';
@@ -535,55 +473,6 @@ if ($turnIsConfigured && preg_match('/^turns?:(?:\/\/)?([^:\/?]+)/i', $turnUrl, 
     let transferCallMessageIds = new Set();
     const INCOMING_TRANSFER_POLL_MS = 5000;
     const PRIORITY_ORDER = { critical: 0, high: 1, urgent: 2, moderate: 3, medium: 3, low: 4 };
-    const PRIORITY_RULES = {
-        incident_type: {
-            bomb_threat: { label: 'Bomb Threat', score: 40 },
-            active_shooter: { label: 'Active Shooter', score: 40 },
-            major_structural_fire: { label: 'Major Structural Fire', score: 38 },
-            building_collapse: { label: 'Building Collapse', score: 38 },
-            chemical_spill_hazardous_material: { label: 'Chemical Spill / Hazardous Material', score: 35 },
-            earthquake: { label: 'Earthquake', score: 35 },
-            landslide: { label: 'Landslide', score: 33 },
-            flash_flood: { label: 'Flash Flood', score: 32 },
-            typhoon_damage: { label: 'Typhoon Damage', score: 30 },
-            gas_leak: { label: 'Gas Leak', score: 30 },
-            medical_emergency: { label: 'Medical Emergency', score: 28 },
-            vehicular_accident: { label: 'Vehicular Accident', score: 25 },
-            missing_person: { label: 'Missing Person', score: 20 },
-            animal_rescue: { label: 'Animal Rescue', score: 10 },
-            power_outage: { label: 'Power Outage', score: 8 },
-            noise_complaint_minor_disturbance: { label: 'Noise Complaint / Minor Disturbance', score: 3 }
-        },
-        threat_to_life: {
-            multiple_lives_immediate_danger: { label: 'Multiple lives are in immediate danger', score: 30 },
-            trapped_or_seriously_injured: { label: 'People are trapped or seriously injured', score: 25 },
-            possible_danger_nearby_people: { label: 'Possible danger to nearby people', score: 15 },
-            no_immediate_danger: { label: 'No immediate danger to life', score: 5 },
-            false_alarm_hoax: { label: 'False alarm / Hoax', score: 0 }
-        },
-        severity_level: {
-            catastrophic: { label: 'Catastrophic', score: 20 },
-            major: { label: 'Major', score: 15 },
-            moderate: { label: 'Moderate', score: 10 },
-            minor: { label: 'Minor', score: 5 },
-            very_minor: { label: 'Very Minor', score: 2 }
-        },
-        population_affected: {
-            more_than_500: { label: 'More than 500 people', score: 10 },
-            '100_500': { label: '100-500 people', score: 8 },
-            '20_99': { label: '20-99 people', score: 6 },
-            '5_19': { label: '5-19 people', score: 4 },
-            '1_4': { label: '1-4 people', score: 2 }
-        },
-        verification_status: {
-            verified_emergency_personnel_cctv_official: { label: 'Verified by emergency personnel, CCTV, or official source', score: 10 },
-            confirmed_multiple_witnesses: { label: 'Confirmed by multiple witnesses', score: 8 },
-            one_identified_witness: { label: 'Reported by one identified witness', score: 5 },
-            anonymous_unverified: { label: 'Anonymous or unverified report', score: 2 },
-            confirmed_false_report: { label: 'Confirmed false report', score: 0 }
-        }
-    };
-
     function normalizePriority(value, fallback = 'medium') {
         const priority = String(value || '').trim().toLowerCase();
         if (priority === 'medium') return 'moderate';
@@ -669,93 +558,6 @@ if ($turnIsConfigured && preg_match('/^turns?:(?:\/\/)?([^:\/?]+)/i', $turnUrl, 
         return Number.isNaN(parsed.getTime()) ? raw : parsed.toLocaleString();
     }
 
-    function priorityMetaFromScore(score) {
-        const value = Number(score) || 0;
-        if (value >= 90) return { priority: 'critical', label: 'CRITICAL', color: 'red', action: 'Immediate dispatch and notify all responders/admins.' };
-        if (value >= 70) return { priority: 'high', label: 'HIGH', color: 'orange', action: 'Dispatch as soon as possible with high priority.' };
-        if (value >= 45) return { priority: 'urgent', label: 'URGENT', color: 'yellow', action: 'Standard emergency response queue.' };
-        if (value >= 20) return { priority: 'moderate', label: 'MODERATE', color: 'blue', action: 'Normal response to available responders.' };
-        return { priority: 'low', label: 'LOW', color: 'green', action: 'Routine handling and monitoring.' };
-    }
-
-    function getIncidentIndicatorPayload() {
-        return {
-            incident_type: document.getElementById('indicatorIncidentType')?.value || '',
-            threat_to_life: document.getElementById('threatToLife')?.value || '',
-            severity_level: document.getElementById('severityLevel')?.value || '',
-            population_affected: document.getElementById('populationAffected')?.value || '',
-            verification_status: document.getElementById('verificationStatus')?.value || ''
-        };
-    }
-
-    function computeIncidentPriorityIndicator() {
-        const values = getIncidentIndicatorPayload();
-        let score = 0;
-        const breakdown = {};
-        Object.entries(values).forEach(([key, value]) => {
-            const item = PRIORITY_RULES[key] && PRIORITY_RULES[key][value] ? PRIORITY_RULES[key][value] : null;
-            const itemScore = item ? Number(item.score) || 0 : 0;
-            score += itemScore;
-            breakdown[key] = {
-                value,
-                label: item ? item.label : '',
-                score: itemScore
-            };
-        });
-        return { score, values, breakdown, meta: priorityMetaFromScore(score) };
-    }
-
-    function syncIncidentPriorityIndicator() {
-        const result = computeIncidentPriorityIndicator();
-        const priorityInput = document.getElementById('incidentPriority');
-        const scoreEl = document.getElementById('priorityScoreValue');
-        const badgeEl = document.getElementById('priorityLevelBadge');
-        const actionEl = document.getElementById('priorityActionText');
-        const previewEl = document.getElementById('priorityIndicatorPreview');
-        const suggestionEl = document.getElementById('prioritySuggestion');
-        const selectedCount = Object.values(result.values).filter(Boolean).length;
-
-        if (priorityInput) {
-            priorityInput.value = result.meta.priority;
-        }
-        if (scoreEl) {
-            scoreEl.textContent = String(result.score);
-        }
-        if (badgeEl) {
-            badgeEl.className = `incident-priority ${result.meta.priority}`;
-            badgeEl.textContent = result.meta.label;
-        }
-        if (actionEl) {
-            actionEl.textContent = selectedCount === 5 ? result.meta.action : 'Complete the indicator fields.';
-        }
-        if (previewEl) {
-            previewEl.className = `priority-score-card priority-${result.meta.priority}`;
-        }
-        if (suggestionEl) {
-            suggestionEl.textContent = selectedCount > 0 ? `(Score: ${result.score})` : '';
-        }
-        return result;
-    }
-
-    function initIncidentPriorityIndicator() {
-        ['indicatorIncidentType', 'threatToLife', 'severityLevel', 'populationAffected', 'verificationStatus'].forEach((id) => {
-            const el = document.getElementById(id);
-            if (el) {
-                el.addEventListener('change', syncIncidentPriorityIndicator);
-            }
-        });
-        syncIncidentPriorityIndicator();
-    }
-
-    function resetIncidentPriorityIndicator() {
-        ['indicatorIncidentType', 'threatToLife', 'severityLevel', 'populationAffected', 'verificationStatus'].forEach((id) => {
-            const el = document.getElementById(id);
-            if (el) {
-                el.value = '';
-            }
-        });
-        syncIncidentPriorityIndicator();
-    }
     let alertAudioContext = null;
     let transferSocket = null;
     let transferSocketUsesInbox = false;
@@ -804,6 +606,7 @@ if ($turnIsConfigured && preg_match('/^turns?:(?:\/\/)?([^:\/?]+)/i', $turnUrl, 
 
         if (!session || session.active !== true) {
             panel.classList.remove('active');
+            panel.classList.remove('manual-create');
             stopTimer();
             stopVoiceTools();
             activeCall = null;
@@ -823,6 +626,7 @@ if ($turnIsConfigured && preg_match('/^turns?:(?:\/\/)?([^:\/?]+)/i', $turnUrl, 
         }
 
         panel.classList.add('active');
+        panel.classList.remove('manual-create');
         const endButton = panel.querySelector('.end-call-btn');
         if (endButton) {
             endButton.disabled = false;
@@ -835,6 +639,25 @@ if ($turnIsConfigured && preg_match('/^turns?:(?:\/\/)?([^:\/?]+)/i', $turnUrl, 
         setVoiceState('Connected. Ready for caller audio and dictation.');
         startTimer();
         updateStats();
+    }
+
+    function openCreateIncidentForm() {
+        const panel = document.getElementById('activeCallPanel');
+        if (!panel) return;
+        panel.classList.add('active', 'manual-create');
+        stopTimer();
+        stopVoiceTools();
+        activeCall = null;
+        activeTransferCall = null;
+
+        const timerEl = document.getElementById('callTimer');
+        if (timerEl) timerEl.textContent = 'Manual';
+        const nameEl = document.getElementById('activeCallerName');
+        const phoneEl = document.getElementById('activeCallerPhone');
+        if (nameEl) nameEl.textContent = 'Manual Incident';
+        if (phoneEl) phoneEl.textContent = '';
+
+        focusAcceptedCallForm();
     }
 
     function redirectToDispatchCenter(data) {
@@ -877,7 +700,6 @@ if ($turnIsConfigured && preg_match('/^turns?:(?:\/\/)?([^:\/?]+)/i', $turnUrl, 
     document.addEventListener('DOMContentLoaded', () => {
         initPrioritySelect();
         initIncidentTypeChecklist();
-        initIncidentPriorityIndicator();
         initIncidentSidebarControls();
         // Hook suggestion on description input
         const descEl = document.getElementById('incidentDescription');
@@ -1570,11 +1392,7 @@ if ($turnIsConfigured && preg_match('/^turns?:(?:\/\/)?([^:\/?]+)/i', $turnUrl, 
         }
         if (descriptionEl && call.description) descriptionEl.value = call.description;
         if (priorityEl && call.priority) {
-            const priority = String(call.priority).toLowerCase();
-            priorityEl.value = priority;
-            document.querySelectorAll('#prioritySelect .priority-option').forEach((option) => {
-                option.classList.toggle('active', option.dataset.value === priority);
-            });
+            setPrioritySelection(call.priority);
         }
         if (statusEl && call.incidentStatus) {
             const status = String(call.incidentStatus).toLowerCase();
@@ -2598,17 +2416,21 @@ if ($turnIsConfigured && preg_match('/^turns?:(?:\/\/)?([^:\/?]+)/i', $turnUrl, 
         const normalized = normalizePriority(value, 'moderate');
         const options = document.querySelectorAll('#prioritySelect .priority-option');
         let applied = false;
+        let selectedValue = normalized;
         options.forEach(o => {
             if (normalizePriority(o.dataset.value, '') === normalized) {
                 o.classList.add('active');
+                o.setAttribute('aria-checked', 'true');
+                selectedValue = o.dataset.value || normalized;
                 applied = true;
             } else {
                 o.classList.remove('active');
+                o.setAttribute('aria-checked', 'false');
             }
         });
         const priorityEl = document.getElementById('incidentPriority');
         if (priorityEl) {
-            priorityEl.value = applied ? normalized : normalized;
+            priorityEl.value = applied ? selectedValue : normalized;
         }
     }
 
@@ -2620,6 +2442,7 @@ if ($turnIsConfigured && preg_match('/^turns?:(?:\/\/)?([^:\/?]+)/i', $turnUrl, 
                 setPrioritySelection(opt.dataset.value);
             });
         });
+        setPrioritySelection(document.getElementById('incidentPriority')?.value || 'low');
     }
 
     function getSelectedIncidentTypes() {
@@ -2757,13 +2580,6 @@ if ($turnIsConfigured && preg_match('/^turns?:(?:\/\/)?([^:\/?]+)/i', $turnUrl, 
     function updatePrioritySuggestion(desc) {
         const text = (desc || '').trim();
         const badge = document.getElementById('prioritySuggestion');
-        const indicator = computeIncidentPriorityIndicator();
-        const indicatorStarted = Object.values(indicator.values).some(Boolean);
-        if (indicatorStarted) {
-            if (badge) badge.textContent = `(Score: ${indicator.score})`;
-            syncIncidentPriorityIndicator();
-            return;
-        }
         // Show suggestion only after user types some description
         if (!text || text.length < 3) {
             if (badge) badge.textContent = '';
@@ -2947,16 +2763,15 @@ if ($turnIsConfigured && preg_match('/^turns?:(?:\/\/)?([^:\/?]+)/i', $turnUrl, 
         }
         const finalLocationText = document.getElementById('incidentLocation').value.trim() || locationText;
         const selectedTypes = getSelectedIncidentTypes();
-        const priorityIndicator = syncIncidentPriorityIndicator();
+        const priorityValue = document.getElementById('incidentPriority')?.value.trim() || '';
         const payload = {
             caller_name: document.getElementById('callerName').value.trim(),
             caller_phone: document.getElementById('callerPhone').value.trim(),
             type: selectedTypes,
             location: finalLocationText,
             description: document.getElementById('incidentDescription').value.trim(),
-            priority: priorityIndicator.meta.priority,
-            status: document.getElementById('status').value,
-            priority_indicator: priorityIndicator.values
+            priority: priorityValue,
+            status: document.getElementById('status').value
         };
         if (coords) {
             payload.latitude = coords.lat;
@@ -3007,8 +2822,7 @@ if ($turnIsConfigured && preg_match('/^turns?:(?:\/\/)?([^:\/?]+)/i', $turnUrl, 
             showToast(wasTransferredCall ? 'Transferred incident logged in Call Receiving & Logs.' : 'Incident logged successfully.');
             e.target.reset();
             resetIncidentTypeChecklist();
-            document.querySelectorAll('#prioritySelect .priority-option').forEach(o => o.classList.remove('active'));
-            resetIncidentPriorityIndicator();
+            setPrioritySelection('low');
             const locationInput = document.getElementById('incidentLocation');
             if (locationInput) {
                 delete locationInput.dataset.lat;

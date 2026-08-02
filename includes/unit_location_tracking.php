@@ -2,6 +2,7 @@
 declare(strict_types=1);
 
 require_once __DIR__ . '/user_presence.php';
+require_once __DIR__ . '/activity_log.php';
 
 if (!function_exists('ers_unit_location_table_exists')) {
     function ers_unit_location_table_exists(PDO $pdo, string $table): bool
@@ -152,6 +153,289 @@ if (!function_exists('ers_unit_location_normalize_optional_number')) {
     {
         $number = ers_unit_location_normalize_coordinate($value, $min, $max);
         return $number;
+    }
+}
+
+if (!function_exists('ers_unit_location_distance_meters')) {
+    function ers_unit_location_distance_meters(float $lat1, float $lng1, float $lat2, float $lng2): float
+    {
+        $radius = 6371000.0;
+        $lat1Rad = deg2rad($lat1);
+        $lat2Rad = deg2rad($lat2);
+        $deltaLat = deg2rad($lat2 - $lat1);
+        $deltaLng = deg2rad($lng2 - $lng1);
+        $a = sin($deltaLat / 2) ** 2
+            + cos($lat1Rad) * cos($lat2Rad) * sin($deltaLng / 2) ** 2;
+        $a = max(0.0, min(1.0, $a));
+        return $radius * 2.0 * atan2(sqrt($a), sqrt(1.0 - $a));
+    }
+}
+
+if (!function_exists('ers_unit_location_ensure_zone_schema')) {
+    function ers_unit_location_ensure_zone_schema(PDO $pdo): void
+    {
+        $pdo->exec(
+            "CREATE TABLE IF NOT EXISTS `responder_zones` (
+                `id` BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+                `name` VARCHAR(150) NOT NULL,
+                `zone_type` VARCHAR(50) NOT NULL DEFAULT 'custom',
+                `center_latitude` DECIMAL(10,7) NOT NULL,
+                `center_longitude` DECIMAL(10,7) NOT NULL,
+                `radius_m` DECIMAL(10,2) NOT NULL DEFAULT 250.00,
+                `is_active` TINYINT(1) NOT NULL DEFAULT 1,
+                `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                `updated_at` DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+                PRIMARY KEY (`id`),
+                KEY `idx_responder_zones_active` (`is_active`),
+                KEY `idx_responder_zones_type` (`zone_type`)
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci"
+        );
+
+        $pdo->exec(
+            "CREATE TABLE IF NOT EXISTS `responder_zone_states` (
+                `id` BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+                `zone_key` VARCHAR(120) NOT NULL,
+                `zone_name` VARCHAR(150) NOT NULL,
+                `zone_type` VARCHAR(50) NOT NULL DEFAULT 'custom',
+                `unit_id` BIGINT UNSIGNED NOT NULL,
+                `responder_id` INT UNSIGNED DEFAULT NULL,
+                `is_inside` TINYINT(1) NOT NULL DEFAULT 0,
+                `last_transition_at` DATETIME DEFAULT NULL,
+                `last_checked_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                `latitude` DECIMAL(10,7) DEFAULT NULL,
+                `longitude` DECIMAL(10,7) DEFAULT NULL,
+                PRIMARY KEY (`id`),
+                UNIQUE KEY `uk_responder_zone_state` (`zone_key`, `unit_id`),
+                KEY `idx_responder_zone_states_unit` (`unit_id`),
+                KEY `idx_responder_zone_states_responder` (`responder_id`),
+                KEY `idx_responder_zone_states_inside` (`is_inside`)
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci"
+        );
+    }
+}
+
+if (!function_exists('ers_unit_location_active_zones')) {
+    function ers_unit_location_active_zones(PDO $pdo): array
+    {
+        $zones = [];
+
+        try {
+            if (ers_unit_location_table_exists($pdo, 'responder_zones')) {
+                $stmt = $pdo->query(
+                    "SELECT id, name, zone_type, center_latitude, center_longitude, radius_m
+                     FROM responder_zones
+                     WHERE is_active = 1
+                     ORDER BY id ASC"
+                );
+                foreach (($stmt ? $stmt->fetchAll(PDO::FETCH_ASSOC) : []) as $row) {
+                    $lat = ers_unit_location_normalize_coordinate($row['center_latitude'] ?? null, -90, 90);
+                    $lng = ers_unit_location_normalize_coordinate($row['center_longitude'] ?? null, -180, 180);
+                    $radius = ers_unit_location_normalize_optional_number($row['radius_m'] ?? null, 1, 100000);
+                    if ($lat === null || $lng === null || $radius === null) {
+                        continue;
+                    }
+                    $zones[] = [
+                        'key' => 'zone:' . (int)$row['id'],
+                        'name' => trim((string)($row['name'] ?? 'Zone #' . (int)$row['id'])),
+                        'type' => trim((string)($row['zone_type'] ?? 'custom')) ?: 'custom',
+                        'latitude' => $lat,
+                        'longitude' => $lng,
+                        'radius_m' => $radius,
+                    ];
+                }
+            }
+        } catch (Throwable $e) {
+            error_log('responder_zones load skipped: ' . $e->getMessage());
+        }
+
+        try {
+            if (
+                ers_unit_location_table_exists($pdo, 'incidents')
+                && ers_unit_location_column_exists($pdo, 'incidents', 'id')
+                && ers_unit_location_column_exists($pdo, 'incidents', 'latitude')
+                && ers_unit_location_column_exists($pdo, 'incidents', 'longitude')
+            ) {
+                $referenceExpr = ers_unit_location_column_exists($pdo, 'incidents', 'reference_no') ? 'reference_no' : "'' AS reference_no";
+                $titleExpr = ers_unit_location_column_exists($pdo, 'incidents', 'title') ? 'title' : "'' AS title";
+                $typeExpr = ers_unit_location_column_exists($pdo, 'incidents', 'type') ? 'type' : "'' AS type";
+                $orderExpr = ers_unit_location_column_exists($pdo, 'incidents', 'updated_at')
+                    ? 'updated_at DESC, id DESC'
+                    : 'id DESC';
+                $stmt = $pdo->query(
+                    "SELECT id, {$referenceExpr}, {$titleExpr}, {$typeExpr}, latitude, longitude
+                     FROM incidents
+                     WHERE status IN ('pending','dispatched','active','in_progress','enroute','on_scene')
+                       AND latitude IS NOT NULL
+                       AND longitude IS NOT NULL
+                     ORDER BY {$orderExpr}
+                     LIMIT 100"
+                );
+                foreach (($stmt ? $stmt->fetchAll(PDO::FETCH_ASSOC) : []) as $row) {
+                    $lat = ers_unit_location_normalize_coordinate($row['latitude'] ?? null, -90, 90);
+                    $lng = ers_unit_location_normalize_coordinate($row['longitude'] ?? null, -180, 180);
+                    if ($lat === null || $lng === null) {
+                        continue;
+                    }
+                    $label = trim((string)($row['reference_no'] ?? ''));
+                    if ($label === '') {
+                        $label = trim((string)($row['title'] ?? ''));
+                    }
+                    if ($label === '') {
+                        $label = 'Incident #' . (int)$row['id'];
+                    }
+                    $zones[] = [
+                        'key' => 'incident:' . (int)$row['id'],
+                        'name' => $label,
+                        'type' => 'incident',
+                        'latitude' => $lat,
+                        'longitude' => $lng,
+                        'radius_m' => 250.0,
+                    ];
+                }
+            }
+        } catch (Throwable $e) {
+            error_log('incident zones load skipped: ' . $e->getMessage());
+        }
+
+        return $zones;
+    }
+}
+
+if (!function_exists('ers_unit_location_log_zone_transition')) {
+    function ers_unit_location_log_zone_transition(
+        PDO $pdo,
+        array $zone,
+        array $unit,
+        int $unitId,
+        int $responderId,
+        bool $entered,
+        float $latitude,
+        float $longitude,
+        float $distanceMeters
+    ): void {
+        $unitCode = trim((string)($unit['identifier'] ?? 'Unit #' . $unitId));
+        $zoneName = trim((string)($zone['name'] ?? 'Zone'));
+        $action = $entered ? 'responder_zone_entered' : 'responder_zone_left';
+        $verb = $entered ? 'entered' : 'left';
+        $details = [
+            'message' => $unitCode . ' ' . $verb . ' ' . $zoneName . '.',
+            'unit_id' => $unitId,
+            'unit_code' => $unitCode,
+            'unit_type' => (string)($unit['unit_type'] ?? ''),
+            'responder_id' => $responderId > 0 ? $responderId : null,
+            'zone_key' => (string)($zone['key'] ?? ''),
+            'zone_name' => $zoneName,
+            'zone_type' => (string)($zone['type'] ?? 'custom'),
+            'latitude' => $latitude,
+            'longitude' => $longitude,
+            'distance_m' => round($distanceMeters, 1),
+        ];
+        log_activity_event(
+            $responderId > 0 ? $responderId : null,
+            $action,
+            'responder_zone',
+            $unitId,
+            json_encode($details, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE) ?: $details['message']
+        );
+    }
+}
+
+if (!function_exists('ers_unit_location_process_zone_transitions')) {
+    function ers_unit_location_process_zone_transitions(PDO $pdo, int $unitId, int $responderId, float $latitude, float $longitude, array $unit): array
+    {
+        if ($unitId <= 0) {
+            return [];
+        }
+
+        try {
+            ers_unit_location_ensure_zone_schema($pdo);
+            $zones = ers_unit_location_active_zones($pdo);
+            if ($zones === []) {
+                return [];
+            }
+
+            $lookup = $pdo->prepare(
+                "SELECT id, is_inside
+                 FROM responder_zone_states
+                 WHERE zone_key = ? AND unit_id = ?
+                 LIMIT 1"
+            );
+            $insert = $pdo->prepare(
+                "INSERT INTO responder_zone_states
+                    (zone_key, zone_name, zone_type, unit_id, responder_id, is_inside,
+                     last_transition_at, last_checked_at, latitude, longitude)
+                 VALUES
+                    (?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, ?, ?)"
+            );
+            $update = $pdo->prepare(
+                "UPDATE responder_zone_states
+                 SET zone_name = ?,
+                     zone_type = ?,
+                     responder_id = ?,
+                     is_inside = ?,
+                     last_transition_at = ?,
+                     last_checked_at = CURRENT_TIMESTAMP,
+                     latitude = ?,
+                     longitude = ?
+                 WHERE id = ?"
+            );
+
+            $transitions = [];
+            foreach ($zones as $zone) {
+                $distance = ers_unit_location_distance_meters(
+                    $latitude,
+                    $longitude,
+                    (float)$zone['latitude'],
+                    (float)$zone['longitude']
+                );
+                $inside = $distance <= (float)$zone['radius_m'];
+                $lookup->execute([(string)$zone['key'], $unitId]);
+                $state = $lookup->fetch(PDO::FETCH_ASSOC);
+                $wasInside = $state ? ((int)($state['is_inside'] ?? 0) === 1) : false;
+                $changed = !$state || $wasInside !== $inside;
+                $transitionAt = $changed ? date('Y-m-d H:i:s') : null;
+
+                if ($state) {
+                    $update->execute([
+                        (string)$zone['name'],
+                        (string)$zone['type'],
+                        $responderId > 0 ? $responderId : null,
+                        $inside ? 1 : 0,
+                        $transitionAt,
+                        $latitude,
+                        $longitude,
+                        (int)$state['id'],
+                    ]);
+                } else {
+                    $insert->execute([
+                        (string)$zone['key'],
+                        (string)$zone['name'],
+                        (string)$zone['type'],
+                        $unitId,
+                        $responderId > 0 ? $responderId : null,
+                        $inside ? 1 : 0,
+                        $transitionAt,
+                        $latitude,
+                        $longitude,
+                    ]);
+                }
+
+                if ($changed && ($inside || $wasInside)) {
+                    ers_unit_location_log_zone_transition($pdo, $zone, $unit, $unitId, $responderId, $inside, $latitude, $longitude, $distance);
+                    $transitions[] = [
+                        'zone_key' => (string)$zone['key'],
+                        'zone_name' => (string)$zone['name'],
+                        'zone_type' => (string)$zone['type'],
+                        'transition' => $inside ? 'entered' : 'left',
+                    ];
+                }
+            }
+
+            return $transitions;
+        } catch (Throwable $e) {
+            error_log('Zone transition processing skipped: ' . $e->getMessage());
+            return [];
+        }
     }
 }
 
@@ -380,6 +664,7 @@ if (!function_exists('ers_unit_location_update')) {
         $params[] = $unitId;
         $unitUpdate = $pdo->prepare('UPDATE units SET ' . implode(', ', $sets) . ' WHERE id = ?');
         $unitUpdate->execute($params);
+        $zoneTransitions = ers_unit_location_process_zone_transitions($pdo, $unitId, $responderId, $latitude, $longitude, $unit);
 
         return [
             'ok' => true,
@@ -389,6 +674,7 @@ if (!function_exists('ers_unit_location_update')) {
             'latitude' => $latitude,
             'longitude' => $longitude,
             'accuracy_m' => $accuracyM,
+            'zone_transitions' => $zoneTransitions,
         ];
     }
 }

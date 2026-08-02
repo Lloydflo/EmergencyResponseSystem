@@ -1740,6 +1740,24 @@ function postJSON(url, payload) {
     }).then(r => r.json());
 }
 
+function formatTimeAgo(createdAt) {
+    const timestamp = new Date(String(createdAt || '').replace(' ', 'T')).getTime();
+    if (!Number.isFinite(timestamp)) return '';
+    const minsAgo = Math.max(0, Math.floor((Date.now() - timestamp) / 60000));
+    if (minsAgo < 1) return 'Just now';
+    if (minsAgo < 60) return `${minsAgo} min ago`;
+
+    const hours = Math.floor(minsAgo / 60);
+    const minutes = minsAgo % 60;
+    if (hours < 24) {
+        return minutes > 0 ? `${hours} hr ${minutes} min ago` : `${hours} hr ago`;
+    }
+
+    const days = Math.floor(hours / 24);
+    const remHours = hours % 24;
+    return remHours > 0 ? `${days} day ${remHours} hr ago` : `${days} day ago`;
+}
+
 function resourceRequest() {
     const name = prompt('Resource name (e.g., Ventilator, Ambulance)');
     if (!name) return;
@@ -1985,8 +2003,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     const prioClass = ['critical', 'high', 'urgent', 'moderate', 'low'].includes(prio)
                         ? prio
                         : (prio === 'medium' ? 'moderate' : 'low');
-                    const minsAgo = (() => { try { return Math.max(0, Math.floor((Date.now() - new Date(it.created_at).getTime()) / 60000)); } catch(e) { return 0; } })();
-                    const timeAgo = minsAgo < 1 ? 'Just now' : (minsAgo + ' min ago');
+                    const timeAgo = formatTimeAgo(it.created_at) || 'Just now';
                     const title = it.title || it.type || 'Incident';
                     const caller = it.caller_name || 'Unknown';
                     const phone = it.caller_phone || '';
@@ -2436,8 +2453,7 @@ function refreshActiveCalls() {
             const prioClass = ['critical', 'high', 'urgent', 'moderate', 'low'].includes(prio)
                 ? prio
                 : (prio === 'medium' ? 'moderate' : 'low');
-            const minsAgo = (() => { try { return Math.max(0, Math.floor((Date.now() - new Date(it.created_at).getTime()) / 60000)); } catch(e) { return 0; } })();
-            const timeAgo = minsAgo < 1 ? 'Just now' : (minsAgo + ' min ago');
+            const timeAgo = formatTimeAgo(it.created_at) || 'Just now';
             const title = it.title || it.type || 'Incident';
             const caller = it.caller_name || 'Unknown';
             const phone = it.caller_phone || '';

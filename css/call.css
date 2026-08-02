@@ -22,6 +22,7 @@
 .call-hero-side,
 .stat-card,
 .incoming-call-alert,
+.create-incident-panel,
 .active-call-panel,
 .recent-incidents {
     position: relative;
@@ -839,11 +840,49 @@ body.incoming-call-modal-open {
     transform: translateY(-1px);
 }
 
+.create-incident-panel,
 .active-call-panel,
 .recent-incidents {
     padding: 1.3rem;
     background: rgba(255, 255, 255, 0.88);
     backdrop-filter: blur(12px);
+}
+
+.create-incident-panel {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+}
+
+.create-incident-panel strong {
+    display: block;
+    color: #0f172a;
+    font-size: 1rem;
+    font-weight: 900;
+}
+
+.create-incident-btn {
+    min-height: 44px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+    padding: 0.75rem 1rem;
+    border: 0;
+    border-radius: 14px;
+    background: linear-gradient(135deg, #0f766e, #14b8a6);
+    color: #ffffff;
+    font-size: 0.9rem;
+    font-weight: 900;
+    cursor: pointer;
+    box-shadow: 0 12px 22px rgba(20, 184, 166, 0.18);
+    transition: transform 0.18s ease, box-shadow 0.18s ease;
+}
+
+.create-incident-btn:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 16px 26px rgba(20, 184, 166, 0.24);
 }
 
 .active-call-panel {
@@ -852,6 +891,12 @@ body.incoming-call-modal-open {
 
 .active-call-panel.active {
     display: block;
+}
+
+.active-call-panel.manual-create .call-header,
+.active-call-panel.manual-create .voice-call-console,
+.active-call-panel.manual-create .call-chat-panel {
+    display: none;
 }
 
 .call-header {
@@ -1399,10 +1444,12 @@ body.incoming-call-modal-open {
     flex-wrap: wrap;
 }
 
+.priority-section,
 .indicator-section {
     margin-top: 1rem;
 }
 
+.priority-title,
 .indicator-title {
     margin-bottom: 0.85rem;
 }
@@ -1509,20 +1556,21 @@ body.incoming-call-modal-open {
     border-color: transparent;
 }
 
-.priority-option.high.active {
+.priority-option.critical.active {
     background: #dc2626;
 }
 
-.priority-option.medium.active {
+.priority-option.high.active {
     background: #ea580c;
+}
+
+.priority-option.medium.active,
+.priority-option.moderate.active {
+    background: #2563eb;
 }
 
 .priority-option.urgent.active {
     background: #ca8a04;
-}
-
-.priority-option.moderate.active {
-    background: #2563eb;
 }
 
 .priority-option.low.active {
@@ -1894,11 +1942,16 @@ body.incident-details-modal-open {
 
 [data-theme="dark"] .call-hero-side,
 [data-theme="dark"] .stat-card,
+[data-theme="dark"] .create-incident-panel,
 [data-theme="dark"] .active-call-panel,
 [data-theme="dark"] .recent-incidents {
     background: rgba(15, 23, 42, 0.86) !important;
     border-color: rgba(148, 163, 184, 0.16) !important;
     color: #e2e8f0 !important;
+}
+
+[data-theme="dark"] .create-incident-panel strong {
+    color: #f8fafc;
 }
 
 [data-theme="dark"] .call-focus-card,
@@ -2159,6 +2212,7 @@ body.incident-details-modal-open {
     .call-hero-side,
     .stat-card,
     .incoming-call-alert,
+    .create-incident-panel,
     .active-call-panel,
     .recent-incidents {
         border-radius: 22px;
@@ -2166,9 +2220,15 @@ body.incident-details-modal-open {
 
     .call-hero-main,
     .call-hero-side,
+    .create-incident-panel,
     .active-call-panel,
     .recent-incidents {
         padding: 1.1rem;
+    }
+
+    .create-incident-panel {
+        align-items: stretch;
+        flex-direction: column;
     }
 
     .stats-bar,

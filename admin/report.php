@@ -213,6 +213,7 @@ try {
                             <option value="incident">Incident Oversight</option>
                             <option value="performance">Performance Review</option>
                             <option value="resource">Resource Audit</option>
+                            <option value="dispatch">Failed Dispatch Attempts</option>
                             <option value="trend">Trend Monitoring</option>
                         </select>
                     </div>
@@ -269,7 +270,7 @@ try {
             </div>
 
             <!-- AI-Powered Insights -->
-            <div class="ai-insights-section" data-report-section="summary incident performance resource trend">
+            <div class="ai-insights-section" data-report-section="summary incident performance resource dispatch trend">
                 <div class="ai-insights-card">
                     <div class="ai-insights-header">
                         <h2><i class="fas fa-brain"></i> AI-Powered Insights</h2>
@@ -374,7 +375,7 @@ try {
                 </div>
             </div>
 
-            <div class="export-section" data-report-section="summary incident performance resource trend">
+            <div class="export-section" data-report-section="summary incident performance resource dispatch trend">
                 <h2 style="font-size: 1.25rem; font-weight: 700; color: #333; margin-bottom: 1rem; display: flex; align-items: center;">
                     <i class="fas fa-file-export" style="margin-right: 0.5rem; color: #0f766e;"></i>
                     Export Dashboard Data
@@ -454,7 +455,7 @@ try {
                 </div>
             </div>
 
-            <div class="chart-container" data-report-section="summary resource performance">
+            <div class="chart-container" data-report-section="summary resource performance dispatch">
                 <div class="chart-header">
                     <h3 class="chart-title">Dispatch Load by Unit Type</h3>
                     <div class="chart-controls">
@@ -497,7 +498,7 @@ try {
             </div>
 
             <!-- Dispatch Breakdown Table -->
-            <div class="data-table" data-report-section="summary resource performance">
+            <div class="data-table" data-report-section="summary resource performance dispatch">
                 <div class="table-header" style="display:flex; align-items:center; justify-content:space-between; gap:1rem;">
                     <h3 class="table-title">Top Dispatched Units</h3>
                     <button class="btn-report" type="button" onclick="showAllDispatchUnitsModal()">
@@ -515,6 +516,42 @@ try {
                         </thead>
                         <tbody id="dispatchTopUnitsBody">
                             <tr><td colspan="3" style="color:#6b7280">Loading dispatches…</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- Failed Dispatch Attempts Table -->
+            <div class="data-table" data-report-section="summary performance dispatch">
+                <div class="table-header" style="display:flex; align-items:center; justify-content:space-between; gap:1rem; flex-wrap:wrap;">
+                    <div>
+                        <h3 class="table-title">Failed Dispatch Attempts</h3>
+                        <div style="color:#6b7280; font-size:0.85rem; margin-top:0.25rem;">
+                            Recorded validation failures, cancelled dispatches, and unacknowledged assignments beyond the response threshold.
+                        </div>
+                    </div>
+                    <div style="display:flex; gap:0.5rem; flex-wrap:wrap;">
+                        <span class="status-badge status-critical">Failed: <span id="failedDispatchTotal">0</span></span>
+                        <span class="status-badge status-pending">Stale: <span id="failedDispatchStale">0</span></span>
+                        <span class="status-badge status-pending">Cancelled: <span id="failedDispatchCancelled">0</span></span>
+                    </div>
+                </div>
+                <div class="table-container">
+                    <table class="analytics-table scrollable">
+                        <thead>
+                            <tr>
+                                <th>Attempted At</th>
+                                <th>Incident</th>
+                                <th>Unit</th>
+                                <th>Type</th>
+                                <th>Priority</th>
+                                <th>Failure</th>
+                                <th>Source</th>
+                                <th>Recovery</th>
+                            </tr>
+                        </thead>
+                        <tbody id="failedDispatchAttemptsBody">
+                            <tr><td colspan="8" style="color:#6b7280">Loading failed dispatch attempts...</td></tr>
                         </tbody>
                     </table>
                 </div>
@@ -827,6 +864,7 @@ try {
         let currentFilters = {};
         let lastReportMetrics = {};
         let lastDispatchReport = {};
+        let lastFailedDispatchAttempts = [];
         let lastRecentIncidents = [];
         const defaultReportFilters = {
             period: <?php echo json_encode($defaultPeriod); ?>,
@@ -1171,7 +1209,8 @@ try {
                     metrics: dispatchData.metrics || {},
                     summary_by_service: dispatchData.summary_by_service || {},
                     top_units: dispatchData.top_units || [],
-                    all_units: dispatchData.all_units || []
+                    all_units: dispatchData.all_units || [],
+                    failed_attempts: dispatchData.failed_attempts || []
                 } : {},
                 recent_incidents: incidentsData.ok ? (incidentsData.items || []) : []
             };
@@ -1202,6 +1241,18 @@ try {
                         <td>${escapeHtml(unit.count || 0)}</td>
                     </tr>
                 `).join('');
+                const failedRows = ((data.dispatch && data.dispatch.failed_attempts) || []).map((item) => `
+                    <tr>
+                        <td>${escapeHtml(item.attempted_at || '')}</td>
+                        <td>${escapeHtml(item.reference_no || item.incident_id || '')}</td>
+                        <td>${escapeHtml(item.unit_identifier || item.unit_id || '')}</td>
+                        <td>${escapeHtml(item.incident_type || '')}</td>
+                        <td>${escapeHtml(item.priority || '')}</td>
+                        <td>${escapeHtml(item.failure_reason || '')}</td>
+                        <td>${escapeHtml(item.source || '')}</td>
+                        <td>${escapeHtml(item.recovery_status || '')}</td>
+                    </tr>
+                `).join('');
                 const html = `
                     <html><head><meta charset="UTF-8"></head><body>
                     <h1>ERS Report Analytics Export</h1>
@@ -1209,6 +1260,7 @@ try {
                     <h2>Metrics</h2><table border="1"><tbody>${metricsRows}</tbody></table>
                     <h2>Recent Incidents</h2><table border="1"><thead><tr><th>Incident</th><th>Type</th><th>Priority</th><th>Status</th><th>Location</th><th>Response Time (Hours)</th></tr></thead><tbody>${incidentRows}</tbody></table>
                     <h2>Dispatch Units</h2><table border="1"><thead><tr><th>Unit</th><th>Type</th><th>Dispatches</th></tr></thead><tbody>${unitRows}</tbody></table>
+                    <h2>Failed Dispatch Attempts</h2><table border="1"><thead><tr><th>Attempted At</th><th>Incident</th><th>Unit</th><th>Type</th><th>Priority</th><th>Failure</th><th>Source</th><th>Recovery Status</th></tr></thead><tbody>${failedRows}</tbody></table>
                     </body></html>
                 `;
                 downloadTextFile('ers-report-' + reportDateStamp() + '.xls', html, 'application/vnd.ms-excel;charset=utf-8');
@@ -1241,6 +1293,18 @@ try {
                         unit.identifier || '',
                         unit.unit_type || '',
                         unit.count || 0
+                    ])),
+                    [],
+                    ['Failed Dispatch Attempted At', 'Incident', 'Unit', 'Type', 'Priority', 'Failure', 'Source', 'Recovery Status'],
+                    ...(((data.dispatch && data.dispatch.failed_attempts) || []).map((item) => [
+                        item.attempted_at || '',
+                        item.reference_no || item.incident_id || '',
+                        item.unit_identifier || item.unit_id || '',
+                        item.incident_type || '',
+                        item.priority || '',
+                        item.failure_reason || '',
+                        item.source || '',
+                        item.recovery_status || ''
                     ]))
                 ];
                 const csv = rows.map((row) => row.map(csvCell).join(',')).join('\r\n');
@@ -1390,6 +1454,11 @@ try {
             .analytics-table tr:hover {
                 background-color: #f8f9fa;
             }
+            .dispatch-recovery-actions { display:flex; flex-wrap:wrap; gap:0.35rem; align-items:center; }
+            .dispatch-recovery-btn { border:0; border-radius:6px; padding:0.35rem 0.55rem; font-size:0.78rem; font-weight:700; cursor:pointer; color:#fff; background:#2563eb; }
+            .dispatch-recovery-btn.cancel { background:#dc2626; }
+            .dispatch-recovery-btn.close { background:#4b5563; }
+            .dispatch-recovery-btn:disabled { opacity:0.6; cursor:progress; transform:none; }
             .chart-canvas { width: 100% !important; height: 100% !important; display: block; }
             .chart-loading { position:absolute; inset:0; display:flex; flex-direction:column; align-items:center; justify-content:center; background: rgba(255,255,255,0.7); color:#374151; font-weight:600; gap:8px; z-index:5; border-radius:10px; }
             .chart-spinner { width:22px; height:22px; border:3px solid #cfe0ff; border-top-color:#3b82f6; border-radius:50%; animation: spin 0.8s linear infinite; }
@@ -2136,7 +2205,9 @@ try {
                     if (onSceneEl) onSceneEl.textContent = (dm.avg_on_scene_min ?? 0).toFixed(1);
                     if (breachEl) breachEl.textContent = ((dm.sla_breach_rate ?? 0)).toFixed(1) + '%';
                     dispatchUnitBreakdown = Array.isArray(disp.all_units) ? disp.all_units : [];
+                    lastFailedDispatchAttempts = Array.isArray(disp.failed_attempts) ? disp.failed_attempts : [];
                     renderDispatchTopUnits(disp.summary_by_service || {});
+                    renderFailedDispatchAttempts(lastFailedDispatchAttempts, dm);
                 }
             } catch (e) {
                 console.error('refreshMetrics failed', e);
@@ -2227,6 +2298,157 @@ try {
                     <td>${label.linked}</td>
                     <td>${count}</td>
                 </tr>`;
+            }).join('');
+        }
+
+        function formatReportDateTime(value) {
+            if (!value) return '';
+            const date = new Date(String(value).replace(' ', 'T'));
+            if (Number.isNaN(date.getTime())) {
+                return String(value);
+            }
+            return date.toLocaleString([], {
+                year: 'numeric',
+                month: 'short',
+                day: 'numeric',
+                hour: 'numeric',
+                minute: '2-digit',
+            });
+        }
+
+        function formatFailureKind(value) {
+            const kind = String(value || '').replace(/_/g, ' ');
+            return kind ? kind.replace(/\b\w/g, (letter) => letter.toUpperCase()) : 'Failed';
+        }
+
+        function formatRecoveryStatus(value) {
+            const status = String(value || 'open').replace(/_/g, ' ');
+            return status ? status.replace(/\b\w/g, (letter) => letter.toUpperCase()) : 'Open';
+        }
+
+        function recoveryStatusClass(value) {
+            const status = String(value || 'open').toLowerCase();
+            if (status === 'recovered') return 'status-resolved';
+            if (status === 'closed') return 'status-pending';
+            return 'status-critical';
+        }
+
+        function renderDispatchRecoveryActions(item) {
+            const actions = Array.isArray(item.recovery_actions) ? item.recovery_actions : [];
+            const status = item.recovery_status || 'open';
+            if (!actions.length) {
+                return `<span class="status-badge ${recoveryStatusClass(status)}">${escapeHtml(formatRecoveryStatus(status))}</span>`;
+            }
+
+            const labels = {
+                retry_same_unit: { label: 'Retry', icon: 'fa-redo', className: '' },
+                cancel_dispatch: { label: 'Cancel', icon: 'fa-ban', className: 'cancel' },
+                close_failure: { label: 'Close', icon: 'fa-check', className: 'close' }
+            };
+            const buttons = actions.map((action) => {
+                const meta = labels[action] || { label: action, icon: 'fa-tools', className: '' };
+                return `
+                    <button
+                        type="button"
+                        class="dispatch-recovery-btn ${escapeHtml(meta.className)}"
+                        data-recover-dispatch
+                        data-recovery-action="${escapeHtml(action)}"
+                        data-attempt-id="${escapeHtml(item.id || '')}"
+                        data-failure-kind="${escapeHtml(item.failure_kind || '')}"
+                        data-incident-id="${escapeHtml(item.incident_id || '')}"
+                        data-unit-id="${escapeHtml(item.unit_id || '')}">
+                        <i class="fas ${escapeHtml(meta.icon)}"></i> ${escapeHtml(meta.label)}
+                    </button>
+                `;
+            }).join('');
+
+            return `
+                <div class="dispatch-recovery-actions">
+                    ${buttons}
+                    <span class="status-badge ${recoveryStatusClass(status)}">${escapeHtml(formatRecoveryStatus(status))}</span>
+                </div>
+            `;
+        }
+
+        async function recoverDispatchAttempt(button) {
+            const action = button?.dataset?.recoveryAction || '';
+            const attemptId = Number(button?.dataset?.attemptId || 0);
+            if (!action || !attemptId) return;
+
+            const confirmMessages = {
+                retry_same_unit: 'Retry this failed dispatch with the same unit?',
+                cancel_dispatch: 'Cancel this stale dispatch assignment and free the unit?',
+                close_failure: 'Close this failed dispatch attempt as handled?'
+            };
+            if (!confirm(confirmMessages[action] || 'Apply this recovery action?')) {
+                return;
+            }
+
+            button.disabled = true;
+            showNotification('Applying dispatch recovery action...', 'info');
+            try {
+                const res = await fetch('api/dispatch_recovery.php', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        action,
+                        attempt_id: attemptId,
+                        failure_kind: button.dataset.failureKind || '',
+                        incident_id: Number(button.dataset.incidentId || 0),
+                        unit_id: Number(button.dataset.unitId || 0)
+                    })
+                });
+                const data = await res.json();
+                if (!data.ok) {
+                    showNotification(data.error || 'Failed to recover dispatch', 'error');
+                    return;
+                }
+                showNotification(data.message || 'Dispatch recovery applied', 'success');
+                await refreshMetrics(currentFilters);
+            } catch (e) {
+                console.error('recoverDispatchAttempt failed', e);
+                showNotification('Failed to recover dispatch', 'error');
+            } finally {
+                button.disabled = false;
+            }
+        }
+
+        function renderFailedDispatchAttempts(items, metrics = {}) {
+            const tbody = document.getElementById('failedDispatchAttemptsBody');
+            const totalEl = document.getElementById('failedDispatchTotal');
+            const staleEl = document.getElementById('failedDispatchStale');
+            const cancelledEl = document.getElementById('failedDispatchCancelled');
+            if (totalEl) totalEl.textContent = String(metrics.failed_attempts_total ?? 0);
+            if (staleEl) staleEl.textContent = String(metrics.stale_unacknowledged_dispatches ?? 0);
+            if (cancelledEl) cancelledEl.textContent = String(metrics.cancelled_dispatches ?? 0);
+            if (!tbody) return;
+
+            const rows = Array.isArray(items) ? items.slice(0, 12) : [];
+            if (rows.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="8" style="color:#6b7280">No failed dispatch attempts found for the selected filters.</td></tr>';
+                return;
+            }
+
+            tbody.innerHTML = rows.map((item) => {
+                const reference = item.reference_no || (item.incident_id ? `#${item.incident_id}` : 'No incident');
+                const unit = item.unit_identifier || (item.unit_id ? `Unit #${item.unit_id}` : 'No unit');
+                const priority = String(item.priority || '').toUpperCase();
+                const failureKind = formatFailureKind(item.failure_kind);
+                return `
+                    <tr>
+                        <td>${escapeHtml(formatReportDateTime(item.attempted_at || ''))}</td>
+                        <td>${escapeHtml(reference)}</td>
+                        <td>${escapeHtml(unit)}</td>
+                        <td>${escapeHtml(item.incident_type || 'Other')}</td>
+                        <td>${escapeHtml(priority || 'N/A')}</td>
+                        <td>
+                            <span class="status-badge status-critical">${escapeHtml(failureKind)}</span>
+                            <div style="margin-top:0.35rem; color:#6b7280; font-size:0.85rem;">${escapeHtml(item.failure_reason || 'No reason recorded')}</div>
+                        </td>
+                        <td>${escapeHtml(String(item.source || '').replace(/_/g, ' '))}</td>
+                        <td>${renderDispatchRecoveryActions(item)}</td>
+                    </tr>
+                `;
             }).join('');
         }
 
@@ -2327,6 +2549,13 @@ try {
             if (cardInc) cardInc.style.cursor='pointer', cardInc.addEventListener('click', () => navigateTo('admin/review.php', { period: currentFilters.period || defaultReportFilters.period, start: currentFilters.start, end: currentFilters.end }));
             if (cardRes) cardRes.style.cursor='pointer', cardRes.addEventListener('click', () => navigateTo('admin/resources.php'));
             if (cardPerf) cardPerf.style.cursor='pointer', cardPerf.addEventListener('click', () => window.open('api/reports_incident_summary.php' + buildQuery(currentFilters), '_blank'));
+            const failedDispatchBody = document.getElementById('failedDispatchAttemptsBody');
+            if (failedDispatchBody) {
+                failedDispatchBody.addEventListener('click', (event) => {
+                    const button = event.target.closest('[data-recover-dispatch]');
+                    if (button) recoverDispatchAttempt(button);
+                });
+            }
             setInterval(function () {
                 if (document.hidden) return;
                 try {

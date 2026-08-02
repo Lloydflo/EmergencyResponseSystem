@@ -2202,19 +2202,29 @@ try {
 
         function resourceReport() {
             showNotification('Generating resource report, please wait...', 'info');
+            const reportWindow = window.open('', '_blank');
+            if (!reportWindow) {
+                showNotification('Please allow pop-ups for this site to open the resource report.', 'error');
+                return;
+            }
+
+            reportWindow.document.write('<!DOCTYPE html><html><head><title>Resource Report</title></head><body style="font-family: system-ui, sans-serif; padding: 24px;">Generating resource report...</body></html>');
+            reportWindow.document.close();
+
             fetch('api/reports_resources.php')
                 .then(response => {
                     if (!response.ok) throw new Error('Network response was not ok');
                     return response.text();
                 })
                 .then(html => {
-                    const reportWindow = window.open('', '_blank');
+                    reportWindow.document.open();
                     reportWindow.document.write(html);
                     reportWindow.document.close();
                     showNotification('Resource report generated and opened in new window', 'success');
                 })
                 .catch(error => {
                     console.error('Error generating report:', error);
+                    reportWindow.close();
                     showNotification('Failed to generate resource report. Please try again.', 'error');
                 });
         }
