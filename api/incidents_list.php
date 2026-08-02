@@ -48,6 +48,7 @@ function ers_incidents_schema(PDO $pdo): array
         'incident_notes',
         'incident_surveys',
         'incident_admin_reviews',
+        'api_sync_logs',
     ];
     $placeholders = implode(',', array_fill(0, count($tables), '?'));
 
@@ -460,6 +461,43 @@ if ($hasAdminReviewTable) {
     $adminReviewSentByUserIdExpr = ers_incidents_has_column($schema, 'incident_admin_reviews', 'sent_by_user_id') ? 'iar.sent_by_user_id' : 'NULL';
 }
 
+$crimeAnalyticsJoin = '';
+$crimeAnalyticsStatusExpr = 'NULL';
+$crimeAnalyticsSyncedAtExpr = 'NULL';
+$hasCrimeAnalyticsLogTable = ers_incidents_has_table($schema, 'api_sync_logs')
+    && ers_incidents_has_column($schema, 'api_sync_logs', 'id')
+    && ers_incidents_has_column($schema, 'api_sync_logs', 'entity_id')
+    && ers_incidents_has_column($schema, 'api_sync_logs', 'entity_type')
+    && ers_incidents_has_column($schema, 'api_sync_logs', 'endpoint_name')
+    && ers_incidents_has_column($schema, 'api_sync_logs', 'status');
+if ($hasCrimeAnalyticsLogTable) {
+    $crimeAnalyticsWhere = [
+        "asl.entity_type = 'incident'",
+        "asl.endpoint_name = 'send_crime_analytics'",
+    ];
+    if (ers_incidents_has_column($schema, 'api_sync_logs', 'direction')) {
+        $crimeAnalyticsWhere[] = "asl.direction = 'outgoing'";
+    }
+    if (ers_incidents_has_column($schema, 'api_sync_logs', 'target_group')) {
+        $crimeAnalyticsWhere[] = "asl.target_group = 'Crime Analytics'";
+    }
+    $crimeAnalyticsUpdatedAtSelect = ers_incidents_has_column($schema, 'api_sync_logs', 'updated_at') ? 'asl.updated_at' : 'NULL AS updated_at';
+    $crimeAnalyticsJoin = " LEFT JOIN (
+        SELECT asl.entity_id, asl.status, {$crimeAnalyticsUpdatedAtSelect}
+        FROM api_sync_logs asl
+        INNER JOIN (
+            SELECT entity_id, MAX(id) AS max_id
+            FROM api_sync_logs
+            WHERE entity_type = 'incident'
+              AND endpoint_name = 'send_crime_analytics'
+            GROUP BY entity_id
+        ) latest_crime_sync ON latest_crime_sync.max_id = asl.id
+        WHERE " . implode(' AND ', $crimeAnalyticsWhere) . "
+    ) crime_sync ON crime_sync.entity_id = i.id";
+    $crimeAnalyticsStatusExpr = 'crime_sync.status';
+    $crimeAnalyticsSyncedAtExpr = ers_incidents_has_column($schema, 'api_sync_logs', 'updated_at') ? 'crime_sync.updated_at' : 'NULL';
+}
+
 $priorityScoreExpr = ers_incidents_has_column($schema, 'incidents', 'priority_score') ? 'i.priority_score' : 'NULL';
 $priorityLabelExpr = ers_incidents_has_column($schema, 'incidents', 'priority_label') ? 'i.priority_label' : 'NULL';
 $priorityColorExpr = ers_incidents_has_column($schema, 'incidents', 'priority_color') ? 'i.priority_color' : 'NULL';
@@ -524,6 +562,8 @@ $sql = "SELECT
         {$adminReviewSentAtExpr} AS admin_review_sent_at,
         {$adminReviewSentByNameExpr} AS admin_review_sent_by_name,
         {$adminReviewSentByUserIdExpr} AS admin_review_sent_by_user_id,
+        {$crimeAnalyticsStatusExpr} AS crime_analytics_status,
+        {$crimeAnalyticsSyncedAtExpr} AS crime_analytics_synced_at,
         {$responseTimeExpr} AS response_time_min,
         {$resolutionTimeExpr} AS resolution_time_min
     FROM incidents i
@@ -533,7 +573,8 @@ $sql = "SELECT
     {$callJoin}
     {$noteAggregateJoin}
     {$surveyAggregateJoin}
-    {$adminReviewJoin}";
+    {$adminReviewJoin}
+    {$crimeAnalyticsJoin}";
 
 $where = [];
 $params = [];
@@ -723,6 +764,8 @@ try {
             'admin_review_sent_by_user_id' => isset($row['admin_review_sent_by_user_id']) && $row['admin_review_sent_by_user_id'] !== null
                 ? (int)$row['admin_review_sent_by_user_id']
                 : null,
+            'crime_analytics_status' => $row['crime_analytics_status'] ?? null,
+            'crime_analytics_synced_at' => $row['crime_analytics_synced_at'] ?? null,
         ];
     }, $rows);
 

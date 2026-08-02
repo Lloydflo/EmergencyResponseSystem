@@ -80,6 +80,9 @@ if ($adminName === '') {
         .ar-row-actions { display: flex; gap: .45rem; flex-wrap: wrap; }
         .ar-action { border: 1px solid #cbd5e1; background: #fff; color: #0f172a; border-radius: 12px; padding: .55rem .85rem; font-weight: 700; cursor: pointer; }
         .ar-action.primary { background: #0f172a; color: #fff; border-color: #0f172a; }
+        .ar-action.sync { background: #0f766e; color: #fff; border-color: #0f766e; }
+        .ar-action.danger { background: #b91c1c; color: #fff; border-color: #b91c1c; }
+        .ar-action.sent, .ar-action:disabled { background: #e2e8f0; color: #64748b; border-color: #cbd5e1; cursor: not-allowed; }
         .ar-empty { padding: 2rem 1rem; text-align: center; color: #64748b; }
         .ar-overlay { position: fixed; inset: 0; background: rgba(15,23,42,.45); backdrop-filter: blur(3px); z-index: 2000; }
         .ar-modal { position: fixed; inset: 0; z-index: 2001; display: flex; align-items: center; justify-content: center; padding: 1rem; box-sizing: border-box; }
@@ -129,6 +132,9 @@ if ($adminName === '') {
         [data-theme="dark"] .ar-stat span, [data-theme="dark"] .ar-stat p, [data-theme="dark"] .ar-field label, [data-theme="dark"] .ar-card-head p, [data-theme="dark"] .ar-meta, [data-theme="dark"] .ar-modal-head p, [data-theme="dark"] .ar-spotlight .type, [data-theme="dark"] .ar-spotlight .desc, [data-theme="dark"] .ar-side span, [data-theme="dark"] .ar-detail span, [data-theme="dark"] .ar-feedback-panel p, [data-theme="dark"] .ar-feedback-head span, [data-theme="dark"] .ar-note, [data-theme="dark"] .ar-feedback-empty, [data-theme="dark"] .ar-proof-card figcaption { color: #94a3b8 !important; }
         [data-theme="dark"] .ar-rating-label { color: #fde68a !important; }
         [data-theme="dark"] .ar-field input, [data-theme="dark"] .ar-field select, [data-theme="dark"] .ar-btn.secondary, [data-theme="dark"] .ar-action, [data-theme="dark"] .ar-close { background: #0f172a !important; color: #f8fafc !important; border-color: #475569 !important; }
+        [data-theme="dark"] .ar-action.sync { background: #115e59 !important; color: #ccfbf1 !important; border-color: #0f766e !important; }
+        [data-theme="dark"] .ar-action.danger { background: #7f1d1d !important; color: #fecaca !important; border-color: #991b1b !important; }
+        [data-theme="dark"] .ar-action.sent, [data-theme="dark"] .ar-action:disabled { background: #1e293b !important; color: #94a3b8 !important; border-color: #334155 !important; }
         [data-theme="dark"] .ar-card-head, [data-theme="dark"] .ar-table th, [data-theme="dark"] .ar-table tr:hover td, [data-theme="dark"] .ar-spotlight, [data-theme="dark"] .ar-grid article, [data-theme="dark"] .ar-feedback-panel, [data-theme="dark"] .ar-side, [data-theme="dark"] .ar-detail, [data-theme="dark"] .ar-feedback, [data-theme="dark"] .ar-feedback-empty, [data-theme="dark"] .ar-proof-card { background: #020617 !important; border-color: #334155 !important; }
         [data-theme="dark"] .ar-count, [data-theme="dark"] .ar-pill.empty { background: #1e293b !important; color: #cbd5e1 !important; }
         [data-theme="dark"] .ar-chip.resolved { background: #052e16 !important; color: #bbf7d0 !important; }
@@ -360,6 +366,23 @@ if ($adminName === '') {
                 const label = rating === null ? (count + ' note(s)') : ('Response Rating ' + rating.toFixed(1) + ' / 5');
                 return '<span class="ar-pill feedback"><i class="fas fa-paper-plane"></i> ' + escapeHtml(label) + '</span>';
             }
+            function isCrimeAnalyticsCandidate(row) {
+                if (normalizeStatus(row.status) !== 'resolved') return false;
+                const haystack = [row.type, row.title, row.description].join(' ').toLowerCase();
+                return /\b(police|crime|robbery|theft|fraud|assault|homicide|violence|weapon|gun|knife|patalim|riot)\b/.test(haystack);
+            }
+            function crimeAnalyticsAction(row) {
+                if (!isCrimeAnalyticsCandidate(row)) return '';
+                const status = String(row.crime_analytics_status || '').toLowerCase();
+                if (status === 'sent') {
+                    const sentAt = row.crime_analytics_synced_at ? ' title="Sent ' + escapeHtml(formatDate(row.crime_analytics_synced_at)) + '"' : '';
+                    return '<button type="button" class="ar-action sent" disabled' + sentAt + '><i class="fas fa-circle-check"></i> Crime Sent</button>';
+                }
+                if (status === 'failed') {
+                    return '<button type="button" class="ar-action danger" data-action="send-crime-analytics" data-id="' + escapeHtml(row.id) + '"><i class="fas fa-rotate"></i> Retry Crime</button>';
+                }
+                return '<button type="button" class="ar-action sync" data-action="send-crime-analytics" data-id="' + escapeHtml(row.id) + '"><i class="fas fa-share-from-square"></i> Send Crime</button>';
+            }
             function renderStars(rating) {
                 const value = toNumber(rating);
                 if (value === null || value < 1) return '<span>No rating</span>';
@@ -438,7 +461,7 @@ if ($adminName === '') {
                         <td>${escapeHtml(formatMinutes(row.response_time_min))}</td>
                         <td>${feedbackPill(row)}</td>
                         <td>${escapeHtml(formatDate(row.resolved_at || row.cleared_at))}</td>
-                        <td><div class="ar-row-actions"><button type="button" class="ar-action primary" data-action="view-feedback" data-id="${row.id}"><i class="fas fa-paper-plane"></i> View Feedback</button><button type="button" class="ar-action" data-action="view-feedback" data-id="${row.id}"><i class="fas fa-eye"></i> Details</button></div></td>
+                        <td><div class="ar-row-actions"><button type="button" class="ar-action primary" data-action="view-feedback" data-id="${row.id}"><i class="fas fa-paper-plane"></i> View Feedback</button><button type="button" class="ar-action" data-action="view-feedback" data-id="${row.id}"><i class="fas fa-eye"></i> Details</button>${crimeAnalyticsAction(row)}</div></td>
                     </tr>
                 `).join('');
             }
@@ -534,6 +557,50 @@ if ($adminName === '') {
                 renderProofs(proofPayload);
             }
 
+            async function sendCrimeAnalytics(button, incidentId) {
+                const row = incidentRows.find((item) => Number(item.id) === Number(incidentId));
+                const incidentCode = row ? (row.incident_code || ('#' + incidentId)) : ('#' + incidentId);
+                if (!window.confirm('Send resolved police/crime incident ' + incidentCode + ' to Crime Analytics?')) {
+                    return;
+                }
+
+                const originalHtml = button.innerHTML;
+                button.disabled = true;
+                button.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Sending';
+                try {
+                    const response = await fetch('api/send_crime_analytics.php', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            incident_id: incidentId,
+                            confirm_send: true
+                        })
+                    });
+                    const raw = await response.text();
+                    let data = {};
+                    try {
+                        data = raw ? JSON.parse(raw) : {};
+                    } catch (parseError) {
+                        throw new Error('Invalid response from send endpoint.');
+                    }
+                    if (!response.ok || !data.ok) {
+                        throw new Error(data.error || data.message || 'Unable to send incident.');
+                    }
+                    if (data.dry_run) {
+                        window.alert('Payload prepared, but not sent. Enable CRIME_ANALYTICS_SEND_ENABLED=true in .env to allow live sending.');
+                    } else if (data.already_sent) {
+                        window.alert('This incident was already sent to Crime Analytics.');
+                    } else {
+                        window.alert('Incident sent to Crime Analytics.');
+                    }
+                    await loadRows();
+                } catch (error) {
+                    window.alert('Crime Analytics send failed: ' + (error.message || 'Unknown error'));
+                    button.disabled = false;
+                    button.innerHTML = originalHtml;
+                }
+            }
+
             async function openModal(incidentId) {
                 setModalLoading();
                 modalOverlay.hidden = false;
@@ -564,7 +631,13 @@ if ($adminName === '') {
                 const button = event.target.closest('[data-action]');
                 if (!button) return;
                 const incidentId = parseInt(button.getAttribute('data-id') || '', 10);
-                if (Number.isInteger(incidentId)) openModal(incidentId);
+                if (!Number.isInteger(incidentId)) return;
+                const action = button.getAttribute('data-action');
+                if (action === 'send-crime-analytics') {
+                    sendCrimeAnalytics(button, incidentId);
+                    return;
+                }
+                openModal(incidentId);
             });
             resetFilterBtn.addEventListener('click', () => {
                 searchFilterInput.value = '';

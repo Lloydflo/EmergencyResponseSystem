@@ -387,8 +387,7 @@ if ($turnIsConfigured && preg_match('/^turns?:(?:\/\/)?([^:\/?]+)/i', $turnUrl, 
                         <button class="filter-tab active" data-filter="all" onclick="setFilter(this)">All</button>
                         <button class="filter-tab" data-filter="critical" onclick="setFilter(this)">Critical</button>
                         <button class="filter-tab" data-filter="high" onclick="setFilter(this)">High</button>
-                        <button class="filter-tab" data-filter="urgent" onclick="setFilter(this)">Urgent</button>
-                        <button class="filter-tab" data-filter="moderate" onclick="setFilter(this)">Moderate</button>
+                        <button class="filter-tab" data-filter="medium" onclick="setFilter(this)">Medium</button>
                         <button class="filter-tab" data-filter="low" onclick="setFilter(this)">Low</button>
                     </div>
 
@@ -423,9 +422,9 @@ if ($turnIsConfigured && preg_match('/^turns?:(?:\/\/)?([^:\/?]+)/i', $turnUrl, 
     let currentFilter = 'all';
     const RECENT_INCIDENTS_ENABLED = true; // enable Recent Incidents data
     const RESET_RECENT_ON_LOAD = false; // localStorage no longer used
-    const API_LIST_URL = '../api/incidents_list.php';
-    const API_CREATE_CALL_URL = '../api/calls_create.php';
-    const API_INCOMING_TRANSFERS_URL = '../api/incoming_transfers.php';
+    const API_LIST_URL = 'api/incidents_list.php';
+    const API_CREATE_CALL_URL = 'api/calls_create.php';
+    const API_INCOMING_TRANSFERS_URL = 'api/incoming_transfers.php';
     const ALERTARA_SOCKET_URL = 'https://emergency-comm.alertaraqc.com';
     const ALERTARA_SOCKET_PATH = '/socket.io';
     const TRANSFER_STUN_SERVERS = [
@@ -472,12 +471,12 @@ if ($turnIsConfigured && preg_match('/^turns?:(?:\/\/)?([^:\/?]+)/i', $turnUrl, 
     let transferCallMessages = [];
     let transferCallMessageIds = new Set();
     const INCOMING_TRANSFER_POLL_MS = 5000;
-    const PRIORITY_ORDER = { critical: 0, high: 1, urgent: 2, moderate: 3, medium: 3, low: 4 };
+    const PRIORITY_ORDER = { critical: 0, high: 1, medium: 2, low: 3 };
     function normalizePriority(value, fallback = 'medium') {
         const priority = String(value || '').trim().toLowerCase();
-        if (priority === 'medium') return 'moderate';
+        if (priority === 'urgent' || priority === 'moderate') return 'medium';
         if (Object.prototype.hasOwnProperty.call(PRIORITY_ORDER, priority)) return priority;
-        return fallback === 'medium' ? 'moderate' : fallback;
+        return fallback === 'urgent' || fallback === 'moderate' ? 'medium' : fallback;
     }
 
     function priorityRank(value) {
@@ -656,6 +655,21 @@ if ($turnIsConfigured && preg_match('/^turns?:(?:\/\/)?([^:\/?]+)/i', $turnUrl, 
         const phoneEl = document.getElementById('activeCallerPhone');
         if (nameEl) nameEl.textContent = 'Manual Incident';
         if (phoneEl) phoneEl.textContent = '';
+
+        const form = document.getElementById('incidentForm');
+        if (form) {
+            form.reset();
+        }
+        resetIncidentTypeChecklist();
+        setPrioritySelection('low');
+        priorityAuto = true;
+        const badge = document.getElementById('prioritySuggestion');
+        if (badge) badge.textContent = '';
+        const locationInput = document.getElementById('incidentLocation');
+        if (locationInput) {
+            delete locationInput.dataset.lat;
+            delete locationInput.dataset.lon;
+        }
 
         focusAcceptedCallForm();
     }
@@ -2413,7 +2427,7 @@ if ($turnIsConfigured && preg_match('/^turns?:(?:\/\/)?([^:\/?]+)/i', $turnUrl, 
     }
 
     function setPrioritySelection(value) {
-        const normalized = normalizePriority(value, 'moderate');
+        const normalized = normalizePriority(value, 'medium');
         const options = document.querySelectorAll('#prioritySelect .priority-option');
         let applied = false;
         let selectedValue = normalized;
@@ -2748,6 +2762,11 @@ if ($turnIsConfigured && preg_match('/^turns?:(?:\/\/)?([^:\/?]+)/i', $turnUrl, 
 
     async function submitIncident(e) {
         e.preventDefault();
+        const form = e.target;
+        const submitButton = form ? form.querySelector('.submit-incident-btn') : null;
+        if (submitButton && submitButton.disabled) {
+            return;
+        }
         const locationText = document.getElementById('incidentLocation').value.trim();
         if (!locationText) {
             alert('Please provide an incident location.');
@@ -2787,6 +2806,10 @@ if ($turnIsConfigured && preg_match('/^turns?:(?:\/\/)?([^:\/?]+)/i', $turnUrl, 
             return;
         }
         try {
+            if (submitButton) {
+                submitButton.disabled = true;
+                submitButton.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Logging...';
+            }
             const res = await fetch(API_CREATE_CALL_URL, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
@@ -2853,6 +2876,11 @@ if ($turnIsConfigured && preg_match('/^turns?:(?:\/\/)?([^:\/?]+)/i', $turnUrl, 
         } catch (err) {
             console.warn('Submit failed:', err);
             alert('Error while logging incident.');
+        } finally {
+            if (submitButton) {
+                submitButton.disabled = false;
+                submitButton.innerHTML = '<i class="fas fa-save"></i> Log Incident';
+            }
         }
     }
 

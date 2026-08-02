@@ -80,6 +80,17 @@
         return transferType === 'live_call' || !!String(item.room || '').trim();
     }
 
+    function callDeskUrl() {
+        const path = String(window.location.pathname || '').toLowerCase();
+        if (path.includes('/admin/')) {
+            return '../dispatcher/call.php';
+        }
+        if (path.includes('/dispatcher/')) {
+            return 'call.php';
+        }
+        return 'dispatcher/call.php';
+    }
+
     function displayType(value) {
         const raw = String(value || 'Emergency').replace(/_/g, ' ').trim();
         return raw ? raw.charAt(0).toUpperCase() + raw.slice(1) : 'Emergency';
@@ -331,7 +342,7 @@
                     return;
                 }
                 if (action === 'call') {
-                    window.location.href = 'dispatcher/call.php';
+                    window.location.href = callDeskUrl();
                     return;
                 }
                 if (action === 'dismiss') {
