@@ -2,6 +2,7 @@
 header("Content-Type: application/json");
 require __DIR__ . "/connect.php";
 require_once __DIR__ . "/../../includes/vehicle_resource_units.php";
+require_once __DIR__ . "/../../includes/emergency_com_status_sync.php";
 
 $assignment_id = intval($_POST["assignment_id"] ?? 0);
 $responder_id  = intval($_POST["responder_id"] ?? 0);
@@ -291,12 +292,30 @@ try {
 
     ers_update_responder_unit_status($pdo, $responder_id, $unit_status);
 
-    $incidentSync = ["resolved" => false, "incident_id" => null];
+    $dispatch = app_assignment_find_dispatch($pdo, $assignment);
+    $linkedIncidentId = (int)($dispatch["incident_id"] ?? $assignment["incident_id"] ?? 0);
+    $incidentSync = ["resolved" => false, "incident_id" => $linkedIncidentId ?: null];
     if ($status === "completed") {
         $incidentSync = app_assignment_resolve_incident($pdo, $assignment);
     }
 
     $pdo->commit();
+
+    $syncIncidentId = (int)($incidentSync["incident_id"] ?? $linkedIncidentId);
+    $externalStatus = match ($status) {
+        "received" => "dispatching",
+        "en_route", "on_scene" => "ongoing_dispatch",
+        "completed" => "completed",
+        default => null,
+    };
+    if ($syncIncidentId > 0 && $externalStatus !== null) {
+        ers_notify_emergency_com_status(
+            $pdo,
+            $syncIncidentId,
+            'Responder assignment updated to ' . $status . '.',
+            $externalStatus
+        );
+    }
 
     echo json_encode([
         "success" => true,

@@ -1,6 +1,7 @@
 <?php
 require_once '../includes/db.php';
 require_once '../includes/vehicle_resource_units.php';
+require_once '../includes/emergency_com_status_sync.php';
 header('Content-Type: application/json');
 
 if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
@@ -383,6 +384,7 @@ try {
     ]);
 
     $pdo->commit();
+    ers_notify_emergency_com_status($pdo, $incidentId, 'Additional response resources are being dispatched.');
 
     echo json_encode([
         'success' => true,

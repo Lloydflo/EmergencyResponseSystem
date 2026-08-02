@@ -3,6 +3,7 @@
 header('Content-Type: application/json');
 require_once __DIR__ . '/../includes/db.php';
 require_once __DIR__ . '/../includes/incident_priority.php';
+require_once __DIR__ . '/../includes/emergency_com_status_sync.php';
 
 if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
     http_response_code(405);
@@ -92,7 +93,7 @@ try {
     }
     if ($status !== null) {
         $s = strtolower($status);
-        if (!in_array($s, ['pending','dispatched','resolved','cancelled'], true)) {
+        if (!in_array($s, ['pending','received','dispatching','dispatched','ongoing_dispatch','in_progress','resolved','completed','cancelled'], true)) {
             http_response_code(400);
             echo json_encode(['ok' => false, 'error' => 'Invalid status']);
             exit;
@@ -108,6 +109,9 @@ try {
     $sql = 'UPDATE incidents SET ' . implode(', ', $fields) . ' WHERE id = :id';
     $stmt = $pdo->prepare($sql);
     $stmt->execute($params);
+    if ($status !== null) {
+        ers_notify_emergency_com_status($pdo, $id);
+    }
     echo json_encode(['ok' => true]);
 } catch (Throwable $e) {
     http_response_code(500);

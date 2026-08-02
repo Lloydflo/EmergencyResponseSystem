@@ -25,6 +25,7 @@ if ($incident_id === null || $unit_ids === []) {
 }
 require_once __DIR__ . '/../includes/db.php';
 require_once __DIR__ . '/../includes/vehicle_resource_units.php';
+require_once __DIR__ . '/../includes/emergency_com_status_sync.php';
 $pdo = get_db_connection();
 if (!$pdo) {
     echo json_encode(['ok'=>false,'error'=>'DB error']);
@@ -406,6 +407,7 @@ try {
     $stmtInc->execute([$incident_id]);
 
     $pdo->commit();
+    ers_notify_emergency_com_status($pdo, $incident_id, 'Response units are being dispatched.');
 
     // Build payload for app notification feed (best-effort; does not block dispatch success).
     try {
