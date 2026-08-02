@@ -373,6 +373,7 @@ document.addEventListener('DOMContentLoaded', function() {
     const incidentCardSeenKey = 'ers.interagencyIncidentCardSeen.' + userRole;
     const resourceAdditionSeenKey = 'ers.resourceAdditionSeen.' + userRole;
     const resourceRequestSeenKey = 'ers.resourceRequestSeen.' + userRole;
+    const zoneNotificationSeenKey = 'ers.responderZoneNotificationSeen.' + userRole;
     const presenceEndpoint = 'api/user_presence.php';
     const state = {
         lastUnreadCount: null,
@@ -381,14 +382,18 @@ document.addEventListener('DOMContentLoaded', function() {
         lastResourceAdditionNotificationId: null,
         lastResolvedNotificationId: null,
         lastIncidentCardNotificationId: null,
+        lastZoneNotificationId: null,
         resolvedSeenId: Number(window.localStorage.getItem(resolvedSeenKey) || 0) || 0,
         incidentCardSeenId: Number(window.localStorage.getItem(incidentCardSeenKey) || 0) || 0,
         resourceAdditionSeenId: Number(window.localStorage.getItem(resourceAdditionSeenKey) || 0) || 0,
         resourceRequestSeenId: Number(window.localStorage.getItem(resourceRequestSeenKey) || 0) || 0,
+        zoneNotificationSeenId: Number(window.localStorage.getItem(zoneNotificationSeenKey) || 0) || 0,
         resolvedNotifications: [],
         resolvedUnreadCount: 0,
         incidentCardNotifications: [],
         incidentCardUnreadCount: 0,
+        zoneNotifications: [],
+        zoneNotificationUnreadCount: 0,
         resourceAdditionNotifications: [],
         resourceAdditionUnreadCount: 0,
         resourceRequestUnreadCount: 0,
@@ -478,6 +483,12 @@ document.addEventListener('DOMContentLoaded', function() {
         return count + ' new incident cards';
     }
 
+    function zoneNotificationUnreadText(count) {
+        if (count <= 0) return 'No zone movement alerts';
+        if (count === 1) return '1 zone movement alert';
+        return count + ' zone movement alerts';
+    }
+
     function incidentCardLabel(item) {
         const card = item && item.incident_card ? item.incident_card : {};
         const ref = String(card.reference_no || '').trim();
@@ -537,6 +548,7 @@ document.addEventListener('DOMContentLoaded', function() {
         return state.resourceRequestUnreadCount
             + state.resolvedUnreadCount
             + state.incidentCardUnreadCount
+            + state.zoneNotificationUnreadCount
             + state.resourceAdditionUnreadCount;
     }
 
@@ -705,6 +717,16 @@ document.addEventListener('DOMContentLoaded', function() {
         return label + (pieces.length ? ' (' + pieces.join(', ') + ')' : '');
     }
 
+    function zoneNotificationText(item) {
+        if (!item) return 'Responder changed zone status.';
+        const message = String(item.message || '').trim();
+        if (message) return message;
+        const unit = String(item.unit_code || item.responder_name || 'Responder').trim();
+        const transition = String(item.transition || 'entered').trim();
+        const zone = String(item.zone_name || 'a zone').trim();
+        return unit + ' ' + transition + ' ' + zone + '.';
+    }
+
     function notificationSortTime(value) {
         const date = parseDate(value);
         return date ? date.getTime() : 0;
@@ -718,6 +740,23 @@ document.addEventListener('DOMContentLoaded', function() {
 
     function collectAllNotifications() {
         const entries = [];
+
+        (Array.isArray(state.zoneNotifications) ? state.zoneNotifications : []).forEach(function(item) {
+            const transition = String(item.transition || '').toLowerCase();
+            const isUnread = Number(item.notification_id || 0) > state.zoneNotificationSeenId;
+            entries.push({
+                kind: 'zone',
+                hrefAttr: 'data-zone-notification="1"',
+                icon: transition === 'left' ? 'fa-location-arrow' : 'fa-location-dot',
+                title: isUnread
+                    ? (transition === 'left' ? 'Responder left zone' : 'Responder entered zone')
+                    : 'Zone movement',
+                text: zoneNotificationText(item),
+                meta: relativeTime(item.notified_at),
+                time: item.notified_at,
+                id: Number(item.notification_id || 0)
+            });
+        });
 
         (Array.isArray(state.incidentCardNotifications) ? state.incidentCardNotifications : []).forEach(function(item) {
             const label = incidentCardLabel(item);
@@ -935,6 +974,20 @@ document.addEventListener('DOMContentLoaded', function() {
         state.toastTimer = window.setTimeout(hideLiveToast, 4000);
     }
 
+    function showZoneNotificationToast(count) {
+        if (!liveToast || count <= 0) return;
+        if (liveToastIcon) liveToastIcon.className = 'fas fa-location-dot';
+        if (liveToastTitle) liveToastTitle.textContent = 'Responder Zones';
+        if (liveToastText) liveToastText.textContent = zoneNotificationUnreadText(count);
+        liveToast.setAttribute('data-toast-target', 'zone');
+        liveToast.hidden = false;
+        window.clearTimeout(state.toastTimer);
+        window.requestAnimationFrame(function() {
+            liveToast.classList.add('show');
+        });
+        state.toastTimer = window.setTimeout(hideLiveToast, 4000);
+    }
+
     function closeModal(modalId) {
         const modal = document.getElementById(modalId);
         if (!modal) return;
@@ -970,6 +1023,7 @@ document.addEventListener('DOMContentLoaded', function() {
         await loadHeaderSummary(50);
         markResolvedNotificationsSeen();
         markIncidentCardNotificationsSeen();
+        markZoneNotificationsSeen();
         markResourceAdditionNotificationsSeen();
         markResourceRequestNotificationsSeen();
         const unreadCount = Math.max(0, Number(state.lastUnreadCount) || 0);
@@ -1015,6 +1069,17 @@ document.addEventListener('DOMContentLoaded', function() {
             state.incidentCardSeenId = latestId;
             state.incidentCardUnreadCount = 0;
             window.localStorage.setItem(incidentCardSeenKey, String(latestId));
+        }
+    }
+
+    function markZoneNotificationsSeen() {
+        const latestId = Math.max(0, ...state.zoneNotifications.map(function(item) {
+            return Number(item.notification_id || 0);
+        }));
+        if (latestId > state.zoneNotificationSeenId) {
+            state.zoneNotificationSeenId = latestId;
+            state.zoneNotificationUnreadCount = 0;
+            window.localStorage.setItem(zoneNotificationSeenKey, String(latestId));
         }
     }
 
@@ -1169,6 +1234,45 @@ document.addEventListener('DOMContentLoaded', function() {
         } catch (_) {}
     }
 
+    async function loadZoneNotificationSummary(limit) {
+        if (userRole !== 'admin') {
+            state.zoneNotifications = [];
+            state.zoneNotificationUnreadCount = 0;
+            state.lastZoneNotificationId = 0;
+            return;
+        }
+
+        try {
+            const requestLimit = Math.max(1, Math.min(50, Number(limit) || 10));
+            const response = await fetch('api/zone_notifications.php?limit=' + requestLimit, {
+                cache: 'no-store',
+                credentials: 'same-origin'
+            });
+            if (!response.ok) return;
+            const data = await response.json();
+            if (!data || !data.ok || !Array.isArray(data.notifications)) return;
+
+            const notifications = data.notifications;
+            const latestId = notifications.length ? Math.max(...notifications.map(function(item) {
+                return Number(item.notification_id || 0);
+            })) : 0;
+
+            if (state.lastZoneNotificationId !== null && latestId > state.lastZoneNotificationId) {
+                const newCount = notifications.filter(function(item) {
+                    const id = Number(item.notification_id || 0);
+                    return id > state.lastZoneNotificationId;
+                }).length;
+                showZoneNotificationToast(newCount);
+            }
+
+            state.lastZoneNotificationId = latestId;
+            state.zoneNotifications = notifications;
+            state.zoneNotificationUnreadCount = notifications.filter(function(item) {
+                return Number(item.notification_id || 0) > state.zoneNotificationSeenId;
+            }).length;
+        } catch (_) {}
+    }
+
     async function loadInteragencySummary() {
         try {
             const response = await fetch('api/interagency_chat_threads.php', {
@@ -1224,8 +1328,12 @@ document.addEventListener('DOMContentLoaded', function() {
             loadBackupRequestSummary(limit),
             loadResolvedIncidentSummary(limit),
             loadIncidentCardSummary(limit),
+            loadZoneNotificationSummary(limit),
             loadInteragencySummary()
         ]).finally(() => {
+            setBadge(notificationBadge, notificationBadgeTotal());
+            renderNotificationList(Math.max(0, Number(state.lastUnreadCount) || 0));
+            renderAllNotificationsList();
             headerSummaryRequest = null;
             headerSummaryLimit = 0;
         });
@@ -1248,6 +1356,7 @@ document.addEventListener('DOMContentLoaded', function() {
             await loadHeaderSummary(100);
             markResolvedNotificationsSeen();
             markIncidentCardNotificationsSeen();
+            markZoneNotificationsSeen();
             markResourceAdditionNotificationsSeen();
             markResourceRequestNotificationsSeen();
             const unreadCount = Math.max(0, Number(state.lastUnreadCount) || 0);
@@ -1283,6 +1392,16 @@ document.addEventListener('DOMContentLoaded', function() {
             event.preventDefault();
             event.stopPropagation();
             openAllNotifications();
+            return;
+        }
+
+        const zoneTrigger = event.target.closest('[data-zone-notification]');
+        if (zoneTrigger) {
+            event.preventDefault();
+            markZoneNotificationsSeen();
+            setBadge(notificationBadge, notificationBadgeTotal());
+            renderNotificationList(Math.max(0, Number(state.lastUnreadCount) || 0));
+            renderAllNotificationsList();
             return;
         }
 
@@ -1352,6 +1471,12 @@ document.addEventListener('DOMContentLoaded', function() {
     if (liveToast) {
         liveToast.addEventListener('click', function(event) {
             event.preventDefault();
+            if (liveToast.getAttribute('data-toast-target') === 'zone') {
+                markZoneNotificationsSeen();
+                setBadge(notificationBadge, notificationBadgeTotal());
+                hideLiveToast();
+                return;
+            }
             if (liveToast.getAttribute('data-toast-target') === 'incident-card') {
                 markIncidentCardNotificationsSeen();
                 openInteragency();

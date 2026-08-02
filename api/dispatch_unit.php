@@ -25,9 +25,24 @@ if ($incident_id === null || $unit_ids === []) {
 }
 require_once __DIR__ . '/../includes/db.php';
 require_once __DIR__ . '/../includes/vehicle_resource_units.php';
+require_once __DIR__ . '/../includes/dispatch_attempt_log.php';
 $pdo = get_db_connection();
 if (!$pdo) {
     echo json_encode(['ok'=>false,'error'=>'DB error']);
+    exit;
+}
+
+function dispatch_fail_response(PDO $pdo, ?int $incidentId, array $unitIds, string $message, array $context = [], int $statusCode = 200): void
+{
+    if ($pdo->inTransaction()) {
+        $pdo->rollBack();
+    }
+
+    ers_dispatch_attempt_log_failed($pdo, $incidentId, $unitIds, $message, 'dispatch_unit', $context);
+    if ($statusCode !== 200) {
+        http_response_code($statusCode);
+    }
+    echo json_encode(['ok' => false, 'error' => $message]);
     exit;
 }
 
@@ -258,9 +273,10 @@ try {
     $incidentStmt->execute([$incident_id]);
     $incidentRow = $incidentStmt->fetch(PDO::FETCH_ASSOC);
     if (!$incidentRow) {
-        $pdo->rollBack();
-        echo json_encode(['ok' => false, 'error' => 'Incident not found']);
-        exit;
+        dispatch_fail_response($pdo, $incident_id, $unit_ids, 'Incident not found', [
+            'incident_id' => $incident_id,
+            'unit_ids' => $unit_ids,
+        ]);
     }
 
     $placeholders = implode(',', array_fill(0, count($unit_ids), '?'));
@@ -314,37 +330,41 @@ try {
     $availableUnits = [];
     foreach ($unitStmt->fetchAll(PDO::FETCH_ASSOC) as $unitRow) {
         if ((string)($unitRow['status'] ?? '') !== 'available') {
-            $pdo->rollBack();
-            echo json_encode([
-                'ok' => false,
-                'error' => 'Unit ' . (string)($unitRow['identifier'] ?? $unitRow['id']) . ' is no longer available'
+            $unitLabel = (string)($unitRow['identifier'] ?? $unitRow['id']);
+            dispatch_fail_response($pdo, $incident_id, $unit_ids, 'Unit ' . $unitLabel . ' is no longer available', [
+                'incident_id' => $incident_id,
+                'unit_ids' => $unit_ids,
+                'unit_identifier' => $unitLabel,
+                'unit_status' => (string)($unitRow['status'] ?? ''),
             ]);
-            exit;
         }
         if ((int)($unitRow['assigned_user_id'] ?? 0) <= 0) {
-            $pdo->rollBack();
-            echo json_encode([
-                'ok' => false,
-                'error' => 'Unit ' . (string)($unitRow['identifier'] ?? $unitRow['id']) . ' has no assigned responder'
+            $unitLabel = (string)($unitRow['identifier'] ?? $unitRow['id']);
+            dispatch_fail_response($pdo, $incident_id, $unit_ids, 'Unit ' . $unitLabel . ' has no assigned responder', [
+                'incident_id' => $incident_id,
+                'unit_ids' => $unit_ids,
+                'unit_identifier' => $unitLabel,
             ]);
-            exit;
         }
         if (!dispatch_responder_is_available($pdo, (int)$unitRow['assigned_user_id'])) {
-            $pdo->rollBack();
-            echo json_encode([
-                'ok' => false,
-                'error' => 'Unit ' . (string)($unitRow['identifier'] ?? $unitRow['id']) . ' responder is not online and available'
+            $unitLabel = (string)($unitRow['identifier'] ?? $unitRow['id']);
+            dispatch_fail_response($pdo, $incident_id, $unit_ids, 'Unit ' . $unitLabel . ' responder is not online and available', [
+                'incident_id' => $incident_id,
+                'unit_ids' => $unit_ids,
+                'unit_identifier' => $unitLabel,
+                'assigned_user_id' => (int)($unitRow['assigned_user_id'] ?? 0),
             ]);
-            exit;
         }
         $availableUnits[(int)$unitRow['id']] = $unitRow;
     }
 
     foreach ($unit_ids as $unit_id) {
         if (!isset($availableUnits[$unit_id])) {
-            $pdo->rollBack();
-            echo json_encode(['ok' => false, 'error' => 'One or more selected units were not found']);
-            exit;
+            dispatch_fail_response($pdo, $incident_id, $unit_ids, 'One or more selected units were not found', [
+                'incident_id' => $incident_id,
+                'unit_ids' => $unit_ids,
+                'missing_unit_id' => $unit_id,
+            ]);
         }
     }
 
@@ -481,6 +501,15 @@ try {
         'notification' => $notificationPayload
     ]);
 } catch (Throwable $e) {
-    try { $pdo->rollBack(); } catch (Throwable $e2) {}
+    try {
+        if ($pdo->inTransaction()) {
+            $pdo->rollBack();
+        }
+    } catch (Throwable $e2) {}
+    ers_dispatch_attempt_log_failed($pdo, $incident_id, $unit_ids, 'Dispatch failed: ' . $e->getMessage(), 'dispatch_unit', [
+        'incident_id' => $incident_id,
+        'unit_ids' => $unit_ids,
+        'exception' => $e->getMessage(),
+    ]);
     echo json_encode(['ok'=>false,'error'=>'Dispatch failed: ' . $e->getMessage()]);
 }

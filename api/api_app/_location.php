@@ -380,6 +380,8 @@ function app_location_update(PDO $pdo, array $input): array
         op_touch_presence($pdo, $responderId);
     }
 
+    $zoneTransitions = ers_unit_location_process_zone_transitions($pdo, $unitId, $responderId, $latitude, $longitude, $unit);
+
     return [
         'ok' => true,
         'unit_id' => $unitId,
@@ -391,5 +393,6 @@ function app_location_update(PDO $pdo, array $input): array
         'location_id' => $locationId,
         'coalesced' => $coalesced,
         'recorded_at' => date('Y-m-d H:i:s'),
+        'zone_transitions' => $zoneTransitions,
     ];
 }

@@ -3,6 +3,7 @@ declare(strict_types=1);
 require_once __DIR__ . '/../includes/admin_api_auth.php';
 require_admin_api_access(true);
 require_once __DIR__ . '/../includes/db.php';
+require_once __DIR__ . '/../includes/dispatch_attempt_log.php';
 
 header('Content-Type: application/json');
 $pdo = get_db_connection();
@@ -78,9 +79,12 @@ function append_type_filter(string &$sql, array &$params, string $column, array 
 [$startAt, $endAt] = period_to_range();
 
 try {
+    ers_dispatch_attempt_ensure_table($pdo);
+
     $typeFilter = isset($_GET['type']) ? trim((string)$_GET['type']) : '';
     $priorityFilter = isset($_GET['priority']) ? trim((string)$_GET['priority']) : '';
     $typeValues = normalized_type_values($typeFilter);
+    $failedStaleThresholdMinutes = 15;
 
     $dispatchJoin = '';
     $dispatchWhere = 'd.assigned_at BETWEEN :s AND :e';
@@ -266,6 +270,189 @@ try {
         $data[] = (int)$row['c'];
     }
 
+    $failedLogWhere = 'dal.created_at BETWEEN :fail_s AND :fail_e';
+    $failedLogParams = [':fail_s' => $startAt, ':fail_e' => $endAt];
+    append_type_filter($failedLogWhere, $failedLogParams, 'i_fail.type', $typeValues, 'failed_log');
+    if ($priorityFilter !== '') {
+        $failedLogWhere .= ' AND i_fail.priority = :failed_log_prio';
+        $failedLogParams[':failed_log_prio'] = $priorityFilter;
+    }
+
+    $stmt = $pdo->prepare("
+        SELECT COUNT(*) AS c
+        FROM dispatch_attempt_logs dal
+        LEFT JOIN incidents i_fail ON i_fail.id = dal.incident_id
+        WHERE {$failedLogWhere}
+          AND LOWER(COALESCE(dal.status, 'failed')) = 'failed'
+    ");
+    $stmt->execute($failedLogParams);
+    $recordedFailures = (int)($stmt->fetch()['c'] ?? 0);
+
+    $cancelledWhere = "d.status = 'cancelled' AND d.assigned_at BETWEEN :cancel_s AND :cancel_e";
+    $cancelledParams = [':cancel_s' => $startAt, ':cancel_e' => $endAt];
+    append_type_filter($cancelledWhere, $cancelledParams, 'i_cancel.type', $typeValues, 'cancelled');
+    if ($priorityFilter !== '') {
+        $cancelledWhere .= ' AND i_cancel.priority = :cancelled_prio';
+        $cancelledParams[':cancelled_prio'] = $priorityFilter;
+    }
+    $stmt = $pdo->prepare("
+        SELECT COUNT(*) AS c
+        FROM dispatches d
+        LEFT JOIN incidents i_cancel ON i_cancel.id = d.incident_id
+        WHERE {$cancelledWhere}
+    ");
+    $stmt->execute($cancelledParams);
+    $cancelledDispatches = (int)($stmt->fetch()['c'] ?? 0);
+
+    $staleWhere = "
+        d.status = 'assigned'
+        AND d.acknowledged_at IS NULL
+        AND d.assigned_at BETWEEN :stale_s AND :stale_e
+        AND TIMESTAMPDIFF(MINUTE, d.assigned_at, CURRENT_TIMESTAMP) >= :stale_threshold
+    ";
+    $staleParams = [
+        ':stale_s' => $startAt,
+        ':stale_e' => $endAt,
+        ':stale_threshold' => $failedStaleThresholdMinutes,
+    ];
+    append_type_filter($staleWhere, $staleParams, 'i_stale.type', $typeValues, 'stale');
+    if ($priorityFilter !== '') {
+        $staleWhere .= ' AND i_stale.priority = :stale_prio';
+        $staleParams[':stale_prio'] = $priorityFilter;
+    }
+    $stmt = $pdo->prepare("
+        SELECT COUNT(*) AS c
+        FROM dispatches d
+        LEFT JOIN incidents i_stale ON i_stale.id = d.incident_id
+        WHERE {$staleWhere}
+    ");
+    $stmt->execute($staleParams);
+    $staleUnacknowledged = (int)($stmt->fetch()['c'] ?? 0);
+
+    $failedAttempts = [];
+    $stmt = $pdo->prepare("
+        SELECT
+            dal.id,
+            dal.incident_id,
+            i_fail.reference_no,
+            i_fail.type AS incident_type,
+            i_fail.priority,
+            i_fail.location_address,
+            dal.unit_id,
+            COALESCE(NULLIF(dal.unit_identifier, ''), u_fail.identifier, '') AS unit_identifier,
+            COALESCE(u_fail.unit_type, '') AS unit_type,
+            dal.source,
+            dal.failure_reason,
+            dal.recovery_status,
+            dal.recovery_action,
+            dal.recovered_dispatch_id,
+            dal.recovered_at,
+            dal.created_at AS attempted_at,
+            'recorded_failure' AS failure_kind
+        FROM dispatch_attempt_logs dal
+        LEFT JOIN incidents i_fail ON i_fail.id = dal.incident_id
+        LEFT JOIN units u_fail ON u_fail.id = dal.unit_id
+        WHERE {$failedLogWhere}
+          AND LOWER(COALESCE(dal.status, 'failed')) = 'failed'
+        ORDER BY dal.created_at DESC, dal.id DESC
+        LIMIT 40
+    ");
+    $stmt->execute($failedLogParams);
+    foreach ($stmt->fetchAll() as $row) {
+        $recoveryStatus = strtolower(trim((string)($row['recovery_status'] ?? 'open')));
+        if ($recoveryStatus === '') {
+            $recoveryStatus = 'open';
+        }
+        $recoveryActions = [];
+        if ($recoveryStatus === 'open') {
+            if ((int)($row['incident_id'] ?? 0) > 0) {
+                $recoveryActions[] = 'retry_same_unit';
+            }
+            $recoveryActions[] = 'close_failure';
+        }
+        $failedAttempts[] = [
+            'id' => (int)$row['id'],
+            'incident_id' => (int)($row['incident_id'] ?? 0),
+            'reference_no' => (string)($row['reference_no'] ?? ''),
+            'incident_type' => (string)($row['incident_type'] ?? ''),
+            'priority' => (string)($row['priority'] ?? ''),
+            'location' => (string)($row['location_address'] ?? ''),
+            'unit_id' => (int)($row['unit_id'] ?? 0),
+            'unit_identifier' => (string)($row['unit_identifier'] ?? ''),
+            'unit_type' => (string)($row['unit_type'] ?? ''),
+            'source' => (string)($row['source'] ?? ''),
+            'failure_reason' => (string)($row['failure_reason'] ?? ''),
+            'attempted_at' => (string)($row['attempted_at'] ?? ''),
+            'failure_kind' => (string)($row['failure_kind'] ?? 'recorded_failure'),
+            'recovery_status' => $recoveryStatus,
+            'recovery_action' => (string)($row['recovery_action'] ?? ''),
+            'recovered_dispatch_id' => (int)($row['recovered_dispatch_id'] ?? 0),
+            'recovered_at' => (string)($row['recovered_at'] ?? ''),
+            'recovery_actions' => $recoveryActions,
+        ];
+    }
+
+    $stmt = $pdo->prepare("
+        SELECT
+            d.id,
+            d.incident_id,
+            i_stale.reference_no,
+            i_stale.type AS incident_type,
+            i_stale.priority,
+            i_stale.location_address,
+            d.unit_id,
+            u_stale.identifier AS unit_identifier,
+            u_stale.unit_type,
+            d.assigned_at AS attempted_at,
+            CASE WHEN d.status = 'cancelled'
+                THEN 'Dispatch was cancelled before completion'
+                ELSE CONCAT('No acknowledgement after ', :label_threshold, ' minutes')
+            END AS failure_reason,
+            CASE WHEN d.status = 'cancelled' THEN 'cancelled_dispatch' ELSE 'stale_unacknowledged' END AS failure_kind
+        FROM dispatches d
+        LEFT JOIN incidents i_cancel ON i_cancel.id = d.incident_id
+        LEFT JOIN incidents i_stale ON i_stale.id = d.incident_id
+        LEFT JOIN units u_stale ON u_stale.id = d.unit_id
+        WHERE ({$cancelledWhere}) OR ({$staleWhere})
+        ORDER BY d.assigned_at DESC, d.id DESC
+        LIMIT 40
+    ");
+    $derivedParams = $cancelledParams + $staleParams;
+    $derivedParams[':label_threshold'] = $failedStaleThresholdMinutes;
+    $stmt->execute($derivedParams);
+    foreach ($stmt->fetchAll() as $row) {
+        $failedAttempts[] = [
+            'id' => (int)$row['id'],
+            'incident_id' => (int)($row['incident_id'] ?? 0),
+            'reference_no' => (string)($row['reference_no'] ?? ''),
+            'incident_type' => (string)($row['incident_type'] ?? ''),
+            'priority' => (string)($row['priority'] ?? ''),
+            'location' => (string)($row['location_address'] ?? ''),
+            'unit_id' => (int)($row['unit_id'] ?? 0),
+            'unit_identifier' => (string)($row['unit_identifier'] ?? ''),
+            'unit_type' => (string)($row['unit_type'] ?? ''),
+            'source' => 'dispatches',
+            'failure_reason' => (string)($row['failure_reason'] ?? ''),
+            'attempted_at' => (string)($row['attempted_at'] ?? ''),
+            'failure_kind' => (string)($row['failure_kind'] ?? ''),
+            'recovery_status' => (string)($row['failure_kind'] ?? '') === 'stale_unacknowledged' ? 'open' : 'closed',
+            'recovery_action' => '',
+            'recovered_dispatch_id' => 0,
+            'recovered_at' => '',
+            'recovery_actions' => (string)($row['failure_kind'] ?? '') === 'stale_unacknowledged' ? ['cancel_dispatch'] : [],
+        ];
+    }
+
+    usort($failedAttempts, static function (array $a, array $b): int {
+        return strcmp((string)($b['attempted_at'] ?? ''), (string)($a['attempted_at'] ?? ''));
+    });
+    $failedAttempts = array_slice($failedAttempts, 0, 50);
+    $failedAttemptTotal = $recordedFailures + $cancelledDispatches + $staleUnacknowledged;
+    $attemptDenominator = $totalDispatches + $recordedFailures;
+    $failureRate = $attemptDenominator > 0
+        ? round(($failedAttemptTotal / $attemptDenominator) * 100, 1)
+        : 0.0;
+
     echo json_encode([
         'ok' => true,
         'metrics' => [
@@ -277,10 +464,17 @@ try {
             'sla_breach_count' => $breaches,
             'sla_breach_rate' => $breachRate,
             'by_unit_type' => $types,
+            'failed_attempts_total' => $failedAttemptTotal,
+            'failed_attempt_rate' => $failureRate,
+            'recorded_failed_attempts' => $recordedFailures,
+            'cancelled_dispatches' => $cancelledDispatches,
+            'stale_unacknowledged_dispatches' => $staleUnacknowledged,
+            'stale_threshold_min' => $failedStaleThresholdMinutes,
         ],
         'summary_by_service' => $serviceSummary,
         'top_units' => $topUnits,
         'all_units' => $allUnits,
+        'failed_attempts' => $failedAttempts,
         'daily' => ['labels' => $labels, 'data' => $data]
     ]);
 } catch (Throwable $e) {
