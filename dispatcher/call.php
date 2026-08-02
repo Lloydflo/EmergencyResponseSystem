@@ -6,9 +6,29 @@ require_once $rootDir . '/includes/auth.php';
 require_role('dispatcher', 'dispatcher/call.php');
 
 $pageTitle = 'Emergency Call Center';
-$turnUrl = (string) ers_env('WEBRTC_TURN_URL', '');
-$turnUsername = (string) ers_env('WEBRTC_TURN_USERNAME', '');
-$turnCredential = (string) ers_env('WEBRTC_TURN_CREDENTIAL', '');
+$turnUrl = trim((string) ers_env('WEBRTC_TURN_URL', ''));
+$turnUsername = trim((string) ers_env('WEBRTC_TURN_USERNAME', ''));
+$turnCredential = trim((string) ers_env('WEBRTC_TURN_CREDENTIAL', ''));
+// A malformed TURN value makes the browser throw while constructing
+// RTCPeerConnection. That also prevents the ERS page from joining the
+// Socket.IO room, so chat and hang-up incorrectly appear to be local only.
+// Keep STUN available, but only publish TURN when the complete credential
+// triplet is valid enough for a browser to parse.
+$turnIsConfigured = preg_match('/^turns?:/i', $turnUrl) === 1
+    && $turnUsername !== ''
+    && $turnCredential !== '';
+$turnUrls = [$turnUrl];
+if ($turnIsConfigured && preg_match('/^turns?:(?:\/\/)?([^:\/?]+)/i', $turnUrl, $turnHostMatch)) {
+    $turnHost = strtolower($turnHostMatch[1]);
+    if ($turnHost === 'global.relay.metered.ca') {
+        $turnUrls = [
+            'turn:' . $turnHost . ':80',
+            'turn:' . $turnHost . ':80?transport=tcp',
+            'turn:' . $turnHost . ':443',
+            'turns:' . $turnHost . ':443?transport=tcp',
+        ];
+    }
+}
 ?>
 
 <!DOCTYPE html>
@@ -408,12 +428,15 @@ $turnCredential = (string) ers_env('WEBRTC_TURN_CREDENTIAL', '');
     const API_INCOMING_TRANSFERS_URL = '../api/incoming_transfers.php';
     const ALERTARA_SOCKET_URL = 'https://emergency-comm.alertaraqc.com';
     const ALERTARA_SOCKET_PATH = '/socket.io';
-    const TRANSFER_ICE_SERVERS = [
+    const TRANSFER_STUN_SERVERS = [
         { urls: 'stun:stun.l.google.com:19302' },
         { urls: 'stun:global.stun.twilio.com:3478' }
-        <?php if ($turnUrl !== ''): ?>,
+    ];
+    const TRANSFER_ICE_SERVERS = [
+        ...TRANSFER_STUN_SERVERS
+        <?php if ($turnIsConfigured): ?>,
         {
-            urls: <?php echo json_encode($turnUrl, JSON_UNESCAPED_SLASHES); ?>,
+            urls: <?php echo json_encode($turnUrls, JSON_UNESCAPED_SLASHES); ?>,
             username: <?php echo json_encode($turnUsername); ?>,
             credential: <?php echo json_encode($turnCredential); ?>
         }
@@ -447,6 +470,7 @@ $turnCredential = (string) ers_env('WEBRTC_TURN_CREDENTIAL', '');
     let transferInboxSocketRetryTimer = null;
     let transferInboxSocketRetryCount = 0;
     let transferCallMessages = [];
+    let transferCallMessageIds = new Set();
     const INCOMING_TRANSFER_POLL_MS = 5000;
     const PRIORITY_ORDER = { critical: 0, high: 1, urgent: 2, moderate: 3, medium: 3, low: 4 };
     function normalizePriority(value, fallback = 'medium') {
@@ -536,6 +560,9 @@ $turnCredential = (string) ers_env('WEBRTC_TURN_CREDENTIAL', '');
 
     let alertAudioContext = null;
     let transferSocket = null;
+    let transferSocketUsesInbox = false;
+    let transferSocketRoom = '';
+    let transferSocketCallHandlers = [];
     let transferPeerConnection = null;
     let transferLocalStream = null;
     let transferLocalStreamPromise = null;
@@ -543,7 +570,24 @@ $turnCredential = (string) ers_env('WEBRTC_TURN_CREDENTIAL', '');
     let transferInboxSocket = null;
     let transferOfferRequestTimer = null;
     let pendingTransferIceCandidates = [];
+    let pendingTransferCallMessages = new Map();
+    let transferNegotiationId = '';
     const SpeechRecognitionApi = window.SpeechRecognition || window.webkitSpeechRecognition || null;
+
+    function bindTransferCallSocketHandler(eventName, handler) {
+        if (!transferSocket || typeof handler !== 'function') return;
+        transferSocket.on(eventName, handler);
+        transferSocketCallHandlers.push({ eventName, handler });
+    }
+
+    function clearTransferCallSocketHandlers(socketInstance = transferSocket) {
+        if (socketInstance && typeof socketInstance.off === 'function') {
+            transferSocketCallHandlers.forEach(({ eventName, handler }) => {
+                socketInstance.off(eventName, handler);
+            });
+        }
+        transferSocketCallHandlers = [];
+    }
 
     function getSharedCallSessionApi() {
         return window.ersCallSession && typeof window.ersCallSession.getState === 'function'
@@ -1031,7 +1075,16 @@ $turnCredential = (string) ers_env('WEBRTC_TURN_CREDENTIAL', '');
     }
 
     function transferQueueKey(transfer) {
-        return String(transfer.transfer_log_id || transfer.transfer_id || transfer.incident_id || transfer.call_id_external || '').trim();
+        return String(
+            transfer.transfer_id
+            || transfer.call_id_external
+            || transfer.callId
+            || transfer.call_id
+            || transfer.room
+            || transfer.transfer_log_id
+            || transfer.incident_id
+            || ''
+        ).trim();
     }
 
     function normalizeTransferQueueItem(transfer) {
@@ -1098,7 +1151,19 @@ $turnCredential = (string) ers_env('WEBRTC_TURN_CREDENTIAL', '');
         }
         const existingIndex = transferQueueItems.findIndex((existing) => existing.queue_key === item.queue_key);
         if (existingIndex >= 0) {
-            transferQueueItems[existingIndex] = { ...transferQueueItems[existingIndex], ...item };
+            const existing = transferQueueItems[existingIndex];
+            const merged = { ...existing, ...item };
+            // Polling may return the database copy before its live signaling
+            // fields are populated. Never erase the room/call identity from
+            // the realtime notification, otherwise Answer opens a form but
+            // cannot join the caller's Socket.IO room.
+            ['room', 'socket_url', 'socket_path', 'call_id_external', 'conversation_id', 'transfer_id'].forEach((field) => {
+                if (!String(item[field] || '').trim() && String(existing[field] || '').trim()) {
+                    merged[field] = existing[field];
+                }
+            });
+            if (existing.transfer_type === 'live_call') merged.transfer_type = 'live_call';
+            transferQueueItems[existingIndex] = merged;
         } else {
             transferQueueItems.unshift(item);
         }
@@ -1236,16 +1301,72 @@ $turnCredential = (string) ers_env('WEBRTC_TURN_CREDENTIAL', '');
         };
     }
 
-    function answerTransferredQueueItem(key) {
+    function resolveOnlineTransferredCall(item) {
+        return new Promise((resolve) => {
+            if (!transferInboxSocket || !transferInboxSocket.connected) {
+                resolve(null);
+                return;
+            }
+            transferInboxSocket.timeout(6000).emit('resolve-live-call', {
+                callId: item.call_id_external || item.callId || '',
+                transferId: item.transfer_id || '',
+                conversationId: item.conversation_id || '',
+                room: item.room || ''
+            }, (error, response) => {
+                if (error || !response || !response.ok || !response.call) {
+                    resolve(null);
+                    return;
+                }
+                resolve(response.call);
+            });
+        });
+    }
+
+    function applyResolvedLiveCallToQueueItem(item, resolvedCall) {
+        if (!item || !resolvedCall || !resolvedCall.room) return false;
+        item.call_id_external = resolvedCall.callId || item.call_id_external;
+        item.transfer_id = item.transfer_id || resolvedCall.callId || '';
+        item.room = resolvedCall.room || item.room;
+        item.socket_url = resolvedCall.socketUrl || item.socket_url || ALERTARA_SOCKET_URL;
+        item.socket_path = resolvedCall.socketPath || item.socket_path || ALERTARA_SOCKET_PATH;
+        item.conversation_id = resolvedCall.conversationId || item.conversation_id;
+        item.transfer_type = 'live_call';
+        return true;
+    }
+
+    async function answerTransferredQueueItem(key) {
         const item = findTransferredQueueItem(key);
         if (!item) return;
+        const resolvedCall = await resolveOnlineTransferredCall(item);
+        applyResolvedLiveCallToQueueItem(item, resolvedCall);
+        if (!String(item.room || '').trim()) {
+            setTransferQueueStatus('This stored item has no online caller room. Ask the caller to start a new call.', 'error');
+            return;
+        }
+        const activeRoom = String(activeTransferCall?.room || '').trim();
+        const activeCallId = String(activeTransferCall?.callId || activeTransferCall?.transferId || '').trim();
+        const itemCallId = String(item.call_id_external || item.transfer_id || '').trim();
+        if (
+            activeTransferCall
+            && ((activeRoom && activeRoom === String(item.room || '').trim())
+                || (activeCallId && itemCallId && activeCallId === itemCallId))
+        ) {
+            focusAcceptedCallForm();
+            return;
+        }
         displayIncomingCallModal(normalizeIncomingCallDetail(incomingCallDetailFromTransfer(item)));
         acceptCall();
     }
 
-    function openTransferredReportQueueItem(key) {
+    async function openTransferredReportQueueItem(key) {
         const item = findTransferredQueueItem(key);
         if (!item) return;
+        const resolvedCall = await resolveOnlineTransferredCall(item);
+        if (applyResolvedLiveCallToQueueItem(item, resolvedCall)) {
+            displayIncomingCallModal(normalizeIncomingCallDetail(incomingCallDetailFromTransfer(item)));
+            acceptCall();
+            return;
+        }
         openIncidentModal(transferredIncidentItem(item));
     }
 
@@ -1359,19 +1480,55 @@ $turnCredential = (string) ers_env('WEBRTC_TURN_CREDENTIAL', '');
         try {
             const callId = String(call.callId || call.transferId || '');
             transferPeerConnection = createTransferPeerConnection(call);
-            transferSocket = window.io(call.socketUrl || ALERTARA_SOCKET_URL, {
-                path: call.socketPath || ALERTARA_SOCKET_PATH,
-                transports: ['websocket', 'polling'],
-                query: { room: call.room }
-            });
-            transferSocket.on('connect', () => {
-                transferSocket.emit('join', call.room);
-                emitTransferAccepted(call);
-                scheduleTransferOfferRequest(call);
-                setVoiceState('Connected to AlertaraQC transfer room ' + call.room + '. Waiting for caller audio.');
-            });
-            transferSocket.on('offer', async (offerPayload) => {
+            const requestedSocketUrl = String(call.socketUrl || ALERTARA_SOCKET_URL).replace(/\/$/, '');
+            const inboxSocketUrl = String(ALERTARA_SOCKET_URL).replace(/\/$/, '');
+            transferSocketUsesInbox = !!transferInboxSocket && requestedSocketUrl === inboxSocketUrl;
+            transferSocketRoom = String(call.room || '');
+            transferSocket = transferSocketUsesInbox
+                ? transferInboxSocket
+                : window.io(requestedSocketUrl, {
+                    path: call.socketPath || ALERTARA_SOCKET_PATH,
+                    transports: ['websocket', 'polling'],
+                    query: { role: 'ers-response-team', room: call.room, callId }
+                });
+            const handleTransferSocketConnected = () => {
+                const activeSocket = transferSocket;
+                const joinCallerRoom = () => {
+                    if (!activeSocket || transferSocket !== activeSocket || !activeSocket.connected) return;
+                    activeSocket.emit('join', call.room, (response) => {
+                        if (transferSocket !== activeSocket) return;
+                        if (response && response.ok) {
+                            setTransferCallChatStatus('Connected to caller room (' + String(response.members || 1) + ' participant(s))');
+                            emitTransferAccepted(call);
+                            scheduleTransferOfferRequest(call);
+                            flushPendingTransferCallMessages();
+                            setVoiceState('Emergency call accepted. Waiting for the caller audio offer.');
+                            return;
+                        }
+                        setTransferCallChatStatus('Could not join the caller room. Retrying...');
+                        window.setTimeout(joinCallerRoom, 600);
+                    });
+                };
+                joinCallerRoom();
+            };
+            bindTransferCallSocketHandler('connect', handleTransferSocketConnected);
+            bindTransferCallSocketHandler('offer', async (offerPayload) => {
                 if (!transferPayloadMatchesCall(offerPayload, callId, call.room)) return;
+                // The signaling server may replay the caller's original lobby
+                // offer when ERS joins the private room. Request and answer a
+                // fresh transfer offer so old ICE and the ERS media leg never
+                // become mixed together.
+                const isTransferOffer = offerPayload
+                    && (offerPayload.transferred === true || offerPayload.target === 'ers');
+                if (!isTransferOffer) {
+                    transferSocket.emit(
+                        'request-transfer-offer',
+                        transferAcceptedPayload(call, 'ers-requires-fresh-media-offer'),
+                        call.room
+                    );
+                    setVoiceState('Requesting a fresh caller audio connection...');
+                    return;
+                }
                 clearTransferOfferRequestTimer();
                 try {
                     await answerTransferOffer(call, offerPayload);
@@ -1380,32 +1537,71 @@ $turnCredential = (string) ers_env('WEBRTC_TURN_CREDENTIAL', '');
                     setVoiceState('Could not connect the live caller audio.');
                 }
             });
-            transferSocket.on('candidate', async (data) => {
+            bindTransferCallSocketHandler('candidate', async (data) => {
                 if (!transferPayloadMatchesCall(data, callId, call.room)) return;
+                // Ignore ICE from the original Emergency-Com/admin discovery
+                // peer. ERS must only add candidates belonging to the fresh
+                // mobile-to-ERS transfer offer answered above.
+                const isTransferCandidate = data
+                    && (data.transferred === true || data.target === 'ers');
+                if (!isTransferCandidate) return;
+                if (
+                    transferNegotiationId
+                    && data.negotiationId
+                    && String(data.negotiationId) !== transferNegotiationId
+                ) return;
                 if (data && data.candidate && transferPeerConnection) {
                     addTransferIceCandidate(data.candidate);
                 }
             });
-            transferSocket.on('call-message', (payload) => {
+            bindTransferCallSocketHandler('call-message', (payload) => {
                 if (!transferPayloadMatchesCall(payload, callId, call.room)) return;
                 if (!payload || payload.sender === 'response_team') return;
-                addTransferCallMessage(payload.text || payload.message || '', 'caller', payload.timestamp, payload.senderName || call.name || 'Caller');
+                addTransferCallMessage(
+                    payload.text || payload.message || '',
+                    'caller',
+                    payload.timestamp,
+                    payload.senderName || call.name || 'Caller',
+                    payload.messageId || ''
+                );
+            });
+            bindTransferCallSocketHandler('call-message-history', (history) => {
+                if (!Array.isArray(history)) return;
+                history.forEach((payload) => {
+                    if (!transferPayloadMatchesCall(payload, callId, call.room)) return;
+                    if (!payload || payload.sender === 'response_team') return;
+                    addTransferCallMessage(
+                        payload.text || payload.message || '',
+                        'caller',
+                        payload.timestamp || payload.serverTimestamp,
+                        payload.senderName || call.name || 'Caller',
+                        payload.messageId || ''
+                    );
+                });
             });
             const handleTransferHangup = (payload) => {
                 if (!transferPayloadMatchesCall(payload, callId, call.room)) return;
                 closeTransferVoiceSession({ notifyPeer: false, reason: 'caller-ended', keepForm: true });
             };
-            transferSocket.on('hangup', handleTransferHangup);
-            transferSocket.on('call-ended', handleTransferHangup);
-            transferSocket.on('call_ended', handleTransferHangup);
-            transferSocket.on('disconnect', () => {
+            bindTransferCallSocketHandler('hangup', handleTransferHangup);
+            bindTransferCallSocketHandler('call-ended', handleTransferHangup);
+            bindTransferCallSocketHandler('call_ended', handleTransferHangup);
+            bindTransferCallSocketHandler('disconnect', () => {
                 if (endingTransferCall) return;
                 setVoiceState('AlertaraQC transfer socket disconnected.');
             });
-            transferSocket.on('connect_error', (error) => {
+            bindTransferCallSocketHandler('connect_error', (error) => {
                 console.warn('Transfer socket connection failed:', error);
                 setVoiceState('Could not reach the AlertaraQC live call socket.');
             });
+            if (transferSocket.connected) {
+                handleTransferSocketConnected();
+            } else if (typeof transferSocket.connect === 'function') {
+                // The active call must never remain tied to an idle inbox
+                // socket. Explicitly resume its public production connection.
+                setTransferCallChatStatus('Connecting to caller room...');
+                transferSocket.connect();
+            }
         } catch (error) {
             console.warn('Unable to connect transfer socket:', error);
             setVoiceState('Unable to connect to the transferred live call.');
@@ -1413,17 +1609,27 @@ $turnCredential = (string) ers_env('WEBRTC_TURN_CREDENTIAL', '');
     }
 
     function createTransferPeerConnection(call) {
-        const pc = new RTCPeerConnection({
-            iceServers: TRANSFER_ICE_SERVERS
-        });
+        let pc;
+        try {
+            pc = new RTCPeerConnection({ iceServers: TRANSFER_ICE_SERVERS });
+        } catch (error) {
+            // Never let a bad deployment-time TURN value stop the ERS from
+            // joining its Socket.IO call room. STUN keeps signaling, chat and
+            // both-side hang-up available while TURN is corrected.
+            console.warn('Invalid TURN configuration; continuing with STUN only.', error);
+            pc = new RTCPeerConnection({ iceServers: TRANSFER_STUN_SERVERS });
+        }
         pc.onicecandidate = (event) => {
             if (!event.candidate || !transferSocket) return;
             transferSocket.emit('candidate', {
-                candidate: event.candidate,
+                candidate: typeof event.candidate.toJSON === 'function'
+                    ? event.candidate.toJSON()
+                    : event.candidate,
                 callId: call.callId || call.transferId || '',
                 room: call.room,
                 transferred: true,
-                target: 'ers'
+                target: 'ers',
+                negotiationId: transferNegotiationId
             }, call.room);
         };
         pc.ontrack = (event) => {
@@ -1477,6 +1683,7 @@ $turnCredential = (string) ers_env('WEBRTC_TURN_CREDENTIAL', '');
         transferOfferRequestTimer = window.setTimeout(() => {
             if (!transferSocket || !call.room || !transferPeerConnection) return;
             if (transferPeerConnection.connectionState === 'connected') return;
+            if (transferPeerConnection.remoteDescription) return;
             transferSocket.emit('request-transfer-offer', transferAcceptedPayload(call, 'response-team-offer-timeout'), call.room);
             setVoiceState('Requesting fresh caller audio connection...');
         }, 700);
@@ -1533,6 +1740,8 @@ $turnCredential = (string) ers_env('WEBRTC_TURN_CREDENTIAL', '');
 
     function resetTransferCallChat(call = null) {
         transferCallMessages = [];
+        transferCallMessageIds = new Set();
+        pendingTransferCallMessages = new Map();
         const messages = document.getElementById('transferCallMessages');
         const input = document.getElementById('transferCallMessageInput');
         if (messages) {
@@ -1542,9 +1751,12 @@ $turnCredential = (string) ers_env('WEBRTC_TURN_CREDENTIAL', '');
         setTransferCallChatStatus(call && call.room ? 'Connected to room' : 'Waiting for call');
     }
 
-    function addTransferCallMessage(text, sender = 'caller', timestamp = Date.now(), senderName = '') {
+    function addTransferCallMessage(text, sender = 'caller', timestamp = Date.now(), senderName = '', messageId = '') {
         const cleanText = String(text || '').trim();
         if (!cleanText) return;
+        const stableMessageId = String(messageId || '').trim();
+        if (stableMessageId && transferCallMessageIds.has(stableMessageId)) return;
+        if (stableMessageId) transferCallMessageIds.add(stableMessageId);
         const messages = document.getElementById('transferCallMessages');
         if (!messages) return;
         if (!transferCallMessages.length) messages.innerHTML = '';
@@ -1561,7 +1773,24 @@ $turnCredential = (string) ers_env('WEBRTC_TURN_CREDENTIAL', '');
         `;
         messages.appendChild(item);
         messages.scrollTop = messages.scrollHeight;
-        transferCallMessages.push({ text: cleanText, sender, timestamp, senderName });
+        transferCallMessages.push({ text: cleanText, sender, timestamp, senderName, messageId: stableMessageId });
+    }
+
+    function flushPendingTransferCallMessages() {
+        const call = activeTransferCall || getSharedCallSession();
+        if (!transferSocket || !transferSocket.connected || !call || !call.room) return false;
+        pendingTransferCallMessages.forEach((payload, messageId) => {
+            if (!payload || String(payload.room || '') !== String(call.room)) return;
+            transferSocket.timeout(8000).emit('call-message', payload, call.room, (error, response) => {
+                if (!error && response && response.ok) {
+                    pendingTransferCallMessages.delete(messageId);
+                    setTransferCallChatStatus(response.recipients > 0 ? 'Delivered' : 'Queued until caller reconnects');
+                } else {
+                    setTransferCallChatStatus('Message queued while the call socket reconnects');
+                }
+            });
+        });
+        return true;
     }
 
     function sendTransferCallMessage() {
@@ -1579,14 +1808,14 @@ $turnCredential = (string) ers_env('WEBRTC_TURN_CREDENTIAL', '');
             room: call.room,
             sender: 'response_team',
             senderName: 'Response Team',
+            messageId: 'ers-' + String(call.callId || call.transferId || '') + '-' + String(Date.now()) + '-' + Math.random().toString(16).slice(2),
             timestamp: Date.now()
         };
-        addTransferCallMessage(text, 'dispatcher', payload.timestamp, payload.senderName);
-        if (transferSocket && transferSocket.connected) {
-            transferSocket.emit('call-message', payload, call.room);
-            setTransferCallChatStatus('Sent');
-        } else {
-            setTransferCallChatStatus('Socket reconnecting. Message shown locally only.');
+        addTransferCallMessage(text, 'dispatcher', payload.timestamp, payload.senderName, payload.messageId);
+        pendingTransferCallMessages.set(payload.messageId, payload);
+        if (!flushPendingTransferCallMessages()) {
+            if (transferSocket && typeof transferSocket.connect === 'function') transferSocket.connect();
+            setTransferCallChatStatus('Message queued while the call socket reconnects');
         }
     }
 
@@ -1651,6 +1880,7 @@ $turnCredential = (string) ers_env('WEBRTC_TURN_CREDENTIAL', '');
             .map((sender) => sender.track ? sender.track.id : '')
             .filter(Boolean);
         transferLocalStream.getAudioTracks().forEach((track) => {
+            track.enabled = true;
             if (!existingTrackIds.includes(track.id)) {
                 transferPeerConnection.addTrack(track, transferLocalStream);
             }
@@ -1676,6 +1906,7 @@ $turnCredential = (string) ers_env('WEBRTC_TURN_CREDENTIAL', '');
         const remoteDescription = typeof offerPayload.sdp === 'string'
             ? { type: 'offer', sdp: offerPayload.sdp }
             : offerPayload.sdp;
+        transferNegotiationId = String(offerPayload.negotiationId || '');
         await transferPeerConnection.setRemoteDescription(remoteDescription);
         await flushPendingTransferIceCandidates();
         await prepareTransferLocalAudio(call);
@@ -1691,7 +1922,8 @@ $turnCredential = (string) ers_env('WEBRTC_TURN_CREDENTIAL', '');
             transfer_id: call.transferId || '',
             room: call.room,
             transferred: true,
-            target: 'ers'
+            target: 'ers',
+            negotiationId: transferNegotiationId
         }, call.room);
         setVoiceState('Answered AlertaraQC live call. Two-way audio is connecting.');
     }
@@ -1699,10 +1931,21 @@ $turnCredential = (string) ers_env('WEBRTC_TURN_CREDENTIAL', '');
     function disconnectTransferCall() {
         clearTransferOfferRequestTimer();
         pendingTransferIceCandidates = [];
-        if (transferSocket && typeof transferSocket.disconnect === 'function') {
-            transferSocket.disconnect();
+        transferNegotiationId = '';
+        const socketToRelease = transferSocket;
+        const sharedInboxSocket = transferSocketUsesInbox;
+        const joinedRoom = transferSocketRoom;
+        clearTransferCallSocketHandlers(socketToRelease);
+        if (socketToRelease && sharedInboxSocket) {
+            if (joinedRoom && socketToRelease.connected) {
+                socketToRelease.emit('leave', joinedRoom);
+            }
+        } else if (socketToRelease && typeof socketToRelease.disconnect === 'function') {
+            socketToRelease.disconnect();
         }
         transferSocket = null;
+        transferSocketUsesInbox = false;
+        transferSocketRoom = '';
         transferLocalStreamPromise = null;
         if (transferPeerConnection) {
             transferPeerConnection.close();
@@ -1829,6 +2072,9 @@ $turnCredential = (string) ers_env('WEBRTC_TURN_CREDENTIAL', '');
 
     function startTransferInboxSocket() {
         if (transferInboxSocket) {
+            if (!transferInboxSocket.connected && typeof transferInboxSocket.connect === 'function') {
+                transferInboxSocket.connect();
+            }
             return;
         }
         if (typeof window.io !== 'function') {
@@ -1855,6 +2101,9 @@ $turnCredential = (string) ers_env('WEBRTC_TURN_CREDENTIAL', '');
                 transferInboxSocketRetryCount = 0;
                 transferInboxSocket.emit('join', TRANSFER_INBOX_ROOM);
                 setTransferQueueStatus('Live transfer socket connected. Waiting for transferred calls and reports...', 'active');
+            });
+            transferInboxSocket.on('disconnect', () => {
+                setTransferQueueStatus('Live transfer socket reconnecting...', 'active');
             });
             transferInboxSocket.on('incoming-transfer', showRealtimeTransferNotice);
             transferInboxSocket.on('ers-transfer-notify', showRealtimeTransferNotice);
