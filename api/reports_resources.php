@@ -1,7 +1,18 @@
 <?php
 declare(strict_types=1);
-require_once __DIR__ . '/../includes/admin_api_auth.php';
-require_admin_api_access(false);
+require_once __DIR__ . '/../includes/auth.php';
+
+if (!is_logged_in()) {
+    header('Location: ../login.php?redirect=' . urlencode('dispatcher/resources.php'));
+    exit;
+}
+
+if (!in_array(current_session_role(), ['admin', 'dispatcher'], true)) {
+    http_response_code(403);
+    echo 'Resource report access required';
+    exit;
+}
+
 require_once __DIR__ . '/../includes/db.php';
 $pdo = get_db_connection();
 if (!$pdo) { http_response_code(500); echo 'Database connection unavailable'; exit; }
