@@ -7,6 +7,7 @@ require_once __DIR__ . '/../includes/db.php';
 require_once __DIR__ . '/../includes/auth.php';
 require_once __DIR__ . '/../includes/activity_log.php';
 require_once __DIR__ . '/../includes/vehicle_resource_units.php';
+require_once __DIR__ . '/../includes/emergency_com_status_sync.php';
 
 if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
     http_response_code(405);
@@ -489,6 +490,20 @@ try {
     }
 
     $pdo->commit();
+
+    $notifiedIncidentIds = [];
+    foreach ($allocations as $allocation) {
+        $incidentId = (int)($allocation['incident_id'] ?? 0);
+        if ($incidentId <= 0 || isset($notifiedIncidentIds[$incidentId])) {
+            continue;
+        }
+        $notifiedIncidentIds[$incidentId] = true;
+        ers_notify_emergency_com_status(
+            $pdo,
+            $incidentId,
+            'Response units are being dispatched.'
+        );
+    }
 
     foreach ($allocations as $allocation) {
         emergency_log_dispatch_notification($userId, (int)$allocation['dispatch_id'], $allocation);

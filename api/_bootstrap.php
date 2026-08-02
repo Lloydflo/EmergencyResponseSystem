@@ -213,7 +213,10 @@ function ers_external_normalize_priority($value): string
 function ers_external_normalize_status($value): string
 {
     $status = strtolower(trim((string)$value));
-    if (in_array($status, ['pending', 'dispatched', 'resolved', 'cancelled'], true)) {
+    if (in_array($status, [
+        'pending', 'received', 'dispatching', 'dispatched',
+        'ongoing_dispatch', 'in_progress', 'resolved', 'completed', 'cancelled'
+    ], true)) {
         return $status;
     }
     return '';

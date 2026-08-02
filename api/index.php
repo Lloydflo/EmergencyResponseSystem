@@ -3,6 +3,7 @@ declare(strict_types=1);
 
 require_once __DIR__ . '/_bootstrap.php';
 require_once __DIR__ . '/../includes/activity_log.php';
+require_once __DIR__ . '/../includes/emergency_com_status_sync.php';
 
 $auth = ers_external_authenticate();
 $pdo = ers_external_db();
@@ -50,6 +51,9 @@ try {
         if ($action === 'conversations') {
             ers_external_json(200, ['success' => true, 'conversations' => ers_api_conversations($pdo)]);
         }
+        if (in_array($action, ['transfer_status', 'status_lookup'], true)) {
+            ers_external_json(200, ers_api_get_transfer_status($pdo));
+        }
         ers_external_json(404, ['success' => false, 'error' => 'Unknown action']);
     }
 
@@ -66,6 +70,9 @@ try {
 
     if (in_array($method, ['POST', 'PATCH'], true) && in_array($action, ['status', 'incident_status'], true)) {
         ers_external_json(200, ers_api_update_incident_status($pdo));
+    }
+    if ($method === 'POST' && in_array($action, ['transfer_status', 'status_lookup'], true)) {
+        ers_external_json(200, ers_api_get_transfer_status($pdo));
     }
 
     ers_external_json(405, ['success' => false, 'error' => 'Method not allowed']);
@@ -998,6 +1005,7 @@ function ers_api_update_incident_status(PDO $pdo): array
     $resolvedSql = $status === 'resolved' ? ', resolved_at = COALESCE(resolved_at, NOW())' : '';
     $update = $pdo->prepare("UPDATE incidents SET status = ?, updated_at = NOW() {$resolvedSql} WHERE id = ?");
     $update->execute([$status, (int)$incident['id']]);
+    ers_notify_emergency_com_status($pdo, (int)$incident['id'], trim((string)($input['note'] ?? '')));
 
     return [
         'success' => true,
@@ -1006,5 +1014,39 @@ function ers_api_update_incident_status(PDO $pdo): array
         'reference_no' => $incident['reference_no'],
         'status' => $status,
     ];
+}
+
+function ers_api_get_transfer_status(PDO $pdo): array
+{
+    $input = ers_external_input();
+    $incidentId = (int)($input['incidentId'] ?? $input['incident_id'] ?? $_GET['incident_id'] ?? 0);
+    $transferId = trim((string)($input['transferId'] ?? $input['transfer_id'] ?? $_GET['transfer_id'] ?? ''));
+    $conversationId = trim((string)($input['conversationId'] ?? $input['conversation_id'] ?? $_GET['conversation_id'] ?? ''));
+
+    if ($incidentId <= 0) {
+        $where = [];
+        $params = [];
+        if ($transferId !== '') {
+            $where[] = 'l.external_incident_id = ?';
+            $params[] = $transferId;
+        }
+        if ($conversationId !== '') {
+            $where[] = "JSON_UNQUOTE(JSON_EXTRACT(l.payload_json, '$.conversationId')) = ?";
+            $params[] = $conversationId;
+            $where[] = "JSON_UNQUOTE(JSON_EXTRACT(l.payload_json, '$.conversation_id')) = ?";
+            $params[] = $conversationId;
+        }
+        if ($where) {
+            $stmt = $pdo->prepare('SELECT l.incident_id FROM external_incident_links l WHERE ' . implode(' OR ', $where) . ' ORDER BY l.id DESC LIMIT 1');
+            $stmt->execute($params);
+            $incidentId = (int)$stmt->fetchColumn();
+        }
+    }
+
+    $status = ers_emergency_com_status($pdo, $incidentId);
+    if (!$status) {
+        ers_external_json(404, ['success' => false, 'error' => 'Transferred incident not found']);
+    }
+    return ['success' => true] + $status;
 }
 ?>

@@ -3,6 +3,7 @@
 header('Content-Type: application/json');
 require_once __DIR__ . '/../includes/db.php';
 require_once __DIR__ . '/../includes/vehicle_resource_units.php';
+require_once __DIR__ . '/../includes/emergency_com_status_sync.php';
 $pdo = get_db_connection();
 if (!$pdo) {
     http_response_code(500);
@@ -262,6 +263,7 @@ try {
     }
 
     $pdo->commit();
+    ers_notify_emergency_com_status($pdo, $incidentId, $note);
     echo json_encode(['ok' => true]);
 } catch (Throwable $e) {
     try { $pdo->rollBack(); } catch (Throwable $e2) {}
