@@ -246,6 +246,15 @@ if ($turnIsConfigured && preg_match('/^turns?:(?:\/\/)?([^:\/?]+)/i', $turnUrl, 
                         </div>
 
                         <form class="incident-form" id="incidentForm" onsubmit="submitIncident(event)">
+                            <div class="manual-form-head">
+                                <div>
+                                    <div class="panel-eyebrow">Manual Incident</div>
+                                    <strong>Create Incident Log</strong>
+                                </div>
+                                <button type="button" class="manual-form-close" onclick="closeCreateIncidentForm()" aria-label="Close create incident form">
+                                    <i class="fas fa-times"></i>
+                                </button>
+                            </div>
                             <div class="form-section">
                                 <div class="section-title">
                                     <i class="fas fa-user"></i>
@@ -672,6 +681,29 @@ if ($turnIsConfigured && preg_match('/^turns?:(?:\/\/)?([^:\/?]+)/i', $turnUrl, 
         }
 
         focusAcceptedCallForm();
+    }
+
+    function closeCreateIncidentForm() {
+        const panel = document.getElementById('activeCallPanel');
+        if (!panel || !panel.classList.contains('manual-create')) return;
+
+        panel.classList.remove('active', 'manual-create');
+
+        const form = document.getElementById('incidentForm');
+        if (form) {
+            form.reset();
+        }
+        resetIncidentTypeChecklist();
+        setPrioritySelection('low');
+        priorityAuto = true;
+        const badge = document.getElementById('prioritySuggestion');
+        if (badge) badge.textContent = '';
+        const locationInput = document.getElementById('incidentLocation');
+        if (locationInput) {
+            delete locationInput.dataset.lat;
+            delete locationInput.dataset.lon;
+        }
+        updateStats();
     }
 
     function redirectToDispatchCenter(data) {
