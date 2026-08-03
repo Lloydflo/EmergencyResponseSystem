@@ -2,7 +2,6 @@
 declare(strict_types=1);
 
 require_once __DIR__ . '/_assignment.php';
-require_once __DIR__ . '/../../includes/emergency_com_status_sync.php';
 
 op_require_method('POST');
 $assignmentId = op_post_int('assignment_id');
@@ -79,13 +78,6 @@ try {
         $relative = (string)($result['completion_image_path'] ?? '');
     }
     $pdo->commit();
-
-    ers_notify_emergency_com_status(
-        $pdo,
-        (int)$result['incident_id'],
-        'Responder completed the incident.',
-        'completed'
-    );
 
     op_success([
         'incident_id' => (int)$result['incident_id'],
