@@ -265,7 +265,7 @@ try {
     $pdo->beginTransaction();
 
     $incidentStmt = $pdo->prepare("
-        SELECT id, priority, description, location_address, latitude, longitude
+        SELECT id, reference_no, priority, description, location_address, latitude, longitude
         FROM incidents
         WHERE id = ?
         LIMIT 1
@@ -369,7 +369,15 @@ try {
     }
 
     $dispatchTime = dispatch_philippine_timestamp();
-    $stmtIns = $pdo->prepare("INSERT INTO dispatches (incident_id, unit_id, status, assigned_at) VALUES (?, ?, 'assigned', ?)");
+    $incidentReferenceNo = trim((string)($incidentRow['reference_no'] ?? ''));
+    if ($incidentReferenceNo === '') {
+        dispatch_fail_response($pdo, $incident_id, $unit_ids, 'Incident reference number is missing', [
+            'incident_id' => $incident_id,
+            'unit_ids' => $unit_ids,
+        ]);
+    }
+
+    $stmtIns = $pdo->prepare("INSERT INTO dispatches (reference_no, unit_id, status, assigned_at) VALUES (?, ?, 'assigned', ?)");
     $stmtUnit = $pdo->prepare("UPDATE units SET status='assigned', current_incident_id=?, last_status_at=CURRENT_TIMESTAMP WHERE id=?");
     $stmtOperatorRecord = $pdo->prepare("
         INSERT INTO dispatch_operator_records
@@ -377,7 +385,7 @@ try {
         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?, ?, ?, ?, ?)
     ");
     foreach ($unit_ids as $unit_id) {
-        $stmtIns->execute([$incident_id, $unit_id, $dispatchTime]);
+        $stmtIns->execute([$incidentReferenceNo, $unit_id, $dispatchTime]);
         $dispatchId = (int)$pdo->lastInsertId();
         $dispatchIds[] = $dispatchId;
 
@@ -434,7 +442,7 @@ try {
         $stmtMeta = $pdo->prepare("
             SELECT
                 d.id AS dispatch_id,
-                d.incident_id,
+                i.id AS incident_id,
                 d.unit_id,
                 d.status AS dispatch_status,
                 d.assigned_at,
@@ -445,7 +453,7 @@ try {
                 u.identifier AS unit_identifier,
                 u.unit_type
             FROM dispatches d
-            LEFT JOIN incidents i ON i.id = d.incident_id
+            LEFT JOIN incidents i ON i.reference_no = d.reference_no
             LEFT JOIN units u ON u.id = d.unit_id
             WHERE d.id IN ($metaPlaceholders)
             ORDER BY d.id ASC

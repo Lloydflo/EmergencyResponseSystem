@@ -244,7 +244,7 @@ function emergency_load_active_incidents(PDO $pdo): array
             (
                 SELECT COUNT(*)
                 FROM dispatches d
-                WHERE d.incident_id = i.id
+                WHERE d.reference_no = i.reference_no
                   AND d.status IN ('assigned','acknowledged','enroute','on_scene')
             ) AS active_dispatch_count
         FROM incidents i
@@ -349,7 +349,7 @@ try {
     $initialAvailableUnits = count($availableUnits);
 
     if ($incidents !== [] && $availableUnits !== []) {
-        $dispatchInsert = $pdo->prepare("INSERT INTO dispatches (incident_id, unit_id, status, assigned_at) VALUES (?, ?, 'assigned', ?)");
+        $dispatchInsert = $pdo->prepare("INSERT INTO dispatches (reference_no, unit_id, status, assigned_at) VALUES (?, ?, 'assigned', ?)");
         $unitUpdate = $pdo->prepare("UPDATE units SET status = 'assigned', current_incident_id = ?, last_status_at = CURRENT_TIMESTAMP WHERE id = ?");
         $incidentUpdate = $pdo->prepare("UPDATE incidents SET status = 'dispatched', updated_at = CURRENT_TIMESTAMP WHERE id = ? AND status IN ('pending','dispatched','active','in_progress')");
         $operatorInsert = $pdo->prepare("
@@ -367,7 +367,7 @@ try {
                 $unit = emergency_take_unit($availableUnits, $preferredType);
                 if ($unit === null) break;
 
-                $dispatchInsert->execute([(int)$incident['id'], (int)$unit['id'], $dispatchTime]);
+                $dispatchInsert->execute([(string)$incident['reference_no'], (int)$unit['id'], $dispatchTime]);
                 $dispatchId = (int)$pdo->lastInsertId();
                 $unitUpdate->execute([(int)$incident['id'], (int)$unit['id']]);
                 ers_sync_vehicle_resource_status_by_unit_id($pdo, (int)$unit['id'], 'in_use');
@@ -434,7 +434,7 @@ try {
                 $unit = emergency_take_unit($availableUnits, $preferredType);
                 if ($unit === null) break;
 
-                $dispatchInsert->execute([(int)$incident['id'], (int)$unit['id'], $dispatchTime]);
+                $dispatchInsert->execute([(string)$incident['reference_no'], (int)$unit['id'], $dispatchTime]);
                 $dispatchId = (int)$pdo->lastInsertId();
                 $unitUpdate->execute([(int)$incident['id'], (int)$unit['id']]);
                 ers_sync_vehicle_resource_status_by_unit_id($pdo, (int)$unit['id'], 'in_use');

@@ -623,8 +623,13 @@ function openDispatchModal(incidentId) {
     document.getElementById('dispatch-modal').style.display = 'flex';
     const unitDropdownLabel = document.getElementById('unit-dropdown-label');
     const unitDropdownMenu = document.getElementById('unit-select');
+    const confirmDispatchBtn = document.getElementById('confirm-dispatch-btn');
     if (unitDropdownLabel) unitDropdownLabel.textContent = 'Select available units';
     if (unitDropdownMenu) unitDropdownMenu.style.display = 'none';
+    if (confirmDispatchBtn) {
+        confirmDispatchBtn.disabled = false;
+        confirmDispatchBtn.textContent = 'Confirm Dispatch';
+    }
     if (currentIncidentId === null) {
         document.getElementById('modal-incident-details').innerHTML = '<span style="color:red">Incident not found.</span>';
         return;
@@ -1953,15 +1958,16 @@ document.addEventListener('DOMContentLoaded', () => {
         const incidentId = toIncidentId(params.get('incident_id'));
         const trackUnit = params.get('track_unit') || params.get('unit') || '';
         const fromCall = params.get('from_call') === '1';
+        const openDispatch = fromCall || params.get('open_dispatch') === '1';
         const period = params.get('period');
-        if (fromCall) {
+        if (openDispatch) {
             if (window.ersCallSession && typeof window.ersCallSession.update === 'function') {
                 window.ersCallSession.update({
                     incidentId: incidentId,
                     incidentReferenceNo: code || ''
                 });
             }
-            showNotification(code ? `Incident ${code} logged. Live call is still ongoing.` : 'Incident logged. Live call is still ongoing.', 'info');
+            showNotification(code ? `Incident ${code} logged. Select a dispatch unit.` : 'Incident logged. Select a dispatch unit.', 'info');
             refreshActiveCalls().finally(() => {
                 if (incidentId !== null) {
                     window.setTimeout(() => openDispatchModal(incidentId), 220);

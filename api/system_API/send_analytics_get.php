@@ -142,7 +142,7 @@ function ers_analytics_load_dispatch_row(PDO $pdo, int $dispatchId): ?array
 
 function ers_analytics_load_incident_rows(PDO $pdo, int $incidentId): array
 {
-    $stmt = $pdo->prepare(ers_analytics_base_sql('WHERE d.incident_id = ? ORDER BY d.assigned_at DESC, d.id DESC'));
+    $stmt = $pdo->prepare(ers_analytics_base_sql('WHERE i.id = ? ORDER BY d.assigned_at DESC, d.id DESC'));
     $stmt->execute([$incidentId]);
     return $stmt->fetchAll(PDO::FETCH_ASSOC) ?: [];
 }
@@ -166,7 +166,8 @@ function ers_analytics_base_sql(string $suffix): string
     return "
         SELECT
             d.id AS dispatch_id,
-            d.incident_id,
+            i.id AS incident_id,
+            i.reference_no,
             d.assigned_at AS dispatch_timestamp,
             d.on_scene_at AS arrival_timestamp,
             d.cleared_at,
@@ -184,7 +185,7 @@ function ers_analytics_base_sql(string $suffix): string
                 ELSE NULL
             END AS duration_min
          FROM dispatches d
-         INNER JOIN incidents i ON i.id = d.incident_id
+         INNER JOIN incidents i ON i.reference_no = d.reference_no
          {$suffix}
     ";
 }
@@ -195,6 +196,7 @@ function ers_analytics_row_to_item(array $row): array
         'source_system' => 'ERS',
         'module' => 'response_time_analytics',
         'incident_id' => isset($row['incident_id']) ? (int)$row['incident_id'] : null,
+        'reference_no' => (string)($row['reference_no'] ?? ''),
         'dispatch_id' => isset($row['dispatch_id']) ? (int)$row['dispatch_id'] : null,
         'dispatch_timestamp' => (string)($row['dispatch_timestamp'] ?? ''),
         'arrival_timestamp' => $row['arrival_timestamp'] ?? null,

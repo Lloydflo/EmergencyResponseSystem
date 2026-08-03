@@ -715,7 +715,10 @@ if ($turnIsConfigured && preg_match('/^turns?:(?:\/\/)?([^:\/?]+)/i', $turnUrl, 
             params.set('code', String(data.incident_reference_no || data.reference_no));
         }
         params.set('from_call', '1');
-        window.location.href = 'dispatcher/dispatch.php?' + params.toString();
+        params.set('open_dispatch', '1');
+        const dispatchUrl = new URL('dispatcher/dispatch.php', document.baseURI || window.location.href);
+        dispatchUrl.search = params.toString();
+        window.location.href = dispatchUrl.href;
     }
 
     function broadcastLoggedIncident(data) {
@@ -2874,7 +2877,7 @@ if ($turnIsConfigured && preg_match('/^turns?:(?:\/\/)?([^:\/?]+)/i', $turnUrl, 
             }
             const wasTransferredCall = !!activeTransferCall;
             broadcastLoggedIncident(data);
-            showToast(wasTransferredCall ? 'Transferred incident logged in Call Receiving & Logs.' : 'Incident logged successfully.');
+            showToast(wasTransferredCall ? 'Transferred incident logged successfully.' : 'Incident logged successfully.');
             e.target.reset();
             resetIncidentTypeChecklist();
             setPrioritySelection('low');
@@ -2902,9 +2905,7 @@ if ($turnIsConfigured && preg_match('/^turns?:(?:\/\/)?([^:\/?]+)/i', $turnUrl, 
             } catch (e) {
                 console.warn('Activity log failed', e);
             }
-            if (!wasTransferredCall) {
-                redirectToDispatchCenter(data);
-            }
+            redirectToDispatchCenter(data);
         } catch (err) {
             console.warn('Submit failed:', err);
             alert('Error while logging incident.');

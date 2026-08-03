@@ -373,8 +373,9 @@ try {
     if ($action === 'cancel_dispatch') {
         $pdo->beginTransaction();
         $stmt = $pdo->prepare("
-            SELECT d.id, d.incident_id, d.unit_id, d.status, u.identifier
+            SELECT d.id, i.id AS incident_id, d.unit_id, d.status, u.identifier
             FROM dispatches d
+            LEFT JOIN incidents i ON i.reference_no = d.reference_no
             LEFT JOIN units u ON u.id = d.unit_id
             WHERE d.id = ?
             LIMIT 1
@@ -449,7 +450,7 @@ try {
     $pdo->beginTransaction();
 
     $stmt = $pdo->prepare("
-        SELECT id, priority, description, location_address, latitude, longitude
+        SELECT id, reference_no, priority, description, location_address, latitude, longitude
         FROM incidents
         WHERE id = ?
         LIMIT 1
@@ -483,8 +484,14 @@ try {
     }
 
     $dispatchTime = recovery_now();
-    $stmt = $pdo->prepare("INSERT INTO dispatches (incident_id, unit_id, status, assigned_at) VALUES (?, ?, 'assigned', ?)");
-    $stmt->execute([$incidentId, $unitId, $dispatchTime]);
+    $incidentReferenceNo = trim((string)($incident['reference_no'] ?? ''));
+    if ($incidentReferenceNo === '') {
+        $pdo->rollBack();
+        recovery_json_error('Incident reference number is missing');
+    }
+
+    $stmt = $pdo->prepare("INSERT INTO dispatches (reference_no, unit_id, status, assigned_at) VALUES (?, ?, 'assigned', ?)");
+    $stmt->execute([$incidentReferenceNo, $unitId, $dispatchTime]);
     $dispatchId = (int)$pdo->lastInsertId();
 
     recovery_set_unit_assignment($pdo, $unitId, $incidentId);
