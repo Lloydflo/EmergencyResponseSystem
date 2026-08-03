@@ -53,10 +53,10 @@ try {
                                     ORDER BY CASE LOWER(priority)
                                         WHEN 'critical' THEN 1
                                         WHEN 'high' THEN 2
-                                        WHEN 'urgent' THEN 3
-                                        WHEN 'moderate' THEN 4
-                                        WHEN 'medium' THEN 4
-                                        WHEN 'low' THEN 5
+                                        WHEN 'urgent' THEN 2
+                                        WHEN 'medium' THEN 3
+                                        WHEN 'moderate' THEN 3
+                                        WHEN 'low' THEN 4
                                         ELSE 6
                                     END, created_at DESC
                                     LIMIT 1")->fetch();
@@ -2028,10 +2028,12 @@ document.addEventListener('DOMContentLoaded', () => {
                 }
                 container.innerHTML = '';
                 items.forEach(it => {
-                    const prio = (it.priority || 'moderate').toLowerCase();
-                    const prioClass = ['critical', 'high', 'urgent', 'moderate', 'low'].includes(prio)
-                        ? prio
-                        : (prio === 'medium' ? 'moderate' : 'low');
+                    const prio = (it.priority || 'medium').toLowerCase();
+                    const prioClass = prio === 'critical'
+                        ? 'critical'
+                        : (prio === 'high' || prio === 'urgent'
+                            ? 'high'
+                            : (prio === 'low' ? 'low' : 'medium'));
                     const timeAgo = formatTimeAgo(it.created_at) || 'Just now';
                     const title = it.title || it.type || 'Incident';
                     const caller = it.caller_name || 'Unknown';
@@ -2478,10 +2480,12 @@ function refreshActiveCalls() {
         }
         container.innerHTML = '';
         items.forEach(it => {
-            const prio = (it.priority || 'moderate').toLowerCase();
-            const prioClass = ['critical', 'high', 'urgent', 'moderate', 'low'].includes(prio)
-                ? prio
-                : (prio === 'medium' ? 'moderate' : 'low');
+            const prio = (it.priority || 'medium').toLowerCase();
+            const prioClass = prio === 'critical'
+                ? 'critical'
+                : (prio === 'high' || prio === 'urgent'
+                    ? 'high'
+                    : (prio === 'low' ? 'low' : 'medium'));
             const timeAgo = formatTimeAgo(it.created_at) || 'Just now';
             const title = it.title || it.type || 'Incident';
             const caller = it.caller_name || 'Unknown';

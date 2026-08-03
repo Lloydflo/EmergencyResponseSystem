@@ -39,7 +39,7 @@
     };
 
     const incidentTypes = ['other', 'medical', 'fire', 'police', 'traffic', 'rescue'];
-    const priorities = ['moderate', 'low', 'urgent', 'high', 'critical'];
+    const priorities = ['medium', 'low', 'high', 'critical'];
 
     const formatDate = (value) => {
         if (!value) {
@@ -249,7 +249,7 @@
                     action: 'convert_to_incident',
                     id: item.id,
                     incident_type: form?.elements.incident_type?.value || 'other',
-                    priority: form?.elements.priority?.value || 'moderate',
+                    priority: form?.elements.priority?.value || 'medium',
                     outcome: form?.elements.outcome?.value.trim() || '',
                 }),
             });
@@ -433,7 +433,7 @@
                         <div class="ia-tip-detail-item">
                             <label class="ia-tip-detail-label" for="iaTipPriority">Priority</label>
                             <select id="iaTipPriority" name="priority" ${isConverted ? 'disabled' : ''}>
-                                ${priorities.map((priority) => `<option value="${priority}" ${priority === 'moderate' ? 'selected' : ''}>${statusLabel(priority)}</option>`).join('')}
+                                ${priorities.map((priority) => `<option value="${priority}" ${priority === 'medium' ? 'selected' : ''}>${statusLabel(priority)}</option>`).join('')}
                             </select>
                         </div>
                         <div class="ia-tip-detail-item">

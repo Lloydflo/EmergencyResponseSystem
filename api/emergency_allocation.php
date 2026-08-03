@@ -184,8 +184,7 @@ function emergency_priority_weight(string $priority): int
 {
     $priority = strtolower(trim($priority));
     if ($priority === 'critical') return 5;
-    if ($priority === 'high') return 4;
-    if ($priority === 'urgent') return 3;
+    if ($priority === 'high' || $priority === 'urgent') return 4;
     if ($priority === 'moderate' || $priority === 'medium') return 2;
     return 1;
 }
@@ -274,10 +273,10 @@ function emergency_load_active_incidents(PDO $pdo): array
             CASE LOWER(COALESCE(i.priority, ''))
                 WHEN 'critical' THEN 1
                 WHEN 'high' THEN 2
-                WHEN 'urgent' THEN 3
-                WHEN 'moderate' THEN 4
-                WHEN 'medium' THEN 4
-                WHEN 'low' THEN 5
+                WHEN 'urgent' THEN 2
+                WHEN 'medium' THEN 3
+                WHEN 'moderate' THEN 3
+                WHEN 'low' THEN 4
                 ELSE 6
             END,
             i.created_at ASC,

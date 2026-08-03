@@ -266,10 +266,10 @@ try {
             ORDER BY CASE LOWER(i.priority)
                 WHEN 'critical' THEN 1
                 WHEN 'high' THEN 2
-                WHEN 'urgent' THEN 3
-                WHEN 'moderate' THEN 4
-                WHEN 'medium' THEN 4
-                WHEN 'low' THEN 5
+                WHEN 'urgent' THEN 2
+                WHEN 'medium' THEN 3
+                WHEN 'moderate' THEN 3
+                WHEN 'low' THEN 4
                 ELSE 6
             END, i.created_at ASC
             LIMIT 10";

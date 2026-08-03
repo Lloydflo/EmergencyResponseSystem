@@ -5,15 +5,18 @@ if (!function_exists('ers_normalize_priority_value')) {
     function ers_normalize_priority_value(string $priority): string
     {
         $priority = strtolower(trim($priority));
-        if ($priority === 'medium') {
-            return 'moderate';
+        if ($priority === 'moderate') {
+            return 'medium';
         }
-        return in_array($priority, ['critical', 'high', 'urgent', 'moderate', 'low'], true) ? $priority : 'moderate';
+        if ($priority === 'urgent') {
+            return 'high';
+        }
+        return in_array($priority, ['critical', 'high', 'medium', 'low'], true) ? $priority : 'medium';
     }
 }
 
 if (!function_exists('ers_build_incident_priority_assessment')) {
-    function ers_build_incident_priority_assessment(array $input, string $fallbackPriority = 'moderate'): array
+    function ers_build_incident_priority_assessment(array $input, string $fallbackPriority = 'medium'): array
     {
         return [
             'has_indicator' => false,
@@ -43,7 +46,9 @@ if (!function_exists('ers_ensure_incident_priority_schema')) {
     {
         foreach (['calls', 'incidents'] as $table) {
             if (ers_incident_priority_column_exists($pdo, $table, 'priority')) {
-                $pdo->exec("ALTER TABLE `{$table}` MODIFY `priority` VARCHAR(20) NOT NULL DEFAULT 'moderate'");
+                $pdo->exec("ALTER TABLE `{$table}` MODIFY `priority` VARCHAR(20) NOT NULL DEFAULT 'medium'");
+                $pdo->exec("UPDATE `{$table}` SET `priority` = 'medium' WHERE LOWER(`priority`) = 'moderate'");
+                $pdo->exec("UPDATE `{$table}` SET `priority` = 'high' WHERE LOWER(`priority`) = 'urgent'");
             }
         }
     }

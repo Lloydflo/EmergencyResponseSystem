@@ -328,7 +328,7 @@ function ers_tip_convert_to_incident(PDO $pdo, array $input): array
         $type = ers_tip_infer_incident_type((string)($item['tip_description'] ?? ''));
     }
 
-    $priority = ers_external_normalize_priority($input['priority'] ?? $payload['priority'] ?? 'moderate');
+    $priority = ers_external_normalize_priority($input['priority'] ?? $payload['priority'] ?? 'medium');
     $location = ers_external_clean($item['location'] ?? '', 255);
     if ($location === '') {
         $location = 'Location not provided';

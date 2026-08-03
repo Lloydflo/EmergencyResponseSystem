@@ -482,9 +482,11 @@ if ($turnIsConfigured && preg_match('/^turns?:(?:\/\/)?([^:\/?]+)/i', $turnUrl, 
     const PRIORITY_ORDER = { critical: 0, high: 1, medium: 2, low: 3 };
     function normalizePriority(value, fallback = 'medium') {
         const priority = String(value || '').trim().toLowerCase();
-        if (priority === 'urgent' || priority === 'moderate') return 'medium';
+        if (priority === 'urgent') return 'high';
+        if (priority === 'moderate') return 'medium';
         if (Object.prototype.hasOwnProperty.call(PRIORITY_ORDER, priority)) return priority;
-        return fallback === 'urgent' || fallback === 'moderate' ? 'medium' : fallback;
+        if (fallback === 'urgent') return 'high';
+        return fallback === 'moderate' ? 'medium' : fallback;
     }
 
     function priorityRank(value) {

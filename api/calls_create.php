@@ -30,7 +30,7 @@ $caller_phone = trim((string)($input['caller_phone'] ?? ''));
 $type = normalize_incident_type_input($input['type'] ?? '');
 $location = trim((string)($input['location'] ?? ''));
 $description = trim((string)($input['description'] ?? ''));
-$priority = ers_normalize_priority_value(trim((string)($input['priority'] ?? 'moderate')));
+$priority = ers_normalize_priority_value(trim((string)($input['priority'] ?? 'medium')));
 $status = trim((string)($input['status'] ?? 'pending'));
 $latitude = array_key_exists('latitude', $input) && $input['latitude'] !== '' ? (float)$input['latitude'] : null;
 $longitude = array_key_exists('longitude', $input) && $input['longitude'] !== '' ? (float)$input['longitude'] : null;

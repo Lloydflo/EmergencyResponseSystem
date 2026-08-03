@@ -176,8 +176,6 @@ try {
     $priorityCounts = [
         'critical' => 0,
         'high' => 0,
-        'urgent' => 0,
-        'moderate' => 0,
         'medium' => 0,
         'low' => 0,
     ];
@@ -189,16 +187,16 @@ try {
         );
         foreach (($priorityStmt ? $priorityStmt->fetchAll(PDO::FETCH_ASSOC) : []) as $row) {
             $key = (string)($row['priority_name'] ?? '');
-            if ($key === 'medium') {
-                $key = 'moderate';
+            if ($key === 'moderate') {
+                $key = 'medium';
+            } elseif ($key === 'urgent') {
+                $key = 'high';
             }
             if (isset($priorityCounts[$key])) {
                 $priorityCounts[$key] += (int)($row['c'] ?? 0);
             }
         }
     }
-    // Retain the original response contract: medium mirrors moderate.
-    $priorityCounts['medium'] = $priorityCounts['moderate'];
 
     echo json_encode(
         [
