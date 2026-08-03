@@ -123,7 +123,8 @@ if ($adminName === '') {
         .ar-feedback-empty { border: 1px dashed #cbd5e1; border-radius: 18px; background: #f8fafc; color: #64748b; padding: 1.05rem 1rem; }
         .ar-proof-gallery { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: .8rem; margin-top: 1rem; }
         .ar-proof-card { margin: 0; border: 1px solid #e2e8f0; border-radius: 18px; overflow: hidden; background: #fff; }
-        .ar-proof-card img { display: block; width: 100%; aspect-ratio: 4 / 3; object-fit: cover; background: #e2e8f0; }
+        .ar-proof-card a { display: block; background: #e2e8f0; }
+        .ar-proof-card img { display: block; width: 100%; height: 220px; object-fit: contain; background: transparent; }
         .ar-proof-card figcaption { display: grid; gap: .18rem; padding: .7rem .78rem; color: #64748b; font-size: .82rem; line-height: 1.45; }
         .ar-proof-card figcaption strong { color: #0f172a; font-size: .86rem; }
         [data-theme="dark"] .main-content { background: radial-gradient(circle at top right, rgba(59,130,246,.14), transparent 28%), #08111f; }
@@ -505,9 +506,12 @@ if ($adminName === '') {
                     const source = item.source === 'responder_completion'
                         ? 'Responder completion upload'
                         : 'Resolution proof upload';
+                    const proofUrl = escapeHtml(normalizeProofUrl(item.url || ''));
                     return `
                         <figure class="ar-proof-card">
-                            <img src="${escapeHtml(normalizeProofUrl(item.url || ''))}" alt="Responder resolution proof">
+                            <a href="${proofUrl}" target="_blank" rel="noopener" title="Open full proof image">
+                                <img src="${proofUrl}" alt="Responder resolution proof">
+                            </a>
                             <figcaption>
                                 <strong>${escapeHtml(source)}</strong>
                                 <span>${escapeHtml(formatDate(item.created_at))}</span>

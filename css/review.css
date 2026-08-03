@@ -937,12 +937,17 @@
     background: #f8fafc;
 }
 
+.proof-card a {
+    display: block;
+    background: #e2e8f0;
+}
+
 .proof-card img {
     display: block;
     width: 100%;
-    height: 160px;
-    object-fit: cover;
-    background: #e2e8f0;
+    height: 220px;
+    object-fit: contain;
+    background: transparent;
 }
 
 .proof-meta {

@@ -399,12 +399,17 @@
       return;
     }
 
-    proofGallery.innerHTML = items.map(item => `
-      <figure class="proof-card">
-        <img src="${escapeAttribute(normalizeProofUrl(item.url || ''))}" alt="Incident resolution proof">
-        <figcaption class="proof-meta">${escapeHtml(formatDate(item.created_at))}</figcaption>
-      </figure>
-    `).join('');
+    proofGallery.innerHTML = items.map(item => {
+      const proofUrl = escapeAttribute(normalizeProofUrl(item.url || ''));
+      return `
+        <figure class="proof-card">
+          <a href="${proofUrl}" target="_blank" rel="noopener" title="Open full proof image">
+            <img src="${proofUrl}" alt="Incident resolution proof">
+          </a>
+          <figcaption class="proof-meta">${escapeHtml(formatDate(item.created_at))}</figcaption>
+        </figure>
+      `;
+    }).join('');
   }
 
   async function submitReviewToAdmin() {
