@@ -602,12 +602,18 @@ function parseLatLngFromText(text) {
 }
 function renderIncidentDetails(inc) {
     const hasPoint = currentIncidentLat !== null && currentIncidentLng !== null;
+    const callerName = inc.caller_name || 'N/A';
+    const callerPhone = inc.caller_phone || 'N/A';
+    const description = inc.description || 'No description provided.';
     document.getElementById('modal-incident-details').innerHTML =
-        `<strong>Type:</strong> ${formatIncidentTypeLabel(inc.type) || inc.type || ''}<br>` +
-        `<strong>Title:</strong> ${inc.title || ''}<br>` +
-        `<strong>Location:</strong> ${inc.location_address || 'N/A'}<br>` +
-        (hasPoint ? `<strong>Coordinates:</strong> ${currentIncidentLat}, ${currentIncidentLng}<br>` : '<strong>Coordinates:</strong> Not available<br>') +
-        `<strong>Priority:</strong> ${inc.priority || ''}`;
+        `<strong>Type:</strong> ${escapeHtml(formatIncidentTypeLabel(inc.type) || inc.type || '')}<br>` +
+        `<strong>Title:</strong> ${escapeHtml(inc.title || '')}<br>` +
+        `<strong>Location:</strong> ${escapeHtml(inc.location_address || 'N/A')}<br>` +
+        (hasPoint ? `<strong>Coordinates:</strong> ${escapeHtml(currentIncidentLat + ', ' + currentIncidentLng)}<br>` : '<strong>Coordinates:</strong> Not available<br>') +
+        `<strong>Priority:</strong> ${escapeHtml(inc.priority || '')}<br>` +
+        `<strong>Caller:</strong> ${escapeHtml(callerName)}<br>` +
+        `<strong>Phone:</strong> ${escapeHtml(callerPhone)}<br>` +
+        `<strong>Description:</strong> ${escapeHtml(description)}`;
 }
 function resolveIncidentPoint(inc) {
     const savedPoint = normalizeLatLngPair(inc && inc.latitude, inc && inc.longitude);

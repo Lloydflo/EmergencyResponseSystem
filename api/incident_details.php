@@ -59,7 +59,15 @@ $responderPresenceMap = ers_vehicle_resource_responder_presence_map($pdo);
 try {
     if ($hasId) {
         $stmt = $pdo->prepare(
-            "SELECT i.*, c.latitude AS call_latitude, c.longitude AS call_longitude
+            "SELECT i.*,
+                    c.caller_name AS call_caller_name,
+                    c.caller_phone AS call_caller_phone,
+                    c.location_address AS call_location_address,
+                    c.incident_type AS call_incident_type,
+                    c.priority AS call_priority,
+                    c.description AS call_description,
+                    c.latitude AS call_latitude,
+                    c.longitude AS call_longitude
              FROM incidents i
              LEFT JOIN calls c ON c.id = i.reported_by_call_id
              WHERE i.id = ?
@@ -68,7 +76,15 @@ try {
         $stmt->execute([$id]);
     } elseif ($code !== '') {
         $stmt = $pdo->prepare(
-            "SELECT i.*, c.latitude AS call_latitude, c.longitude AS call_longitude
+            "SELECT i.*,
+                    c.caller_name AS call_caller_name,
+                    c.caller_phone AS call_caller_phone,
+                    c.location_address AS call_location_address,
+                    c.incident_type AS call_incident_type,
+                    c.priority AS call_priority,
+                    c.description AS call_description,
+                    c.latitude AS call_latitude,
+                    c.longitude AS call_longitude
              FROM incidents i
              LEFT JOIN calls c ON c.id = i.reported_by_call_id
              WHERE i.reference_no = ?
@@ -82,13 +98,44 @@ try {
     if ($stmt) {
         $incident = $stmt->fetch(PDO::FETCH_ASSOC);
         if ($incident) {
+            if ((!isset($incident['type']) || trim((string)$incident['type']) === '' || strtolower(trim((string)$incident['type'])) === 'other') && isset($incident['call_incident_type']) && trim((string)$incident['call_incident_type']) !== '') {
+                $incident['type'] = $incident['call_incident_type'];
+            }
+            if ((!isset($incident['priority']) || trim((string)$incident['priority']) === '') && isset($incident['call_priority']) && trim((string)$incident['call_priority']) !== '') {
+                $incident['priority'] = $incident['call_priority'];
+            }
+            if ((!isset($incident['description']) || trim((string)$incident['description']) === '') && isset($incident['call_description']) && trim((string)$incident['call_description']) !== '') {
+                $incident['description'] = $incident['call_description'];
+            }
+            if (
+                (!isset($incident['location_address']) || trim((string)$incident['location_address']) === '' || stripos((string)$incident['location_address'], 'Location pending') !== false)
+                && isset($incident['call_location_address'])
+                && trim((string)$incident['call_location_address']) !== ''
+            ) {
+                $incident['location_address'] = $incident['call_location_address'];
+            }
+            $incident['caller_name'] = trim((string)($incident['caller_name'] ?? '')) !== ''
+                ? $incident['caller_name']
+                : ($incident['call_caller_name'] ?? null);
+            $incident['caller_phone'] = trim((string)($incident['caller_phone'] ?? '')) !== ''
+                ? $incident['caller_phone']
+                : ($incident['call_caller_phone'] ?? null);
             if ((!isset($incident['latitude']) || $incident['latitude'] === null || $incident['latitude'] === '') && isset($incident['call_latitude']) && $incident['call_latitude'] !== null && $incident['call_latitude'] !== '') {
                 $incident['latitude'] = $incident['call_latitude'];
             }
             if ((!isset($incident['longitude']) || $incident['longitude'] === null || $incident['longitude'] === '') && isset($incident['call_longitude']) && $incident['call_longitude'] !== null && $incident['call_longitude'] !== '') {
                 $incident['longitude'] = $incident['call_longitude'];
             }
-            unset($incident['call_latitude'], $incident['call_longitude']);
+            unset(
+                $incident['call_caller_name'],
+                $incident['call_caller_phone'],
+                $incident['call_location_address'],
+                $incident['call_incident_type'],
+                $incident['call_priority'],
+                $incident['call_description'],
+                $incident['call_latitude'],
+                $incident['call_longitude']
+            );
 
             $incidentId = (int)$incident['id'];
             $hasIncidentNotes = ers_table_exists($pdo, 'incident_notes');
