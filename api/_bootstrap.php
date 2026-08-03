@@ -129,12 +129,36 @@ function ers_external_input(): array
         return $cached;
     }
 
-    $decoded = json_decode($raw, true);
-    if (!is_array($decoded)) {
+    $trimmed = trim($raw);
+    $contentType = strtolower((string)($_SERVER['CONTENT_TYPE'] ?? ''));
+    $looksJson = str_contains($contentType, 'application/json')
+        || str_starts_with($trimmed, '{')
+        || str_starts_with($trimmed, '[');
+
+    if ($looksJson) {
+        $decoded = json_decode($trimmed, true);
+        if (!is_array($decoded)) {
+            ers_external_json(400, ['success' => false, 'error' => 'Invalid JSON body']);
+        }
+
+        $cached = $decoded;
+        return $cached;
+    }
+
+    $form = [];
+    if (str_contains($contentType, 'application/x-www-form-urlencoded') || str_contains($trimmed, '=')) {
+        parse_str($trimmed, $form);
+    }
+    if (is_array($form) && $form !== []) {
+        $cached = $form;
+        return $cached;
+    }
+
+    if (!is_array(json_decode($trimmed, true))) {
         ers_external_json(400, ['success' => false, 'error' => 'Invalid JSON body']);
     }
 
-    $cached = $decoded;
+    $cached = [];
     return $cached;
 }
 
@@ -189,7 +213,10 @@ function ers_external_normalize_priority($value): string
 function ers_external_normalize_status($value): string
 {
     $status = strtolower(trim((string)$value));
-    if (in_array($status, ['pending', 'dispatched', 'resolved', 'cancelled'], true)) {
+    if (in_array($status, [
+        'pending', 'received', 'dispatching', 'dispatched',
+        'ongoing_dispatch', 'in_progress', 'resolved', 'completed', 'cancelled'
+    ], true)) {
         return $status;
     }
     return '';

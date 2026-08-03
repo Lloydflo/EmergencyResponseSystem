@@ -53,7 +53,7 @@
 
         setText(els.external, openTransfers.length);
         setText(els.activeIncidents, incidentItems.length);
-        setText(els.newTips, tipItems.filter((item) => String(item.status || 'new').toLowerCase() === 'new').length);
+        setText(els.newTips, tipItems.filter((item) => ['pending', 'new'].includes(String(item.status || 'new').trim().toLowerCase())).length);
         setText(els.highEvents, highEvents.length);
         setText(els.standbyUnits, standbyUnits);
 

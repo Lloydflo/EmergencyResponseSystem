@@ -1452,6 +1452,7 @@ function startLivePolling() {
         Promise.all([
             pruneOfflineUnitMarkers(),
             loadDispatchedUnits(),
+            refreshActiveCalls(),
             refreshAvailableUnits(),
             loadIncidentMarkers()
         ]).finally(() => {
@@ -2504,6 +2505,11 @@ window.addEventListener('storage', function(e) {
         refreshActiveCalls();
         loadIncidentMarkers();
     }
+});
+
+window.addEventListener('ers:incident-queue-updated', function() {
+    refreshActiveCalls();
+    loadIncidentMarkers();
 });
 
 

@@ -53,7 +53,7 @@
                 const status = String(item.incident_status || '').trim().toLowerCase();
                 return !['resolved', 'cancelled', 'closed', 'rejected'].includes(status);
             }).length,
-            iaAnonymousTipInbox: tipItems.filter((item) => String(item.status || 'new').toLowerCase() === 'new').length,
+            iaAnonymousTipInbox: tipItems.filter((item) => ['pending', 'new'].includes(String(item.status || 'new').trim().toLowerCase())).length,
             iaEventCoordination: eventItems.filter((item) => {
                 const status = String(item.status || '').toLowerCase();
                 const hazard = String(item.on_site_safety_hazard_level || '').toLowerCase();
