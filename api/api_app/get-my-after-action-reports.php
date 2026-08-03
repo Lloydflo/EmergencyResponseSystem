@@ -1,12 +1,11 @@
 <?php
 declare(strict_types=1);
 require_once __DIR__ . '/_operational_api.php';
+require_once __DIR__ . '/_after_action_schema.php';
 
 op_require_method('GET');
 $pdo = db();
-if (!op_table_exists($pdo, 'responder_after_action_reports')) {
-    op_error('After-action reporting is not installed on the database yet.', 503);
-}
+op_require_after_action_schema($pdo);
 
 $responderId = op_query_int('responder_id');
 op_require_positive($responderId, 'responder_id');
