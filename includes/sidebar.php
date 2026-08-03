@@ -246,6 +246,62 @@ document.addEventListener('DOMContentLoaded', function() {
     // can trigger the sidebar without duplicating logic.
     window.sidebarToggle = toggleSidebar;
     window.sidebarClose = closeSidebar;
+
+    const prefetchedSidebarUrls = new Set();
+
+    function isPrefetchableSidebarUrl(url) {
+        if (!url || url.origin !== window.location.origin) {
+            return false;
+        }
+        if (url.href === window.location.href) {
+            return false;
+        }
+        const protocol = url.protocol.toLowerCase();
+        if (protocol !== 'http:' && protocol !== 'https:') {
+            return false;
+        }
+        const path = url.pathname.toLowerCase();
+        return !path.endsWith('/logout.php') && !path.endsWith('/download.php');
+    }
+
+    function prefetchSidebarLink(link) {
+        if (!link || link.target || link.hasAttribute('download')) {
+            return;
+        }
+
+        let url;
+        try {
+            url = new URL(link.getAttribute('href') || '', window.location.href);
+        } catch (_) {
+            return;
+        }
+
+        if (!isPrefetchableSidebarUrl(url) || prefetchedSidebarUrls.has(url.href)) {
+            return;
+        }
+
+        prefetchedSidebarUrls.add(url.href);
+        const hint = document.createElement('link');
+        hint.rel = 'prefetch';
+        hint.as = 'document';
+        hint.href = url.href;
+        hint.crossOrigin = 'use-credentials';
+        document.head.appendChild(hint);
+    }
+
+    document.querySelectorAll('.sidebar a[href]').forEach(function(link) {
+        link.addEventListener('pointerenter', function() {
+            window.setTimeout(function() {
+                prefetchSidebarLink(link);
+            }, 80);
+        }, { passive: true });
+        link.addEventListener('focus', function() {
+            prefetchSidebarLink(link);
+        });
+        link.addEventListener('touchstart', function() {
+            prefetchSidebarLink(link);
+        }, { passive: true });
+    });
     
     // Close sidebar when clicking overlay
     if (sidebarOverlay) {

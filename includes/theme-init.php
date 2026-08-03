@@ -19,3 +19,9 @@
     document.documentElement.style.colorScheme = resolvedTheme;
 })();
 </script>
+<link rel="preconnect" href="https://cdnjs.cloudflare.com" crossorigin>
+<link rel="dns-prefetch" href="//cdnjs.cloudflare.com">
+<link rel="preconnect" href="https://unpkg.com" crossorigin>
+<link rel="dns-prefetch" href="//unpkg.com">
+<link rel="preconnect" href="https://www.gstatic.com" crossorigin>
+<link rel="dns-prefetch" href="//www.gstatic.com">
