@@ -540,11 +540,23 @@ if ($turnIsConfigured && preg_match('/^turns?:(?:\/\/)?([^:\/?]+)/i', $turnUrl, 
         return key && dismissedTransferQueueKeys.has(String(key));
     }
 
+    function markTransferQueueKeysDismissed(keys) {
+        let changed = false;
+        (Array.isArray(keys) ? keys : []).forEach((value) => {
+            const key = String(value || '').trim();
+            if (!key || dismissedTransferQueueKeys.has(key)) return;
+            dismissedTransferQueueKeys.add(key);
+            changed = true;
+        });
+        if (changed) {
+            saveDismissedTransferQueueKeys();
+        }
+    }
+
     function dismissTransferredQueueItem(key) {
         const normalizedKey = String(key || '').trim();
         if (!normalizedKey) return;
-        dismissedTransferQueueKeys.add(normalizedKey);
-        saveDismissedTransferQueueKeys();
+        markTransferQueueKeysDismissed([normalizedKey]);
         transferQueueItems = transferQueueItems.filter((item) => item.queue_key !== normalizedKey);
         renderTransferredQueue();
     }
@@ -1001,6 +1013,7 @@ if ($turnIsConfigured && preg_match('/^turns?:(?:\/\/)?([^:\/?]+)/i', $turnUrl, 
         const keepForm = options.keepForm !== false;
         const reason = options.reason || 'call-ended';
         const call = activeTransferCall || getSharedCallSession() || activeCall || {};
+        dismissTransferredQueueItemForIncomingCall(call);
 
         if (options.notifyPeer === true) {
             notifyTransferredCallerHangup(call, reason);
@@ -1319,23 +1332,34 @@ if ($turnIsConfigured && preg_match('/^turns?:(?:\/\/)?([^:\/?]+)/i', $turnUrl, 
     function removeTransferredQueueItemForIncomingCall(call) {
         const keys = new Set([
             call && call.transferId,
+            call && call.transfer_id,
             call && call.callId,
-            call && call.incidentId
+            call && call.call_id,
+            call && call.call_id_external,
+            call && call.incidentId,
+            call && call.incident_id,
+            call && call.room
         ].map((value) => String(value || '').trim()).filter(Boolean));
         if (!keys.size) return;
+        markTransferQueueKeysDismissed(Array.from(keys));
         const before = transferQueueItems.length;
         transferQueueItems = transferQueueItems.filter((item) => {
             return ![
                 item.queue_key,
                 item.transfer_id,
                 item.call_id_external,
-                item.incident_id
+                item.incident_id,
+                item.room
             ].some((value) => keys.has(String(value || '').trim()));
         });
         incomingCallQueue = incomingCallQueue.filter((item) => !keys.has(incomingCallKey(item)));
         if (transferQueueItems.length !== before) {
             renderTransferredQueue();
         }
+    }
+
+    function dismissTransferredQueueItemForIncomingCall(call) {
+        removeTransferredQueueItemForIncomingCall(call || {});
     }
 
     function incomingCallDetailFromTransfer(item) {

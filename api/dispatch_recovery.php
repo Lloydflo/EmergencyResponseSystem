@@ -59,6 +59,45 @@ function recovery_column_exists(PDO $pdo, string $tableName, string $columnName)
     }
 }
 
+function recovery_index_exists(PDO $pdo, string $tableName, string $indexName): bool
+{
+    try {
+        $stmt = $pdo->prepare(
+            "SELECT 1
+             FROM INFORMATION_SCHEMA.STATISTICS
+             WHERE TABLE_SCHEMA = DATABASE()
+               AND TABLE_NAME = ?
+               AND INDEX_NAME = ?
+             LIMIT 1"
+        );
+        $stmt->execute([$tableName, $indexName]);
+        return (bool)$stmt->fetchColumn();
+    } catch (Throwable $e) {
+        return false;
+    }
+}
+
+function recovery_ensure_dispatches_assignment_schema(PDO $pdo): void
+{
+    if (!recovery_table_exists($pdo, 'dispatches')) {
+        return;
+    }
+
+    if (!recovery_column_exists($pdo, 'dispatches', 'reference_no')) {
+        $pdo->exec("ALTER TABLE `dispatches` ADD COLUMN `reference_no` VARCHAR(50) DEFAULT NULL AFTER `id`");
+    }
+    if (!recovery_column_exists($pdo, 'dispatches', 'incident_id')) {
+        $afterColumn = recovery_column_exists($pdo, 'dispatches', 'reference_no') ? 'reference_no' : 'id';
+        $pdo->exec("ALTER TABLE `dispatches` ADD COLUMN `incident_id` BIGINT(20) UNSIGNED DEFAULT NULL AFTER `{$afterColumn}`");
+    }
+    if (!recovery_index_exists($pdo, 'dispatches', 'idx_dispatches_reference_no')) {
+        $pdo->exec("ALTER TABLE `dispatches` ADD KEY `idx_dispatches_reference_no` (`reference_no`)");
+    }
+    if (!recovery_index_exists($pdo, 'dispatches', 'idx_dispatches_incident_id')) {
+        $pdo->exec("ALTER TABLE `dispatches` ADD KEY `idx_dispatches_incident_id` (`incident_id`)");
+    }
+}
+
 function recovery_now(): string
 {
     return (new DateTimeImmutable('now', new DateTimeZone('Asia/Manila')))->format('Y-m-d H:i:s');
@@ -354,6 +393,7 @@ if ($attemptId <= 0) {
 try {
     ers_dispatch_attempt_ensure_table($pdo);
     recovery_ensure_dispatch_operator_records_table($pdo);
+    recovery_ensure_dispatches_assignment_schema($pdo);
 
     if ($action === 'close_failure') {
         $stmt = $pdo->prepare("SELECT id FROM dispatch_attempt_logs WHERE id = ? LIMIT 1");
@@ -490,8 +530,8 @@ try {
         recovery_json_error('Incident reference number is missing');
     }
 
-    $stmt = $pdo->prepare("INSERT INTO dispatches (reference_no, unit_id, status, assigned_at) VALUES (?, ?, 'assigned', ?)");
-    $stmt->execute([$incidentReferenceNo, $unitId, $dispatchTime]);
+    $stmt = $pdo->prepare("INSERT INTO dispatches (incident_id, reference_no, unit_id, status, assigned_at) VALUES (?, ?, ?, 'assigned', ?)");
+    $stmt->execute([$incidentId, $incidentReferenceNo, $unitId, $dispatchTime]);
     $dispatchId = (int)$pdo->lastInsertId();
 
     recovery_set_unit_assignment($pdo, $unitId, $incidentId);

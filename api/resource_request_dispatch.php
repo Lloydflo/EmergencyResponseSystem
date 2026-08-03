@@ -88,6 +88,27 @@ function backup_dispatch_index_exists(PDO $pdo, string $tableName, string $index
     }
 }
 
+function backup_dispatch_ensure_assignment_schema(PDO $pdo): void
+{
+    if (!backup_dispatch_table_exists($pdo, 'dispatches')) {
+        return;
+    }
+
+    if (!backup_dispatch_column_exists($pdo, 'dispatches', 'reference_no')) {
+        $pdo->exec("ALTER TABLE `dispatches` ADD COLUMN `reference_no` VARCHAR(50) DEFAULT NULL AFTER `id`");
+    }
+    if (!backup_dispatch_column_exists($pdo, 'dispatches', 'incident_id')) {
+        $afterColumn = backup_dispatch_column_exists($pdo, 'dispatches', 'reference_no') ? 'reference_no' : 'id';
+        $pdo->exec("ALTER TABLE `dispatches` ADD COLUMN `incident_id` BIGINT(20) UNSIGNED DEFAULT NULL AFTER `{$afterColumn}`");
+    }
+    if (!backup_dispatch_index_exists($pdo, 'dispatches', 'idx_dispatches_reference_no')) {
+        $pdo->exec("ALTER TABLE `dispatches` ADD KEY `idx_dispatches_reference_no` (`reference_no`)");
+    }
+    if (!backup_dispatch_index_exists($pdo, 'dispatches', 'idx_dispatches_incident_id')) {
+        $pdo->exec("ALTER TABLE `dispatches` ADD KEY `idx_dispatches_incident_id` (`incident_id`)");
+    }
+}
+
 function backup_dispatch_ensure_operator_records_table(PDO $pdo): void
 {
     $pdo->exec("
@@ -197,6 +218,7 @@ if ($requestId <= 0 || $incidentId <= 0 || $unitIds === []) {
 
 try {
     backup_dispatch_ensure_operator_records_table($pdo);
+    backup_dispatch_ensure_assignment_schema($pdo);
 
     $pdo->beginTransaction();
 
@@ -354,7 +376,7 @@ try {
         ]);
     }
 
-    $dispatchInsert = $pdo->prepare("INSERT INTO dispatches (reference_no, unit_id, status, assigned_at) VALUES (?, ?, 'assigned', ?)");
+    $dispatchInsert = $pdo->prepare("INSERT INTO dispatches (incident_id, reference_no, unit_id, status, assigned_at) VALUES (?, ?, ?, 'assigned', ?)");
     $unitUpdate = $pdo->prepare("UPDATE units SET status = 'assigned', current_incident_id = ?, last_status_at = CURRENT_TIMESTAMP WHERE id = ?");
     $operatorRecordInsert = $pdo->prepare("
         INSERT INTO dispatch_operator_records
@@ -364,7 +386,7 @@ try {
 
     $dispatchedUnits = [];
     foreach ($unitIds as $unitId) {
-        $dispatchInsert->execute([$incidentReferenceNo, $unitId, $dispatchTime]);
+        $dispatchInsert->execute([$incidentId, $incidentReferenceNo, $unitId, $dispatchTime]);
         $unitUpdate->execute([$incidentId, $unitId]);
         ers_sync_vehicle_resource_status_by_unit_id($pdo, $unitId, 'in_use');
 
