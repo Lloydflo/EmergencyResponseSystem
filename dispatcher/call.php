@@ -315,7 +315,6 @@ if ($turnIsConfigured && preg_match('/^turns?:(?:\/\/)?([^:\/?]+)/i', $turnUrl, 
                                     <div class="section-title priority-title">
                                         <i class="fas fa-triangle-exclamation"></i>
                                         Priority
-                                        <span id="prioritySuggestion" class="priority-suggestion"></span>
                                     </div>
                                     <div class="priority-select" id="prioritySelect" role="radiogroup" aria-label="Incident priority">
                                         <button type="button" class="priority-option low active" data-value="low" role="radio" aria-checked="true">Low</button>
@@ -483,9 +482,11 @@ if ($turnIsConfigured && preg_match('/^turns?:(?:\/\/)?([^:\/?]+)/i', $turnUrl, 
     const PRIORITY_ORDER = { critical: 0, high: 1, medium: 2, low: 3 };
     function normalizePriority(value, fallback = 'medium') {
         const priority = String(value || '').trim().toLowerCase();
-        if (priority === 'urgent' || priority === 'moderate') return 'medium';
+        if (priority === 'urgent') return 'high';
+        if (priority === 'moderate') return 'medium';
         if (Object.prototype.hasOwnProperty.call(PRIORITY_ORDER, priority)) return priority;
-        return fallback === 'urgent' || fallback === 'moderate' ? 'medium' : fallback;
+        if (fallback === 'urgent') return 'high';
+        return fallback === 'moderate' ? 'medium' : fallback;
     }
 
     function priorityRank(value) {
@@ -541,11 +542,23 @@ if ($turnIsConfigured && preg_match('/^turns?:(?:\/\/)?([^:\/?]+)/i', $turnUrl, 
         return key && dismissedTransferQueueKeys.has(String(key));
     }
 
+    function markTransferQueueKeysDismissed(keys) {
+        let changed = false;
+        (Array.isArray(keys) ? keys : []).forEach((value) => {
+            const key = String(value || '').trim();
+            if (!key || dismissedTransferQueueKeys.has(key)) return;
+            dismissedTransferQueueKeys.add(key);
+            changed = true;
+        });
+        if (changed) {
+            saveDismissedTransferQueueKeys();
+        }
+    }
+
     function dismissTransferredQueueItem(key) {
         const normalizedKey = String(key || '').trim();
         if (!normalizedKey) return;
-        dismissedTransferQueueKeys.add(normalizedKey);
-        saveDismissedTransferQueueKeys();
+        markTransferQueueKeysDismissed([normalizedKey]);
         transferQueueItems = transferQueueItems.filter((item) => item.queue_key !== normalizedKey);
         renderTransferredQueue();
     }
@@ -619,6 +632,7 @@ if ($turnIsConfigured && preg_match('/^turns?:(?:\/\/)?([^:\/?]+)/i', $turnUrl, 
             stopVoiceTools();
             activeCall = null;
             activeTransferCall = null;
+            clearTransferFormContext();
             updateStats();
             return;
         }
@@ -631,6 +645,7 @@ if ($turnIsConfigured && preg_match('/^turns?:(?:\/\/)?([^:\/?]+)/i', $turnUrl, 
         };
         if (session.isTransfer === true) {
             activeTransferCall = session;
+            storeTransferFormContext(session);
         }
 
         panel.classList.add('active');
@@ -657,6 +672,7 @@ if ($turnIsConfigured && preg_match('/^turns?:(?:\/\/)?([^:\/?]+)/i', $turnUrl, 
         stopVoiceTools();
         activeCall = null;
         activeTransferCall = null;
+        clearTransferFormContext();
 
         const timerEl = document.getElementById('callTimer');
         if (timerEl) timerEl.textContent = 'Manual';
@@ -672,8 +688,7 @@ if ($turnIsConfigured && preg_match('/^turns?:(?:\/\/)?([^:\/?]+)/i', $turnUrl, 
         resetIncidentTypeChecklist();
         setPrioritySelection('low');
         priorityAuto = true;
-        const badge = document.getElementById('prioritySuggestion');
-        if (badge) badge.textContent = '';
+        clearTransferFormContext();
         const locationInput = document.getElementById('incidentLocation');
         if (locationInput) {
             delete locationInput.dataset.lat;
@@ -696,8 +711,6 @@ if ($turnIsConfigured && preg_match('/^turns?:(?:\/\/)?([^:\/?]+)/i', $turnUrl, 
         resetIncidentTypeChecklist();
         setPrioritySelection('low');
         priorityAuto = true;
-        const badge = document.getElementById('prioritySuggestion');
-        if (badge) badge.textContent = '';
         const locationInput = document.getElementById('incidentLocation');
         if (locationInput) {
             delete locationInput.dataset.lat;
@@ -715,7 +728,10 @@ if ($turnIsConfigured && preg_match('/^turns?:(?:\/\/)?([^:\/?]+)/i', $turnUrl, 
             params.set('code', String(data.incident_reference_no || data.reference_no));
         }
         params.set('from_call', '1');
-        window.location.href = 'dispatcher/dispatch.php?' + params.toString();
+        params.set('open_dispatch', '1');
+        const dispatchUrl = new URL('dispatcher/dispatch.php', document.baseURI || window.location.href);
+        dispatchUrl.search = params.toString();
+        window.location.href = dispatchUrl.href;
     }
 
     function broadcastLoggedIncident(data) {
@@ -915,9 +931,19 @@ if ($turnIsConfigured && preg_match('/^turns?:(?:\/\/)?([^:\/?]+)/i', $turnUrl, 
                 incidentStatus: incomingCall.incidentStatus || '',
                 incidentType: incomingCall.incidentType || '',
                 location: incomingCall.location || '',
+                priority: incomingCall.priority || '',
+                latitude: incomingCall.latitude ?? null,
+                longitude: incomingCall.longitude ?? null,
+                description: incomingCall.description || '',
                 isTransfer: incomingCall.isTransfer === true,
                 transferId: incomingCall.transferId || '',
-                room: incomingCall.room || ''
+                callId: incomingCall.callId || '',
+                conversationId: incomingCall.conversationId || '',
+                room: incomingCall.room || '',
+                transferType: incomingCall.transferType || '',
+                socketUrl: incomingCall.socketUrl || '',
+                socketPath: incomingCall.socketPath || '',
+                sourceSystem: incomingCall.sourceSystem || ''
             });
         } else {
             activeCall = { active: true, name, phone, start, isTransfer: incomingCall.isTransfer === true };
@@ -989,6 +1015,7 @@ if ($turnIsConfigured && preg_match('/^turns?:(?:\/\/)?([^:\/?]+)/i', $turnUrl, 
         const keepForm = options.keepForm !== false;
         const reason = options.reason || 'call-ended';
         const call = activeTransferCall || getSharedCallSession() || activeCall || {};
+        dismissTransferredQueueItemForIncomingCall(call);
 
         if (options.notifyPeer === true) {
             notifyTransferredCallerHangup(call, reason);
@@ -1002,6 +1029,11 @@ if ($turnIsConfigured && preg_match('/^turns?:(?:\/\/)?([^:\/?]+)/i', $turnUrl, 
         }
         activeCall = null;
         activeTransferCall = keepForm && call && call.isTransfer === true ? call : null;
+        if (activeTransferCall) {
+            storeTransferFormContext(activeTransferCall);
+        } else {
+            clearTransferFormContext();
+        }
         stopTimer();
         updateStats();
 
@@ -1302,23 +1334,34 @@ if ($turnIsConfigured && preg_match('/^turns?:(?:\/\/)?([^:\/?]+)/i', $turnUrl, 
     function removeTransferredQueueItemForIncomingCall(call) {
         const keys = new Set([
             call && call.transferId,
+            call && call.transfer_id,
             call && call.callId,
-            call && call.incidentId
+            call && call.call_id,
+            call && call.call_id_external,
+            call && call.incidentId,
+            call && call.incident_id,
+            call && call.room
         ].map((value) => String(value || '').trim()).filter(Boolean));
         if (!keys.size) return;
+        markTransferQueueKeysDismissed(Array.from(keys));
         const before = transferQueueItems.length;
         transferQueueItems = transferQueueItems.filter((item) => {
             return ![
                 item.queue_key,
                 item.transfer_id,
                 item.call_id_external,
-                item.incident_id
+                item.incident_id,
+                item.room
             ].some((value) => keys.has(String(value || '').trim()));
         });
         incomingCallQueue = incomingCallQueue.filter((item) => !keys.has(incomingCallKey(item)));
         if (transferQueueItems.length !== before) {
             renderTransferredQueue();
         }
+    }
+
+    function dismissTransferredQueueItemForIncomingCall(call) {
+        removeTransferredQueueItemForIncomingCall(call || {});
     }
 
     function incomingCallDetailFromTransfer(item) {
@@ -1418,6 +1461,7 @@ if ($turnIsConfigured && preg_match('/^turns?:(?:\/\/)?([^:\/?]+)/i', $turnUrl, 
 
     function applyIncomingCallToForm(call) {
         if (!call) return;
+        storeTransferFormContext(call);
         const nameEl = document.getElementById('callerName');
         const phoneEl = document.getElementById('callerPhone');
         const locationEl = document.getElementById('incidentLocation');
@@ -1452,6 +1496,46 @@ if ($turnIsConfigured && preg_match('/^turns?:(?:\/\/)?([^:\/?]+)/i', $turnUrl, 
         if (call.incidentType) {
             setIncidentTypesFromTransfer(call.incidentType);
         }
+    }
+
+    function storeTransferFormContext(call) {
+        const form = document.getElementById('incidentForm');
+        if (!form || !call || call.isTransfer !== true) return;
+        const incidentId = call.incidentId || call.incident_id || '';
+        form.dataset.transferIncidentId = String(incidentId || '');
+        form.dataset.transferId = String(call.transferId || call.transfer_id || '');
+        form.dataset.transferCallId = String(call.callId || call.call_id_external || call.call_id || '');
+        form.dataset.transferReferenceNo = String(call.incidentReferenceNo || call.reference_no || '');
+        form.dataset.transferSourceSystem = String(call.sourceSystem || call.source_system || '');
+    }
+
+    function clearTransferFormContext() {
+        const form = document.getElementById('incidentForm');
+        if (!form) return;
+        delete form.dataset.transferIncidentId;
+        delete form.dataset.transferId;
+        delete form.dataset.transferCallId;
+        delete form.dataset.transferReferenceNo;
+        delete form.dataset.transferSourceSystem;
+    }
+
+    function transferSubmitContext(form) {
+        const session = getSharedCallSession() || {};
+        const call = activeTransferCall || {};
+        const incidentId = Number(
+            (form && form.dataset ? form.dataset.transferIncidentId : '')
+            || call.incidentId
+            || call.incident_id
+            || session.incidentId
+            || session.incident_id
+        );
+        return {
+            incidentId: Number.isFinite(incidentId) && incidentId > 0 ? incidentId : 0,
+            transferId: (form && form.dataset ? form.dataset.transferId : '') || call.transferId || call.transfer_id || session.transferId || '',
+            callId: (form && form.dataset ? form.dataset.transferCallId : '') || call.callId || call.call_id_external || call.call_id || session.callId || '',
+            referenceNo: (form && form.dataset ? form.dataset.transferReferenceNo : '') || call.incidentReferenceNo || call.reference_no || session.incidentReferenceNo || '',
+            sourceSystem: (form && form.dataset ? form.dataset.transferSourceSystem : '') || call.sourceSystem || call.source_system || session.sourceSystem || ''
+        };
     }
 
     function focusAcceptedCallForm() {
@@ -2625,17 +2709,10 @@ if ($turnIsConfigured && preg_match('/^turns?:(?:\/\/)?([^:\/?]+)/i', $turnUrl, 
 
     function updatePrioritySuggestion(desc) {
         const text = (desc || '').trim();
-        const badge = document.getElementById('prioritySuggestion');
-        // Show suggestion only after user types some description
         if (!text || text.length < 3) {
-            if (badge) badge.textContent = '';
             return;
         }
         const suggested = suggestPriorityFromDescription(text);
-        if (badge) {
-            const label = suggested.charAt(0).toUpperCase() + suggested.slice(1);
-            badge.textContent = `(Suggested: ${label})`;
-        }
         if (priorityAuto) {
             setPrioritySelection(suggested);
         }
@@ -2824,6 +2901,16 @@ if ($turnIsConfigured && preg_match('/^turns?:(?:\/\/)?([^:\/?]+)/i', $turnUrl, 
             priority: priorityValue,
             status: document.getElementById('status').value
         };
+        const transferContext = transferSubmitContext(form);
+        if (transferContext.incidentId > 0 || transferContext.transferId || transferContext.callId || transferContext.referenceNo) {
+            if (transferContext.incidentId > 0) {
+                payload.transfer_incident_id = transferContext.incidentId;
+            }
+            payload.transfer_id = transferContext.transferId;
+            payload.transfer_call_id = transferContext.callId;
+            payload.transfer_reference_no = transferContext.referenceNo;
+            payload.transfer_source_system = transferContext.sourceSystem;
+        }
         if (coords) {
             payload.latitude = coords.lat;
             payload.longitude = coords.lng;
@@ -2874,7 +2961,7 @@ if ($turnIsConfigured && preg_match('/^turns?:(?:\/\/)?([^:\/?]+)/i', $turnUrl, 
             }
             const wasTransferredCall = !!activeTransferCall;
             broadcastLoggedIncident(data);
-            showToast(wasTransferredCall ? 'Transferred incident logged in Call Receiving & Logs.' : 'Incident logged successfully.');
+            showToast(wasTransferredCall ? 'Transferred incident logged successfully.' : 'Incident logged successfully.');
             e.target.reset();
             resetIncidentTypeChecklist();
             setPrioritySelection('low');
@@ -2883,9 +2970,8 @@ if ($turnIsConfigured && preg_match('/^turns?:(?:\/\/)?([^:\/?]+)/i', $turnUrl, 
                 delete locationInput.dataset.lat;
                 delete locationInput.dataset.lon;
             }
+            clearTransferFormContext();
             priorityAuto = true;
-            const badge = document.getElementById('prioritySuggestion');
-            if (badge) badge.textContent = '';
             await loadIncidentsFromServer();
             // Log activity event for dashboard Recent Activity
             try {
@@ -2902,9 +2988,7 @@ if ($turnIsConfigured && preg_match('/^turns?:(?:\/\/)?([^:\/?]+)/i', $turnUrl, 
             } catch (e) {
                 console.warn('Activity log failed', e);
             }
-            if (!wasTransferredCall) {
-                redirectToDispatchCenter(data);
-            }
+            redirectToDispatchCenter(data);
         } catch (err) {
             console.warn('Submit failed:', err);
             alert('Error while logging incident.');
@@ -2951,8 +3035,6 @@ if ($turnIsConfigured && preg_match('/^turns?:(?:\/\/)?([^:\/?]+)/i', $turnUrl, 
         }).sort((a, b) => {
             const byPriority = priorityRank(a.priority) - priorityRank(b.priority);
             if (byPriority !== 0) return byPriority;
-            const byScore = (Number(b.priority_score) || 0) - (Number(a.priority_score) || 0);
-            if (byScore !== 0) return byScore;
             const byTime = parseQueueTime(b.updated_at || b.created_at || b.timestamp) - parseQueueTime(a.updated_at || a.created_at || a.timestamp);
             if (byTime !== 0) return byTime;
             return Number(b.id || 0) - Number(a.id || 0);
@@ -2961,7 +3043,6 @@ if ($turnIsConfigured && preg_match('/^turns?:(?:\/\/)?([^:\/?]+)/i', $turnUrl, 
 
     function incidentCardHtml(i) {
         const priorityClass = normalizePriority(i.priority, 'low');
-        const priorityScore = Number.isFinite(Number(i.priority_score)) ? Number(i.priority_score) : null;
         const created = new Date(i.created_at || Date.now());
         const code = i.incident_code || '';
         const id = Number(i.id) || 0;
@@ -2969,7 +3050,7 @@ if ($turnIsConfigured && preg_match('/^turns?:(?:\/\/)?([^:\/?]+)/i', $turnUrl, 
             <div class="incident-card" role="button" tabindex="0" onclick="openIncidentById(${id})" onkeydown="handleIncidentCardKey(event, ${id})">
                 <div class="incident-header">
                     <div class="incident-id">${escapeHtml(code || ('#' + id))}</div>
-                    <div class="incident-priority ${escapeHtml(priorityClass)}">${escapeHtml((priorityClass||'low').toUpperCase())}${priorityScore !== null ? ` - ${priorityScore} pts` : ''}</div>
+                    <div class="incident-priority ${escapeHtml(priorityClass)}">${escapeHtml((priorityClass||'low').toUpperCase())}</div>
                 </div>
                 <div class="incident-type">${escapeHtml(labelForType(i.type))}</div>
                 <div class="incident-location"><i class="fas fa-map-marker-alt"></i> ${escapeHtml(i.location || 'No location')}</div>
@@ -3045,18 +3126,16 @@ if ($turnIsConfigured && preg_match('/^turns?:(?:\/\/)?([^:\/?]+)/i', $turnUrl, 
             .filter(Boolean)
             .join(' | ');
         const priorityClass = normalizePriority(item.priority, 'low');
-        const priorityScore = Number.isFinite(Number(item.priority_score)) ? `${Number(item.priority_score)} pts` : '';
 
         title.textContent = item.incident_code || `Incident #${item.id || ''}`;
         body.innerHTML = `
             <div class="incident-details-summary">
-                <span class="incident-priority ${priorityClass}">${escapeHtml(priorityClass.toUpperCase())}${priorityScore ? ` - ${escapeHtml(priorityScore)}` : ''}</span>
+                <span class="incident-priority ${priorityClass}">${escapeHtml(priorityClass.toUpperCase())}</span>
                 <span class="incident-status-pill">${escapeHtml(item.status || 'N/A')}</span>
                 <span>${escapeHtml(formatDateTime(item.created_at))}</span>
             </div>
             <div class="incident-details-grid">
                 ${incidentDetailRow('Type', labelForType(item.type))}
-                ${incidentDetailRow('Priority Score', priorityScore)}
                 ${incidentDetailRow('Location', item.location)}
                 ${incidentDetailRow('Coordinates', coordinates)}
                 ${incidentDetailRow('Caller', item.caller_name)}

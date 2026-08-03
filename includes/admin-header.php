@@ -17,8 +17,12 @@ $review_page = $normalized_user_role === 'dispatcher'
 $profile_page = 'profile.php';
 $account_settings_page = 'account_settings.php';
 $user_avatar = trim((string)($_SESSION['user_avatar'] ?? ''));
+$avatar_cache_ttl = 300;
+$avatar_checked_at = (int)($_SESSION['user_avatar_checked_at'] ?? 0);
+$should_refresh_avatar = !empty($_SESSION['user_id'])
+    && ($avatar_checked_at <= 0 || (time() - $avatar_checked_at) > $avatar_cache_ttl);
 
-if (!empty($_SESSION['user_id'])) {
+if ($should_refresh_avatar) {
     if (!function_exists('get_db_connection') && is_file(__DIR__ . '/db.php')) {
         require_once __DIR__ . '/db.php';
     }
@@ -35,21 +39,36 @@ if (!empty($_SESSION['user_id'])) {
                     $user_avatar = '';
                     unset($_SESSION['user_avatar']);
                 }
+                $_SESSION['user_avatar_checked_at'] = time();
             }
         } catch (Throwable $e) {
+            $_SESSION['user_avatar_checked_at'] = time();
         }
     }
 }
 
+$avatar_words = preg_split('/\s+/', trim((string)$user_name)) ?: [];
+$avatar_initials = '';
+foreach ($avatar_words as $word) {
+    if ($word === '') {
+        continue;
+    }
+    $avatar_initials .= strtoupper(substr($word, 0, 1));
+    if (strlen($avatar_initials) >= 2) {
+        break;
+    }
+}
+$avatar_initials = $avatar_initials !== '' ? $avatar_initials : 'U';
+$fallback_avatar_svg = '<svg xmlns="http://www.w3.org/2000/svg" width="128" height="128" viewBox="0 0 128 128"><rect width="128" height="128" rx="64" fill="#4c8a89"/><text x="50%" y="54%" text-anchor="middle" dominant-baseline="middle" font-family="Arial, Helvetica, sans-serif" font-size="44" font-weight="700" fill="#ffffff">' . htmlspecialchars($avatar_initials, ENT_QUOTES, 'UTF-8') . '</text></svg>';
 $avatar_source = $user_avatar !== ''
     ? $user_avatar
-    : 'https://ui-avatars.com/api/?name=' . urlencode($user_name) . '&background=4c8a89&color=fff&size=128';
+    : 'data:image/svg+xml;base64,' . base64_encode($fallback_avatar_svg);
 ?>
 
-<link rel="stylesheet" href="css/notification-modal.css">;
-<link rel="stylesheet" href="css/message-modal.css">;
-<link rel="stylesheet" href="css/message-content-modal.css">;
-<link rel="stylesheet" href="css/admin-dark-theme.css">;
+<link rel="stylesheet" href="css/notification-modal.css">
+<link rel="stylesheet" href="css/message-modal.css">
+<link rel="stylesheet" href="css/message-content-modal.css">
+<link rel="stylesheet" href="css/admin-dark-theme.css">
 <style>
     .header-empty-state {
         display: grid;
@@ -207,7 +226,7 @@ $avatar_source = $user_avatar !== ''
                 <div class="user-role"><?php echo htmlspecialchars($user_role); ?></div>
             </div>
             <div class="user-avatar">
-                <img src="<?php echo htmlspecialchars($avatar_source); ?>" alt="<?php echo htmlspecialchars($user_name); ?>" class="avatar-img">
+                <img src="<?php echo htmlspecialchars($avatar_source); ?>" alt="<?php echo htmlspecialchars($user_name); ?>" class="avatar-img" decoding="async">
             </div>
             <i class="fas fa-chevron-down dropdown-icon"></i>
         </div>
@@ -220,7 +239,7 @@ $avatar_source = $user_avatar !== ''
     <div class="dropdown-header">
         <div class="dropdown-user-info">
             <div class="dropdown-user-avatar">
-                <img src="<?php echo htmlspecialchars($avatar_source); ?>" alt="<?php echo htmlspecialchars($user_name); ?>">
+                <img src="<?php echo htmlspecialchars($avatar_source); ?>" alt="<?php echo htmlspecialchars($user_name); ?>" decoding="async">
             </div>
             <div class="dropdown-user-details">
                 <div class="dropdown-user-name"><?php echo htmlspecialchars($user_name); ?></div>
@@ -1498,14 +1517,40 @@ document.addEventListener('DOMContentLoaded', function() {
     window.closeModal = closeModal;
     window.closeAllModals = closeAllModals;
 
+    function runWhenPageSettled(callback) {
+        const scheduleIdle = function() {
+            if ('requestIdleCallback' in window) {
+                window.requestIdleCallback(callback, { timeout: 3500 });
+                return;
+            }
+            window.setTimeout(callback, 1200);
+        };
+
+        if (document.readyState === 'complete') {
+            scheduleIdle();
+        } else {
+            window.addEventListener('load', scheduleIdle, { once: true });
+        }
+    }
+
     const pollHeaderSummary = () => {
         if (document.hidden) return;
         loadHeaderSummary();
     };
-    loadHeaderSummary();
-    state.poller = window.setInterval(pollHeaderSummary, 15000);
+    const startHeaderSummaryPolling = () => {
+        if (state.poller) return;
+        loadHeaderSummary();
+        state.poller = window.setInterval(pollHeaderSummary, 15000);
+    };
+
+    runWhenPageSettled(startHeaderSummaryPolling);
     document.addEventListener('visibilitychange', () => {
-        if (!document.hidden) loadHeaderSummary();
+        if (document.hidden) return;
+        if (state.poller) {
+            loadHeaderSummary();
+            return;
+        }
+        runWhenPageSettled(startHeaderSummaryPolling);
     });
 });
 </script>

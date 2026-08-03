@@ -208,10 +208,6 @@ try {
     }
 
     if ($canLoadQueue) {
-        $hasPriorityScore = ers_dispatcher_summary_has_column($schema, 'incidents', 'priority_score');
-        $priorityScoreSelect = $hasPriorityScore ? 'i.priority_score' : 'NULL AS priority_score';
-        $priorityScoreOrder = $hasPriorityScore ? 'COALESCE(i.priority_score, 0) DESC,' : '';
-
         $callsJoin = '';
         $callerNameExpr = 'NULL';
         $callerPhoneExpr = 'NULL';
@@ -256,7 +252,6 @@ try {
                 i.title,
                 i.type,
                 i.priority,
-                {$priorityScoreSelect},
                 i.status,
                 i.location_address,
                 i.created_at,
@@ -271,12 +266,12 @@ try {
             ORDER BY CASE LOWER(i.priority)
                 WHEN 'critical' THEN 1
                 WHEN 'high' THEN 2
-                WHEN 'urgent' THEN 3
-                WHEN 'moderate' THEN 4
-                WHEN 'medium' THEN 4
-                WHEN 'low' THEN 5
+                WHEN 'urgent' THEN 2
+                WHEN 'medium' THEN 3
+                WHEN 'moderate' THEN 3
+                WHEN 'low' THEN 4
                 ELSE 6
-            END, {$priorityScoreOrder} i.created_at ASC
+            END, i.created_at ASC
             LIMIT 10";
         $queueStmt = $pdo->query($queueSql);
         $queueItems = $queueStmt ? $queueStmt->fetchAll(PDO::FETCH_ASSOC) : [];

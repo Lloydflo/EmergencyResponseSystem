@@ -69,7 +69,7 @@
     function normalizePriority(value) {
         const priority = String(value || 'medium').trim().toLowerCase();
         if (priority === 'critical') return 'critical';
-        if (priority === 'urgent') return 'urgent';
+        if (priority === 'urgent') return 'high';
         if (priority === 'high') return 'high';
         if (priority === 'low') return 'low';
         return 'medium';

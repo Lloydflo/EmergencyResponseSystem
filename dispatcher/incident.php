@@ -22,10 +22,10 @@ try {
                                  ORDER BY CASE LOWER(priority)
                                      WHEN 'critical' THEN 1
                                      WHEN 'high' THEN 2
-                                     WHEN 'urgent' THEN 3
-                                     WHEN 'moderate' THEN 4
-                                     WHEN 'medium' THEN 4
-                                     WHEN 'low' THEN 5
+                                     WHEN 'urgent' THEN 2
+                                     WHEN 'medium' THEN 3
+                                     WHEN 'moderate' THEN 3
+                                     WHEN 'low' THEN 4
                                      ELSE 6
                                  END, created_at DESC
                                  LIMIT 1")->fetch();
@@ -263,7 +263,7 @@ try {
         document.querySelectorAll('.btn-priority').forEach(button => {
             button.addEventListener('click', function() {
                 const incidentCard = this.closest('.incident-card');
-                const priorityCycle = ['critical', 'high', 'urgent', 'moderate', 'low'];
+                const priorityCycle = ['critical', 'high', 'medium', 'low'];
                 const currentPriority = priorityCycle.find((priority) => incidentCard.classList.contains(`priority-${priority}`)) || 'low';
 
                 const currentIndex = priorityCycle.indexOf(currentPriority);
@@ -576,8 +576,9 @@ try {
 
         function normalizePriority(priority) {
             const value = String(priority || 'low').trim().toLowerCase();
-            if (value === 'critical' || value === 'high') return 'high';
-            if (value === 'medium') return 'medium';
+            if (value === 'critical') return 'critical';
+            if (value === 'high' || value === 'urgent') return 'high';
+            if (value === 'medium' || value === 'moderate') return 'medium';
             return 'low';
         }
 

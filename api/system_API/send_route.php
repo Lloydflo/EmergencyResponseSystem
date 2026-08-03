@@ -365,7 +365,7 @@ function ers_group2_load_dispatch_route_source(PDO $pdo, int $dispatchId): ?arra
     $stmt = $pdo->prepare(
         "SELECT
             d.id AS dispatch_id,
-            d.incident_id,
+            i.id AS incident_id,
             d.unit_id,
             d.assigned_at,
             i.reference_no,
@@ -376,7 +376,7 @@ function ers_group2_load_dispatch_route_source(PDO $pdo, int $dispatchId): ?arra
             u.identifier AS unit_identifier,
             u.unit_type
          FROM dispatches d
-         LEFT JOIN incidents i ON i.id = d.incident_id
+         LEFT JOIN incidents i ON i.reference_no = d.reference_no
          LEFT JOIN units u ON u.id = d.unit_id
          WHERE d.id = ?
          LIMIT 1"
@@ -388,7 +388,13 @@ function ers_group2_load_dispatch_route_source(PDO $pdo, int $dispatchId): ?arra
 
 function ers_group2_incident_id_from_dispatch(PDO $pdo, int $dispatchId): int
 {
-    $stmt = $pdo->prepare('SELECT incident_id FROM dispatches WHERE id = ? LIMIT 1');
+    $stmt = $pdo->prepare(
+        'SELECT i.id
+         FROM dispatches d
+         INNER JOIN incidents i ON i.reference_no = d.reference_no
+         WHERE d.id = ?
+         LIMIT 1'
+    );
     $stmt->execute([$dispatchId]);
     return (int)($stmt->fetchColumn() ?: 0);
 }
@@ -398,7 +404,12 @@ function ers_group2_dispatch_unit_count(PDO $pdo, int $incidentId): int
     if ($incidentId <= 0) {
         return 0;
     }
-    $stmt = $pdo->prepare('SELECT COUNT(*) FROM dispatches WHERE incident_id = ?');
+    $stmt = $pdo->prepare(
+        'SELECT COUNT(*)
+         FROM dispatches d
+         INNER JOIN incidents i ON i.reference_no = d.reference_no
+         WHERE i.id = ?'
+    );
     $stmt->execute([$incidentId]);
     return (int)$stmt->fetchColumn();
 }

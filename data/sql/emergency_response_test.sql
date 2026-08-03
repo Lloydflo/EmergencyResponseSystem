@@ -296,16 +296,7 @@ CREATE TABLE `calls` (
   `latitude` decimal(10,7) DEFAULT NULL,
   `longitude` decimal(10,7) DEFAULT NULL,
   `incident_type` varchar(100) NOT NULL,
-  `priority` varchar(20) NOT NULL DEFAULT 'moderate',
-  `priority_score` tinyint(3) UNSIGNED DEFAULT NULL,
-  `priority_label` varchar(20) DEFAULT NULL,
-  `priority_color` varchar(20) DEFAULT NULL,
-  `indicator_incident_type` varchar(80) DEFAULT NULL,
-  `threat_to_life` varchar(80) DEFAULT NULL,
-  `severity_level` varchar(80) DEFAULT NULL,
-  `population_affected` varchar(80) DEFAULT NULL,
-  `verification_status` varchar(80) DEFAULT NULL,
-  `priority_breakdown` longtext DEFAULT NULL,
+  `priority` varchar(20) NOT NULL DEFAULT 'medium',
   `status` enum('new','triaged','closed') NOT NULL DEFAULT 'new',
   `description` text DEFAULT NULL,
   `received_at` datetime NOT NULL DEFAULT current_timestamp(),
@@ -337,13 +328,9 @@ INSERT INTO `calls` (`id`, `reference_no`, `caller_name`, `caller_phone`, `calle
 DELIMITER $$
 CREATE TRIGGER `trg_calls_ai_create_incident` AFTER INSERT ON `calls` FOR EACH ROW BEGIN
   INSERT INTO `incidents` (
-    `reference_no`, `type`, `priority`, `priority_score`, `priority_label`, `priority_color`,
-    `indicator_incident_type`, `threat_to_life`, `severity_level`, `population_affected`, `verification_status`, `priority_breakdown`,
-    `status`, `title`, `description`, `location_address`, `latitude`, `longitude`, `reported_by_call_id`
+    `reference_no`, `type`, `priority`, `status`, `title`, `description`, `location_address`, `latitude`, `longitude`, `reported_by_call_id`
   ) VALUES (
-    NEW.`reference_no`, NEW.`incident_type`, NEW.`priority`, NEW.`priority_score`, NEW.`priority_label`, NEW.`priority_color`,
-    NEW.`indicator_incident_type`, NEW.`threat_to_life`, NEW.`severity_level`, NEW.`population_affected`, NEW.`verification_status`, NEW.`priority_breakdown`,
-    'pending', CONCAT('Incident from call ', NEW.`reference_no`), NEW.`description`, NEW.`location_address`, NEW.`latitude`, NEW.`longitude`, NEW.`id`
+    NEW.`reference_no`, NEW.`incident_type`, NEW.`priority`, 'pending', CONCAT('Incident from call ', NEW.`reference_no`), NEW.`description`, NEW.`location_address`, NEW.`latitude`, NEW.`longitude`, NEW.`id`
   );
 END
 $$
@@ -357,7 +344,7 @@ DELIMITER ;
 
 CREATE TABLE `dispatches` (
   `id` bigint(20) UNSIGNED NOT NULL AUTO_INCREMENT,
-  `incident_id` bigint(20) UNSIGNED NOT NULL,
+  `reference_no` varchar(50) NOT NULL,
   `unit_id` bigint(20) UNSIGNED NOT NULL,
   `status` enum('assigned','acknowledged','enroute','on_scene','cleared','cancelled') NOT NULL DEFAULT 'assigned',
   `assigned_at` datetime NOT NULL DEFAULT current_timestamp(),
@@ -404,18 +391,18 @@ CREATE TABLE IF NOT EXISTS `dispatch_operator_records` (
 -- Dumping data for table `dispatches`
 --
 
-INSERT INTO `dispatches` (`id`, `incident_id`, `unit_id`, `status`, `assigned_at`, `acknowledged_at`, `enroute_at`, `on_scene_at`, `cleared_at`, `notes`) VALUES
-(1, 4, 2, 'cleared', '2026-02-04 19:04:58', NULL, NULL, NULL, '2026-02-04 19:34:57', NULL),
-(2, 7, 7, 'cleared', '2026-02-06 17:23:10', NULL, NULL, NULL, '2026-02-07 00:15:05', NULL),
-(3, 8, 5, 'cleared', '2026-02-08 05:28:03', NULL, NULL, NULL, '2026-02-11 17:54:47', NULL),
-(4, 6, 11, 'cleared', '2026-02-11 17:56:43', NULL, NULL, NULL, '2026-02-11 23:00:40', NULL),
-(5, 11, 1, 'cleared', '2026-02-11 23:01:38', NULL, NULL, NULL, '2026-02-11 23:22:18', NULL),
-(6, 12, 1, 'cleared', '2026-02-11 23:58:21', NULL, NULL, NULL, '2026-02-11 23:59:21', NULL),
-(7, 13, 6, 'assigned', '2026-02-12 02:34:09', NULL, NULL, NULL, NULL, NULL),
-(8, 13, 7, 'assigned', '2026-02-12 05:47:58', NULL, NULL, NULL, NULL, NULL),
-(9, 13, 9, 'assigned', '2026-02-12 05:56:05', NULL, NULL, NULL, NULL, NULL),
-(10, 13, 8, 'assigned', '2026-02-12 05:58:06', NULL, NULL, NULL, NULL, NULL),
-(11, 13, 10, 'assigned', '2026-02-12 05:58:31', NULL, NULL, NULL, NULL, NULL);
+INSERT INTO `dispatches` (`id`, `reference_no`, `unit_id`, `status`, `assigned_at`, `acknowledged_at`, `enroute_at`, `on_scene_at`, `cleared_at`, `notes`) VALUES
+(1, 'REF-20260204040430-8022', 2, 'cleared', '2026-02-04 19:04:58', NULL, NULL, NULL, '2026-02-04 19:34:57', NULL),
+(2, 'REF-20260206022224-2140', 7, 'cleared', '2026-02-06 17:23:10', NULL, NULL, NULL, '2026-02-07 00:15:05', NULL),
+(3, 'REF-20260207142751-7153', 5, 'cleared', '2026-02-08 05:28:03', NULL, NULL, NULL, '2026-02-11 17:54:47', NULL),
+(4, 'REF-20260204080042-4397', 11, 'cleared', '2026-02-11 17:56:43', NULL, NULL, NULL, '2026-02-11 23:00:40', NULL),
+(5, 'REF-20260211085107-1710', 1, 'cleared', '2026-02-11 23:01:38', NULL, NULL, NULL, '2026-02-11 23:22:18', NULL),
+(6, 'REF-20260211112610-3531', 1, 'cleared', '2026-02-11 23:58:21', NULL, NULL, NULL, '2026-02-11 23:59:21', NULL),
+(7, 'REF-20260211112610-3531', 6, 'assigned', '2026-02-12 02:34:09', NULL, NULL, NULL, NULL, NULL),
+(8, 'REF-20260211112610-3531', 7, 'assigned', '2026-02-12 05:47:58', NULL, NULL, NULL, NULL, NULL),
+(9, 'REF-20260211112610-3531', 9, 'assigned', '2026-02-12 05:56:05', NULL, NULL, NULL, NULL, NULL),
+(10, 'REF-20260211112610-3531', 8, 'assigned', '2026-02-12 05:58:06', NULL, NULL, NULL, NULL, NULL),
+(11, 'REF-20260211112610-3531', 10, 'assigned', '2026-02-12 05:58:31', NULL, NULL, NULL, NULL, NULL);
 
 --
 -- Triggers `dispatches`
@@ -423,11 +410,13 @@ INSERT INTO `dispatches` (`id`, `incident_id`, `unit_id`, `status`, `assigned_at
 DELIMITER $$
 CREATE TRIGGER `trg_dispatches_ai_update_status` AFTER INSERT ON `dispatches` FOR EACH ROW BEGIN
   UPDATE `units`
-    SET `status` = 'assigned', `current_incident_id` = NEW.`incident_id`, `last_status_at` = CURRENT_TIMESTAMP
+    SET `status` = 'assigned',
+        `current_incident_id` = (SELECT `id` FROM `incidents` WHERE `reference_no` = NEW.`reference_no` LIMIT 1),
+        `last_status_at` = CURRENT_TIMESTAMP
     WHERE `id` = NEW.`unit_id`;
   UPDATE `incidents`
     SET `status` = 'dispatched', `updated_at` = CURRENT_TIMESTAMP
-    WHERE `id` = NEW.`incident_id` AND `status` IN ('pending','cancelled');
+    WHERE `reference_no` = NEW.`reference_no` AND `status` IN ('pending','cancelled');
 END
 $$
 DELIMITER ;
@@ -442,9 +431,9 @@ CREATE TRIGGER `trg_dispatches_au_propagate` AFTER UPDATE ON `dispatches` FOR EA
   END IF;
 
   IF NEW.`status` = 'cleared' THEN
-    UPDATE `incidents` SET `status` = 'resolved', `resolved_at` = CURRENT_TIMESTAMP WHERE `id` = NEW.`incident_id`;
+    UPDATE `incidents` SET `status` = 'resolved', `resolved_at` = CURRENT_TIMESTAMP WHERE `reference_no` = NEW.`reference_no`;
   ELSEIF NEW.`status` = 'cancelled' THEN
-    UPDATE `incidents` SET `status` = 'cancelled' WHERE `id` = NEW.`incident_id`;
+    UPDATE `incidents` SET `status` = 'cancelled' WHERE `reference_no` = NEW.`reference_no`;
   END IF;
 END
 $$
@@ -461,7 +450,7 @@ CREATE TRIGGER `trg_dispatch_operator_records_au_complete` AFTER UPDATE ON `disp
     UPDATE `dispatches`
       SET `status` = 'cleared',
           `cleared_at` = COALESCE(`cleared_at`, CURRENT_TIMESTAMP)
-      WHERE `incident_id` = NEW.`incident_id`
+      WHERE `reference_no` = (SELECT `reference_no` FROM `incidents` WHERE `id` = NEW.`incident_id` LIMIT 1)
         AND `status` IN ('assigned','acknowledged','enroute','on_scene');
 
     UPDATE `units` u
@@ -469,7 +458,7 @@ CREATE TRIGGER `trg_dispatch_operator_records_au_complete` AFTER UPDATE ON `disp
       SET u.`status` = 'available',
           u.`current_incident_id` = NULL,
           u.`last_status_at` = CURRENT_TIMESTAMP
-      WHERE d.`incident_id` = NEW.`incident_id`;
+      WHERE d.`reference_no` = (SELECT `reference_no` FROM `incidents` WHERE `id` = NEW.`incident_id` LIMIT 1);
 
     UPDATE `incidents`
       SET `status` = 'resolved',
@@ -514,16 +503,7 @@ CREATE TABLE `incidents` (
   `id` bigint(20) UNSIGNED NOT NULL,
   `reference_no` varchar(50) NOT NULL,
   `type` varchar(100) NOT NULL,
-  `priority` varchar(20) NOT NULL DEFAULT 'moderate',
-  `priority_score` tinyint(3) UNSIGNED DEFAULT NULL,
-  `priority_label` varchar(20) DEFAULT NULL,
-  `priority_color` varchar(20) DEFAULT NULL,
-  `indicator_incident_type` varchar(80) DEFAULT NULL,
-  `threat_to_life` varchar(80) DEFAULT NULL,
-  `severity_level` varchar(80) DEFAULT NULL,
-  `population_affected` varchar(80) DEFAULT NULL,
-  `verification_status` varchar(80) DEFAULT NULL,
-  `priority_breakdown` longtext DEFAULT NULL,
+  `priority` varchar(20) NOT NULL DEFAULT 'medium',
   `status` enum('pending','dispatched','resolved','cancelled') NOT NULL DEFAULT 'pending',
   `title` varchar(200) DEFAULT NULL,
   `description` text DEFAULT NULL,
@@ -1017,7 +997,7 @@ ALTER TABLE `calls`
 --
 ALTER TABLE `dispatches`
   ADD PRIMARY KEY (`id`),
-  ADD KEY `idx_dispatches_incident_id` (`incident_id`),
+  ADD KEY `idx_dispatches_reference_no` (`reference_no`),
   ADD KEY `idx_dispatches_unit_id` (`unit_id`),
   ADD KEY `idx_dispatches_status` (`status`),
   ADD KEY `idx_dispatches_assigned_at` (`assigned_at`),

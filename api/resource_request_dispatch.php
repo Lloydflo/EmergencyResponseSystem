@@ -2,6 +2,7 @@
 require_once '../includes/db.php';
 require_once '../includes/vehicle_resource_units.php';
 require_once '../includes/emergency_com_status_sync.php';
+require_once '../includes/dispatch_attempt_log.php';
 header('Content-Type: application/json');
 
 if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
@@ -84,6 +85,27 @@ function backup_dispatch_index_exists(PDO $pdo, string $tableName, string $index
         return (bool)$stmt->fetchColumn();
     } catch (Throwable $e) {
         return false;
+    }
+}
+
+function backup_dispatch_ensure_assignment_schema(PDO $pdo): void
+{
+    if (!backup_dispatch_table_exists($pdo, 'dispatches')) {
+        return;
+    }
+
+    if (!backup_dispatch_column_exists($pdo, 'dispatches', 'reference_no')) {
+        $pdo->exec("ALTER TABLE `dispatches` ADD COLUMN `reference_no` VARCHAR(50) DEFAULT NULL AFTER `id`");
+    }
+    if (!backup_dispatch_column_exists($pdo, 'dispatches', 'incident_id')) {
+        $afterColumn = backup_dispatch_column_exists($pdo, 'dispatches', 'reference_no') ? 'reference_no' : 'id';
+        $pdo->exec("ALTER TABLE `dispatches` ADD COLUMN `incident_id` BIGINT(20) UNSIGNED DEFAULT NULL AFTER `{$afterColumn}`");
+    }
+    if (!backup_dispatch_index_exists($pdo, 'dispatches', 'idx_dispatches_reference_no')) {
+        $pdo->exec("ALTER TABLE `dispatches` ADD KEY `idx_dispatches_reference_no` (`reference_no`)");
+    }
+    if (!backup_dispatch_index_exists($pdo, 'dispatches', 'idx_dispatches_incident_id')) {
+        $pdo->exec("ALTER TABLE `dispatches` ADD KEY `idx_dispatches_incident_id` (`incident_id`)");
     }
 }
 
@@ -196,6 +218,7 @@ if ($requestId <= 0 || $incidentId <= 0 || $unitIds === []) {
 
 try {
     backup_dispatch_ensure_operator_records_table($pdo);
+    backup_dispatch_ensure_assignment_schema($pdo);
 
     $pdo->beginTransaction();
 
@@ -244,7 +267,7 @@ try {
     }
 
     $incidentStmt = $pdo->prepare('
-        SELECT id, priority, description, location_address, latitude, longitude
+        SELECT id, reference_no, priority, description, location_address, latitude, longitude
         FROM incidents
         WHERE id = ?
         LIMIT 1
@@ -344,7 +367,16 @@ try {
     }
 
     $dispatchTime = backup_dispatch_philippine_timestamp();
-    $dispatchInsert = $pdo->prepare("INSERT INTO dispatches (incident_id, unit_id, status, assigned_at) VALUES (?, ?, 'assigned', ?)");
+    $incidentReferenceNo = trim((string)($incidentRow['reference_no'] ?? ''));
+    if ($incidentReferenceNo === '') {
+        backup_dispatch_fail_response($pdo, $incidentId, $unitIds, 'Incident reference number is missing', [
+            'request_id' => $requestId,
+            'incident_id' => $incidentId,
+            'unit_ids' => $unitIds,
+        ]);
+    }
+
+    $dispatchInsert = $pdo->prepare("INSERT INTO dispatches (incident_id, reference_no, unit_id, status, assigned_at) VALUES (?, ?, ?, 'assigned', ?)");
     $unitUpdate = $pdo->prepare("UPDATE units SET status = 'assigned', current_incident_id = ?, last_status_at = CURRENT_TIMESTAMP WHERE id = ?");
     $operatorRecordInsert = $pdo->prepare("
         INSERT INTO dispatch_operator_records
@@ -354,7 +386,7 @@ try {
 
     $dispatchedUnits = [];
     foreach ($unitIds as $unitId) {
-        $dispatchInsert->execute([$incidentId, $unitId, $dispatchTime]);
+        $dispatchInsert->execute([$incidentId, $incidentReferenceNo, $unitId, $dispatchTime]);
         $unitUpdate->execute([$incidentId, $unitId]);
         ers_sync_vehicle_resource_status_by_unit_id($pdo, $unitId, 'in_use');
 

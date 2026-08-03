@@ -498,11 +498,6 @@ if ($hasCrimeAnalyticsLogTable) {
     $crimeAnalyticsSyncedAtExpr = ers_incidents_has_column($schema, 'api_sync_logs', 'updated_at') ? 'crime_sync.updated_at' : 'NULL';
 }
 
-$priorityScoreExpr = ers_incidents_has_column($schema, 'incidents', 'priority_score') ? 'i.priority_score' : 'NULL';
-$priorityLabelExpr = ers_incidents_has_column($schema, 'incidents', 'priority_label') ? 'i.priority_label' : 'NULL';
-$priorityColorExpr = ers_incidents_has_column($schema, 'incidents', 'priority_color') ? 'i.priority_color' : 'NULL';
-$priorityBreakdownExpr = ers_incidents_has_column($schema, 'incidents', 'priority_breakdown') ? 'i.priority_breakdown' : 'NULL';
-
 $assignedAtExpr = $hasLatestDispatch ? 'ld.assigned_at' : 'NULL';
 $acknowledgedAtExpr = $hasLatestDispatch ? 'ld.acknowledged_at' : 'NULL';
 $enrouteAtExpr = $hasLatestDispatch ? 'ld.enroute_at' : 'NULL';
@@ -530,10 +525,6 @@ $sql = "SELECT
         {$referenceNoExpr} AS reference_no,
         {$typeExpr} AS type,
         {$priorityExpr} AS priority,
-        {$priorityScoreExpr} AS priority_score,
-        {$priorityLabelExpr} AS priority_label,
-        {$priorityColorExpr} AS priority_color,
-        {$priorityBreakdownExpr} AS priority_breakdown,
         {$statusExpr} AS status,
         {$locationAddressExpr} AS location_address,
         {$descriptionExpr} AS description,
@@ -690,17 +681,13 @@ if (ers_incidents_has_column($schema, 'incidents', 'priority')) {
     $orderParts[] = "CASE LOWER(i.priority)
         WHEN 'critical' THEN 1
         WHEN 'high' THEN 2
-        WHEN 'urgent' THEN 3
-        WHEN 'moderate' THEN 4
-        WHEN 'medium' THEN 4
-        WHEN 'low' THEN 5
+        WHEN 'urgent' THEN 2
+        WHEN 'medium' THEN 3
+        WHEN 'moderate' THEN 3
+        WHEN 'low' THEN 4
         ELSE 6
     END";
 }
-if (ers_incidents_has_column($schema, 'incidents', 'priority_score')) {
-    $orderParts[] = 'COALESCE(i.priority_score, 0) DESC';
-}
-
 $sortDateExpressions = [];
 foreach ([$resolvedAtExpr, $clearedAtExpr, $updatedAtExpr, $createdAtExpr] as $expression) {
     if ($expression !== 'NULL' && !in_array($expression, $sortDateExpressions, true)) {
@@ -730,10 +717,6 @@ try {
             'location' => $row['location_address'] ?? '',
             'description' => $row['description'] ?? '',
             'priority' => $row['priority'] ?? '',
-            'priority_score' => isset($row['priority_score']) && $row['priority_score'] !== null ? (int)$row['priority_score'] : null,
-            'priority_label' => $row['priority_label'] ?? null,
-            'priority_color' => $row['priority_color'] ?? null,
-            'priority_breakdown' => $row['priority_breakdown'] ?? null,
             'status' => $row['status'] ?? '',
             'created_at' => $row['created_at'] ?? null,
             'updated_at' => $row['updated_at'] ?? null,

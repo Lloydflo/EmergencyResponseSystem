@@ -30,10 +30,11 @@ $caller_phone = trim((string)($input['caller_phone'] ?? ''));
 $type = normalize_incident_type_input($input['type'] ?? '');
 $location = trim((string)($input['location'] ?? ''));
 $description = trim((string)($input['description'] ?? ''));
-$priority = ers_normalize_priority_value(trim((string)($input['priority'] ?? 'moderate')));
+$priority = ers_normalize_priority_value(trim((string)($input['priority'] ?? 'medium')));
 $status = trim((string)($input['status'] ?? 'pending'));
 $latitude = array_key_exists('latitude', $input) && $input['latitude'] !== '' ? (float)$input['latitude'] : null;
 $longitude = array_key_exists('longitude', $input) && $input['longitude'] !== '' ? (float)$input['longitude'] : null;
+$transfer_incident_id = transfer_incident_id_from_input($input);
 
 if ($latitude !== null && ($latitude < -90 || $latitude > 90)) {
     $latitude = null;
@@ -52,9 +53,6 @@ if ($caller_name === '' || $caller_phone === '' || $type === '' || $location ===
     exit;
 }
 
-$priorityAssessment = ers_build_incident_priority_assessment($input, $priority);
-$priority = ers_normalize_priority_value((string)$priorityAssessment['priority']);
-
 try {
     ensure_no_auto_value_on_zero_mode($pdo);
     // Self-heal for deployments where id columns were created without AUTO_INCREMENT.
@@ -63,6 +61,56 @@ try {
     ers_ensure_incident_priority_schema($pdo);
 } catch (Throwable $schemaErr) {
     error_log('calls_create schema check warning: ' . $schemaErr->getMessage());
+}
+
+$transfer_incident_id = $transfer_incident_id > 0
+    ? $transfer_incident_id
+    : resolve_transfer_incident_id($pdo, $input);
+
+if ($transfer_incident_id > 0) {
+    try {
+        $updatedIncident = update_existing_transfer_incident(
+            $pdo,
+            $transfer_incident_id,
+            $caller_name,
+            $caller_phone,
+            $type,
+            $location,
+            $description,
+            $priority,
+            $status,
+            $latitude,
+            $longitude
+        );
+        if ($updatedIncident !== null) {
+            log_incident_created_audit(
+                (int)$updatedIncident['id'],
+                (string)$updatedIncident['reference_no'],
+                $type,
+                $priority,
+                $location
+            );
+            echo json_encode([
+                'ok' => true,
+                'updated_transfer' => true,
+                'call_id' => $updatedIncident['call_id'],
+                'reference_no' => $updatedIncident['reference_no'],
+                'incident_id' => (int)$updatedIncident['id'],
+                'incident_reference_no' => $updatedIncident['reference_no'],
+                'incident_status' => $updatedIncident['status'],
+                'priority' => $priority,
+            ]);
+            exit;
+        }
+    } catch (Throwable $e) {
+        if ($pdo->inTransaction()) {
+            $pdo->rollBack();
+        }
+        http_response_code(500);
+        error_log('calls_create transfer update failed: ' . $e->getMessage());
+        echo json_encode(['ok' => false, 'error' => build_user_facing_db_error($e)]);
+        exit;
+    }
 }
 
 $duplicate_sql = 'SELECT id, reference_no, type, location_address, created_at
@@ -106,7 +154,7 @@ try {
         ':priority' => $priority,
         ':status' => $callStatus,
         ':description' => $description,
-    ], $priorityAssessment);
+    ]);
 
     $stmt2 = $pdo->prepare('SELECT id, reference_no, status FROM incidents WHERE reported_by_call_id = :cid LIMIT 1');
     $stmt2->execute([':cid' => $call_id]);
@@ -130,13 +178,13 @@ try {
             'reference_no' => $reference_no,
             'status' => 'pending',
         ];
-        update_incident_priority_indicator($pdo, $incident_id, $priority, $priorityAssessment);
+        update_incident_priority_indicator($pdo, $incident_id, $priority);
     } else {
-        update_incident_priority_indicator($pdo, (int)$incident['id'], $priority, $priorityAssessment);
+        update_incident_priority_indicator($pdo, (int)$incident['id'], $priority);
     }
 
     $pdo->commit();
-    log_incident_created_audit($incident ? (int)$incident['id'] : null, $incident ? (string)$incident['reference_no'] : $reference_no, $type, $priority, $location, $priorityAssessment);
+    log_incident_created_audit($incident ? (int)$incident['id'] : null, $incident ? (string)$incident['reference_no'] : $reference_no, $type, $priority, $location);
 
     echo json_encode([
         'ok' => true,
@@ -146,9 +194,6 @@ try {
         'incident_reference_no' => $incident ? $incident['reference_no'] : null,
         'incident_status' => $incident ? $incident['status'] : null,
         'priority' => $priority,
-        'priority_score' => (int)$priorityAssessment['score'],
-        'priority_label' => (string)$priorityAssessment['label'],
-        'priority_color' => (string)$priorityAssessment['color'],
     ]);
 } catch (Throwable $e) {
     if ($pdo->inTransaction()) {
@@ -159,31 +204,290 @@ try {
     echo json_encode(['ok' => false, 'error' => build_user_facing_db_error($e)]);
 }
 
-function log_incident_created_audit(?int $incidentId, string $referenceNo, string $type, string $priority, string $location, array $assessment): void {
+function log_incident_created_audit(?int $incidentId, string $referenceNo, string $type, string $priority, string $location): void {
     if ($incidentId === null || $incidentId < 1) {
         return;
     }
     $details = 'Incoming incident ' . ($referenceNo !== '' ? $referenceNo : ('#' . $incidentId))
         . ' was logged. Type: ' . $type
         . ' | Priority: ' . $priority
-        . ' | Score: ' . (int)($assessment['score'] ?? 0)
         . ' | Location: ' . $location;
     log_activity_event(null, 'incident_created', 'incident', $incidentId, $details);
 }
 
-function insert_call_row(PDO $pdo, array $params, array $assessment): int {
-    $params = array_merge($params, ers_priority_assessment_db_params($assessment));
+function transfer_incident_id_from_input(array $input): int {
+    foreach (['transfer_incident_id', 'existing_incident_id', 'linked_incident_id'] as $key) {
+        if (isset($input[$key]) && is_numeric((string)$input[$key])) {
+            $id = (int)$input[$key];
+            if ($id > 0) {
+                return $id;
+            }
+        }
+    }
+    return 0;
+}
+
+function resolve_transfer_incident_id(PDO $pdo, array $input): int {
+    $ids = [];
+    foreach ([
+        $input['transfer_id'] ?? '',
+        $input['transfer_call_id'] ?? '',
+        $input['call_id_external'] ?? '',
+        $input['callId'] ?? '',
+        $input['call_id'] ?? '',
+    ] as $value) {
+        $value = trim((string)$value);
+        if ($value !== '' && !in_array($value, $ids, true)) {
+            $ids[] = $value;
+        }
+    }
+
+    if ($ids !== [] && calls_create_table_exists($pdo, 'external_incident_links')) {
+        $placeholders = implode(',', array_fill(0, count($ids), '?'));
+        $params = $ids;
+        $stmt = $pdo->prepare(
+            "SELECT incident_id
+             FROM external_incident_links
+             WHERE external_incident_id IN ({$placeholders})
+             ORDER BY id DESC
+             LIMIT 1"
+        );
+        $stmt->execute($params);
+        $id = (int)$stmt->fetchColumn();
+        if ($id > 0) {
+            return $id;
+        }
+
+        $jsonWhere = [];
+        $jsonParams = [];
+        foreach ($ids as $idValue) {
+            foreach (['callId', 'call_id', 'transferId', 'transfer_id'] as $jsonKey) {
+                $jsonWhere[] = "JSON_UNQUOTE(JSON_EXTRACT(payload_json, '$.{$jsonKey}')) = ?";
+                $jsonParams[] = $idValue;
+                $jsonWhere[] = "JSON_UNQUOTE(JSON_EXTRACT(payload_json, '$.call.{$jsonKey}')) = ?";
+                $jsonParams[] = $idValue;
+            }
+        }
+        if ($jsonWhere !== []) {
+            $stmt = $pdo->prepare(
+                'SELECT incident_id
+                 FROM external_incident_links
+                 WHERE (' . implode(' OR ', $jsonWhere) . ')
+                 ORDER BY id DESC
+                 LIMIT 1'
+            );
+            $stmt->execute($jsonParams);
+            $id = (int)$stmt->fetchColumn();
+            if ($id > 0) {
+                return $id;
+            }
+        }
+    }
+
+    $referenceNo = trim((string)($input['transfer_reference_no'] ?? $input['incident_reference_no'] ?? $input['reference_no'] ?? ''));
+    if ($referenceNo !== '' && calls_create_table_exists($pdo, 'incidents')) {
+        $stmt = $pdo->prepare(
+            "SELECT id
+             FROM incidents
+             WHERE reference_no = ?
+               AND status NOT IN ('resolved', 'cancelled', 'closed', 'rejected')
+             ORDER BY id DESC
+             LIMIT 1"
+        );
+        $stmt->execute([$referenceNo]);
+        $id = (int)$stmt->fetchColumn();
+        if ($id > 0) {
+            return $id;
+        }
+    }
+
+    return 0;
+}
+
+function update_existing_transfer_incident(
+    PDO $pdo,
+    int $incidentId,
+    string $callerName,
+    string $callerPhone,
+    string $type,
+    string $location,
+    string $description,
+    string $priority,
+    string $requestedStatus,
+    ?float $latitude,
+    ?float $longitude
+): ?array {
+    if ($incidentId <= 0) {
+        return null;
+    }
+
+    $pdo->beginTransaction();
+    $hasExternalLinkTable = calls_create_table_exists($pdo, 'external_incident_links');
+    $externalLinkExpr = $hasExternalLinkTable
+        ? '(SELECT COUNT(*) FROM external_incident_links l WHERE l.incident_id = incidents.id LIMIT 1) AS transfer_link_count'
+        : '0 AS transfer_link_count';
+    $stmt = $pdo->prepare(
+        'SELECT id, reference_no, status, title, description, reported_by_call_id, ' . $externalLinkExpr . '
+         FROM incidents
+         WHERE id = ?
+         LIMIT 1
+         FOR UPDATE'
+    );
+    $stmt->execute([$incidentId]);
+    $incident = $stmt->fetch(PDO::FETCH_ASSOC);
+    if (!$incident) {
+        $pdo->rollBack();
+        return null;
+    }
+
+    $transferMarkerText = strtolower(implode(' ', [
+        (string)($incident['reference_no'] ?? ''),
+        (string)($incident['title'] ?? ''),
+        (string)($incident['description'] ?? ''),
+    ]));
+    $hasTransferMarker = (int)($incident['transfer_link_count'] ?? 0) > 0
+        || strpos($transferMarkerText, 'trn-') !== false
+        || strpos($transferMarkerText, 'transfer') !== false
+        || strpos($transferMarkerText, 'alertaraqc') !== false;
+    if (!$hasTransferMarker) {
+        $pdo->rollBack();
+        return null;
+    }
+
+    $currentStatus = strtolower(trim((string)($incident['status'] ?? '')));
+    if (in_array($currentStatus, ['resolved', 'cancelled', 'closed', 'rejected'], true)) {
+        $pdo->rollBack();
+        return null;
+    }
+
+    $referenceNo = trim((string)($incident['reference_no'] ?? ''));
+    if ($referenceNo === '') {
+        $referenceNo = 'REF-' . date('YmdHis') . '-' . str_pad((string)random_int(0, 9999), 4, '0', STR_PAD_LEFT);
+    }
+
+    $nextIncidentStatus = strtolower(trim($requestedStatus));
+    if (!in_array($nextIncidentStatus, ['pending', 'dispatched', 'resolved'], true)) {
+        $nextIncidentStatus = $currentStatus !== '' ? $currentStatus : 'pending';
+    }
+    $nextCallStatus = $nextIncidentStatus === 'pending' ? 'new' : 'triaged';
+    $callId = (int)($incident['reported_by_call_id'] ?? 0);
+
+    if ($callId > 0) {
+        $callUpdatedAtSet = calls_create_column_exists($pdo, 'calls', 'updated_at')
+            ? ', updated_at = CURRENT_TIMESTAMP'
+            : '';
+        $callUpdate = $pdo->prepare(
+            'UPDATE calls
+             SET reference_no = ?,
+                 caller_name = ?,
+                 caller_phone = ?,
+                 location_address = ?,
+                 latitude = ?,
+                 longitude = ?,
+                 incident_type = ?,
+                 priority = ?,
+                 status = ?,
+                 description = ?' . $callUpdatedAtSet . '
+             WHERE id = ?'
+        );
+        $callUpdate->execute([
+            $referenceNo,
+            $callerName,
+            $callerPhone,
+            $location,
+            $latitude,
+            $longitude,
+            $type,
+            $priority,
+            $nextCallStatus,
+            $description,
+            $callId,
+        ]);
+    }
+
+    $title = 'Incident from call ' . $referenceNo;
+    $incidentUpdatedAtSet = calls_create_column_exists($pdo, 'incidents', 'updated_at')
+        ? ', updated_at = CURRENT_TIMESTAMP'
+        : '';
+    $incidentUpdate = $pdo->prepare(
+        'UPDATE incidents
+         SET reference_no = ?,
+             type = ?,
+             priority = ?,
+             status = ?,
+             title = ?,
+             description = ?,
+             location_address = ?,
+             latitude = ?,
+             longitude = ?' . $incidentUpdatedAtSet . '
+         WHERE id = ?'
+    );
+    $incidentUpdate->execute([
+        $referenceNo,
+        $type,
+        $priority,
+        $nextIncidentStatus,
+        $title,
+        $description,
+        $location,
+        $latitude,
+        $longitude,
+        $incidentId,
+    ]);
+
+    update_incident_priority_indicator($pdo, $incidentId, $priority);
+
+    $pdo->commit();
+
+    return [
+        'id' => $incidentId,
+        'reference_no' => $referenceNo,
+        'status' => $nextIncidentStatus,
+        'call_id' => $callId > 0 ? $callId : null,
+    ];
+}
+
+function calls_create_table_exists(PDO $pdo, string $tableName): bool {
+    try {
+        $stmt = $pdo->prepare(
+            'SELECT 1
+             FROM INFORMATION_SCHEMA.TABLES
+             WHERE TABLE_SCHEMA = DATABASE()
+               AND TABLE_NAME = ?
+             LIMIT 1'
+        );
+        $stmt->execute([$tableName]);
+        return (bool)$stmt->fetchColumn();
+    } catch (Throwable $e) {
+        return false;
+    }
+}
+
+function calls_create_column_exists(PDO $pdo, string $tableName, string $columnName): bool {
+    try {
+        $stmt = $pdo->prepare(
+            'SELECT 1
+             FROM INFORMATION_SCHEMA.COLUMNS
+             WHERE TABLE_SCHEMA = DATABASE()
+               AND TABLE_NAME = ?
+               AND COLUMN_NAME = ?
+             LIMIT 1'
+        );
+        $stmt->execute([$tableName, $columnName]);
+        return (bool)$stmt->fetchColumn();
+    } catch (Throwable $e) {
+        return false;
+    }
+}
+
+function insert_call_row(PDO $pdo, array $params): int {
     $sql = 'INSERT INTO calls (
                 reference_no, caller_name, caller_phone, caller_email, location_address, latitude, longitude,
-                incident_type, priority, priority_score, priority_label, priority_color,
-                indicator_incident_type, threat_to_life, severity_level, population_affected, verification_status, priority_breakdown,
-                status, description, received_at
+                incident_type, priority, status, description, received_at
             )
             VALUES (
                 :reference_no, :caller_name, :caller_phone, NULL, :location_address, :latitude, :longitude,
-                :incident_type, :priority, :priority_score, :priority_label, :priority_color,
-                :indicator_incident_type, :threat_to_life, :severity_level, :population_affected, :verification_status, :priority_breakdown,
-                :status, :description, NOW()
+                :incident_type, :priority, :status, :description, NOW()
             )';
     $stmt = $pdo->prepare($sql);
     try {
@@ -239,15 +543,11 @@ function normalize_incident_type_input($value): string {
 function insert_call_row_with_id(PDO $pdo, array $params): int {
     $sql = 'INSERT INTO calls (
                 id, reference_no, caller_name, caller_phone, caller_email, location_address, latitude, longitude,
-                incident_type, priority, priority_score, priority_label, priority_color,
-                indicator_incident_type, threat_to_life, severity_level, population_affected, verification_status, priority_breakdown,
-                status, description, received_at
+                incident_type, priority, status, description, received_at
             )
             VALUES (
                 :id, :reference_no, :caller_name, :caller_phone, NULL, :location_address, :latitude, :longitude,
-                :incident_type, :priority, :priority_score, :priority_label, :priority_color,
-                :indicator_incident_type, :threat_to_life, :severity_level, :population_affected, :verification_status, :priority_breakdown,
-                :status, :description, NOW()
+                :incident_type, :priority, :status, :description, NOW()
             )';
     $stmt = $pdo->prepare($sql);
 
@@ -294,29 +594,22 @@ function insert_incident_row(PDO $pdo, array $params): int {
     throw new RuntimeException('Incident insert did not return a valid id');
 }
 
-function update_incident_priority_indicator(PDO $pdo, int $incidentId, string $priority, array $assessment): void {
+function update_incident_priority_indicator(PDO $pdo, int $incidentId, string $priority): void {
     if ($incidentId < 1) {
         return;
     }
-    $params = ers_priority_assessment_db_params($assessment);
-    $params[':priority'] = $priority;
-    $params[':id'] = $incidentId;
+    $updatedAtSet = calls_create_column_exists($pdo, 'incidents', 'updated_at')
+        ? ', updated_at = CURRENT_TIMESTAMP'
+        : '';
     $stmt = $pdo->prepare(
         'UPDATE incidents
-         SET priority = :priority,
-             priority_score = :priority_score,
-             priority_label = :priority_label,
-             priority_color = :priority_color,
-             indicator_incident_type = :indicator_incident_type,
-             threat_to_life = :threat_to_life,
-             severity_level = :severity_level,
-             population_affected = :population_affected,
-             verification_status = :verification_status,
-             priority_breakdown = :priority_breakdown,
-             updated_at = CURRENT_TIMESTAMP
+         SET priority = :priority' . $updatedAtSet . '
          WHERE id = :id'
     );
-    $stmt->execute($params);
+    $stmt->execute([
+        ':priority' => $priority,
+        ':id' => $incidentId,
+    ]);
 }
 
 function insert_incident_row_with_id(PDO $pdo, array $params): int {

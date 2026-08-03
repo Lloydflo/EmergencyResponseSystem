@@ -26,6 +26,7 @@ if ($incident_id === null || $unit_ids === []) {
 require_once __DIR__ . '/../includes/db.php';
 require_once __DIR__ . '/../includes/vehicle_resource_units.php';
 require_once __DIR__ . '/../includes/emergency_com_status_sync.php';
+require_once __DIR__ . '/../includes/dispatch_attempt_log.php';
 $pdo = get_db_connection();
 if (!$pdo) {
     echo json_encode(['ok'=>false,'error'=>'DB error']);
@@ -103,6 +104,27 @@ function ensure_dispatch_operator_records_table(PDO $pdo): void
         if (!dispatch_index_exists($pdo, 'dispatch_operator_records', $indexName)) {
             $pdo->exec("ALTER TABLE `dispatch_operator_records` ADD KEY `{$indexName}` {$indexColumns}");
         }
+    }
+}
+
+function ensure_dispatches_assignment_schema(PDO $pdo): void
+{
+    if (!dispatch_table_exists($pdo, 'dispatches')) {
+        return;
+    }
+
+    if (!dispatch_column_exists($pdo, 'dispatches', 'reference_no')) {
+        $pdo->exec("ALTER TABLE `dispatches` ADD COLUMN `reference_no` VARCHAR(50) DEFAULT NULL AFTER `id`");
+    }
+    if (!dispatch_column_exists($pdo, 'dispatches', 'incident_id')) {
+        $afterColumn = dispatch_column_exists($pdo, 'dispatches', 'reference_no') ? 'reference_no' : 'id';
+        $pdo->exec("ALTER TABLE `dispatches` ADD COLUMN `incident_id` BIGINT(20) UNSIGNED DEFAULT NULL AFTER `{$afterColumn}`");
+    }
+    if (!dispatch_index_exists($pdo, 'dispatches', 'idx_dispatches_reference_no')) {
+        $pdo->exec("ALTER TABLE `dispatches` ADD KEY `idx_dispatches_reference_no` (`reference_no`)");
+    }
+    if (!dispatch_index_exists($pdo, 'dispatches', 'idx_dispatches_incident_id')) {
+        $pdo->exec("ALTER TABLE `dispatches` ADD KEY `idx_dispatches_incident_id` (`incident_id`)");
     }
 }
 
@@ -254,6 +276,16 @@ function dispatch_responder_is_available(PDO $pdo, int $responderId): bool
         && $lastSeen >= time() - 180;
 }
 
+function insert_dispatch_assignment(PDO $pdo, int $incidentId, string $referenceNo, int $unitId, string $dispatchTime): int
+{
+    $stmt = $pdo->prepare("
+        INSERT INTO dispatches (incident_id, reference_no, unit_id, status, assigned_at)
+        VALUES (?, ?, ?, 'assigned', ?)
+    ");
+    $stmt->execute([$incidentId, $referenceNo, $unitId, $dispatchTime]);
+    return (int)$pdo->lastInsertId();
+}
+
 try {
     $dispatchIds = [];
     $dispatchedUnits = [];
@@ -261,11 +293,12 @@ try {
     $notificationLogged = false;
 
     ensure_dispatch_operator_records_table($pdo);
+    ensure_dispatches_assignment_schema($pdo);
 
     $pdo->beginTransaction();
 
     $incidentStmt = $pdo->prepare("
-        SELECT id, priority, description, location_address, latitude, longitude
+        SELECT id, reference_no, priority, description, location_address, latitude, longitude
         FROM incidents
         WHERE id = ?
         LIMIT 1
@@ -369,7 +402,14 @@ try {
     }
 
     $dispatchTime = dispatch_philippine_timestamp();
-    $stmtIns = $pdo->prepare("INSERT INTO dispatches (incident_id, unit_id, status, assigned_at) VALUES (?, ?, 'assigned', ?)");
+    $incidentReferenceNo = trim((string)($incidentRow['reference_no'] ?? ''));
+    if ($incidentReferenceNo === '') {
+        dispatch_fail_response($pdo, $incident_id, $unit_ids, 'Incident reference number is missing', [
+            'incident_id' => $incident_id,
+            'unit_ids' => $unit_ids,
+        ]);
+    }
+
     $stmtUnit = $pdo->prepare("UPDATE units SET status='assigned', current_incident_id=?, last_status_at=CURRENT_TIMESTAMP WHERE id=?");
     $stmtOperatorRecord = $pdo->prepare("
         INSERT INTO dispatch_operator_records
@@ -377,8 +417,7 @@ try {
         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?, ?, ?, ?, ?)
     ");
     foreach ($unit_ids as $unit_id) {
-        $stmtIns->execute([$incident_id, $unit_id, $dispatchTime]);
-        $dispatchId = (int)$pdo->lastInsertId();
+        $dispatchId = insert_dispatch_assignment($pdo, $incident_id, $incidentReferenceNo, $unit_id, $dispatchTime);
         $dispatchIds[] = $dispatchId;
 
         $stmtUnit->execute([$incident_id, $unit_id]);
@@ -434,7 +473,7 @@ try {
         $stmtMeta = $pdo->prepare("
             SELECT
                 d.id AS dispatch_id,
-                d.incident_id,
+                i.id AS incident_id,
                 d.unit_id,
                 d.status AS dispatch_status,
                 d.assigned_at,
@@ -445,7 +484,7 @@ try {
                 u.identifier AS unit_identifier,
                 u.unit_type
             FROM dispatches d
-            LEFT JOIN incidents i ON i.id = d.incident_id
+            LEFT JOIN incidents i ON i.reference_no = d.reference_no
             LEFT JOIN units u ON u.id = d.unit_id
             WHERE d.id IN ($metaPlaceholders)
             ORDER BY d.id ASC

@@ -71,7 +71,7 @@ try {
     // Validate enums if provided
     if ($priority !== null) {
         $p = ers_normalize_priority_value($priority);
-        if (!in_array($p, ['critical','high','urgent','moderate','low'], true)) {
+        if (!in_array($p, ['critical','high','medium','low'], true)) {
             http_response_code(400);
             echo json_encode(['ok' => false, 'error' => 'Invalid priority']);
             exit;

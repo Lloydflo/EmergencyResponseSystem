@@ -246,6 +246,62 @@ document.addEventListener('DOMContentLoaded', function() {
     // can trigger the sidebar without duplicating logic.
     window.sidebarToggle = toggleSidebar;
     window.sidebarClose = closeSidebar;
+
+    const prefetchedSidebarUrls = new Set();
+
+    function isPrefetchableSidebarUrl(url) {
+        if (!url || url.origin !== window.location.origin) {
+            return false;
+        }
+        if (url.href === window.location.href) {
+            return false;
+        }
+        const protocol = url.protocol.toLowerCase();
+        if (protocol !== 'http:' && protocol !== 'https:') {
+            return false;
+        }
+        const path = url.pathname.toLowerCase();
+        return !path.endsWith('/logout.php') && !path.endsWith('/download.php');
+    }
+
+    function prefetchSidebarLink(link) {
+        if (!link || link.target || link.hasAttribute('download')) {
+            return;
+        }
+
+        let url;
+        try {
+            url = new URL(link.getAttribute('href') || '', window.location.href);
+        } catch (_) {
+            return;
+        }
+
+        if (!isPrefetchableSidebarUrl(url) || prefetchedSidebarUrls.has(url.href)) {
+            return;
+        }
+
+        prefetchedSidebarUrls.add(url.href);
+        const hint = document.createElement('link');
+        hint.rel = 'prefetch';
+        hint.as = 'document';
+        hint.href = url.href;
+        hint.crossOrigin = 'use-credentials';
+        document.head.appendChild(hint);
+    }
+
+    document.querySelectorAll('.sidebar a[href]').forEach(function(link) {
+        link.addEventListener('pointerenter', function() {
+            window.setTimeout(function() {
+                prefetchSidebarLink(link);
+            }, 80);
+        }, { passive: true });
+        link.addEventListener('focus', function() {
+            prefetchSidebarLink(link);
+        });
+        link.addEventListener('touchstart', function() {
+            prefetchSidebarLink(link);
+        }, { passive: true });
+    });
     
     // Close sidebar when clicking overlay
     if (sidebarOverlay) {
@@ -362,9 +418,23 @@ document.addEventListener('DOMContentLoaded', function() {
             incidentStatus: String(session.incidentStatus || ''),
             incidentType: String(session.incidentType || ''),
             location: String(session.location || ''),
+            priority: String(session.priority || ''),
+            latitude: session.latitude !== null && session.latitude !== undefined && session.latitude !== ''
+                ? Number(session.latitude)
+                : null,
+            longitude: session.longitude !== null && session.longitude !== undefined && session.longitude !== ''
+                ? Number(session.longitude)
+                : null,
+            description: String(session.description || ''),
             isTransfer: session.isTransfer === true,
             transferId: String(session.transferId || ''),
-            room: String(session.room || '')
+            callId: String(session.callId || ''),
+            conversationId: String(session.conversationId || ''),
+            room: String(session.room || ''),
+            transferType: String(session.transferType || ''),
+            socketUrl: String(session.socketUrl || ''),
+            socketPath: String(session.socketPath || ''),
+            sourceSystem: String(session.sourceSystem || '')
         };
     }
 
@@ -533,9 +603,19 @@ document.addEventListener('DOMContentLoaded', function() {
                 incidentStatus: payload && Object.prototype.hasOwnProperty.call(payload, 'incidentStatus') ? payload.incidentStatus : current.incidentStatus,
                 incidentType: payload && Object.prototype.hasOwnProperty.call(payload, 'incidentType') ? payload.incidentType : current.incidentType,
                 location: payload && Object.prototype.hasOwnProperty.call(payload, 'location') ? payload.location : current.location,
+                priority: payload && Object.prototype.hasOwnProperty.call(payload, 'priority') ? payload.priority : current.priority,
+                latitude: payload && Object.prototype.hasOwnProperty.call(payload, 'latitude') ? payload.latitude : current.latitude,
+                longitude: payload && Object.prototype.hasOwnProperty.call(payload, 'longitude') ? payload.longitude : current.longitude,
+                description: payload && Object.prototype.hasOwnProperty.call(payload, 'description') ? payload.description : current.description,
                 isTransfer: payload && Object.prototype.hasOwnProperty.call(payload, 'isTransfer') ? payload.isTransfer === true : current.isTransfer === true,
                 transferId: payload && Object.prototype.hasOwnProperty.call(payload, 'transferId') ? payload.transferId : current.transferId,
-                room: payload && Object.prototype.hasOwnProperty.call(payload, 'room') ? payload.room : current.room
+                callId: payload && Object.prototype.hasOwnProperty.call(payload, 'callId') ? payload.callId : current.callId,
+                conversationId: payload && Object.prototype.hasOwnProperty.call(payload, 'conversationId') ? payload.conversationId : current.conversationId,
+                room: payload && Object.prototype.hasOwnProperty.call(payload, 'room') ? payload.room : current.room,
+                transferType: payload && Object.prototype.hasOwnProperty.call(payload, 'transferType') ? payload.transferType : current.transferType,
+                socketUrl: payload && Object.prototype.hasOwnProperty.call(payload, 'socketUrl') ? payload.socketUrl : current.socketUrl,
+                socketPath: payload && Object.prototype.hasOwnProperty.call(payload, 'socketPath') ? payload.socketPath : current.socketPath,
+                sourceSystem: payload && Object.prototype.hasOwnProperty.call(payload, 'sourceSystem') ? payload.sourceSystem : current.sourceSystem
             });
         },
         update: function(payload) {

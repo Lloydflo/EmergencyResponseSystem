@@ -53,10 +53,10 @@ try {
                                     ORDER BY CASE LOWER(priority)
                                         WHEN 'critical' THEN 1
                                         WHEN 'high' THEN 2
-                                        WHEN 'urgent' THEN 3
-                                        WHEN 'moderate' THEN 4
-                                        WHEN 'medium' THEN 4
-                                        WHEN 'low' THEN 5
+                                        WHEN 'urgent' THEN 2
+                                        WHEN 'medium' THEN 3
+                                        WHEN 'moderate' THEN 3
+                                        WHEN 'low' THEN 4
                                         ELSE 6
                                     END, created_at DESC
                                     LIMIT 1")->fetch();
@@ -495,6 +495,22 @@ function routeDistanceKm(fromPoint, toPoint) {
         })
         .catch(() => null);
 }
+function readJsonResponse(response) {
+    return response.text().then(text => {
+        let data = null;
+        if (text.trim() !== '') {
+            try {
+                data = JSON.parse(text);
+            } catch (error) {
+                throw new Error(text.replace(/\s+/g, ' ').trim() || 'Invalid server response');
+            }
+        }
+        if (!response.ok) {
+            throw new Error((data && data.error) || `Request failed (${response.status})`);
+        }
+        return data || {};
+    });
+}
 function updateSelectedUnitRouteDistances(units) {
     const incidentPoint = normalizeLatLngPair(currentIncidentLat, currentIncidentLng);
     if (!incidentPoint) return;
@@ -602,12 +618,18 @@ function parseLatLngFromText(text) {
 }
 function renderIncidentDetails(inc) {
     const hasPoint = currentIncidentLat !== null && currentIncidentLng !== null;
+    const callerName = inc.caller_name || 'N/A';
+    const callerPhone = inc.caller_phone || 'N/A';
+    const description = inc.description || 'No description provided.';
     document.getElementById('modal-incident-details').innerHTML =
-        `<strong>Type:</strong> ${formatIncidentTypeLabel(inc.type) || inc.type || ''}<br>` +
-        `<strong>Title:</strong> ${inc.title || ''}<br>` +
-        `<strong>Location:</strong> ${inc.location_address || 'N/A'}<br>` +
-        (hasPoint ? `<strong>Coordinates:</strong> ${currentIncidentLat}, ${currentIncidentLng}<br>` : '<strong>Coordinates:</strong> Not available<br>') +
-        `<strong>Priority:</strong> ${inc.priority || ''}`;
+        `<strong>Type:</strong> ${escapeHtml(formatIncidentTypeLabel(inc.type) || inc.type || '')}<br>` +
+        `<strong>Title:</strong> ${escapeHtml(inc.title || '')}<br>` +
+        `<strong>Location:</strong> ${escapeHtml(inc.location_address || 'N/A')}<br>` +
+        (hasPoint ? `<strong>Coordinates:</strong> ${escapeHtml(currentIncidentLat + ', ' + currentIncidentLng)}<br>` : '<strong>Coordinates:</strong> Not available<br>') +
+        `<strong>Priority:</strong> ${escapeHtml(inc.priority || '')}<br>` +
+        `<strong>Caller:</strong> ${escapeHtml(callerName)}<br>` +
+        `<strong>Phone:</strong> ${escapeHtml(callerPhone)}<br>` +
+        `<strong>Description:</strong> ${escapeHtml(description)}`;
 }
 function resolveIncidentPoint(inc) {
     const savedPoint = normalizeLatLngPair(inc && inc.latitude, inc && inc.longitude);
@@ -623,8 +645,13 @@ function openDispatchModal(incidentId) {
     document.getElementById('dispatch-modal').style.display = 'flex';
     const unitDropdownLabel = document.getElementById('unit-dropdown-label');
     const unitDropdownMenu = document.getElementById('unit-select');
+    const confirmDispatchBtn = document.getElementById('confirm-dispatch-btn');
     if (unitDropdownLabel) unitDropdownLabel.textContent = 'Select available units';
     if (unitDropdownMenu) unitDropdownMenu.style.display = 'none';
+    if (confirmDispatchBtn) {
+        confirmDispatchBtn.disabled = false;
+        confirmDispatchBtn.textContent = 'Confirm Dispatch';
+    }
     if (currentIncidentId === null) {
         document.getElementById('modal-incident-details').innerHTML = '<span style="color:red">Incident not found.</span>';
         return;
@@ -772,8 +799,8 @@ document.addEventListener('DOMContentLoaded', function() {
         }
 
         Promise.all([
-            fetch('api/incident_details.php?id=' + encodeURIComponent(currentIncidentId)).then(r => r.json()),
-            Promise.all(unitIds.map(unitId => fetch('api/unit_details.php?id=' + encodeURIComponent(unitId)).then(r => r.json())))
+            fetch('api/incident_details.php?id=' + encodeURIComponent(currentIncidentId)).then(readJsonResponse),
+            Promise.all(unitIds.map(unitId => fetch('api/unit_details.php?id=' + encodeURIComponent(unitId)).then(readJsonResponse)))
         ]).then(([incRes, unitResponses]) => {
             const inc = incRes.incident || {};
             let toLat = null, toLng = null;
@@ -804,7 +831,7 @@ document.addEventListener('DOMContentLoaded', function() {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ incident_id: currentIncidentId, unit_ids: unitIds })
-                }).then(r => r.json()).then(data => {
+                }).then(readJsonResponse).then(data => {
                     if (data.ok) {
                         if (typeof addRouteToIncident === 'function' && toLat && toLng) {
                             routeUnits.forEach(routeUnit => {
@@ -839,8 +866,8 @@ document.addEventListener('DOMContentLoaded', function() {
                         btn.textContent = 'Confirm Dispatch';
                     }
                 });
-        }).catch(() => {
-            alert('Network error.');
+        }).catch(error => {
+            alert(error && error.message ? error.message : 'Network error.');
             btn.disabled = false;
             btn.textContent = 'Confirm Dispatch';
         });
@@ -952,7 +979,7 @@ function getIcon(type) {
     return L.divIcon({
         className: 'ers-unit-div-icon',
         html: `
-            <div style="width:38px;height:38px;border-radius:50% 50% 50% 8px;transform:rotate(-45deg);background:${meta.color};border:2px solid #fff;box-shadow:0 8px 18px rgba(15,23,42,.35);display:flex;align-items:center;justify-content:center;">
+            <div style="width:38px;height:38px;border-radius:50% 50% 50% 8px;transform:rotate(-45deg);background:${meta.color};border:2px solid #fff;display:flex;align-items:center;justify-content:center;">
                 <i class="fas ${meta.icon}" style="transform:rotate(45deg);color:#fff;font-size:17px;line-height:1;"></i>
             </div>
         `,
@@ -1953,15 +1980,16 @@ document.addEventListener('DOMContentLoaded', () => {
         const incidentId = toIncidentId(params.get('incident_id'));
         const trackUnit = params.get('track_unit') || params.get('unit') || '';
         const fromCall = params.get('from_call') === '1';
+        const openDispatch = fromCall || params.get('open_dispatch') === '1';
         const period = params.get('period');
-        if (fromCall) {
+        if (openDispatch) {
             if (window.ersCallSession && typeof window.ersCallSession.update === 'function') {
                 window.ersCallSession.update({
                     incidentId: incidentId,
                     incidentReferenceNo: code || ''
                 });
             }
-            showNotification(code ? `Incident ${code} logged. Live call is still ongoing.` : 'Incident logged. Live call is still ongoing.', 'info');
+            showNotification(code ? `Incident ${code} logged. Select a dispatch unit.` : 'Incident logged. Select a dispatch unit.', 'info');
             refreshActiveCalls().finally(() => {
                 if (incidentId !== null) {
                     window.setTimeout(() => openDispatchModal(incidentId), 220);
@@ -2000,10 +2028,12 @@ document.addEventListener('DOMContentLoaded', () => {
                 }
                 container.innerHTML = '';
                 items.forEach(it => {
-                    const prio = (it.priority || 'moderate').toLowerCase();
-                    const prioClass = ['critical', 'high', 'urgent', 'moderate', 'low'].includes(prio)
-                        ? prio
-                        : (prio === 'medium' ? 'moderate' : 'low');
+                    const prio = (it.priority || 'medium').toLowerCase();
+                    const prioClass = prio === 'critical'
+                        ? 'critical'
+                        : (prio === 'high' || prio === 'urgent'
+                            ? 'high'
+                            : (prio === 'low' ? 'low' : 'medium'));
                     const timeAgo = formatTimeAgo(it.created_at) || 'Just now';
                     const title = it.title || it.type || 'Incident';
                     const caller = it.caller_name || 'Unknown';
@@ -2025,7 +2055,7 @@ document.addEventListener('DOMContentLoaded', () => {
                         <div class="call-actions">
                             <button class="btn-dispatch" onclick="openDispatchModal(${it.id})">Dispatch Unit</button>
                             <button class="btn-action-small" onclick="viewDetails(this)" data-incident-id="${it.id}"><i class="fas fa-eye"></i> Details</button>
-                            ${phone ? `<button class=\"btn-action-small\" onclick=\"contactCaller(this)\" data-phone=\"${escapeAttr(phone)}\"><i class=\"fas fa-phone\"></i> Call</button>` : ''}
+                            ${phone ? `<button class="btn-action-small call-phone-btn" onclick="contactCaller(this)" data-phone="${escapeAttr(phone)}"><i class="fas fa-phone"></i> Call</button>` : ''}
                         </div>`;
                     container.appendChild(card);
                 });
@@ -2450,10 +2480,12 @@ function refreshActiveCalls() {
         }
         container.innerHTML = '';
         items.forEach(it => {
-            const prio = (it.priority || 'moderate').toLowerCase();
-            const prioClass = ['critical', 'high', 'urgent', 'moderate', 'low'].includes(prio)
-                ? prio
-                : (prio === 'medium' ? 'moderate' : 'low');
+            const prio = (it.priority || 'medium').toLowerCase();
+            const prioClass = prio === 'critical'
+                ? 'critical'
+                : (prio === 'high' || prio === 'urgent'
+                    ? 'high'
+                    : (prio === 'low' ? 'low' : 'medium'));
             const timeAgo = formatTimeAgo(it.created_at) || 'Just now';
             const title = it.title || it.type || 'Incident';
             const caller = it.caller_name || 'Unknown';
@@ -2462,20 +2494,20 @@ function refreshActiveCalls() {
             card.className = 'call-card ' + prioClass;
             card.setAttribute('data-incident-id', String(it.id));
             card.innerHTML = `
-                <div class=\"call-info\">
-                    <div class=\"call-details\">
-                        <div class=\"call-title\">${escapeHtml(title)}</div>
-                        <div class=\"call-meta\">
-                            <span><i class=\"fas fa-clock\"></i> ${escapeHtml(timeAgo)}</span>
-                            <span><i class=\"fas fa-user\"></i> ${escapeHtml(caller)}</span>
-                            <span class=\"status-indicator status-${prioClass}\"></span> ${prio.charAt(0).toUpperCase() + prio.slice(1)} Priority
+                <div class="call-info">
+                    <div class="call-details">
+                        <div class="call-title">${escapeHtml(title)}</div>
+                        <div class="call-meta">
+                            <span><i class="fas fa-clock"></i> ${escapeHtml(timeAgo)}</span>
+                            <span><i class="fas fa-user"></i> ${escapeHtml(caller)}</span>
+                            <span class="status-indicator status-${prioClass}"></span> ${prio.charAt(0).toUpperCase() + prio.slice(1)} Priority
                         </div>
                     </div>
                 </div>
-                <div class=\"call-actions\">
-                    <button class=\"btn-dispatch\" onclick=\"openDispatchModal(${it.id})\">Dispatch Unit</button>
-                    <button class=\"btn-action-small\" onclick=\"viewDetails(this)\" data-incident-id=\"${it.id}\"><i class=\"fas fa-eye\"></i> Details</button>
-                    ${phone ? `<button class=\\\"btn-action-small\\\" onclick=\\\"contactCaller(this)\\\" data-phone=\\\"${escapeAttr(phone)}\\\"><i class=\\\"fas fa-phone\\\"></i> Call</button>` : ''}
+                <div class="call-actions">
+                    <button class="btn-dispatch" onclick="openDispatchModal(${it.id})">Dispatch Unit</button>
+                    <button class="btn-action-small" onclick="viewDetails(this)" data-incident-id="${it.id}"><i class="fas fa-eye"></i> Details</button>
+                    ${phone ? `<button class="btn-action-small call-phone-btn" onclick="contactCaller(this)" data-phone="${escapeAttr(phone)}"><i class="fas fa-phone"></i> Call</button>` : ''}
                 </div>`;
             container.appendChild(card);
         });
