@@ -495,6 +495,22 @@ function routeDistanceKm(fromPoint, toPoint) {
         })
         .catch(() => null);
 }
+function readJsonResponse(response) {
+    return response.text().then(text => {
+        let data = null;
+        if (text.trim() !== '') {
+            try {
+                data = JSON.parse(text);
+            } catch (error) {
+                throw new Error(text.replace(/\s+/g, ' ').trim() || 'Invalid server response');
+            }
+        }
+        if (!response.ok) {
+            throw new Error((data && data.error) || `Request failed (${response.status})`);
+        }
+        return data || {};
+    });
+}
 function updateSelectedUnitRouteDistances(units) {
     const incidentPoint = normalizeLatLngPair(currentIncidentLat, currentIncidentLng);
     if (!incidentPoint) return;
@@ -783,8 +799,8 @@ document.addEventListener('DOMContentLoaded', function() {
         }
 
         Promise.all([
-            fetch('api/incident_details.php?id=' + encodeURIComponent(currentIncidentId)).then(r => r.json()),
-            Promise.all(unitIds.map(unitId => fetch('api/unit_details.php?id=' + encodeURIComponent(unitId)).then(r => r.json())))
+            fetch('api/incident_details.php?id=' + encodeURIComponent(currentIncidentId)).then(readJsonResponse),
+            Promise.all(unitIds.map(unitId => fetch('api/unit_details.php?id=' + encodeURIComponent(unitId)).then(readJsonResponse)))
         ]).then(([incRes, unitResponses]) => {
             const inc = incRes.incident || {};
             let toLat = null, toLng = null;
@@ -815,7 +831,7 @@ document.addEventListener('DOMContentLoaded', function() {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ incident_id: currentIncidentId, unit_ids: unitIds })
-                }).then(r => r.json()).then(data => {
+                }).then(readJsonResponse).then(data => {
                     if (data.ok) {
                         if (typeof addRouteToIncident === 'function' && toLat && toLng) {
                             routeUnits.forEach(routeUnit => {
@@ -850,8 +866,8 @@ document.addEventListener('DOMContentLoaded', function() {
                         btn.textContent = 'Confirm Dispatch';
                     }
                 });
-        }).catch(() => {
-            alert('Network error.');
+        }).catch(error => {
+            alert(error && error.message ? error.message : 'Network error.');
             btn.disabled = false;
             btn.textContent = 'Confirm Dispatch';
         });

@@ -2,6 +2,7 @@
 require_once '../includes/db.php';
 require_once '../includes/vehicle_resource_units.php';
 require_once '../includes/emergency_com_status_sync.php';
+require_once '../includes/dispatch_attempt_log.php';
 header('Content-Type: application/json');
 
 if ($_SERVER['REQUEST_METHOD'] !== 'POST') {

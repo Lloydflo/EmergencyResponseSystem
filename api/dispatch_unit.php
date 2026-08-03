@@ -26,6 +26,7 @@ if ($incident_id === null || $unit_ids === []) {
 require_once __DIR__ . '/../includes/db.php';
 require_once __DIR__ . '/../includes/vehicle_resource_units.php';
 require_once __DIR__ . '/../includes/emergency_com_status_sync.php';
+require_once __DIR__ . '/../includes/dispatch_attempt_log.php';
 $pdo = get_db_connection();
 if (!$pdo) {
     echo json_encode(['ok'=>false,'error'=>'DB error']);
