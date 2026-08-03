@@ -256,7 +256,7 @@ if ($adminName === '') {
                 </section>
                 <section class="ar-feedback-panel">
                     <h4><i class="fas fa-paper-plane"></i> Feedback &amp; Surveys</h4>
-                    <p>Dispatcher notes and received survey entries appear here automatically.</p>
+                    <p>Dispatcher notes, responder messages, after-action entries, and received surveys appear here automatically.</p>
                     <div id="adminFeedbackList" class="ar-feedback-list"></div>
                 </section>
                 <section class="ar-feedback-panel">
