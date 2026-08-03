@@ -23,15 +23,10 @@
         return String(value || '').replace(/\s+/g, ' ').trim();
     }
 
-    function hasQcContext(text) {
-        return /(quezon city|qc|metro manila|philippines)\b/i.test(text);
-    }
-
     function buildProxyParams(query, options) {
         return new URLSearchParams({
             q: query,
-            limit: String(options.limit || DEFAULT_LIMIT),
-            strict: options.strictViewbox ? '1' : '0'
+            limit: String(options.limit || DEFAULT_LIMIT)
         });
     }
 
@@ -39,7 +34,6 @@
         const label = String(place.display_name || '').toLowerCase();
         const q = String(query || '').toLowerCase();
         let score = toNum(place.importance) || 0;
-        if (label.includes('quezon city')) score += 2;
         if (label.includes(q)) score += 1.5;
         return score;
     }
@@ -60,8 +54,7 @@
         const input = normalizeText(query);
         if (!input) return [];
 
-        const localizedQuery = hasQcContext(input) ? input : `${input}, Quezon City`;
-        const params = buildProxyParams(localizedQuery, options);
+        const params = buildProxyParams(input, options);
         const url = `api/geocode_proxy.php?${params.toString()}`;
         const res = await fetch(url, {
             signal: signal,
@@ -125,8 +118,6 @@
         const mergedOptions = Object.assign(
             {
                 limit: DEFAULT_LIMIT,
-                strictViewbox: inputId === 'search-location',
-                preferViewbox: true,
                 minChars: 3,
                 debounceMs: 220
             },
@@ -266,10 +257,7 @@
 
     // Auto-attach for known fields
     window.addEventListener('DOMContentLoaded', function () {
-        attachPlaceAutocomplete('incidentLocation', null, {
-            strictViewbox: false,
-            preferViewbox: true
-        });
+        attachPlaceAutocomplete('incidentLocation');
         attachPlaceAutocomplete('search-location', function (place) {
             const lat = toNum(place && place.lat);
             const lon = toNum(place && place.lon);
@@ -279,9 +267,6 @@
             } else if (window.map) {
                 window.map.setView([lat, lon], 16, { animate: true });
             }
-        }, {
-            strictViewbox: true,
-            preferViewbox: true
         });
     });
 })();

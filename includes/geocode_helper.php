@@ -1,17 +1,6 @@
 <?php
 declare(strict_types=1);
 
-if (!defined('ERS_GEOCODE_QC_VIEWBOX')) {
-    define('ERS_GEOCODE_QC_VIEWBOX', '121.0000,14.7500,121.1000,14.6000');
-}
-
-if (!function_exists('ers_geocode_has_location_context')) {
-    function ers_geocode_has_location_context(string $text): bool
-    {
-        return (bool)preg_match('/(quezon city|qc|metro manila|philippines)\b/i', $text);
-    }
-}
-
 if (!function_exists('ers_geocode_plus_code_alphabet')) {
     function ers_geocode_plus_code_alphabet(): string
     {
@@ -225,13 +214,8 @@ if (!function_exists('ers_geocode_build_url')) {
             'format' => 'jsonv2',
             'addressdetails' => '1',
             'limit' => (string)$limit,
-            'countrycodes' => 'ph',
             'q' => $query,
-            'viewbox' => ERS_GEOCODE_QC_VIEWBOX,
         ];
-        if ($strict) {
-            $params['bounded'] = '1';
-        }
 
         return 'https://nominatim.openstreetmap.org/search?' . http_build_query($params, '', '&', PHP_QUERY_RFC3986);
     }
@@ -286,9 +270,6 @@ if (!function_exists('ers_geocode_score_item')) {
         $label = strtolower((string)($item['display_name'] ?? ''));
         $q = strtolower($query);
         $score = isset($item['importance']) ? (float)$item['importance'] : 0.0;
-        if (strpos($label, 'quezon city') !== false) {
-            $score += 2.0;
-        }
         if ($q !== '' && strpos($label, $q) !== false) {
             $score += 1.5;
         }
@@ -331,13 +312,7 @@ if (!function_exists('ers_geocode_location_to_coordinates')) {
             return $plusCodeCoordinates;
         }
 
-        $localized = ers_geocode_has_location_context($input)
-            ? $input
-            : $input . ', Quezon City, Metro Manila, Philippines';
-
         $attempts = [
-            ['query' => $localized, 'strict' => true],
-            ['query' => $localized, 'strict' => false],
             ['query' => $input, 'strict' => false],
         ];
 

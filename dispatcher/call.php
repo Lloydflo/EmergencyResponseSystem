@@ -2787,15 +2787,10 @@ if ($turnIsConfigured && preg_match('/^turns?:(?:\/\/)?([^:\/?]+)/i', $turnUrl, 
         return parseCoordinateText(input.value);
     }
 
-    function hasLocationContext(text) {
-        return /(quezon city|qc|metro manila|philippines)\b/i.test(String(text || ''));
-    }
-
-    async function geocodeOnce(query, strictViewbox) {
+    async function geocodeOnce(query) {
         const params = new URLSearchParams({
             q: query,
-            limit: '6',
-            strict: strictViewbox ? '1' : '0'
+            limit: '6'
         });
         const url = `api/geocode_proxy.php?${params.toString()}`;
         const res = await fetch(url, { headers: { Accept: 'application/json' } });
@@ -2813,7 +2808,6 @@ if ($turnIsConfigured && preg_match('/^turns?:(?:\/\/)?([^:\/?]+)/i', $turnUrl, 
         const scored = items.map((item) => {
             const label = String(item.display_name || '').toLowerCase();
             let score = Number(item.importance || 0);
-            if (label.includes('quezon city')) score += 2;
             if (q && label.includes(q)) score += 1.5;
             return { item, score };
         });
@@ -2833,18 +2827,8 @@ if ($turnIsConfigured && preg_match('/^turns?:(?:\/\/)?([^:\/?]+)/i', $turnUrl, 
             return incidentGeocodeCache[cacheKey];
         }
 
-        const normalizedQuery = hasLocationContext(raw)
-            ? raw
-            : `${raw}, Quezon City, Metro Manila, Philippines`;
-
         try {
-            let candidates = await geocodeOnce(normalizedQuery, true);
-            if (!candidates.length) {
-                candidates = await geocodeOnce(normalizedQuery, false);
-            }
-            if (!candidates.length && normalizedQuery !== raw) {
-                candidates = await geocodeOnce(raw, false);
-            }
+            const candidates = await geocodeOnce(raw);
             const best = selectBestGeocodeCandidate(candidates, raw);
             const lat = Number(best?.lat);
             const lng = Number(best?.lon);

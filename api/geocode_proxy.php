@@ -9,13 +9,12 @@ if ($_SERVER['REQUEST_METHOD'] !== 'GET') {
     exit;
 }
 
-const QC_VIEWBOX = '121.0000,14.7500,121.1000,14.6000'; // left,top,right,bottom
 const CACHE_TTL_SECONDS = 86400; // 24 hours fresh cache
 const CACHE_MAX_ENTRIES = 800;
 
 $rawQuery = trim((string)($_GET['q'] ?? ''));
 $limit = (int)($_GET['limit'] ?? 6);
-$strict = (string)($_GET['strict'] ?? '') === '1';
+$strict = false;
 
 if ($rawQuery === '') {
     http_response_code(422);
@@ -137,21 +136,12 @@ function normalize_items(array $items, int $limit): array {
     return $out;
 }
 
-function has_location_context(string $text): bool {
-    return (bool)preg_match('/(quezon city|qc|metro manila|philippines)\b/i', $text);
-}
-
 function build_nominatim_url(string $query, int $limit, bool $strict): string {
     $params = new URLSearchParams();
     $params->set('format', 'jsonv2');
     $params->set('addressdetails', '1');
     $params->set('limit', (string)$limit);
-    $params->set('countrycodes', 'ph');
     $params->set('q', $query);
-    $params->set('viewbox', QC_VIEWBOX);
-    if ($strict) {
-        $params->set('bounded', '1');
-    }
     return 'https://nominatim.openstreetmap.org/search?' . $params->toString();
 }
 
@@ -159,7 +149,6 @@ function score_item(array $item, string $query): float {
     $label = strtolower((string)($item['display_name'] ?? ''));
     $q = strtolower($query);
     $score = isset($item['importance']) ? (float)$item['importance'] : 0.0;
-    if (strpos($label, 'quezon city') !== false) $score += 2.0;
     if ($q !== '' && strpos($label, $q) !== false) $score += 1.5;
     return $score;
 }
@@ -168,13 +157,7 @@ function fetch_geocode_candidates(string $query, int $limit, bool $strict): arra
     $input = trim($query);
     if ($input === '') return [];
 
-    $localized = has_location_context($input)
-        ? $input
-        : $input . ', Quezon City, Metro Manila, Philippines';
-
     $attempts = [
-        ['q' => $localized, 'strict' => $strict],
-        ['q' => $localized, 'strict' => false],
         ['q' => $input, 'strict' => false],
     ];
 
@@ -186,15 +169,7 @@ function fetch_geocode_candidates(string $query, int $limit, bool $strict): arra
             continue;
         }
         $last = $data;
-        if ((bool)$attempt['strict']) {
-            break;
-        }
-        foreach ($data as $place) {
-            $label = strtolower((string)($place['display_name'] ?? ''));
-            if (strpos($label, 'quezon city') !== false) {
-                break 2;
-            }
-        }
+        break;
     }
 
     if (empty($last)) return [];
@@ -258,4 +233,3 @@ final class URLSearchParams {
         return http_build_query($this->data, '', '&', PHP_QUERY_RFC3986);
     }
 }
-
