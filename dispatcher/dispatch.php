@@ -957,7 +957,7 @@ function getIcon(type) {
     return L.divIcon({
         className: 'ers-unit-div-icon',
         html: `
-            <div style="width:38px;height:38px;border-radius:50% 50% 50% 8px;transform:rotate(-45deg);background:${meta.color};border:2px solid #fff;box-shadow:0 8px 18px rgba(15,23,42,.35);display:flex;align-items:center;justify-content:center;">
+            <div style="width:38px;height:38px;border-radius:50% 50% 50% 8px;transform:rotate(-45deg);background:${meta.color};border:2px solid #fff;display:flex;align-items:center;justify-content:center;">
                 <i class="fas ${meta.icon}" style="transform:rotate(45deg);color:#fff;font-size:17px;line-height:1;"></i>
             </div>
         `,

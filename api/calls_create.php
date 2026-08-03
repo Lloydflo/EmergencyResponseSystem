@@ -34,6 +34,7 @@ $priority = ers_normalize_priority_value(trim((string)($input['priority'] ?? 'mo
 $status = trim((string)($input['status'] ?? 'pending'));
 $latitude = array_key_exists('latitude', $input) && $input['latitude'] !== '' ? (float)$input['latitude'] : null;
 $longitude = array_key_exists('longitude', $input) && $input['longitude'] !== '' ? (float)$input['longitude'] : null;
+$transfer_incident_id = transfer_incident_id_from_input($input);
 
 if ($latitude !== null && ($latitude < -90 || $latitude > 90)) {
     $latitude = null;
@@ -63,6 +64,57 @@ try {
     ers_ensure_incident_priority_schema($pdo);
 } catch (Throwable $schemaErr) {
     error_log('calls_create schema check warning: ' . $schemaErr->getMessage());
+}
+
+if ($transfer_incident_id > 0) {
+    try {
+        $updatedIncident = update_existing_transfer_incident(
+            $pdo,
+            $transfer_incident_id,
+            $caller_name,
+            $caller_phone,
+            $type,
+            $location,
+            $description,
+            $priority,
+            $status,
+            $latitude,
+            $longitude,
+            $priorityAssessment
+        );
+        if ($updatedIncident !== null) {
+            log_incident_created_audit(
+                (int)$updatedIncident['id'],
+                (string)$updatedIncident['reference_no'],
+                $type,
+                $priority,
+                $location,
+                $priorityAssessment
+            );
+            echo json_encode([
+                'ok' => true,
+                'updated_transfer' => true,
+                'call_id' => $updatedIncident['call_id'],
+                'reference_no' => $updatedIncident['reference_no'],
+                'incident_id' => (int)$updatedIncident['id'],
+                'incident_reference_no' => $updatedIncident['reference_no'],
+                'incident_status' => $updatedIncident['status'],
+                'priority' => $priority,
+                'priority_score' => (int)$priorityAssessment['score'],
+                'priority_label' => (string)$priorityAssessment['label'],
+                'priority_color' => (string)$priorityAssessment['color'],
+            ]);
+            exit;
+        }
+    } catch (Throwable $e) {
+        if ($pdo->inTransaction()) {
+            $pdo->rollBack();
+        }
+        http_response_code(500);
+        error_log('calls_create transfer update failed: ' . $e->getMessage());
+        echo json_encode(['ok' => false, 'error' => build_user_facing_db_error($e)]);
+        exit;
+    }
 }
 
 $duplicate_sql = 'SELECT id, reference_no, type, location_address, created_at
@@ -169,6 +221,174 @@ function log_incident_created_audit(?int $incidentId, string $referenceNo, strin
         . ' | Score: ' . (int)($assessment['score'] ?? 0)
         . ' | Location: ' . $location;
     log_activity_event(null, 'incident_created', 'incident', $incidentId, $details);
+}
+
+function transfer_incident_id_from_input(array $input): int {
+    foreach (['transfer_incident_id', 'existing_incident_id', 'linked_incident_id'] as $key) {
+        if (isset($input[$key]) && is_numeric((string)$input[$key])) {
+            $id = (int)$input[$key];
+            if ($id > 0) {
+                return $id;
+            }
+        }
+    }
+    return 0;
+}
+
+function update_existing_transfer_incident(
+    PDO $pdo,
+    int $incidentId,
+    string $callerName,
+    string $callerPhone,
+    string $type,
+    string $location,
+    string $description,
+    string $priority,
+    string $requestedStatus,
+    ?float $latitude,
+    ?float $longitude,
+    array $assessment
+): ?array {
+    if ($incidentId <= 0) {
+        return null;
+    }
+
+    $pdo->beginTransaction();
+    $hasExternalLinkTable = calls_create_table_exists($pdo, 'external_incident_links');
+    $externalLinkExpr = $hasExternalLinkTable
+        ? '(SELECT COUNT(*) FROM external_incident_links l WHERE l.incident_id = incidents.id LIMIT 1) AS transfer_link_count'
+        : '0 AS transfer_link_count';
+    $stmt = $pdo->prepare(
+        'SELECT id, reference_no, status, title, description, reported_by_call_id, ' . $externalLinkExpr . '
+         FROM incidents
+         WHERE id = ?
+         LIMIT 1
+         FOR UPDATE'
+    );
+    $stmt->execute([$incidentId]);
+    $incident = $stmt->fetch(PDO::FETCH_ASSOC);
+    if (!$incident) {
+        $pdo->rollBack();
+        return null;
+    }
+
+    $transferMarkerText = strtolower(implode(' ', [
+        (string)($incident['reference_no'] ?? ''),
+        (string)($incident['title'] ?? ''),
+        (string)($incident['description'] ?? ''),
+    ]));
+    $hasTransferMarker = (int)($incident['transfer_link_count'] ?? 0) > 0
+        || strpos($transferMarkerText, 'trn-') !== false
+        || strpos($transferMarkerText, 'transfer') !== false
+        || strpos($transferMarkerText, 'alertaraqc') !== false;
+    if (!$hasTransferMarker) {
+        $pdo->rollBack();
+        return null;
+    }
+
+    $currentStatus = strtolower(trim((string)($incident['status'] ?? '')));
+    if (in_array($currentStatus, ['resolved', 'cancelled', 'closed', 'rejected'], true)) {
+        $pdo->rollBack();
+        return null;
+    }
+
+    $referenceNo = trim((string)($incident['reference_no'] ?? ''));
+    if ($referenceNo === '') {
+        $referenceNo = 'REF-' . date('YmdHis') . '-' . str_pad((string)random_int(0, 9999), 4, '0', STR_PAD_LEFT);
+    }
+
+    $nextIncidentStatus = strtolower(trim($requestedStatus));
+    if (!in_array($nextIncidentStatus, ['pending', 'dispatched', 'resolved'], true)) {
+        $nextIncidentStatus = $currentStatus !== '' ? $currentStatus : 'pending';
+    }
+    $nextCallStatus = $nextIncidentStatus === 'pending' ? 'new' : 'triaged';
+    $callId = (int)($incident['reported_by_call_id'] ?? 0);
+
+    if ($callId > 0) {
+        $callUpdate = $pdo->prepare(
+            'UPDATE calls
+             SET reference_no = ?,
+                 caller_name = ?,
+                 caller_phone = ?,
+                 location_address = ?,
+                 latitude = ?,
+                 longitude = ?,
+                 incident_type = ?,
+                 priority = ?,
+                 status = ?,
+                 description = ?,
+                 updated_at = CURRENT_TIMESTAMP
+             WHERE id = ?'
+        );
+        $callUpdate->execute([
+            $referenceNo,
+            $callerName,
+            $callerPhone,
+            $location,
+            $latitude,
+            $longitude,
+            $type,
+            $priority,
+            $nextCallStatus,
+            $description,
+            $callId,
+        ]);
+    }
+
+    $title = 'Incident from call ' . $referenceNo;
+    $incidentUpdate = $pdo->prepare(
+        'UPDATE incidents
+         SET reference_no = ?,
+             type = ?,
+             priority = ?,
+             status = ?,
+             title = ?,
+             description = ?,
+             location_address = ?,
+             latitude = ?,
+             longitude = ?,
+             updated_at = CURRENT_TIMESTAMP
+         WHERE id = ?'
+    );
+    $incidentUpdate->execute([
+        $referenceNo,
+        $type,
+        $priority,
+        $nextIncidentStatus,
+        $title,
+        $description,
+        $location,
+        $latitude,
+        $longitude,
+        $incidentId,
+    ]);
+
+    update_incident_priority_indicator($pdo, $incidentId, $priority, $assessment);
+
+    $pdo->commit();
+
+    return [
+        'id' => $incidentId,
+        'reference_no' => $referenceNo,
+        'status' => $nextIncidentStatus,
+        'call_id' => $callId > 0 ? $callId : null,
+    ];
+}
+
+function calls_create_table_exists(PDO $pdo, string $tableName): bool {
+    try {
+        $stmt = $pdo->prepare(
+            'SELECT 1
+             FROM INFORMATION_SCHEMA.TABLES
+             WHERE TABLE_SCHEMA = DATABASE()
+               AND TABLE_NAME = ?
+             LIMIT 1'
+        );
+        $stmt->execute([$tableName]);
+        return (bool)$stmt->fetchColumn();
+    } catch (Throwable $e) {
+        return false;
+    }
 }
 
 function insert_call_row(PDO $pdo, array $params, array $assessment): int {

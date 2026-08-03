@@ -918,9 +918,19 @@ if ($turnIsConfigured && preg_match('/^turns?:(?:\/\/)?([^:\/?]+)/i', $turnUrl, 
                 incidentStatus: incomingCall.incidentStatus || '',
                 incidentType: incomingCall.incidentType || '',
                 location: incomingCall.location || '',
+                priority: incomingCall.priority || '',
+                latitude: incomingCall.latitude ?? null,
+                longitude: incomingCall.longitude ?? null,
+                description: incomingCall.description || '',
                 isTransfer: incomingCall.isTransfer === true,
                 transferId: incomingCall.transferId || '',
-                room: incomingCall.room || ''
+                callId: incomingCall.callId || '',
+                conversationId: incomingCall.conversationId || '',
+                room: incomingCall.room || '',
+                transferType: incomingCall.transferType || '',
+                socketUrl: incomingCall.socketUrl || '',
+                socketPath: incomingCall.socketPath || '',
+                sourceSystem: incomingCall.sourceSystem || ''
             });
         } else {
             activeCall = { active: true, name, phone, start, isTransfer: incomingCall.isTransfer === true };
@@ -2827,6 +2837,13 @@ if ($turnIsConfigured && preg_match('/^turns?:(?:\/\/)?([^:\/?]+)/i', $turnUrl, 
             priority: priorityValue,
             status: document.getElementById('status').value
         };
+        const transferIncidentId = Number(activeTransferCall && (activeTransferCall.incidentId || activeTransferCall.incident_id));
+        if (activeTransferCall && activeTransferCall.isTransfer === true && Number.isFinite(transferIncidentId) && transferIncidentId > 0) {
+            payload.transfer_incident_id = transferIncidentId;
+            payload.transfer_id = activeTransferCall.transferId || activeTransferCall.transfer_id || '';
+            payload.transfer_call_id = activeTransferCall.callId || activeTransferCall.call_id_external || '';
+            payload.transfer_source_system = activeTransferCall.sourceSystem || activeTransferCall.source_system || '';
+        }
         if (coords) {
             payload.latitude = coords.lat;
             payload.longitude = coords.lng;

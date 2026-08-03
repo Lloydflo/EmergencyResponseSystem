@@ -530,6 +530,15 @@
     box-shadow: 0 12px 24px rgba(15, 23, 42, 0.16);
 }
 
+.dispatch-map-shell .ers-unit-div-icon > div {
+    box-shadow: none !important;
+    filter: none !important;
+}
+
+.dispatch-map-shell .leaflet-marker-shadow {
+    display: none !important;
+}
+
 .status-indicator {
     display: inline-block;
     width: 11px;
