@@ -315,7 +315,6 @@ if ($turnIsConfigured && preg_match('/^turns?:(?:\/\/)?([^:\/?]+)/i', $turnUrl, 
                                     <div class="section-title priority-title">
                                         <i class="fas fa-triangle-exclamation"></i>
                                         Priority
-                                        <span id="prioritySuggestion" class="priority-suggestion"></span>
                                     </div>
                                     <div class="priority-select" id="prioritySelect" role="radiogroup" aria-label="Incident priority">
                                         <button type="button" class="priority-option low active" data-value="low" role="radio" aria-checked="true">Low</button>
@@ -676,8 +675,6 @@ if ($turnIsConfigured && preg_match('/^turns?:(?:\/\/)?([^:\/?]+)/i', $turnUrl, 
         setPrioritySelection('low');
         priorityAuto = true;
         clearTransferFormContext();
-        const badge = document.getElementById('prioritySuggestion');
-        if (badge) badge.textContent = '';
         const locationInput = document.getElementById('incidentLocation');
         if (locationInput) {
             delete locationInput.dataset.lat;
@@ -700,8 +697,6 @@ if ($turnIsConfigured && preg_match('/^turns?:(?:\/\/)?([^:\/?]+)/i', $turnUrl, 
         resetIncidentTypeChecklist();
         setPrioritySelection('low');
         priorityAuto = true;
-        const badge = document.getElementById('prioritySuggestion');
-        if (badge) badge.textContent = '';
         const locationInput = document.getElementById('incidentLocation');
         if (locationInput) {
             delete locationInput.dataset.lat;
@@ -1484,6 +1479,7 @@ if ($turnIsConfigured && preg_match('/^turns?:(?:\/\/)?([^:\/?]+)/i', $turnUrl, 
         form.dataset.transferIncidentId = String(incidentId || '');
         form.dataset.transferId = String(call.transferId || call.transfer_id || '');
         form.dataset.transferCallId = String(call.callId || call.call_id_external || call.call_id || '');
+        form.dataset.transferReferenceNo = String(call.incidentReferenceNo || call.reference_no || '');
         form.dataset.transferSourceSystem = String(call.sourceSystem || call.source_system || '');
     }
 
@@ -1493,6 +1489,7 @@ if ($turnIsConfigured && preg_match('/^turns?:(?:\/\/)?([^:\/?]+)/i', $turnUrl, 
         delete form.dataset.transferIncidentId;
         delete form.dataset.transferId;
         delete form.dataset.transferCallId;
+        delete form.dataset.transferReferenceNo;
         delete form.dataset.transferSourceSystem;
     }
 
@@ -1510,6 +1507,7 @@ if ($turnIsConfigured && preg_match('/^turns?:(?:\/\/)?([^:\/?]+)/i', $turnUrl, 
             incidentId: Number.isFinite(incidentId) && incidentId > 0 ? incidentId : 0,
             transferId: (form && form.dataset ? form.dataset.transferId : '') || call.transferId || call.transfer_id || session.transferId || '',
             callId: (form && form.dataset ? form.dataset.transferCallId : '') || call.callId || call.call_id_external || call.call_id || session.callId || '',
+            referenceNo: (form && form.dataset ? form.dataset.transferReferenceNo : '') || call.incidentReferenceNo || call.reference_no || session.incidentReferenceNo || '',
             sourceSystem: (form && form.dataset ? form.dataset.transferSourceSystem : '') || call.sourceSystem || call.source_system || session.sourceSystem || ''
         };
     }
@@ -2685,17 +2683,10 @@ if ($turnIsConfigured && preg_match('/^turns?:(?:\/\/)?([^:\/?]+)/i', $turnUrl, 
 
     function updatePrioritySuggestion(desc) {
         const text = (desc || '').trim();
-        const badge = document.getElementById('prioritySuggestion');
-        // Show suggestion only after user types some description
         if (!text || text.length < 3) {
-            if (badge) badge.textContent = '';
             return;
         }
         const suggested = suggestPriorityFromDescription(text);
-        if (badge) {
-            const label = suggested.charAt(0).toUpperCase() + suggested.slice(1);
-            badge.textContent = `(Suggested: ${label})`;
-        }
         if (priorityAuto) {
             setPrioritySelection(suggested);
         }
@@ -2885,10 +2876,13 @@ if ($turnIsConfigured && preg_match('/^turns?:(?:\/\/)?([^:\/?]+)/i', $turnUrl, 
             status: document.getElementById('status').value
         };
         const transferContext = transferSubmitContext(form);
-        if (transferContext.incidentId > 0) {
-            payload.transfer_incident_id = transferContext.incidentId;
+        if (transferContext.incidentId > 0 || transferContext.transferId || transferContext.callId || transferContext.referenceNo) {
+            if (transferContext.incidentId > 0) {
+                payload.transfer_incident_id = transferContext.incidentId;
+            }
             payload.transfer_id = transferContext.transferId;
             payload.transfer_call_id = transferContext.callId;
+            payload.transfer_reference_no = transferContext.referenceNo;
             payload.transfer_source_system = transferContext.sourceSystem;
         }
         if (coords) {
@@ -2952,8 +2946,6 @@ if ($turnIsConfigured && preg_match('/^turns?:(?:\/\/)?([^:\/?]+)/i', $turnUrl, 
             }
             clearTransferFormContext();
             priorityAuto = true;
-            const badge = document.getElementById('prioritySuggestion');
-            if (badge) badge.textContent = '';
             await loadIncidentsFromServer();
             // Log activity event for dashboard Recent Activity
             try {
@@ -3017,8 +3009,6 @@ if ($turnIsConfigured && preg_match('/^turns?:(?:\/\/)?([^:\/?]+)/i', $turnUrl, 
         }).sort((a, b) => {
             const byPriority = priorityRank(a.priority) - priorityRank(b.priority);
             if (byPriority !== 0) return byPriority;
-            const byScore = (Number(b.priority_score) || 0) - (Number(a.priority_score) || 0);
-            if (byScore !== 0) return byScore;
             const byTime = parseQueueTime(b.updated_at || b.created_at || b.timestamp) - parseQueueTime(a.updated_at || a.created_at || a.timestamp);
             if (byTime !== 0) return byTime;
             return Number(b.id || 0) - Number(a.id || 0);
@@ -3027,7 +3017,6 @@ if ($turnIsConfigured && preg_match('/^turns?:(?:\/\/)?([^:\/?]+)/i', $turnUrl, 
 
     function incidentCardHtml(i) {
         const priorityClass = normalizePriority(i.priority, 'low');
-        const priorityScore = Number.isFinite(Number(i.priority_score)) ? Number(i.priority_score) : null;
         const created = new Date(i.created_at || Date.now());
         const code = i.incident_code || '';
         const id = Number(i.id) || 0;
@@ -3035,7 +3024,7 @@ if ($turnIsConfigured && preg_match('/^turns?:(?:\/\/)?([^:\/?]+)/i', $turnUrl, 
             <div class="incident-card" role="button" tabindex="0" onclick="openIncidentById(${id})" onkeydown="handleIncidentCardKey(event, ${id})">
                 <div class="incident-header">
                     <div class="incident-id">${escapeHtml(code || ('#' + id))}</div>
-                    <div class="incident-priority ${escapeHtml(priorityClass)}">${escapeHtml((priorityClass||'low').toUpperCase())}${priorityScore !== null ? ` - ${priorityScore} pts` : ''}</div>
+                    <div class="incident-priority ${escapeHtml(priorityClass)}">${escapeHtml((priorityClass||'low').toUpperCase())}</div>
                 </div>
                 <div class="incident-type">${escapeHtml(labelForType(i.type))}</div>
                 <div class="incident-location"><i class="fas fa-map-marker-alt"></i> ${escapeHtml(i.location || 'No location')}</div>
@@ -3111,18 +3100,16 @@ if ($turnIsConfigured && preg_match('/^turns?:(?:\/\/)?([^:\/?]+)/i', $turnUrl, 
             .filter(Boolean)
             .join(' | ');
         const priorityClass = normalizePriority(item.priority, 'low');
-        const priorityScore = Number.isFinite(Number(item.priority_score)) ? `${Number(item.priority_score)} pts` : '';
 
         title.textContent = item.incident_code || `Incident #${item.id || ''}`;
         body.innerHTML = `
             <div class="incident-details-summary">
-                <span class="incident-priority ${priorityClass}">${escapeHtml(priorityClass.toUpperCase())}${priorityScore ? ` - ${escapeHtml(priorityScore)}` : ''}</span>
+                <span class="incident-priority ${priorityClass}">${escapeHtml(priorityClass.toUpperCase())}</span>
                 <span class="incident-status-pill">${escapeHtml(item.status || 'N/A')}</span>
                 <span>${escapeHtml(formatDateTime(item.created_at))}</span>
             </div>
             <div class="incident-details-grid">
                 ${incidentDetailRow('Type', labelForType(item.type))}
-                ${incidentDetailRow('Priority Score', priorityScore)}
                 ${incidentDetailRow('Location', item.location)}
                 ${incidentDetailRow('Coordinates', coordinates)}
                 ${incidentDetailRow('Caller', item.caller_name)}

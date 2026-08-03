@@ -1501,74 +1501,6 @@ body.incoming-call-modal-open {
     gap: 0.85rem;
 }
 
-.priority-score-card {
-    min-height: 88px;
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 1rem;
-    padding: 1rem;
-    border-radius: 12px;
-    border: 1px solid #d7dee8;
-    background: #f8fafc;
-}
-
-.priority-score-card span {
-    display: block;
-    color: #64748b;
-    font-size: 0.76rem;
-    font-weight: 800;
-    text-transform: uppercase;
-}
-
-.priority-score-card strong {
-    display: block;
-    color: #0f172a;
-    font-size: 2rem;
-    line-height: 1;
-}
-
-.priority-score-meta {
-    display: flex;
-    flex-direction: column;
-    align-items: flex-end;
-    gap: 0.4rem;
-    text-align: right;
-}
-
-.priority-score-meta small {
-    max-width: 220px;
-    color: #64748b;
-    font-size: 0.78rem;
-    font-weight: 700;
-    line-height: 1.35;
-}
-
-.priority-score-card.priority-critical {
-    border-color: #fecaca;
-    background: #fef2f2;
-}
-
-.priority-score-card.priority-high {
-    border-color: #fed7aa;
-    background: #fff7ed;
-}
-
-.priority-score-card.priority-urgent {
-    border-color: #fde68a;
-    background: #fefce8;
-}
-
-.priority-score-card.priority-moderate {
-    border-color: #bfdbfe;
-    background: #eff6ff;
-}
-
-.priority-score-card.priority-low {
-    border-color: #bbf7d0;
-    background: #f0fdf4;
-}
-
 .priority-option {
     flex: 1 1 0;
     min-width: 110px;
@@ -2226,8 +2158,7 @@ body.incident-details-modal-open {
 }
 
 [data-theme="dark"] .priority-option,
-[data-theme="dark"] .filter-tab,
-[data-theme="dark"] .priority-score-card {
+[data-theme="dark"] .filter-tab {
     background: #1e293b;
     color: #e2e8f0;
 }
@@ -2235,15 +2166,6 @@ body.incident-details-modal-open {
 [data-theme="dark"] .priority-option:hover,
 [data-theme="dark"] .filter-tab:hover {
     background: #334155;
-}
-
-[data-theme="dark"] .priority-score-card strong {
-    color: #f8fafc;
-}
-
-[data-theme="dark"] .priority-score-card span,
-[data-theme="dark"] .priority-score-meta small {
-    color: #cbd5e1;
 }
 
 @media (max-width: 1320px) {
@@ -2334,16 +2256,6 @@ body.incident-details-modal-open {
 
     .priority-select {
         flex-direction: column;
-    }
-
-    .priority-score-card {
-        align-items: flex-start;
-        flex-direction: column;
-    }
-
-    .priority-score-meta {
-        align-items: flex-start;
-        text-align: left;
     }
 
     .date-controls {

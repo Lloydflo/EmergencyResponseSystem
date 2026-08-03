@@ -197,7 +197,6 @@ function crime_analytics_is_police_case(array $incident): bool
         $incident['type'] ?? '',
         $incident['title'] ?? '',
         $incident['description'] ?? '',
-        $incident['indicator_incident_type'] ?? '',
     ]));
     return preg_match('/\b(police|crime|robbery|theft|fraud|assault|homicide|violence|weapon|gun|knife|patalim|riot)\b/', $haystack) === 1;
 }
