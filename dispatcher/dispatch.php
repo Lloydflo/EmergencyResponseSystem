@@ -2031,7 +2031,7 @@ document.addEventListener('DOMContentLoaded', () => {
                         <div class="call-actions">
                             <button class="btn-dispatch" onclick="openDispatchModal(${it.id})">Dispatch Unit</button>
                             <button class="btn-action-small" onclick="viewDetails(this)" data-incident-id="${it.id}"><i class="fas fa-eye"></i> Details</button>
-                            ${phone ? `<button class=\"btn-action-small\" onclick=\"contactCaller(this)\" data-phone=\"${escapeAttr(phone)}\"><i class=\"fas fa-phone\"></i> Call</button>` : ''}
+                            ${phone ? `<button class="btn-action-small call-phone-btn" onclick="contactCaller(this)" data-phone="${escapeAttr(phone)}"><i class="fas fa-phone"></i> Call</button>` : ''}
                         </div>`;
                     container.appendChild(card);
                 });
@@ -2468,20 +2468,20 @@ function refreshActiveCalls() {
             card.className = 'call-card ' + prioClass;
             card.setAttribute('data-incident-id', String(it.id));
             card.innerHTML = `
-                <div class=\"call-info\">
-                    <div class=\"call-details\">
-                        <div class=\"call-title\">${escapeHtml(title)}</div>
-                        <div class=\"call-meta\">
-                            <span><i class=\"fas fa-clock\"></i> ${escapeHtml(timeAgo)}</span>
-                            <span><i class=\"fas fa-user\"></i> ${escapeHtml(caller)}</span>
-                            <span class=\"status-indicator status-${prioClass}\"></span> ${prio.charAt(0).toUpperCase() + prio.slice(1)} Priority
+                <div class="call-info">
+                    <div class="call-details">
+                        <div class="call-title">${escapeHtml(title)}</div>
+                        <div class="call-meta">
+                            <span><i class="fas fa-clock"></i> ${escapeHtml(timeAgo)}</span>
+                            <span><i class="fas fa-user"></i> ${escapeHtml(caller)}</span>
+                            <span class="status-indicator status-${prioClass}"></span> ${prio.charAt(0).toUpperCase() + prio.slice(1)} Priority
                         </div>
                     </div>
                 </div>
-                <div class=\"call-actions\">
-                    <button class=\"btn-dispatch\" onclick=\"openDispatchModal(${it.id})\">Dispatch Unit</button>
-                    <button class=\"btn-action-small\" onclick=\"viewDetails(this)\" data-incident-id=\"${it.id}\"><i class=\"fas fa-eye\"></i> Details</button>
-                    ${phone ? `<button class=\\\"btn-action-small\\\" onclick=\\\"contactCaller(this)\\\" data-phone=\\\"${escapeAttr(phone)}\\\"><i class=\\\"fas fa-phone\\\"></i> Call</button>` : ''}
+                <div class="call-actions">
+                    <button class="btn-dispatch" onclick="openDispatchModal(${it.id})">Dispatch Unit</button>
+                    <button class="btn-action-small" onclick="viewDetails(this)" data-incident-id="${it.id}"><i class="fas fa-eye"></i> Details</button>
+                    ${phone ? `<button class="btn-action-small call-phone-btn" onclick="contactCaller(this)" data-phone="${escapeAttr(phone)}"><i class="fas fa-phone"></i> Call</button>` : ''}
                 </div>`;
             container.appendChild(card);
         });

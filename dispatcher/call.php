@@ -619,6 +619,7 @@ if ($turnIsConfigured && preg_match('/^turns?:(?:\/\/)?([^:\/?]+)/i', $turnUrl, 
             stopVoiceTools();
             activeCall = null;
             activeTransferCall = null;
+            clearTransferFormContext();
             updateStats();
             return;
         }
@@ -631,6 +632,7 @@ if ($turnIsConfigured && preg_match('/^turns?:(?:\/\/)?([^:\/?]+)/i', $turnUrl, 
         };
         if (session.isTransfer === true) {
             activeTransferCall = session;
+            storeTransferFormContext(session);
         }
 
         panel.classList.add('active');
@@ -657,6 +659,7 @@ if ($turnIsConfigured && preg_match('/^turns?:(?:\/\/)?([^:\/?]+)/i', $turnUrl, 
         stopVoiceTools();
         activeCall = null;
         activeTransferCall = null;
+        clearTransferFormContext();
 
         const timerEl = document.getElementById('callTimer');
         if (timerEl) timerEl.textContent = 'Manual';
@@ -672,6 +675,7 @@ if ($turnIsConfigured && preg_match('/^turns?:(?:\/\/)?([^:\/?]+)/i', $turnUrl, 
         resetIncidentTypeChecklist();
         setPrioritySelection('low');
         priorityAuto = true;
+        clearTransferFormContext();
         const badge = document.getElementById('prioritySuggestion');
         if (badge) badge.textContent = '';
         const locationInput = document.getElementById('incidentLocation');
@@ -1015,6 +1019,11 @@ if ($turnIsConfigured && preg_match('/^turns?:(?:\/\/)?([^:\/?]+)/i', $turnUrl, 
         }
         activeCall = null;
         activeTransferCall = keepForm && call && call.isTransfer === true ? call : null;
+        if (activeTransferCall) {
+            storeTransferFormContext(activeTransferCall);
+        } else {
+            clearTransferFormContext();
+        }
         stopTimer();
         updateStats();
 
@@ -1431,6 +1440,7 @@ if ($turnIsConfigured && preg_match('/^turns?:(?:\/\/)?([^:\/?]+)/i', $turnUrl, 
 
     function applyIncomingCallToForm(call) {
         if (!call) return;
+        storeTransferFormContext(call);
         const nameEl = document.getElementById('callerName');
         const phoneEl = document.getElementById('callerPhone');
         const locationEl = document.getElementById('incidentLocation');
@@ -1465,6 +1475,43 @@ if ($turnIsConfigured && preg_match('/^turns?:(?:\/\/)?([^:\/?]+)/i', $turnUrl, 
         if (call.incidentType) {
             setIncidentTypesFromTransfer(call.incidentType);
         }
+    }
+
+    function storeTransferFormContext(call) {
+        const form = document.getElementById('incidentForm');
+        if (!form || !call || call.isTransfer !== true) return;
+        const incidentId = call.incidentId || call.incident_id || '';
+        form.dataset.transferIncidentId = String(incidentId || '');
+        form.dataset.transferId = String(call.transferId || call.transfer_id || '');
+        form.dataset.transferCallId = String(call.callId || call.call_id_external || call.call_id || '');
+        form.dataset.transferSourceSystem = String(call.sourceSystem || call.source_system || '');
+    }
+
+    function clearTransferFormContext() {
+        const form = document.getElementById('incidentForm');
+        if (!form) return;
+        delete form.dataset.transferIncidentId;
+        delete form.dataset.transferId;
+        delete form.dataset.transferCallId;
+        delete form.dataset.transferSourceSystem;
+    }
+
+    function transferSubmitContext(form) {
+        const session = getSharedCallSession() || {};
+        const call = activeTransferCall || {};
+        const incidentId = Number(
+            (form && form.dataset ? form.dataset.transferIncidentId : '')
+            || call.incidentId
+            || call.incident_id
+            || session.incidentId
+            || session.incident_id
+        );
+        return {
+            incidentId: Number.isFinite(incidentId) && incidentId > 0 ? incidentId : 0,
+            transferId: (form && form.dataset ? form.dataset.transferId : '') || call.transferId || call.transfer_id || session.transferId || '',
+            callId: (form && form.dataset ? form.dataset.transferCallId : '') || call.callId || call.call_id_external || call.call_id || session.callId || '',
+            sourceSystem: (form && form.dataset ? form.dataset.transferSourceSystem : '') || call.sourceSystem || call.source_system || session.sourceSystem || ''
+        };
     }
 
     function focusAcceptedCallForm() {
@@ -2837,12 +2884,12 @@ if ($turnIsConfigured && preg_match('/^turns?:(?:\/\/)?([^:\/?]+)/i', $turnUrl, 
             priority: priorityValue,
             status: document.getElementById('status').value
         };
-        const transferIncidentId = Number(activeTransferCall && (activeTransferCall.incidentId || activeTransferCall.incident_id));
-        if (activeTransferCall && activeTransferCall.isTransfer === true && Number.isFinite(transferIncidentId) && transferIncidentId > 0) {
-            payload.transfer_incident_id = transferIncidentId;
-            payload.transfer_id = activeTransferCall.transferId || activeTransferCall.transfer_id || '';
-            payload.transfer_call_id = activeTransferCall.callId || activeTransferCall.call_id_external || '';
-            payload.transfer_source_system = activeTransferCall.sourceSystem || activeTransferCall.source_system || '';
+        const transferContext = transferSubmitContext(form);
+        if (transferContext.incidentId > 0) {
+            payload.transfer_incident_id = transferContext.incidentId;
+            payload.transfer_id = transferContext.transferId;
+            payload.transfer_call_id = transferContext.callId;
+            payload.transfer_source_system = transferContext.sourceSystem;
         }
         if (coords) {
             payload.latitude = coords.lat;
@@ -2903,6 +2950,7 @@ if ($turnIsConfigured && preg_match('/^turns?:(?:\/\/)?([^:\/?]+)/i', $turnUrl, 
                 delete locationInput.dataset.lat;
                 delete locationInput.dataset.lon;
             }
+            clearTransferFormContext();
             priorityAuto = true;
             const badge = document.getElementById('prioritySuggestion');
             if (badge) badge.textContent = '';

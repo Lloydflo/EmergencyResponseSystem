@@ -465,6 +465,15 @@
     background: #cbd5e1;
 }
 
+.call-phone-btn {
+    color: #065f46;
+    background: #d1fae5;
+}
+
+.call-phone-btn:hover {
+    background: #a7f3d0;
+}
+
 .dispatch-map-shell {
     position: relative;
     display: flex;
@@ -867,6 +876,15 @@
 
 [data-theme="dark"] .btn-action-small:hover {
     background: #334155;
+}
+
+[data-theme="dark"] .call-phone-btn {
+    color: #bbf7d0;
+    background: #14532d;
+}
+
+[data-theme="dark"] .call-phone-btn:hover {
+    background: #166534;
 }
 
 [data-theme="dark"] .dispatch-map-shell {

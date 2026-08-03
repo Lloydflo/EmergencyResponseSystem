@@ -305,6 +305,9 @@ function update_existing_transfer_incident(
     $callId = (int)($incident['reported_by_call_id'] ?? 0);
 
     if ($callId > 0) {
+        $callUpdatedAtSet = calls_create_column_exists($pdo, 'calls', 'updated_at')
+            ? ', updated_at = CURRENT_TIMESTAMP'
+            : '';
         $callUpdate = $pdo->prepare(
             'UPDATE calls
              SET reference_no = ?,
@@ -316,8 +319,7 @@ function update_existing_transfer_incident(
                  incident_type = ?,
                  priority = ?,
                  status = ?,
-                 description = ?,
-                 updated_at = CURRENT_TIMESTAMP
+                 description = ?' . $callUpdatedAtSet . '
              WHERE id = ?'
         );
         $callUpdate->execute([
@@ -336,6 +338,9 @@ function update_existing_transfer_incident(
     }
 
     $title = 'Incident from call ' . $referenceNo;
+    $incidentUpdatedAtSet = calls_create_column_exists($pdo, 'incidents', 'updated_at')
+        ? ', updated_at = CURRENT_TIMESTAMP'
+        : '';
     $incidentUpdate = $pdo->prepare(
         'UPDATE incidents
          SET reference_no = ?,
@@ -346,8 +351,7 @@ function update_existing_transfer_incident(
              description = ?,
              location_address = ?,
              latitude = ?,
-             longitude = ?,
-             updated_at = CURRENT_TIMESTAMP
+             longitude = ?' . $incidentUpdatedAtSet . '
          WHERE id = ?'
     );
     $incidentUpdate->execute([
@@ -385,6 +389,23 @@ function calls_create_table_exists(PDO $pdo, string $tableName): bool {
              LIMIT 1'
         );
         $stmt->execute([$tableName]);
+        return (bool)$stmt->fetchColumn();
+    } catch (Throwable $e) {
+        return false;
+    }
+}
+
+function calls_create_column_exists(PDO $pdo, string $tableName, string $columnName): bool {
+    try {
+        $stmt = $pdo->prepare(
+            'SELECT 1
+             FROM INFORMATION_SCHEMA.COLUMNS
+             WHERE TABLE_SCHEMA = DATABASE()
+               AND TABLE_NAME = ?
+               AND COLUMN_NAME = ?
+             LIMIT 1'
+        );
+        $stmt->execute([$tableName, $columnName]);
         return (bool)$stmt->fetchColumn();
     } catch (Throwable $e) {
         return false;
