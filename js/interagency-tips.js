@@ -57,9 +57,102 @@
         });
     };
 
+    const appBasePath = () => {
+        const path = String(window.location.pathname || '');
+        const match = path.match(/^(.*)\/(?:admin|dispatcher)\//i);
+        return match ? match[1] : '';
+    };
+
+    const normalizeEvidenceUrl = (value) => {
+        const text = String(value || '').trim();
+        if (text === '') {
+            return '';
+        }
+
+        if (/^https?:\/\//i.test(text) || /^data:image\//i.test(text) || /^blob:/i.test(text)) {
+            return text;
+        }
+
+        if (/^\/9j\//.test(text)) {
+            return `data:image/jpeg;base64,${text}`;
+        }
+        if (/^iVBOR/i.test(text)) {
+            return `data:image/png;base64,${text}`;
+        }
+        if (/^R0lG/i.test(text)) {
+            return `data:image/gif;base64,${text}`;
+        }
+        if (/^UklGR/i.test(text)) {
+            return `data:image/webp;base64,${text}`;
+        }
+
+        const normalized = text.replace(/\\/g, '/');
+        const base = appBasePath();
+        if (normalized.startsWith('/') && base !== '' && !normalized.startsWith(`${base}/`)) {
+            return `${base}${normalized}`;
+        }
+        if (/^\.\.\//.test(normalized)) {
+            return normalized.replace(/^(\.\.\/)+/, '');
+        }
+        return normalized;
+    };
+
     const isEvidenceLink = (value) => {
         const text = String(value || '').trim();
-        return /^https?:\/\//i.test(text) || /^data:image\//i.test(text) || /\.(png|jpe?g|gif|webp)$/i.test(text);
+        return /^https?:\/\//i.test(text)
+            || /^data:image\//i.test(text)
+            || /^blob:/i.test(text)
+            || /\.(png|jpe?g|gif|webp|bmp|svg)(?:[?#].*)?$/i.test(text);
+    };
+
+    const evidenceCandidates = (value, depth = 0) => {
+        if (value === null || value === undefined || depth > 3) {
+            return [];
+        }
+
+        if (Array.isArray(value)) {
+            return value.flatMap((entry) => evidenceCandidates(entry, depth + 1));
+        }
+
+        if (typeof value === 'object') {
+            const keys = [
+                'url', 'path', 'src', 'href', 'image', 'photo', 'photo_url',
+                'photoOfEvidence', 'photo_of_evidence', 'evidence_photo',
+                'evidence', 'file', 'file_url', 'filePath', 'filename',
+                'base64', 'data',
+            ];
+            const direct = keys
+                .filter((key) => Object.prototype.hasOwnProperty.call(value, key))
+                .flatMap((key) => evidenceCandidates(value[key], depth + 1));
+            const nested = Object.keys(value)
+                .filter((key) => !keys.includes(key))
+                .flatMap((key) => evidenceCandidates(value[key], depth + 1));
+            return [...direct, ...nested];
+        }
+
+        const text = String(value || '').trim();
+        if (text === '') {
+            return [];
+        }
+        if (/^[\[{]/.test(text)) {
+            try {
+                return evidenceCandidates(JSON.parse(text), depth + 1);
+            } catch (_) {}
+        }
+        return [text];
+    };
+
+    const evidenceInfo = (value) => {
+        const raw = String(value || '').trim();
+        const candidates = evidenceCandidates(value)
+            .map(normalizeEvidenceUrl)
+            .filter(Boolean);
+        const url = candidates.find(isEvidenceLink) || '';
+        return {
+            raw,
+            url,
+            hasEvidence: raw !== '' || candidates.length > 0,
+        };
     };
 
     const incidentUrl = (referenceNo) => {
@@ -311,11 +404,11 @@
         }
 
         return items.map((item) => {
-            const photo = String(item.photo_of_evidence || '').trim();
+            const evidencePhoto = evidenceInfo(item.photo_of_evidence);
             const itemStatus = statusOf(item);
-            const evidenceButton = photo
-                ? (isEvidenceLink(photo)
-                    ? `<a class="ia-tip-icon ia-tip-evidence" href="${escapeHtml(photo)}" target="_blank" rel="noopener" title="View evidence" aria-label="View evidence"><i class="fas fa-image"></i></a>`
+            const evidenceButton = evidencePhoto.hasEvidence
+                ? (evidencePhoto.url
+                    ? `<a class="ia-tip-evidence ia-tip-evidence-thumb" href="${escapeHtml(evidencePhoto.url)}" target="_blank" rel="noopener" title="View evidence" aria-label="View evidence"><img src="${escapeHtml(evidencePhoto.url)}" alt="Evidence for ${escapeHtml(item.tip_id || 'anonymous tip')}" loading="lazy"></a>`
                     : '<span class="ia-tip-chip">Evidence saved</span>')
                 : '';
 
@@ -355,15 +448,18 @@
             `;
         }
 
-        const photo = String(item.photo_of_evidence || '').trim();
+        const evidencePhoto = evidenceInfo(item.photo_of_evidence);
         const itemStatus = statusOf(item);
         const convertedReference = String(item.converted_reference_no || '').trim();
         const convertedId = Number(item.converted_incident_id || 0);
         const isConverted = itemStatus === 'converted_to_incident';
-        const evidence = photo
-            ? (isEvidenceLink(photo)
-                ? `<a class="ia-tip-secondary" href="${escapeHtml(photo)}" target="_blank" rel="noopener"><i class="fas fa-image"></i> Evidence</a>`
-                : `<div class="ia-tip-detail-value">${escapeHtml(photo)}</div>`)
+        const evidence = evidencePhoto.hasEvidence
+            ? (evidencePhoto.url
+                ? `<a class="ia-tip-evidence ia-tip-evidence-preview" href="${escapeHtml(evidencePhoto.url)}" target="_blank" rel="noopener">
+                        <img class="ia-tip-evidence-image" src="${escapeHtml(evidencePhoto.url)}" alt="Evidence for ${escapeHtml(item.tip_id || 'anonymous tip')}" loading="lazy">
+                        <span><i class="fas fa-arrow-up-right-from-square"></i> Open full image</span>
+                   </a>`
+                : '<div class="ia-tip-detail-value">Evidence saved but no image URL was provided.</div>')
             : '<div class="ia-tip-detail-value">None</div>';
         const incidentLink = convertedReference
             ? `<a class="ia-tip-secondary" href="${escapeHtml(incidentUrl(convertedReference))}"><i class="fas fa-arrow-up-right-from-square"></i> ${escapeHtml(convertedReference)}</a>`
