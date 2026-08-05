@@ -1,4 +1,0 @@
-# Keep all values outside the public web directory.
-FIREBASE_SERVICE_ACCOUNT_PATH=/absolute/private/path/firebase-service-account.json
-APP_ASSIGNMENT_PUSH_KEY=replace-with-a-long-random-secret
-APP_PRESENCE_CRON_KEY=replace-with-a-different-long-random-secret
