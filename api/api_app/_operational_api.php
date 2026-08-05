@@ -599,6 +599,23 @@ function op_tip_response(array $row): array
     ];
 }
 
+/** Number of hours an approved report remains in the active Approved queue. */
+function op_after_action_history_hours(): int
+{
+    return 24;
+}
+
+/** @return array<string,mixed> */
+function op_after_action_history_policy(): array
+{
+    $hours = op_after_action_history_hours();
+    return [
+        'approved_queue_hours' => $hours,
+        'description' => 'Approved reports remain in the active Approved queue for 24 hours, then appear in monthly history.',
+        'server_time_ms' => (int)round(microtime(true) * 1000),
+    ];
+}
+
 /** @param array<string,mixed> $row @return array<string,mixed> */
 function op_after_action_response(array $row): array
 {
@@ -617,6 +634,30 @@ function op_after_action_response(array $row): array
         'revision_required' => 'Needs Revision',
         default => 'Pending',
     };
+
+    $createdAtMs = (int)($row['created_at_ms'] ?? 0);
+    $updatedAtMs = (int)($row['updated_at_ms'] ?? 0);
+    $reviewedAtMs = (int)($row['reviewed_at_ms'] ?? 0);
+    if ($reviewedAtMs <= 0 && !empty($row['reviewed_at'])) {
+        $parsedReviewedAt = strtotime((string)$row['reviewed_at']);
+        $reviewedAtMs = $parsedReviewedAt !== false ? $parsedReviewedAt * 1000 : 0;
+    }
+
+    // Legacy verified rows may predate reviewed_at. Because approved reports
+    // are immutable, updated_at is a safe fallback for their approval time.
+    $approvedAtMs = $workflowStatus === 'approved'
+        ? ($reviewedAtMs > 0 ? $reviewedAtMs : $updatedAtMs)
+        : 0;
+    $historyEligibleAtMs = $approvedAtMs > 0
+        ? $approvedAtMs + (op_after_action_history_hours() * 60 * 60 * 1000)
+        : 0;
+    $serverTimeMs = (int)round(microtime(true) * 1000);
+    $isHistory = $workflowStatus === 'approved'
+        && $historyEligibleAtMs > 0
+        && $serverTimeMs >= $historyEligibleAtMs;
+    $historyMonth = $approvedAtMs > 0
+        ? date('Y-m', (int)floor($approvedAtMs / 1000))
+        : null;
 
     return [
         'id' => (int)($row['id'] ?? 0),
@@ -646,8 +687,13 @@ function op_after_action_response(array $row): array
         'reviewer_notes' => (string)($row['reviewer_notes'] ?? ''),
         'submitted_at' => $row['submitted_at'] ?? null,
         'reviewed_at' => $row['reviewed_at'] ?? null,
-        'created_at_ms' => (int)($row['created_at_ms'] ?? 0),
-        'updated_at_ms' => (int)($row['updated_at_ms'] ?? 0),
+        'reviewed_at_ms' => $reviewedAtMs,
+        'approved_at_ms' => $approvedAtMs,
+        'history_eligible_at_ms' => $historyEligibleAtMs,
+        'is_history' => $isHistory,
+        'history_month' => $historyMonth,
+        'created_at_ms' => $createdAtMs,
+        'updated_at_ms' => $updatedAtMs,
     ];
 }
 

@@ -83,7 +83,7 @@ try {
 
     if ($existing !== null) {
         $existingStatus = strtolower((string)($existing['status'] ?? 'draft'));
-        if ($existingStatus === 'verified') {
+        if (in_array($existingStatus, ['verified', 'approved'], true)) {
             $pdo->rollBack();
             op_error('The approved after-action report is read-only.', 409);
         }

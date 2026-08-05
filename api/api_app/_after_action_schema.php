@@ -54,32 +54,67 @@ CREATE TABLE IF NOT EXISTS `responder_after_action_reports` (
     UNIQUE KEY `uq_aar_incident_responder` (`incident_id`, `responder_id`),
     KEY `idx_aar_responder_updated` (`responder_id`, `updated_at`),
     KEY `idx_aar_status_updated` (`status`, `updated_at`),
+    KEY `idx_aar_status_reviewed` (`status`, `reviewed_at`),
     KEY `idx_aar_incident` (`incident_id`),
     KEY `idx_aar_reviewer` (`reviewer_user_id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
 SQL;
 }
 
-function op_require_after_action_schema(PDO $pdo): void
+function op_after_action_index_exists(PDO $pdo, string $indexName): bool
 {
-    if (op_after_action_table_exists($pdo)) {
-        return;
-    }
+    $statement = $pdo->prepare(
+        'SELECT 1 FROM INFORMATION_SCHEMA.STATISTICS '
+        . 'WHERE TABLE_SCHEMA = DATABASE() '
+        . 'AND TABLE_NAME = \'responder_after_action_reports\' '
+        . 'AND INDEX_NAME = ? LIMIT 1'
+    );
+    $statement->execute([$indexName]);
+    return (bool)$statement->fetchColumn();
+}
 
+/**
+ * The history view filters verified rows by reviewed_at. Add the supporting
+ * index when DDL permission is available, but do not take the API offline when
+ * a restricted production database user cannot alter an existing table.
+ */
+function op_after_action_ensure_history_index(PDO $pdo): void
+{
+    $indexName = 'idx_aar_status_reviewed';
     try {
-        $pdo->exec(op_after_action_create_table_sql());
+        if (op_after_action_index_exists($pdo, $indexName)) {
+            return;
+        }
+        $pdo->exec(
+            'ALTER TABLE `responder_after_action_reports` '
+            . 'ADD INDEX `idx_aar_status_reviewed` (`status`, `reviewed_at`)'
+        );
     } catch (Throwable $error) {
         error_log(
-            '[api_app] after-action schema bootstrap failed: '
+            '[api_app] optional after-action history index was not installed: '
             . $error->getMessage()
         );
-        op_error(
-            'After-action reporting is not installed. Run the supplied database migration.',
-            503,
-            [
-                'migration' => 'migrations/2026_08_03_create_responder_after_action_reports.sql',
-            ]
-        );
+    }
+}
+
+function op_require_after_action_schema(PDO $pdo): void
+{
+    if (!op_after_action_table_exists($pdo)) {
+        try {
+            $pdo->exec(op_after_action_create_table_sql());
+        } catch (Throwable $error) {
+            error_log(
+                '[api_app] after-action schema bootstrap failed: '
+                . $error->getMessage()
+            );
+            op_error(
+                'After-action reporting is not installed. Run the supplied database migration.',
+                503,
+                [
+                    'migration' => 'migrations/2026_08_03_create_responder_after_action_reports.sql',
+                ]
+            );
+        }
     }
 
     if (!op_after_action_table_exists($pdo)) {
@@ -91,4 +126,6 @@ function op_require_after_action_schema(PDO $pdo): void
             ]
         );
     }
+
+    op_after_action_ensure_history_index($pdo);
 }
