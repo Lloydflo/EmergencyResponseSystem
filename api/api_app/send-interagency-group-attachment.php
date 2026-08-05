@@ -12,6 +12,16 @@ $fileName = op_post_string('file_name', '', 255);
 $mimeType = op_post_string('mime_type', 'application/octet-stream', 150);
 $fileSize = max(0, op_post_int('file_size'));
 $isImage = op_post_bool('is_image', false);
+$isAudio = op_post_bool('is_audio', false);
+$audioDurationMs = max(0, min(120000, op_post_int('audio_duration_ms')));
+$normalizedMime = strtolower(trim($mimeType));
+$fileExtension = strtolower((string)pathinfo($fileName, PATHINFO_EXTENSION));
+$isAudio = $isAudio
+    || str_starts_with($normalizedMime, 'audio/')
+    || in_array($fileExtension, ['m4a', 'aac', '3gp', 'ogg', 'opus', 'wav', 'mp3'], true);
+if ($isAudio) {
+    $isImage = false;
+}
 
 op_require_positive($groupId, 'group_id');
 op_require_positive($senderId, 'sender_user_id');
@@ -36,7 +46,7 @@ try {
     $groupStatement = $pdo->prepare('SELECT name FROM interagency_group_threads WHERE id = ? LIMIT 1');
     $groupStatement->execute([$groupId]);
     $groupName = trim((string)$groupStatement->fetchColumn());
-    $messageText = $isImage ? 'Image' : $fileName;
+    $messageText = $isAudio ? 'Voice message' : ($isImage ? 'Image' : $fileName);
     $messageDetails = json_encode(
         [
             'text' => $messageText,
@@ -46,6 +56,8 @@ try {
                 'mime_type' => $mimeType,
                 'size' => $fileSize,
                 'is_image' => $isImage ? 1 : 0,
+                'is_audio' => $isAudio ? 1 : 0,
+                'duration_ms' => $isAudio ? $audioDurationMs : 0,
             ]],
         ],
         JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_INVALID_UTF8_SUBSTITUTE
@@ -92,8 +104,12 @@ try {
             'message_id' => $messageId,
             'sender_id' => $senderId,
             'sender_name' => (string)($sender['name'] ?? 'Responder'),
-            'message_type' => $isImage ? 'image' : 'file',
-            'body' => $isImage ? 'Sent an image' : 'Sent a file: ' . ers_notification_preview($fileName, 160),
+            'message_type' => $isAudio ? 'audio' : ($isImage ? 'image' : 'file'),
+            'body' => $isAudio
+                ? 'Sent a voice message'
+                : ($isImage
+                    ? 'Sent an image'
+                    : 'Sent a file: ' . ers_notification_preview($fileName, 160)),
         ]);
     } catch (Throwable $pushError) {
         error_log('department attachment push skipped: ' . $pushError->getMessage());
@@ -102,6 +118,8 @@ try {
     op_success([
         'message' => 'Attachment sent.',
         'message_id' => $messageId,
+        'message_type' => $isAudio ? 'audio' : ($isImage ? 'image' : 'file'),
+        'audio_duration_ms' => $isAudio ? $audioDurationMs : 0,
         'push' => [
             'attempted' => (int)$push['attempted'],
             'delivered' => (int)$push['delivered'],

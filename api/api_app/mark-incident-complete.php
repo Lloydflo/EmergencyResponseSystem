@@ -82,7 +82,6 @@ try {
     op_success([
         'incident_id' => (int)$result['incident_id'],
         'completion_image_path' => $relative,
-        'review_status' => (string)($result['review_status'] ?? 'pending_review'),
         'already_completed' => (bool)($result['already_completed'] ?? false),
     ]);
 } catch (AppAssignmentException $error) {

@@ -505,7 +505,7 @@ function app_assignment_complete_incident(
     }
 
     $select = ['id', 'status'];
-    foreach (['completion_image_path', 'review_status', 'completed_by_responder_id', 'completed_at'] as $column) {
+    foreach (['completion_image_path', 'completed_by_responder_id', 'completed_at'] as $column) {
         $select[] = op_column_exists($pdo, 'incidents', $column)
             ? '`' . $column . '`'
             : 'NULL AS `' . $column . '`';
@@ -538,7 +538,6 @@ function app_assignment_complete_incident(
             'incident_id' => $incidentId,
             'already_completed' => true,
             'completion_image_path' => (string)($incident['completion_image_path'] ?? ''),
-            'review_status' => (string)($incident['review_status'] ?? 'pending_review'),
         ];
     }
 
@@ -618,7 +617,6 @@ function app_assignment_complete_incident(
     foreach ([
         'completion_notes' => $notes,
         'completion_image_path' => $imagePath,
-        'review_status' => 'pending_review',
         'completed_by_responder_id' => $responderId,
     ] as $column => $value) {
         if (op_column_exists($pdo, 'incidents', $column)) {
@@ -677,6 +675,5 @@ function app_assignment_complete_incident(
         'incident_id' => $incidentId,
         'already_completed' => false,
         'completion_image_path' => $imagePath,
-        'review_status' => 'pending_review',
     ];
 }
