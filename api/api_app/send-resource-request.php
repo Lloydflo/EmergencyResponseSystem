@@ -1,55 +1,82 @@
 <?php
-header("Content-Type: application/json");
-require __DIR__ . "/connect.php";
+declare(strict_types=1);
 
-$responder_id   = intval($_POST["responder_id"] ?? 0);
-$responder_name = trim($_POST["responder_name"] ?? "");
-$category       = trim($_POST["category"] ?? "");
-$resource_name  = trim($_POST["resource_name"] ?? "");
-$quantity       = intval($_POST["quantity"] ?? 0);
-$urgency        = trim($_POST["urgency"] ?? "");
-$incident_id    = trim($_POST["incident_id"] ?? "");
-$location       = trim($_POST["location"] ?? "");
-$notes          = trim($_POST["notes"] ?? "");
+header('Content-Type: application/json; charset=utf-8');
+require_once __DIR__ . '/connect.php';
+require_once __DIR__ . '/../../includes/activity_log.php';
 
-if ($responder_id <= 0 || $responder_name === "" || $resource_name === "" || $quantity <= 0 || $location === "") {
-    echo json_encode(["success" => false, "message" => "Missing required fields"]);
+$responderId = (int)($_POST['responder_id'] ?? 0);
+$responderName = trim((string)($_POST['responder_name'] ?? ''));
+$category = trim((string)($_POST['category'] ?? ''));
+$resourceName = trim((string)($_POST['resource_name'] ?? ''));
+$quantity = (int)($_POST['quantity'] ?? 0);
+$urgency = trim((string)($_POST['urgency'] ?? ''));
+$incidentRaw = trim((string)($_POST['incident_id'] ?? ''));
+$location = trim((string)($_POST['location'] ?? ''));
+$notes = trim((string)($_POST['notes'] ?? ''));
+$incidentValue = ($incidentRaw === '' || strtoupper($incidentRaw) === 'N/A') ? null : $incidentRaw;
+$incidentId = $incidentValue !== null && ctype_digit($incidentValue) ? (int)$incidentValue : 0;
+
+if ($responderId <= 0 || $responderName === '' || $resourceName === '' || $quantity <= 0 || $location === '') {
+    http_response_code(422);
+    echo json_encode(['success' => false, 'message' => 'Missing required fields']);
     exit;
 }
 
-$incident_id = $incident_id === "" || $incident_id === "N/A" ? null : $incident_id;
-
 try {
     $pdo = db();
-
-    $stmt = $pdo->prepare("
-        INSERT INTO responder_resource_requests
-            (responder_id, responder_name, category, resource_name, quantity, urgency, incident_id, location, notes, status)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending')
-    ");
-
-    $stmt->execute([
-        $responder_id,
-        $responder_name,
+    $statement = $pdo->prepare(
+        'INSERT INTO responder_resource_requests '
+        . '(responder_id, responder_name, category, resource_name, quantity, urgency, incident_id, location, notes, status) '
+        . "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending')"
+    );
+    $statement->execute([
+        $responderId,
+        $responderName,
         $category,
-        $resource_name,
+        $resourceName,
         $quantity,
         $urgency,
-        $incident_id,
+        $incidentValue,
         $location,
-        $notes
+        $notes,
     ]);
+    $requestId = (int)$pdo->lastInsertId();
+    $referenceNo = $incidentId > 0
+        ? ers_audit_reference_no($pdo, 'incident', $incidentId, ['incident_id' => $incidentId])
+        : '';
 
-    $newId = (int)$pdo->lastInsertId();
+    record_operational_audit_event(
+        $pdo,
+        $responderId,
+        'resource_requested',
+        'resource_request',
+        $requestId,
+        'Responder requested ' . $quantity . ' × ' . $resourceName
+            . ($referenceNo !== '' ? ' for incident ' . $referenceNo : '') . '.',
+        [
+            'actor_name' => $responderName,
+            'actor_role' => 'responder',
+            'source_channel' => 'responder_app',
+            'event_category' => 'resource',
+            'event_outcome' => 'success',
+            'reference_no' => $referenceNo,
+            'incident_id' => $incidentId,
+            'event_key' => 'resource_request:' . $requestId . ':created',
+            'metadata' => [
+                'request_id' => $requestId,
+                'category' => $category,
+                'resource_name' => $resourceName,
+                'quantity' => $quantity,
+                'urgency' => $urgency,
+                'request_notes_recorded' => $notes !== '',
+            ],
+        ]
+    );
 
-    echo json_encode([
-        "success" => true,
-        "message" => "Resource request sent",
-        "id" => $newId
-    ]);
-} catch (Throwable $e) {
-    echo json_encode([
-        "success" => false,
-        "message" => $e->getMessage()
-    ]);
+    echo json_encode(['success' => true, 'message' => 'Resource request sent', 'id' => $requestId]);
+} catch (Throwable $error) {
+    http_response_code(500);
+    error_log('[send-resource-request] ' . $error->getMessage());
+    echo json_encode(['success' => false, 'message' => 'Unable to send resource request']);
 }

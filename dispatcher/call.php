@@ -432,6 +432,7 @@ if ($turnIsConfigured && preg_match('/^turns?:(?:\/\/)?([^:\/?]+)/i', $turnUrl, 
     const RESET_RECENT_ON_LOAD = false; // localStorage no longer used
     const API_LIST_URL = 'api/incidents_list.php';
     const API_CREATE_CALL_URL = 'api/calls_create.php';
+    const API_CALL_AUDIT_URL = 'api/call_audit_event.php';
     const API_INCOMING_TRANSFERS_URL = 'api/incoming_transfers.php';
     const ALERTARA_SOCKET_URL = 'https://emergency-comm.alertaraqc.com';
     const ALERTARA_SOCKET_PATH = '/socket.io';
@@ -633,15 +634,19 @@ if ($turnIsConfigured && preg_match('/^turns?:(?:\/\/)?([^:\/?]+)/i', $turnUrl, 
             activeCall = null;
             activeTransferCall = null;
             clearTransferFormContext();
+            clearCallAuditContext();
             updateStats();
             return;
         }
 
         const start = Number(session.start);
+        const acceptedAt = Number(session.acceptedAt);
         activeCall = {
             name: session.name || 'Unknown',
             phone: session.phone || '',
-            start: Number.isFinite(start) && start > 0 ? start : Date.now()
+            start: Number.isFinite(start) && start > 0 ? start : Date.now(),
+            acceptedAt: Number.isFinite(acceptedAt) && acceptedAt > 0 ? acceptedAt : null,
+            auditSessionId: String(session.auditSessionId || '')
         };
         if (session.isTransfer === true) {
             activeTransferCall = session;
@@ -673,6 +678,7 @@ if ($turnIsConfigured && preg_match('/^turns?:(?:\/\/)?([^:\/?]+)/i', $turnUrl, 
         activeCall = null;
         activeTransferCall = null;
         clearTransferFormContext();
+        clearCallAuditContext();
 
         const timerEl = document.getElementById('callTimer');
         if (timerEl) timerEl.textContent = 'Manual';
@@ -716,6 +722,7 @@ if ($turnIsConfigured && preg_match('/^turns?:(?:\/\/)?([^:\/?]+)/i', $turnUrl, 
             delete locationInput.dataset.lat;
             delete locationInput.dataset.lon;
         }
+        clearCallAuditContext();
         updateStats();
     }
 
@@ -809,6 +816,7 @@ if ($turnIsConfigured && preg_match('/^turns?:(?:\/\/)?([^:\/?]+)/i', $turnUrl, 
             name: name || 'Incoming Call',
             phone: phone,
             start: Number(raw.start) > 0 ? Number(raw.start) : (Number.isFinite(parsedStart) ? parsedStart : Date.now()),
+            auditSessionId: String(raw.audit_session_id || raw.auditSessionId || '').trim(),
             isTransfer,
             transferId: raw.transfer_id || raw.transferId || '',
             callId: raw.call_id_external || raw.callId || raw.call_id || raw.transfer_id || raw.transferId || '',
@@ -831,6 +839,72 @@ if ($turnIsConfigured && preg_match('/^turns?:(?:\/\/)?([^:\/?]+)/i', $turnUrl, 
         };
     }
 
+    function createCallAuditSessionId() {
+        if (window.crypto && typeof window.crypto.randomUUID === 'function') {
+            return window.crypto.randomUUID();
+        }
+        const randomPart = Math.random().toString(36).slice(2, 14);
+        return 'call:' + Date.now().toString(36) + ':' + randomPart;
+    }
+
+    function ensureCallAuditSession(call) {
+        if (!call || typeof call !== 'object') return '';
+        let auditSessionId = String(call.auditSessionId || call.audit_session_id || '').trim();
+        if (!/^[A-Za-z0-9.:-]{8,96}$/.test(auditSessionId)) {
+            auditSessionId = createCallAuditSessionId();
+        }
+        call.auditSessionId = auditSessionId;
+        return auditSessionId;
+    }
+
+    function recordCallAuditMilestone(call, milestone, reason = '') {
+        if (!call || typeof call !== 'object') return;
+        const auditSessionId = ensureCallAuditSession(call);
+        if (!auditSessionId) return;
+
+        const event = String(milestone || '').trim().toLowerCase();
+        let eventTime = Date.now();
+        if (event === 'received') {
+            eventTime = Number(call.start || eventTime);
+        } else if (event === 'accepted') {
+            eventTime = Number(call.acceptedAt || eventTime);
+        }
+        if (!Number.isFinite(eventTime) || eventTime <= 0) {
+            eventTime = Date.now();
+        }
+
+        const payload = {
+            audit_session_id: auditSessionId,
+            event,
+            occurred_at: new Date(eventTime).toISOString(),
+            reference_no: String(call.incidentReferenceNo || call.reference_no || '').trim(),
+            is_transfer: call.isTransfer === true,
+            source_system: String(call.sourceSystem || call.source_system || '').trim(),
+            reason: String(reason || '').trim()
+        };
+
+        fetch(API_CALL_AUDIT_URL, {
+            method: 'POST',
+            credentials: 'same-origin',
+            keepalive: event === 'rejected' || event === 'ended',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+        }).then((response) => {
+            if (!response.ok) {
+                throw new Error('Call audit endpoint returned HTTP ' + response.status);
+            }
+            return response.json();
+        }).then((result) => {
+            if (!result || result.ok !== true) {
+                throw new Error(result && result.error ? result.error : 'Call audit event was not recorded');
+            }
+        }).catch((error) => {
+            // The canonical calls_create endpoint records the same timestamps as
+            // a fallback when the live audit request is temporarily unavailable.
+            console.warn('Call audit milestone failed:', error);
+        });
+    }
+
     function incomingCallKey(call) {
         return String(call && (call.transferId || call.callId || call.incidentId || '') || '').trim();
     }
@@ -841,6 +915,8 @@ if ($turnIsConfigured && preg_match('/^turns?:(?:\/\/)?([^:\/?]+)/i', $turnUrl, 
         if (!modal || !alert) return;
 
         pendingIncomingCall = call;
+        ensureCallAuditSession(pendingIncomingCall);
+        recordCallAuditMilestone(pendingIncomingCall, 'received');
 
         const eyebrow = document.querySelector('.call-alert-eyebrow');
         if (eyebrow) {
@@ -914,6 +990,11 @@ if ($turnIsConfigured && preg_match('/^turns?:(?:\/\/)?([^:\/?]+)/i', $turnUrl, 
         const name = incomingCall.name || document.getElementById('incomingCallerName').textContent || 'Unknown';
         const phone = incomingCall.phone || '';
         const start = incomingCall.start || Date.now();
+        const acceptedAt = Date.now();
+        incomingCall.acceptedAt = acceptedAt;
+        ensureCallAuditSession(incomingCall);
+        storeCallAuditContext(incomingCall);
+        recordCallAuditMilestone(incomingCall, 'accepted');
         hideIncomingCallModal();
         pendingIncomingCall = null;
         removeTransferredQueueItemForIncomingCall(incomingCall);
@@ -924,6 +1005,8 @@ if ($turnIsConfigured && preg_match('/^turns?:(?:\/\/)?([^:\/?]+)/i', $turnUrl, 
                 name: name,
                 phone: phone,
                 start: start,
+                acceptedAt: acceptedAt,
+                auditSessionId: incomingCall.auditSessionId || '',
                 muted: false,
                 speaker: false,
                 incidentId: incomingCall.incidentId || null,
@@ -946,7 +1029,15 @@ if ($turnIsConfigured && preg_match('/^turns?:(?:\/\/)?([^:\/?]+)/i', $turnUrl, 
                 sourceSystem: incomingCall.sourceSystem || ''
             });
         } else {
-            activeCall = { active: true, name, phone, start, isTransfer: incomingCall.isTransfer === true };
+            activeCall = {
+                active: true,
+                name,
+                phone,
+                start,
+                acceptedAt,
+                auditSessionId: incomingCall.auditSessionId || '',
+                isTransfer: incomingCall.isTransfer === true
+            };
         }
         applyIncomingCallToForm(incomingCall);
         resetTransferCallChat(incomingCall);
@@ -960,6 +1051,10 @@ if ($turnIsConfigured && preg_match('/^turns?:(?:\/\/)?([^:\/?]+)/i', $turnUrl, 
     }
 
     function rejectCall() {
+        const rejectedCall = pendingIncomingCall || {};
+        if (rejectedCall && (rejectedCall.start || rejectedCall.auditSessionId)) {
+            recordCallAuditMilestone(rejectedCall, 'rejected', 'dispatcher-rejected');
+        }
         pendingIncomingCall = null;
         hideIncomingCallModal();
         showNextQueuedIncomingCall();
@@ -1020,6 +1115,9 @@ if ($turnIsConfigured && preg_match('/^turns?:(?:\/\/)?([^:\/?]+)/i', $turnUrl, 
         if (options.notifyPeer === true) {
             notifyTransferredCallerHangup(call, reason);
         }
+        if (call && (call.start || call.auditSessionId)) {
+            recordCallAuditMilestone(call, 'ended', reason);
+        }
 
         stopVoiceTools();
         disconnectTransferCall();
@@ -1029,6 +1127,11 @@ if ($turnIsConfigured && preg_match('/^turns?:(?:\/\/)?([^:\/?]+)/i', $turnUrl, 
         }
         activeCall = null;
         activeTransferCall = keepForm && call && call.isTransfer === true ? call : null;
+        if (keepForm) {
+            storeCallAuditContext(call);
+        } else {
+            clearCallAuditContext();
+        }
         if (activeTransferCall) {
             storeTransferFormContext(activeTransferCall);
         } else {
@@ -1496,6 +1599,31 @@ if ($turnIsConfigured && preg_match('/^turns?:(?:\/\/)?([^:\/?]+)/i', $turnUrl, 
         if (call.incidentType) {
             setIncidentTypesFromTransfer(call.incidentType);
         }
+    }
+
+    function storeCallAuditContext(call) {
+        const form = document.getElementById('incidentForm');
+        if (!form || !call) return;
+        const receivedAtMs = Number(call.start || 0);
+        const acceptedAtMs = Number(call.acceptedAt || 0);
+        const auditSessionId = ensureCallAuditSession(call);
+        if (Number.isFinite(receivedAtMs) && receivedAtMs > 0) {
+            form.dataset.callReceivedAtMs = String(receivedAtMs);
+        }
+        if (Number.isFinite(acceptedAtMs) && acceptedAtMs > 0) {
+            form.dataset.callAcceptedAtMs = String(acceptedAtMs);
+        }
+        if (auditSessionId) {
+            form.dataset.callAuditSessionId = auditSessionId;
+        }
+    }
+
+    function clearCallAuditContext() {
+        const form = document.getElementById('incidentForm');
+        if (!form) return;
+        delete form.dataset.callReceivedAtMs;
+        delete form.dataset.callAcceptedAtMs;
+        delete form.dataset.callAuditSessionId;
     }
 
     function storeTransferFormContext(call) {
@@ -2885,6 +3013,22 @@ if ($turnIsConfigured && preg_match('/^turns?:(?:\/\/)?([^:\/?]+)/i', $turnUrl, 
             priority: priorityValue,
             status: document.getElementById('status').value
         };
+        const callContext = activeTransferCall || getSharedCallSession() || activeCall || {};
+        const receivedAtMs = Number(callContext.start || form?.dataset?.callReceivedAtMs || 0);
+        const acceptedAtMs = Number(callContext.acceptedAt || form?.dataset?.callAcceptedAtMs || 0);
+        if (Number.isFinite(receivedAtMs) && receivedAtMs > 0) {
+            payload.received_at = new Date(receivedAtMs).toISOString();
+        }
+        if (Number.isFinite(acceptedAtMs) && acceptedAtMs > 0) {
+            payload.accepted_at = new Date(acceptedAtMs).toISOString();
+        }
+        const auditSessionId = String(
+            callContext.auditSessionId || form?.dataset?.callAuditSessionId || ''
+        ).trim();
+        if (/^[A-Za-z0-9.:-]{8,96}$/.test(auditSessionId)) {
+            payload.audit_session_id = auditSessionId;
+        }
+
         const transferContext = transferSubmitContext(form);
         if (transferContext.incidentId > 0 || transferContext.transferId || transferContext.callId || transferContext.referenceNo) {
             if (transferContext.incidentId > 0) {
@@ -2955,23 +3099,9 @@ if ($turnIsConfigured && preg_match('/^turns?:(?:\/\/)?([^:\/?]+)/i', $turnUrl, 
                 delete locationInput.dataset.lon;
             }
             clearTransferFormContext();
+            clearCallAuditContext();
             priorityAuto = true;
             await loadIncidentsFromServer();
-            // Log activity event for dashboard Recent Activity
-            try {
-                const details = `Type: ${selectedTypes.join(', ')} | Location: ${payload.location} | Priority: ${payload.priority}`;
-                await fetch('api/activity_event.php', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        action: 'call_logged',
-                        entity_type: 'call',
-                        details: details
-                    })
-                });
-            } catch (e) {
-                console.warn('Activity log failed', e);
-            }
             redirectToDispatchCenter(data);
         } catch (err) {
             console.warn('Submit failed:', err);
