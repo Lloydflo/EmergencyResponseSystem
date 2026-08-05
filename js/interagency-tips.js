@@ -17,6 +17,7 @@
         search: '',
         status: 'all',
         expanded: true,
+        evidenceViewer: null,
     };
 
     const escapeHtml = (value) => String(value ?? '')
@@ -408,7 +409,7 @@
             const itemStatus = statusOf(item);
             const evidenceButton = evidencePhoto.hasEvidence
                 ? (evidencePhoto.url
-                    ? `<a class="ia-tip-evidence ia-tip-evidence-thumb" href="${escapeHtml(evidencePhoto.url)}" target="_blank" rel="noopener" title="View evidence" aria-label="View evidence"><img src="${escapeHtml(evidencePhoto.url)}" alt="Evidence for ${escapeHtml(item.tip_id || 'anonymous tip')}" loading="lazy"></a>`
+                    ? `<a class="ia-tip-evidence ia-tip-evidence-thumb" href="${escapeHtml(evidencePhoto.url)}" data-tip-evidence-url="${escapeHtml(evidencePhoto.url)}" data-tip-evidence-title="${escapeHtml(item.tip_id || 'Evidence')}" title="View evidence" aria-label="View evidence"><img src="${escapeHtml(evidencePhoto.url)}" alt="Evidence for ${escapeHtml(item.tip_id || 'anonymous tip')}" loading="lazy"></a>`
                     : '<span class="ia-tip-chip">Evidence saved</span>')
                 : '';
 
@@ -455,7 +456,7 @@
         const isConverted = itemStatus === 'converted_to_incident';
         const evidence = evidencePhoto.hasEvidence
             ? (evidencePhoto.url
-                ? `<a class="ia-tip-evidence ia-tip-evidence-preview" href="${escapeHtml(evidencePhoto.url)}" target="_blank" rel="noopener">
+                ? `<a class="ia-tip-evidence ia-tip-evidence-preview" href="${escapeHtml(evidencePhoto.url)}" data-tip-evidence-url="${escapeHtml(evidencePhoto.url)}" data-tip-evidence-title="${escapeHtml(item.tip_id || 'Evidence')}">
                         <img class="ia-tip-evidence-image" src="${escapeHtml(evidencePhoto.url)}" alt="Evidence for ${escapeHtml(item.tip_id || 'anonymous tip')}" loading="lazy">
                         <span><i class="fas fa-arrow-up-right-from-square"></i> Open full image</span>
                    </a>`
@@ -545,6 +546,34 @@
         `;
     };
 
+    const renderEvidenceViewer = () => {
+        if (!state.evidenceViewer || !state.evidenceViewer.url) {
+            return '';
+        }
+
+        const url = state.evidenceViewer.url;
+        const title = state.evidenceViewer.title || 'Evidence';
+        return `
+            <div class="ia-tip-viewer" data-tip-viewer>
+                <div class="ia-tip-viewer-backdrop" data-tip-close-viewer></div>
+                <div class="ia-tip-viewer-panel" role="dialog" aria-modal="true" aria-label="Evidence image">
+                    <div class="ia-tip-viewer-head">
+                        <strong>${escapeHtml(title)}</strong>
+                        <button type="button" class="ia-tip-icon" data-tip-close-viewer aria-label="Close evidence preview">
+                            <i class="fas fa-times"></i>
+                        </button>
+                    </div>
+                    <img class="ia-tip-viewer-image" src="${escapeHtml(url)}" alt="Full evidence for ${escapeHtml(title)}">
+                    <div class="ia-tip-viewer-actions">
+                        <a class="ia-tip-secondary" href="${escapeHtml(url)}" target="_blank" rel="noopener">
+                            <i class="fas fa-arrow-up-right-from-square"></i> New tab
+                        </a>
+                    </div>
+                </div>
+            </div>
+        `;
+    };
+
     const render = () => {
         root.innerHTML = `
             <div class="ia-tip-shell ${state.expanded ? 'is-open' : 'is-collapsed'}">
@@ -583,13 +612,26 @@
                     </div>
                 </div>
             </div>
+            ${renderEvidenceViewer()}
         `;
     };
 
     root.addEventListener('click', (event) => {
         const evidence = event.target.closest('.ia-tip-evidence');
         if (evidence) {
+            event.preventDefault();
             event.stopPropagation();
+            state.evidenceViewer = {
+                url: evidence.getAttribute('data-tip-evidence-url') || evidence.getAttribute('href') || '',
+                title: evidence.getAttribute('data-tip-evidence-title') || 'Evidence',
+            };
+            render();
+            return;
+        }
+
+        if (event.target.closest('[data-tip-close-viewer]')) {
+            state.evidenceViewer = null;
+            render();
             return;
         }
 
@@ -627,6 +669,12 @@
     });
 
     root.addEventListener('keydown', (event) => {
+        if (event.key === 'Escape' && state.evidenceViewer) {
+            state.evidenceViewer = null;
+            render();
+            return;
+        }
+
         const row = event.target.closest('[data-tip-select]');
         if (!row || !['Enter', ' '].includes(event.key)) {
             return;

@@ -1735,7 +1735,7 @@ $pageTitle = 'Resources Status';
                 strictViewbox: false,
                 preferViewbox: true,
                 minChars: 2,
-                limit: 6
+                limit: 10
             });
         }
 

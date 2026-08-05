@@ -1018,22 +1018,16 @@ function hasLocationContext(text) {
 
 async function geocodeOnce(query, strictViewbox) {
     const params = new URLSearchParams({
-        format: 'jsonv2',
-        limit: '6',
-        countrycodes: 'ph',
-        addressdetails: '1',
-        q: query
+        q: query,
+        limit: '10',
+        strict: strictViewbox ? '1' : '0'
     });
-    params.set('viewbox', QC_VIEWBOX);
-    if (strictViewbox) {
-        params.set('bounded', '1');
-    }
-    const response = await fetch(`https://nominatim.openstreetmap.org/search?${params.toString()}`, {
+    const response = await fetch(`api/geocode_proxy.php?${params.toString()}`, {
         headers: { Accept: 'application/json' }
     });
     if (!response.ok) return [];
     const data = await response.json();
-    return Array.isArray(data) ? data : [];
+    return data && data.ok && Array.isArray(data.items) ? data.items : [];
 }
 
 function selectBestGeocodeCandidate(items, originalQuery) {

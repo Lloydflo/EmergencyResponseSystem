@@ -2790,7 +2790,7 @@ if ($turnIsConfigured && preg_match('/^turns?:(?:\/\/)?([^:\/?]+)/i', $turnUrl, 
     async function geocodeOnce(query) {
         const params = new URLSearchParams({
             q: query,
-            limit: '6'
+            limit: '10'
         });
         const url = `api/geocode_proxy.php?${params.toString()}`;
         const res = await fetch(url, { headers: { Accept: 'application/json' } });

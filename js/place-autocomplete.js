@@ -1,7 +1,7 @@
 // Location autocomplete via backend geocode proxy (Nominatim + cache).
 // Usage: attachPlaceAutocomplete(inputId, onSelect, options)
 (function () {
-    const DEFAULT_LIMIT = 6;
+    const DEFAULT_LIMIT = 10;
 
     function toNum(value) {
         const n = Number(value);
