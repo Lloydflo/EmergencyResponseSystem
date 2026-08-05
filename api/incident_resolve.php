@@ -2,6 +2,8 @@
 // Resolve an incident and release any assigned units
 header('Content-Type: application/json');
 require_once __DIR__ . '/../includes/db.php';
+require_once __DIR__ . '/../includes/auth.php';
+require_once __DIR__ . '/../includes/activity_log.php';
 require_once __DIR__ . '/../includes/vehicle_resource_units.php';
 require_once __DIR__ . '/../includes/emergency_com_status_sync.php';
 $pdo = get_db_connection();
@@ -74,44 +76,52 @@ function incident_resolve_column_exists(PDO $pdo, string $table, string $column)
     }
 }
 
-function incident_resolve_log_notification(PDO $pdo, int $incidentId): void
+function incident_resolve_log_notification(PDO $pdo, int $incidentId, string $note = ''): void
 {
     if ($incidentId <= 0 || !incident_resolve_table_exists($pdo, 'activity_log')) {
         return;
     }
 
     try {
-        $existsStmt = $pdo->prepare("
-            SELECT 1
-            FROM activity_log
-            WHERE action = 'incident_resolved'
-              AND entity_type = 'incident'
-              AND entity_id = :iid
-            LIMIT 1
-        ");
-        $existsStmt->execute([':iid' => $incidentId]);
-        if ($existsStmt->fetchColumn()) {
-            return;
+        $stmt = $pdo->prepare('SELECT reference_no, status, resolved_at FROM incidents WHERE id = ? LIMIT 1');
+        $stmt->execute([$incidentId]);
+        $incident = $stmt->fetch(PDO::FETCH_ASSOC) ?: [];
+        $reference = trim((string)($incident['reference_no'] ?? ''));
+        $userId = isset($_SESSION['user_id']) && (int)$_SESSION['user_id'] > 0
+            ? (int)$_SESSION['user_id']
+            : null;
+        $role = strtolower(trim((string)($_SESSION['login_role'] ?? $_SESSION['user_role'] ?? '')));
+        if (!in_array($role, ['admin', 'dispatcher'], true)) {
+            $role = $userId ? 'dispatcher' : 'system';
         }
+        $source = $role === 'admin' ? 'admin_web' : ($role === 'dispatcher' ? 'dispatcher_web' : 'server_api');
+        $occurredAt = trim((string)($incident['resolved_at'] ?? '')) ?: null;
 
-        $nextId = (int)$pdo->query("SELECT COALESCE(MAX(id), 0) + 1 FROM activity_log")->fetchColumn();
-        $stmt = $pdo->prepare("
-            INSERT INTO activity_log (id, user_id, action, entity_type, entity_id, details, created_at)
-            SELECT
-                :next_id,
-                NULL,
-                'incident_resolved',
-                'incident',
-                i.id,
-                CONCAT('Incident ', COALESCE(NULLIF(i.reference_no, ''), CONCAT('#', i.id)), ' has been resolved.'),
-                CURRENT_TIMESTAMP
-            FROM incidents i
-            WHERE i.id = :iid
-            LIMIT 1
-        ");
-        $stmt->execute([':next_id' => $nextId, ':iid' => $incidentId]);
+        record_operational_audit_event(
+            $pdo,
+            $userId,
+            'incident_resolved',
+            'incident',
+            $incidentId,
+            'Incident ' . ($reference !== '' ? $reference : ('#' . $incidentId)) . ' was resolved from the operations website.',
+            [
+                'actor_role' => $role,
+                'source_channel' => $source,
+                'event_category' => 'completion',
+                'event_outcome' => 'success',
+                'reference_no' => $reference,
+                'incident_id' => $incidentId,
+                'occurred_at' => $occurredAt,
+                'event_key' => 'incident:' . $incidentId . ':resolved:' . $source,
+                'metadata' => [
+                    'incident_status' => (string)($incident['status'] ?? 'resolved'),
+                    'resolution_note_recorded' => trim($note) !== '',
+                    'units_released' => true,
+                ],
+            ]
+        );
     } catch (Throwable $notificationError) {
-        error_log('Incident resolve notification skipped: ' . $notificationError->getMessage());
+        error_log('Incident resolve audit skipped: ' . $notificationError->getMessage());
     }
 }
 
@@ -244,7 +254,7 @@ try {
     $stmt3 = $pdo->prepare('UPDATE incidents SET ' . implode(', ', $incidentFields) . ' WHERE id = :iid');
     $stmt3->execute([':iid' => $incidentId]);
 
-    incident_resolve_log_notification($pdo, $incidentId);
+    incident_resolve_log_notification($pdo, $incidentId, $note);
 
     // Optional: add note to incident_notes
     if (

@@ -280,12 +280,21 @@ function logout_user(): void {
         require_once __DIR__ . '/db.php';
         require_once __DIR__ . '/user_presence.php';
         if (!empty($_SESSION['logged_in']) || !empty($_SESSION['otp_verified'])) {
-            log_activity_event(
+            $normalizedRole = canonical_role($rawRole);
+            $source = $normalizedRole === 'dispatcher' ? 'dispatcher_web' : ($normalizedRole === 'admin' ? 'admin_web' : 'server_api');
+            log_operational_event(
                 $userId,
                 'logout',
                 'auth',
                 $userId,
-                trim($roleLabel . ' ' . $userName . ' signed out')
+                trim($roleLabel . ' ' . $userName . ' signed out'),
+                [
+                    'actor_role' => $normalizedRole !== 'unknown' ? $normalizedRole : 'user',
+                    'source_channel' => $source,
+                    'event_category' => 'authentication',
+                    'event_outcome' => 'success',
+                    'metadata' => ['session_event' => 'logout'],
+                ]
             );
         }
         $pdo = get_db_connection();

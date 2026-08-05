@@ -2,6 +2,7 @@
 declare(strict_types=1);
 require_once __DIR__ . '/_operational_api.php';
 require_once __DIR__ . '/_after_action_schema.php';
+require_once __DIR__ . '/../../includes/activity_log.php';
 
 op_require_method('POST');
 $pdo = db();
@@ -80,6 +81,7 @@ try {
     );
     $existingStatement->execute([$incidentId, $responderId]);
     $existing = op_fetch_one($existingStatement);
+    $previousReportStatus = strtolower((string)($existing['status'] ?? 'none'));
 
     if ($existing !== null) {
         $existingStatus = strtolower((string)($existing['status'] ?? 'draft'));
@@ -96,6 +98,36 @@ try {
                 );
                 $reload->execute([(int)$existing['id']]);
                 $row = op_fetch_one($reload);
+                $referenceNo = ers_audit_reference_no($pdo, 'after_action_report', (int)$existing['id'], [
+                    'incident_id' => $incidentId,
+                    'report_id' => (int)$existing['id'],
+                ]);
+                record_operational_audit_event(
+                    $pdo,
+                    $responderId,
+                    'after_action_report_submitted',
+                    'after_action_report',
+                    (int)$existing['id'],
+                    'Responder submitted the after-action report for incident '
+                        . ($referenceNo !== '' ? $referenceNo : ('#' . $incidentId))
+                        . ' for admin review.',
+                    [
+                        'actor_name' => $responderName,
+                        'actor_email' => (string)($responder['email'] ?? ''),
+                        'actor_role' => 'responder',
+                        'source_channel' => 'responder_app',
+                        'event_category' => 'report_review',
+                        'event_outcome' => 'success',
+                        'reference_no' => $referenceNo,
+                        'incident_id' => $incidentId,
+                        'report_id' => (int)$existing['id'],
+                        'event_key' => 'after_action_report:' . (int)$existing['id'] . ':submitted',
+                        'metadata' => [
+                            'report_status' => 'submitted',
+                            'idempotent_retry' => true,
+                        ],
+                    ]
+                );
                 $pdo->commit();
                 op_success([
                     'message' => 'The after-action report is already submitted.',
@@ -158,6 +190,49 @@ try {
     if ($report === null) {
         throw new RuntimeException('The after-action report could not be reloaded.');
     }
+
+    $referenceNo = ers_audit_reference_no($pdo, 'after_action_report', $reportId, [
+        'incident_id' => $incidentId,
+        'report_id' => $reportId,
+    ]);
+    $auditAction = $status === 'submitted'
+        ? 'after_action_report_submitted'
+        : 'after_action_report_saved';
+    $auditDetails = $status === 'submitted'
+        ? 'Responder submitted the after-action report for incident '
+            . ($referenceNo !== '' ? $referenceNo : ('#' . $incidentId))
+            . ' for admin review.'
+        : 'Responder saved a Pending after-action report for incident '
+            . ($referenceNo !== '' ? $referenceNo : ('#' . $incidentId)) . '.';
+    $auditContext = [
+        'actor_name' => $responderName,
+        'actor_email' => (string)($responder['email'] ?? ''),
+        'actor_role' => 'responder',
+        'source_channel' => 'responder_app',
+        'event_category' => 'report_review',
+        'event_outcome' => 'success',
+        'reference_no' => $referenceNo,
+        'incident_id' => $incidentId,
+        'report_id' => $reportId,
+        'metadata' => [
+            'previous_status' => $previousReportStatus,
+            'report_status' => $status,
+            'created' => $created,
+            'follow_up_required' => $followUpRequired,
+        ],
+    ];
+    if ($status === 'submitted') {
+        $auditContext['event_key'] = 'after_action_report:' . $reportId . ':submitted';
+    }
+    record_operational_audit_event(
+        $pdo,
+        $responderId,
+        $auditAction,
+        'after_action_report',
+        $reportId,
+        $auditDetails,
+        $auditContext
+    );
 
     $pdo->commit();
     op_success([

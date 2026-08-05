@@ -1,49 +1,77 @@
 <?php
-header("Content-Type: application/json");
-require __DIR__ . "/connect.php";
+declare(strict_types=1);
 
-$pdo = db();   // ← ADD THIS LINE
+header('Content-Type: application/json; charset=utf-8');
+require_once __DIR__ . '/connect.php';
+require_once __DIR__ . '/../../includes/activity_log.php';
 
-$responder_id = intval($_POST["responder_id"] ?? 0);
-$responder_name = trim($_POST["responder_name"] ?? "");
-$department = trim($_POST["department"] ?? "");
-$requested_department = trim($_POST["requested_department"] ?? "");
-$resources = trim($_POST["resources"] ?? "");
-$is_full_backup = intval($_POST["is_full_backup"] ?? 0);
-$incident_id = trim($_POST["incident_id"] ?? "");
+$responderId = (int)($_POST['responder_id'] ?? 0);
+$responderName = trim((string)($_POST['responder_name'] ?? ''));
+$department = trim((string)($_POST['department'] ?? ''));
+$requestedDepartment = trim((string)($_POST['requested_department'] ?? ''));
+$resources = trim((string)($_POST['resources'] ?? ''));
+$isFullBackup = (int)($_POST['is_full_backup'] ?? 0) === 1;
+$incidentRaw = trim((string)($_POST['incident_id'] ?? ''));
+$incidentId = ctype_digit($incidentRaw) ? (int)$incidentRaw : 0;
 
-if ($responder_id <= 0 || $responder_name === "" || $requested_department === "" || $resources === "") {
-    echo json_encode(["success" => false, "message" => "Missing required fields"]);
+if ($responderId <= 0 || $responderName === '' || $requestedDepartment === '' || $resources === '') {
+    http_response_code(422);
+    echo json_encode(['success' => false, 'message' => 'Missing required fields']);
     exit;
 }
 
 try {
-    $stmt = $pdo->prepare("
-        INSERT INTO responder_backup_requests
-            (responder_id, responder_name, department, requested_department, resources, is_full_backup, incident_id)
-        VALUES (?, ?, ?, ?, ?, ?, ?)
-    ");
-
-    $stmt->execute([
-        $responder_id,
-        $responder_name,
+    $pdo = db();
+    $statement = $pdo->prepare(
+        'INSERT INTO responder_backup_requests '
+        . '(responder_id, responder_name, department, requested_department, resources, is_full_backup, incident_id) '
+        . 'VALUES (?, ?, ?, ?, ?, ?, ?)'
+    );
+    $statement->execute([
+        $responderId,
+        $responderName,
         $department,
-        $requested_department,
+        $requestedDepartment,
         $resources,
-        $is_full_backup,
-        $incident_id
+        $isFullBackup ? 1 : 0,
+        $incidentRaw,
     ]);
+    $requestId = (int)$pdo->lastInsertId();
+    $referenceNo = $incidentId > 0
+        ? ers_audit_reference_no($pdo, 'incident', $incidentId, ['incident_id' => $incidentId])
+        : '';
 
-    $newId = (int)$pdo->lastInsertId();
+    record_operational_audit_event(
+        $pdo,
+        $responderId,
+        'backup_requested',
+        'backup_request',
+        $requestId,
+        'Responder requested ' . ($isFullBackup ? 'full backup' : 'additional backup')
+            . ' from ' . $requestedDepartment
+            . ($referenceNo !== '' ? ' for incident ' . $referenceNo : '') . '.',
+        [
+            'actor_name' => $responderName,
+            'actor_role' => 'responder',
+            'source_channel' => 'responder_app',
+            'event_category' => 'resource',
+            'event_outcome' => 'success',
+            'reference_no' => $referenceNo,
+            'incident_id' => $incidentId,
+            'event_key' => 'backup_request:' . $requestId . ':created',
+            'metadata' => [
+                'request_id' => $requestId,
+                'department' => $department,
+                'requested_department' => $requestedDepartment,
+                'full_backup' => $isFullBackup,
+                'resources_requested' => $resources,
+            ],
+        ]
+    );
 
-    echo json_encode([
-        "success" => true,
-        "message" => "Backup request sent",
-        "id" => $newId
-    ]);
-} catch (Throwable $e) {
-    echo json_encode([
-        "success" => false,
-        "message" => $e->getMessage()
-    ]);
+    echo json_encode(['success' => true, 'message' => 'Backup request sent', 'id' => $requestId]);
+} catch (Throwable $error) {
+    http_response_code(500);
+    error_log('[send-backup-request] ' . $error->getMessage());
+    echo json_encode(['success' => false, 'message' => 'Unable to send backup request']);
 }

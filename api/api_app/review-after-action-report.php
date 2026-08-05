@@ -2,6 +2,7 @@
 declare(strict_types=1);
 require_once __DIR__ . '/_operational_api.php';
 require_once __DIR__ . '/_after_action_schema.php';
+require_once __DIR__ . '/../../includes/activity_log.php';
 
 op_require_method('POST');
 $pdo = db();
@@ -12,7 +13,7 @@ $reportId = op_post_int('report_id');
 $action = strtolower(op_post_string('action', '', 16));
 $notes = op_post_string('notes', '', 10000);
 
-op_require_active_reviewer($pdo, $reviewerId);
+$reviewer = op_require_active_reviewer($pdo, $reviewerId);
 op_require_positive($reportId, 'report_id');
 if (!in_array($action, ['approve', 'verify', 'return'], true)) {
     op_error('action must be approve or return (verify remains a supported legacy alias).', 422);
@@ -53,6 +54,54 @@ try {
     );
     $reload->execute([$reportId]);
     $updated = op_fetch_one($reload);
+
+    $incidentId = (int)($report['incident_id'] ?? 0);
+    $referenceNo = ers_audit_reference_no($pdo, 'after_action_report', $reportId, [
+        'incident_id' => $incidentId,
+        'report_id' => $reportId,
+    ]);
+    $reviewerRole = strtolower(trim((string)($reviewer['role'] ?? 'admin')));
+    if ($reviewerRole === 'operator') {
+        $reviewerRole = 'dispatcher';
+    }
+    $auditAction = $isApproval
+        ? 'after_action_report_approved'
+        : 'after_action_report_returned';
+    $auditDetails = $isApproval
+        ? 'Admin approved the after-action report for incident '
+            . ($referenceNo !== '' ? $referenceNo : ('#' . $incidentId)) . '.'
+        : 'Reviewer returned the after-action report for incident '
+            . ($referenceNo !== '' ? $referenceNo : ('#' . $incidentId))
+            . ' for revision.';
+    $auditContext = [
+        'actor_name' => (string)($reviewer['name'] ?? ''),
+        'actor_email' => (string)($reviewer['email'] ?? ''),
+        'actor_role' => $reviewerRole,
+        'source_channel' => $reviewerRole === 'admin' ? 'admin_web' : 'dispatcher_web',
+        'event_category' => 'report_review',
+        'event_outcome' => $isApproval ? 'success' : 'warning',
+        'reference_no' => $referenceNo,
+        'incident_id' => $incidentId,
+        'report_id' => $reportId,
+        'metadata' => [
+            'previous_status' => 'submitted',
+            'report_status' => $newStatus,
+            'review_notes_recorded' => trim($notes) !== '',
+        ],
+    ];
+    if ($isApproval) {
+        $auditContext['event_key'] = 'after_action_report:' . $reportId . ':approved';
+    }
+    record_operational_audit_event(
+        $pdo,
+        $reviewerId,
+        $auditAction,
+        'after_action_report',
+        $reportId,
+        $auditDetails,
+        $auditContext
+    );
+
     $pdo->commit();
 
     op_success([

@@ -24,6 +24,8 @@ if ($incident_id === null || $unit_ids === []) {
     exit;
 }
 require_once __DIR__ . '/../includes/db.php';
+require_once __DIR__ . '/../includes/auth.php';
+require_once __DIR__ . '/../includes/activity_log.php';
 require_once __DIR__ . '/../includes/vehicle_resource_units.php';
 require_once __DIR__ . '/../includes/emergency_com_status_sync.php';
 require_once __DIR__ . '/../includes/dispatch_attempt_log.php';
@@ -33,6 +35,38 @@ if (!$pdo) {
     exit;
 }
 
+function dispatch_record_failed_audit(PDO $pdo, ?int $incidentId, array $unitIds, string $message, array $context = []): void
+{
+    $userId = isset($_SESSION['user_id']) && (int)$_SESSION['user_id'] > 0
+        ? (int)$_SESSION['user_id']
+        : null;
+    $role = strtolower(trim((string)($_SESSION['login_role'] ?? $_SESSION['user_role'] ?? 'dispatcher')));
+    if (!in_array($role, ['admin', 'dispatcher'], true)) {
+        $role = $userId ? 'dispatcher' : 'system';
+    }
+    $source = $role === 'admin' ? 'admin_web' : ($role === 'dispatcher' ? 'dispatcher_web' : 'server_api');
+
+    record_operational_audit_event(
+        $pdo,
+        $userId,
+        'dispatch_failed',
+        'incident',
+        $incidentId,
+        $message,
+        [
+            'actor_role' => $role,
+            'source_channel' => $source,
+            'event_category' => 'dispatch',
+            'event_outcome' => 'failed',
+            'incident_id' => $incidentId,
+            'metadata' => array_merge([
+                'unit_ids' => array_values(array_map('intval', $unitIds)),
+                'failure_reason' => $message,
+            ], $context),
+        ]
+    );
+}
+
 function dispatch_fail_response(PDO $pdo, ?int $incidentId, array $unitIds, string $message, array $context = [], int $statusCode = 200): void
 {
     if ($pdo->inTransaction()) {
@@ -40,6 +74,7 @@ function dispatch_fail_response(PDO $pdo, ?int $incidentId, array $unitIds, stri
     }
 
     ers_dispatch_attempt_log_failed($pdo, $incidentId, $unitIds, $message, 'dispatch_unit', $context);
+    dispatch_record_failed_audit($pdo, $incidentId, $unitIds, $message, $context);
     if ($statusCode !== 200) {
         http_response_code($statusCode);
     }
@@ -510,23 +545,49 @@ try {
             }, $dispatchedUnits);
         }
 
-        if (session_status() === PHP_SESSION_NONE) {
-            @session_start();
+        $userId = isset($_SESSION['user_id']) && (int)$_SESSION['user_id'] > 0
+            ? (int)$_SESSION['user_id']
+            : null;
+        $role = strtolower(trim((string)($_SESSION['login_role'] ?? $_SESSION['user_role'] ?? 'dispatcher')));
+        if (!in_array($role, ['admin', 'dispatcher'], true)) {
+            $role = $userId ? 'dispatcher' : 'system';
         }
-        $userId = isset($_SESSION['user_id']) ? (int)$_SESSION['user_id'] : null;
+        $source = $role === 'admin' ? 'admin_web' : ($role === 'dispatcher' ? 'dispatcher_web' : 'server_api');
 
         $notificationText = 'Dispatch confirmed for incident #' . (string)$incident_id . ' with ' . count($dispatchIds) . ' unit' . (count($dispatchIds) === 1 ? '' : 's');
         $notificationDetails = [
             'message' => $notificationText,
             'dispatch' => $notificationPayload
         ];
+        $detailsJson = json_encode($notificationDetails, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
 
-        $stmtLog = $pdo->prepare("
-            INSERT INTO activity_log (user_id, action, entity_type, entity_id, details, created_at)
-            VALUES (?, 'dispatch_confirmed', 'dispatch', ?, ?, ?)
-        ");
-        $stmtLog->execute([$userId, $dispatchIds[0] ?? null, json_encode($notificationDetails, JSON_UNESCAPED_UNICODE), $dispatchTime]);
-        $notificationLogged = true;
+        $auditId = record_operational_audit_event(
+            $pdo,
+            $userId,
+            'dispatch_confirmed',
+            'dispatch',
+            $dispatchIds[0] ?? null,
+            is_string($detailsJson) ? $detailsJson : $notificationText,
+            [
+                'actor_role' => $role,
+                'source_channel' => $source,
+                'event_category' => 'dispatch',
+                'event_outcome' => 'success',
+                'reference_no' => $incidentReferenceNo,
+                'incident_id' => $incident_id,
+                'dispatch_id' => $dispatchIds[0] ?? null,
+                'occurred_at' => $dispatchTime,
+                'event_key' => 'incident:' . $incident_id . ':dispatch:' . (string)($dispatchIds[0] ?? 0) . ':confirmed',
+                'metadata' => [
+                    'dispatch_ids' => $dispatchIds,
+                    'unit_ids' => array_map(static fn(array $unit): int => (int)$unit['id'], $dispatchedUnits),
+                    'unit_identifiers' => array_map(static fn(array $unit): string => (string)$unit['identifier'], $dispatchedUnits),
+                    'responder_ids' => array_map(static fn(array $unit): int => (int)$unit['responder_id'], $dispatchedUnits),
+                    'dispatched_count' => count($dispatchIds),
+                ],
+            ]
+        );
+        $notificationLogged = $auditId !== null;
     } catch (Throwable $logError) {
         // Dispatch already committed; keep success response even if logging fails.
     }
@@ -546,10 +607,12 @@ try {
             $pdo->rollBack();
         }
     } catch (Throwable $e2) {}
-    ers_dispatch_attempt_log_failed($pdo, $incident_id, $unit_ids, 'Dispatch failed: ' . $e->getMessage(), 'dispatch_unit', [
+    $failureContext = [
         'incident_id' => $incident_id,
         'unit_ids' => $unit_ids,
         'exception' => $e->getMessage(),
-    ]);
+    ];
+    ers_dispatch_attempt_log_failed($pdo, $incident_id, $unit_ids, 'Dispatch failed: ' . $e->getMessage(), 'dispatch_unit', $failureContext);
+    dispatch_record_failed_audit($pdo, $incident_id, $unit_ids, 'Dispatch failed: ' . $e->getMessage(), $failureContext);
     echo json_encode(['ok'=>false,'error'=>'Dispatch failed: ' . $e->getMessage()]);
 }

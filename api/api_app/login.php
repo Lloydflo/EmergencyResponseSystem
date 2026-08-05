@@ -4,6 +4,7 @@ header("Content-Type: application/json");
 require_once __DIR__ . '/../../includes/db.php';
 require_once __DIR__ . '/../../includes/user_presence.php';
 require_once __DIR__ . '/../../includes/unit_location_tracking.php';
+require_once __DIR__ . '/../../includes/activity_log.php';
 
 $input = json_decode(file_get_contents("php://input"), true);
 if (!is_array($input)) {
@@ -125,6 +126,29 @@ try {
         'responder_id' => (int)$user['id'],
         'unit_code' => (string)($user['unit_code'] ?? ''),
     ]);
+
+    record_operational_audit_event(
+        $pdo,
+        (int)$user['id'],
+        'responder_login',
+        'authentication',
+        (int)$user['id'],
+        'Responder signed in to the mobile application.',
+        [
+            'actor_name' => (string)($user['name'] ?? ''),
+            'actor_email' => (string)($user['email'] ?? ''),
+            'actor_role' => 'responder',
+            'source_channel' => 'responder_app',
+            'event_category' => 'authentication',
+            'event_outcome' => 'success',
+            'metadata' => [
+                'department' => (string)($user['department'] ?? ''),
+                'unit_code' => (string)($user['unit_code'] ?? ($unit['identifier'] ?? '')),
+                'unit_type' => (string)($user['unit_type'] ?? ($unit['unit_type'] ?? '')),
+                'location_sync_succeeded' => (bool)($locationUpdate['ok'] ?? false),
+            ],
+        ]
+    );
 
     echo json_encode([
         "success" => true,
