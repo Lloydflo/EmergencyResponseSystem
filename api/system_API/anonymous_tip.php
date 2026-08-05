@@ -86,10 +86,23 @@ function ers_tip_normalize(array $input, ?string $externalClient = null): array
         ?? $input['photoOfEvidence']
         ?? $input['photo']
         ?? $input['evidence_photo']
+        ?? $input['evidencePhoto']
+        ?? $input['evidence_url']
+        ?? $input['evidenceUrl']
+        ?? $input['image_url']
+        ?? $input['imageUrl']
         ?? '';
     if (is_array($photo)) {
-        $encodedPhoto = json_encode($photo, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
-        $photo = is_string($encodedPhoto) ? $encodedPhoto : '';
+        $extractedPhoto = ers_tip_extract_evidence($photo);
+        if ($extractedPhoto !== '') {
+            $photo = $extractedPhoto;
+        } else {
+            $encodedPhoto = json_encode($photo, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
+            $photo = is_string($encodedPhoto) ? $encodedPhoto : '';
+        }
+    }
+    if (trim((string)$photo) === '') {
+        $photo = ers_tip_extract_evidence($input);
     }
 
     $status = strtolower(ers_external_clean($input['status'] ?? 'new', 40));
@@ -427,7 +440,7 @@ function ers_tip_find(PDO $pdo, int $id): array
 {
     $stmt = $pdo->prepare(
         "SELECT at.id, at.tip_id, at.tip_datetime, at.location, at.tip_description, at.photo_of_evidence,
-                at.status, at.outcome, at.source_system, at.received_at, at.updated_at,
+                at.status, at.outcome, at.source_system, at.received_at, at.updated_at, at.raw_payload,
                 i.id AS converted_incident_id, i.reference_no AS converted_reference_no, i.status AS converted_incident_status
          FROM anonymous_tips at
          LEFT JOIN external_incident_links eil
@@ -439,7 +452,7 @@ function ers_tip_find(PDO $pdo, int $id): array
     );
     $stmt->execute([ers_tip_link_source(), $id]);
     $row = $stmt->fetch(PDO::FETCH_ASSOC);
-    return is_array($row) ? $row : [];
+    return is_array($row) ? ers_tip_prepare_response($row) : [];
 }
 
 function ers_tip_list(PDO $pdo): array
@@ -465,7 +478,7 @@ function ers_tip_list(PDO $pdo): array
     }
 
     $sql = "SELECT at.id, at.tip_id, at.tip_datetime, at.location, at.tip_description, at.photo_of_evidence,
-                   at.status, at.outcome, at.source_system, at.received_at, at.updated_at,
+                   at.status, at.outcome, at.source_system, at.received_at, at.updated_at, at.raw_payload,
                    i.id AS converted_incident_id, i.reference_no AS converted_reference_no, i.status AS converted_incident_status
             FROM anonymous_tips at
             LEFT JOIN external_incident_links eil
@@ -480,7 +493,8 @@ function ers_tip_list(PDO $pdo): array
 
     $stmt = $pdo->prepare($sql);
     $stmt->execute($params);
-    return $stmt->fetchAll(PDO::FETCH_ASSOC) ?: [];
+    $rows = $stmt->fetchAll(PDO::FETCH_ASSOC) ?: [];
+    return array_map('ers_tip_prepare_response', $rows);
 }
 
 function ers_tip_find_for_action(PDO $pdo, int $id, string $tipId): array
@@ -493,7 +507,102 @@ function ers_tip_find_for_action(PDO $pdo, int $id, string $tipId): array
     $stmt = $pdo->prepare($sql);
     $stmt->execute([$id > 0 ? $id : $tipId]);
     $row = $stmt->fetch(PDO::FETCH_ASSOC);
-    return is_array($row) ? $row : [];
+    return is_array($row) ? ers_tip_hydrate_evidence($row) : [];
+}
+
+function ers_tip_prepare_response(array $row): array
+{
+    $row = ers_tip_hydrate_evidence($row);
+    unset($row['raw_payload']);
+    return $row;
+}
+
+function ers_tip_hydrate_evidence(array $row): array
+{
+    if (trim((string)($row['photo_of_evidence'] ?? '')) !== '') {
+        return $row;
+    }
+
+    $payload = trim((string)($row['raw_payload'] ?? ''));
+    if ($payload === '') {
+        return $row;
+    }
+
+    $decoded = json_decode($payload, true);
+    if (is_array($decoded)) {
+        $evidence = ers_tip_extract_evidence($decoded);
+        if ($evidence !== '') {
+            $row['photo_of_evidence'] = $evidence;
+        }
+    }
+
+    return $row;
+}
+
+function ers_tip_extract_evidence($value, int $depth = 0): string
+{
+    if ($depth > 4 || $value === null) {
+        return '';
+    }
+
+    if (is_string($value)) {
+        $text = trim($value);
+        if ($text === '') {
+            return '';
+        }
+        if (preg_match('/^[\[{]/', $text) === 1) {
+            $decoded = json_decode($text, true);
+            if (is_array($decoded)) {
+                return ers_tip_extract_evidence($decoded, $depth + 1);
+            }
+        }
+        return $text;
+    }
+
+    if (is_scalar($value)) {
+        return trim((string)$value);
+    }
+
+    if (!is_array($value)) {
+        return '';
+    }
+
+    if ($value !== [] && array_keys($value) === range(0, count($value) - 1)) {
+        foreach ($value as $entry) {
+            $evidence = ers_tip_extract_evidence($entry, $depth + 1);
+            if ($evidence !== '') {
+                return $evidence;
+            }
+        }
+        return '';
+    }
+
+    $directKeys = [
+        'photo_of_evidence', 'photoOfEvidence', 'evidence_photo', 'evidencePhoto',
+        'evidence_url', 'evidenceUrl', 'image_url', 'imageUrl', 'photo_url',
+        'photoUrl', 'url', 'path', 'src', 'href', 'image', 'photo', 'file_url',
+        'fileUrl', 'filePath', 'base64', 'data',
+    ];
+    foreach ($directKeys as $key) {
+        if (array_key_exists($key, $value)) {
+            $evidence = ers_tip_extract_evidence($value[$key], $depth + 1);
+            if ($evidence !== '') {
+                return $evidence;
+            }
+        }
+    }
+
+    $nestedKeys = ['evidence', 'attachments', 'attachment', 'images', 'imageFiles', 'photos', 'files', 'media'];
+    foreach ($nestedKeys as $key) {
+        if (array_key_exists($key, $value)) {
+            $evidence = ers_tip_extract_evidence($value[$key], $depth + 1);
+            if ($evidence !== '') {
+                return $evidence;
+            }
+        }
+    }
+
+    return '';
 }
 
 function ers_tip_set_status(PDO $pdo, int $id, string $status, string $outcome): void

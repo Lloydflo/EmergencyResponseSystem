@@ -203,7 +203,7 @@ if ($reviewerName === '') {
                         <div class="panel-head">
                             <div>
                                 <h4><i class="fas fa-comments"></i> Submitted Feedback</h4>
-                                <p>All dispatcher notes and ratings recorded for this incident.</p>
+                                <p>Dispatcher notes, responder messages, and ratings recorded for this incident.</p>
                             </div>
                             <div id="feedbackSummary" class="feedback-summary-chips"></div>
                         </div>
