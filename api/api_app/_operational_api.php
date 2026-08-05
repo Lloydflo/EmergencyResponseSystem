@@ -602,6 +602,22 @@ function op_tip_response(array $row): array
 /** @param array<string,mixed> $row @return array<string,mixed> */
 function op_after_action_response(array $row): array
 {
+    // Keep the existing database values for backward compatibility while
+    // exposing the responder-facing Pending -> Submitted -> Approved workflow.
+    $legacyStatus = strtolower(trim((string)($row['status'] ?? 'draft')));
+    $workflowStatus = match ($legacyStatus) {
+        'submitted' => 'submitted',
+        'verified', 'approved' => 'approved',
+        'returned' => 'revision_required',
+        default => 'pending',
+    };
+    $statusLabel = match ($workflowStatus) {
+        'submitted' => 'Submitted',
+        'approved' => 'Approved',
+        'revision_required' => 'Needs Revision',
+        default => 'Pending',
+    };
+
     return [
         'id' => (int)($row['id'] ?? 0),
         'incident_id' => (int)($row['incident_id'] ?? 0),
@@ -621,7 +637,10 @@ function op_after_action_response(array $row): array
         'follow_up_required' => (int)($row['follow_up_required'] ?? 0),
         'follow_up_details' => (string)($row['follow_up_details'] ?? ''),
         'lessons_learned' => (string)($row['lessons_learned'] ?? ''),
-        'status' => (string)($row['status'] ?? 'draft'),
+        'status' => $legacyStatus,
+        'workflow_status' => $workflowStatus,
+        'status_label' => $statusLabel,
+        'is_editable' => in_array($legacyStatus, ['draft', 'returned'], true),
         'reviewer_user_id' => isset($row['reviewer_user_id']) && $row['reviewer_user_id'] !== null
             ? (int)$row['reviewer_user_id'] : null,
         'reviewer_notes' => (string)($row['reviewer_notes'] ?? ''),

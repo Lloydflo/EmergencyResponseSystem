@@ -79,7 +79,7 @@ $allowed = [
     '3gp' => ['audio/3gpp', 'video/3gpp', 'application/octet-stream'],
     'ogg' => ['audio/ogg', 'application/ogg', 'application/octet-stream'],
     'opus' => ['audio/opus', 'audio/ogg', 'application/ogg', 'application/octet-stream'],
-    'wav' => ['audio/wav', 'audio/x-wav', 'audio/wave', 'application/octet-stream'],
+    'wav' => ['audio/wav', 'audio/x-wav', 'audio/wave', 'audio/vnd.wave', 'application/octet-stream'],
     'mp3' => ['audio/mpeg', 'audio/mp3', 'application/octet-stream'],
 ];
 
@@ -98,6 +98,8 @@ $extensionByMime = [
     'audio/opus' => 'opus',
     'audio/wav' => 'wav',
     'audio/x-wav' => 'wav',
+    'audio/wave' => 'wav',
+    'audio/vnd.wave' => 'wav',
     'audio/mpeg' => 'mp3',
 ];
 
@@ -144,13 +146,41 @@ try {
     $baseUrl = $configuredBaseUrl !== ''
         ? rtrim($configuredBaseUrl, '/')
         : 'https://emergency-response.alertaraqc.com';
+    $apiAppPublicPath = '/' . trim(
+        (string)(getenv('ERS_API_APP_PUBLIC_PATH') ?: '/api/api_app'),
+        '/'
+    );
+
+    // Use a canonical response MIME even when libmagic reports a generic or
+    // vendor-specific equivalent. The streaming endpoint also serves this MIME
+    // and supports byte ranges required by Android audio players.
+    $publicMime = match ($extension) {
+        'jpg', 'jpeg' => 'image/jpeg',
+        'png' => 'image/png',
+        'webp' => 'image/webp',
+        'pdf' => 'application/pdf',
+        'doc' => 'application/msword',
+        'docx' => 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+        'm4a' => 'audio/mp4',
+        'aac' => 'audio/aac',
+        '3gp' => 'audio/3gpp',
+        'ogg', 'opus' => 'audio/ogg',
+        'wav' => 'audio/wav',
+        'mp3' => 'audio/mpeg',
+        default => $detectedMime,
+    };
+    $staticUrl = $baseUrl . '/uploads/chat/' . rawurlencode($newName);
+    $streamUrl = $baseUrl . $apiAppPublicPath
+        . '/chat-file.php?file=' . rawurlencode($newName);
 
     op_success([
-        'file_url' => $baseUrl . '/uploads/chat/' . rawurlencode($newName),
+        'file_url' => $streamUrl,
+        'static_file_url' => $staticUrl,
         'file_name' => $originalName,
         'file_type' => $extension,
         'file_size' => filesize($targetPath) ?: $fileSize,
-        'mime_type' => $detectedMime,
+        'mime_type' => $publicMime,
+        'detected_mime_type' => $detectedMime,
     ], 201);
 } catch (Throwable $error) {
     error_log('upload_chat_file: ' . $error->getMessage());

@@ -24,13 +24,18 @@ $safetyIssues = op_post_string('safety_issues', '', 10000);
 $followUpRequired = op_post_bool('follow_up_required');
 $followUpDetails = op_post_string('follow_up_details', '', 10000);
 $lessonsLearned = op_post_string('lessons_learned', '', 10000);
-$status = strtolower(op_post_string('status', 'draft', 16));
+$requestedStatus = strtolower(op_post_string('status', 'pending', 24));
+$status = match ($requestedStatus) {
+    'pending', 'draft' => 'draft',
+    'submitted' => 'submitted',
+    default => '',
+};
 
 op_require_positive($incidentId, 'incident_id');
 op_require_positive($responderId, 'responder_id');
 op_require_text($operationalOutcome, 'operational_outcome');
-if (!in_array($status, ['draft', 'submitted'], true)) {
-    op_error('Responders may save only draft or submitted reports.', 422);
+if ($status === '') {
+    op_error('Responders may save only pending or submitted reports.', 422);
 }
 if ($status === 'submitted') {
     op_require_text($incidentSummary, 'incident_summary');
@@ -80,7 +85,7 @@ try {
         $existingStatus = strtolower((string)($existing['status'] ?? 'draft'));
         if ($existingStatus === 'verified') {
             $pdo->rollBack();
-            op_error('The verified after-action report is read-only.', 409);
+            op_error('The approved after-action report is read-only.', 409);
         }
         if ($existingStatus === 'submitted') {
             if ($status === 'submitted') {
@@ -157,8 +162,8 @@ try {
     $pdo->commit();
     op_success([
         'message' => $status === 'submitted'
-            ? 'After-action report submitted for verification.'
-            : 'After-action report draft saved.',
+            ? 'After-action report submitted for admin review.'
+            : 'After-action report saved as Pending.',
         'report' => op_after_action_response($report),
         'created' => $created,
         'idempotent' => false,

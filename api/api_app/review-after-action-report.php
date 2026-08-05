@@ -14,8 +14,8 @@ $notes = op_post_string('notes', '', 10000);
 
 op_require_active_reviewer($pdo, $reviewerId);
 op_require_positive($reportId, 'report_id');
-if (!in_array($action, ['verify', 'return'], true)) {
-    op_error('action must be verify or return.', 422);
+if (!in_array($action, ['approve', 'verify', 'return'], true)) {
+    op_error('action must be approve or return (verify remains a supported legacy alias).', 422);
 }
 if ($action === 'return') {
     op_require_text($notes, 'notes');
@@ -37,7 +37,8 @@ try {
         op_error('Only submitted reports can be reviewed.', 409);
     }
 
-    $newStatus = $action === 'verify' ? 'verified' : 'returned';
+    $isApproval = in_array($action, ['approve', 'verify'], true);
+    $newStatus = $isApproval ? 'verified' : 'returned';
     $update = $pdo->prepare(
         'UPDATE responder_after_action_reports SET status = ?, reviewer_user_id = ?, '
         . 'reviewer_notes = ?, reviewed_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP '
@@ -55,9 +56,10 @@ try {
     $pdo->commit();
 
     op_success([
-        'message' => $action === 'verify'
-            ? 'After-action report verified.'
+        'message' => $isApproval
+            ? 'After-action report approved.'
             : 'After-action report returned for revision.',
+        'review_action' => $isApproval ? 'approved' : 'returned',
         'report' => op_after_action_response($updated ?? $report),
     ]);
 } catch (Throwable $error) {
