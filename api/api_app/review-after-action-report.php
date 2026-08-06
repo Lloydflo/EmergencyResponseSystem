@@ -10,15 +10,27 @@ op_require_after_action_schema($pdo);
 
 $reviewerId = op_post_int('reviewer_id');
 $reportId = op_post_int('report_id');
+
+// When this endpoint is called from the authenticated admin website, bind the
+// requested reviewer to the active session. API clients without a PHP session
+// retain the existing reviewer-id validation below.
+if (session_status() === PHP_SESSION_NONE && isset($_COOKIE[session_name()])) {
+    @session_start();
+}
+$sessionReviewerId = isset($_SESSION['user_id']) ? (int)$_SESSION['user_id'] : 0;
+if ($sessionReviewerId > 0 && $sessionReviewerId !== $reviewerId) {
+    op_error('The reviewer does not match the authenticated session.', 403);
+}
+
 $action = strtolower(op_post_string('action', '', 16));
 $notes = op_post_string('notes', '', 10000);
 
 $reviewer = op_require_active_reviewer($pdo, $reviewerId);
 op_require_positive($reportId, 'report_id');
-if (!in_array($action, ['approve', 'verify', 'return'], true)) {
-    op_error('action must be approve or return (verify remains a supported legacy alias).', 422);
+if (!in_array($action, ['approve', 'verify', 'return', 'reject'], true)) {
+    op_error('action must be approve or return (verify and reject remain supported aliases).', 422);
 }
-if ($action === 'return') {
+if (in_array($action, ['return', 'reject'], true)) {
     op_require_text($notes, 'notes');
 }
 
@@ -39,7 +51,7 @@ try {
     }
 
     $isApproval = in_array($action, ['approve', 'verify'], true);
-    $newStatus = $isApproval ? 'verified' : 'returned';
+    $newStatus = $isApproval ? 'approved' : 'returned';
     $update = $pdo->prepare(
         'UPDATE responder_after_action_reports SET status = ?, reviewer_user_id = ?, '
         . 'reviewer_notes = ?, reviewed_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP '

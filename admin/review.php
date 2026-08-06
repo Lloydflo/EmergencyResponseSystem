@@ -3,11 +3,24 @@ $rootDir = dirname(__DIR__);
 require_once $rootDir . '/includes/auth.php';
 require_role('admin', 'admin/review.php');
 
+$reviewUiBuild = '20260806-after-action-approval-v1';
+if (!headers_sent()) {
+    header('Cache-Control: no-store, no-cache, must-revalidate, max-age=0');
+    header('Pragma: no-cache');
+    header('Expires: 0');
+    header('X-Review-UI-Build: ' . $reviewUiBuild);
+}
+
 $pageTitle = 'Review & Feedback';
 $adminName = trim((string)($_SESSION['user_name'] ?? $_SESSION['name'] ?? 'Admin'));
 if ($adminName === '') {
     $adminName = 'Admin';
 }
+$adminUserId = (int)($_SESSION['user_id'] ?? 0);
+$reviewScriptModified = is_file($rootDir . '/js/admin-review-after-action.js')
+    ? (string)filemtime($rootDir . '/js/admin-review-after-action.js')
+    : '0';
+$reviewScriptVersion = rawurlencode($reviewUiBuild . '-' . $reviewScriptModified);
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -75,6 +88,7 @@ if ($adminName === '') {
         .ar-chip, .ar-pill { display: inline-flex; align-items: center; gap: .4rem; padding: .35rem .7rem; border-radius: 999px; font-size: .76rem; font-weight: 800; }
         .ar-chip.resolved { background: #dcfce7; color: #166534; }
         .ar-chip.cancelled { background: #fee2e2; color: #991b1b; }
+        .ar-pill.critical { background: #7f1d1d; color: #fff; }
         .ar-pill.high { background: #fee2e2; color: #b91c1c; }
         .ar-pill.medium { background: #fef3c7; color: #b45309; }
         .ar-pill.low { background: #dcfce7; color: #166534; }
@@ -119,9 +133,6 @@ if ($adminName === '') {
         .ar-feedback-head { display: flex; justify-content: space-between; gap: .8rem; align-items: center; }
         .ar-feedback-head strong { color: #0f172a; }
         .ar-feedback-head span { color: #64748b; font-size: .84rem; }
-        .ar-rating-wrap { display: grid; justify-items: end; gap: .25rem; }
-        .ar-rating-label { color: #92400e; font-size: .78rem; font-weight: 800; }
-        .ar-stars { display: inline-flex; gap: .18rem; color: #f59e0b; }
         .ar-note { margin: .65rem 0 0; color: #334155; line-height: 1.65; white-space: pre-wrap; }
         .ar-feedback-empty { border: 1px dashed #cbd5e1; border-radius: 18px; background: #f8fafc; color: #64748b; padding: 1.05rem 1rem; }
         .ar-proof-gallery { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: .8rem; margin-top: 1rem; }
@@ -130,11 +141,60 @@ if ($adminName === '') {
         .ar-proof-card img { display: block; width: 100%; height: 220px; object-fit: contain; background: transparent; }
         .ar-proof-card figcaption { display: grid; gap: .18rem; padding: .7rem .78rem; color: #64748b; font-size: .82rem; line-height: 1.45; }
         .ar-proof-card figcaption strong { color: #0f172a; font-size: .86rem; }
+        .ar-report-status { display: inline-flex; align-items: center; gap: .38rem; width: fit-content; padding: .36rem .68rem; border-radius: 999px; font-size: .76rem; font-weight: 800; white-space: nowrap; }
+        .ar-report-status.submitted { background: #fef3c7; color: #92400e; }
+        .ar-report-status.approved { background: #dcfce7; color: #166534; }
+        .ar-report-status.revision { background: #fee2e2; color: #991b1b; }
+        .ar-report-status.pending, .ar-report-status.none { background: #e2e8f0; color: #475569; }
+        .ar-report-cell { display: grid; gap: .25rem; min-width: 150px; }
+        .ar-report-cell > span:not(.ar-report-status) { color: #334155; font-size: .78rem; font-weight: 700; }
+        .ar-report-cell small { color: #64748b; line-height: 1.4; }
+        .ar-date-cell { display: grid; gap: .22rem; min-width: 145px; }
+        .ar-date-cell strong { color: #334155; font-size: .78rem; }
+        .ar-date-cell span { color: #64748b; font-size: .8rem; line-height: 1.4; }
+        .ar-panel-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 1rem; }
+        .ar-after-action-list { display: grid; gap: 1rem; margin-top: 1rem; }
+        .ar-report-card { overflow: hidden; border: 1px solid #cbd5e1; border-radius: 18px; background: #fff; }
+        .ar-report-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 1rem; padding: .95rem 1rem; border-bottom: 1px solid #e2e8f0; background: #f8fafc; }
+        .ar-report-kicker { display: block; color: #64748b; font-size: .76rem; font-weight: 800; letter-spacing: .04em; text-transform: uppercase; }
+        .ar-report-head h5 { margin: .35rem 0 0; color: #0f172a; font-size: 1.08rem; }
+        .ar-report-head p { margin: .28rem 0 0; color: #64748b; font-size: .82rem; }
+        .ar-report-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: .65rem; padding: 1rem; }
+        .ar-report-field { display: grid; gap: .35rem; min-width: 0; padding: .72rem .78rem; border: 1px solid #e2e8f0; border-radius: 14px; background: #f8fbff; }
+        .ar-report-field-wide { grid-column: 1 / -1; }
+        .ar-report-field span { color: #64748b; font-size: .72rem; font-weight: 800; letter-spacing: .045em; text-transform: uppercase; }
+        .ar-report-field strong { color: #0f172a; font-size: .88rem; font-weight: 650; line-height: 1.58; white-space: pre-wrap; overflow-wrap: anywhere; }
+        .ar-review-box { margin: 0 1rem 1rem; padding: .9rem; border: 1px solid #bfdbfe; border-radius: 15px; background: #eff6ff; }
+        .ar-review-box label { display: block; color: #1e3a8a; font-size: .82rem; font-weight: 800; }
+        .ar-review-box textarea { width: 100%; margin-top: .45rem; padding: .72rem .78rem; border: 1px solid #93c5fd; border-radius: 12px; background: #fff; color: #0f172a; font: inherit; line-height: 1.5; resize: vertical; box-sizing: border-box; }
+        .ar-review-box textarea:focus { outline: none; border-color: #2563eb; box-shadow: 0 0 0 4px rgba(37,99,235,.14); }
+        .ar-review-actions { display: flex; flex-wrap: wrap; gap: .55rem; margin-top: .72rem; }
+        .ar-review-btn { min-height: 42px; padding: .65rem .85rem; border: 0; border-radius: 11px; color: #fff; font-weight: 800; cursor: pointer; }
+        .ar-review-btn.approve { background: #15803d; }
+        .ar-review-btn.return { background: #b91c1c; }
+        .ar-review-btn:disabled { opacity: .58; cursor: wait; }
+        .ar-review-help { margin: .62rem 0 0 !important; color: #475569 !important; font-size: .78rem; line-height: 1.5; }
+        .ar-review-message { min-height: 1.2em; margin-top: .4rem; color: #1d4ed8; font-size: .8rem; font-weight: 700; }
+        .ar-review-message.error { color: #b91c1c; }
+        .ar-review-outcome { margin: 0 1rem 1rem; padding: .82rem .9rem; border-radius: 14px; border: 1px solid #cbd5e1; background: #f8fafc; }
+        .ar-review-outcome.approved { border-color: #86efac; background: #f0fdf4; }
+        .ar-review-outcome.revision { border-color: #fecaca; background: #fef2f2; }
+        .ar-review-outcome > div { display: flex; align-items: center; justify-content: space-between; gap: .7rem; flex-wrap: wrap; }
+        .ar-review-outcome > div > span:last-child { color: #64748b; font-size: .8rem; }
+        .ar-review-outcome p { margin: .6rem 0 0; color: #334155; line-height: 1.55; }
+        .ar-review-outcome blockquote { display: grid; gap: .28rem; margin: .65rem 0 0; padding: .65rem .75rem; border-left: 4px solid #64748b; border-radius: 0 10px 10px 0; background: rgba(255,255,255,.72); }
+        .ar-review-outcome blockquote strong { color: #334155; font-size: .78rem; }
+        .ar-review-outcome blockquote span { color: #475569; line-height: 1.55; white-space: pre-wrap; }
+        .ar-note-source { display: inline-flex; padding: .3rem .55rem; border-radius: 999px; background: #e2e8f0; color: #475569 !important; font-size: .72rem !important; font-weight: 800; white-space: nowrap; }
+        .ar-toast { position: fixed; top: calc(var(--app-header-height-1) + .75rem); right: 1rem; z-index: 3000; max-width: min(420px, calc(100vw - 2rem)); padding: .82rem 1rem; border-radius: 13px; background: #1e293b; color: #fff; box-shadow: 0 14px 34px rgba(15,23,42,.26); font-size: .88rem; font-weight: 700; transition: opacity .2s ease, transform .2s ease; }
+        .ar-toast.success { background: #166534; }
+        .ar-toast.error { background: #991b1b; }
+        .ar-toast.leaving { opacity: 0; transform: translateY(-8px); }
+        html.ar-modal-open, html.ar-modal-open body { overflow: hidden; }
         [data-theme="dark"] .main-content { background: radial-gradient(circle at top right, rgba(59,130,246,.14), transparent 28%), #08111f; }
         [data-theme="dark"] .ar-stat, [data-theme="dark"] .ar-toolbar, [data-theme="dark"] .ar-card, [data-theme="dark"] .ar-modal-dialog { background: linear-gradient(180deg, rgba(15,23,42,.98), rgba(2,6,23,.98)); border-color: #334155; box-shadow: 0 18px 42px rgba(2,6,23,.38); }
         [data-theme="dark"] .ar-stat strong, [data-theme="dark"] .ar-ref, [data-theme="dark"] .ar-card-head h2, [data-theme="dark"] .ar-modal-head h3, [data-theme="dark"] .ar-spotlight h4, [data-theme="dark"] .ar-side strong, [data-theme="dark"] .ar-grid h4, [data-theme="dark"] .ar-feedback-panel h4, [data-theme="dark"] .ar-detail strong, [data-theme="dark"] .ar-feedback-head strong, [data-theme="dark"] .ar-proof-card figcaption strong { color: #f8fafc !important; }
         [data-theme="dark"] .ar-stat span, [data-theme="dark"] .ar-stat p, [data-theme="dark"] .ar-field label, [data-theme="dark"] .ar-card-head p, [data-theme="dark"] .ar-meta, [data-theme="dark"] .ar-modal-head p, [data-theme="dark"] .ar-spotlight .type, [data-theme="dark"] .ar-spotlight .desc, [data-theme="dark"] .ar-side span, [data-theme="dark"] .ar-detail span, [data-theme="dark"] .ar-feedback-panel p, [data-theme="dark"] .ar-feedback-head span, [data-theme="dark"] .ar-note, [data-theme="dark"] .ar-feedback-empty, [data-theme="dark"] .ar-proof-card figcaption { color: #94a3b8 !important; }
-        [data-theme="dark"] .ar-rating-label { color: #fde68a !important; }
         [data-theme="dark"] .ar-field input, [data-theme="dark"] .ar-field select, [data-theme="dark"] .ar-btn.secondary, [data-theme="dark"] .ar-action, [data-theme="dark"] .ar-close { background: #0f172a !important; color: #f8fafc !important; border-color: #475569 !important; }
         [data-theme="dark"] .ar-action.sync { background: #115e59 !important; color: #ccfbf1 !important; border-color: #0f766e !important; }
         [data-theme="dark"] .ar-action.danger { background: #7f1d1d !important; color: #fecaca !important; border-color: #991b1b !important; }
@@ -146,8 +206,18 @@ if ($adminName === '') {
         [data-theme="dark"] .ar-pill.high { background: #450a0a !important; color: #fecaca !important; }
         [data-theme="dark"] .ar-pill.medium { background: #451a03 !important; color: #fde68a !important; }
         [data-theme="dark"] .ar-pill.low { background: #052e16 !important; color: #bbf7d0 !important; }
-        @media (max-width: 1180px) { .ar-stats, .ar-grid { grid-template-columns: repeat(2, minmax(0,1fr)); } .ar-toolbar, .ar-spotlight { grid-template-columns: 1fr; } .ar-actions { justify-content: flex-end; } }
-        @media (max-width: 767px) { .main-content { padding: calc(var(--app-header-height-mobile-1) + 1rem) .75rem 1.5rem; } .ar-stats, .ar-toolbar, .ar-grid { grid-template-columns: 1fr; } .ar-actions, .ar-row-actions { display: grid; grid-template-columns: 1fr; } .ar-feedback-head, .ar-card-head { flex-direction: column; align-items: flex-start; } }
+        [data-theme="dark"] .ar-report-card, [data-theme="dark"] .ar-report-head, [data-theme="dark"] .ar-report-field, [data-theme="dark"] .ar-review-outcome, [data-theme="dark"] .ar-review-box { background: #020617 !important; border-color: #334155 !important; }
+        [data-theme="dark"] .ar-report-head h5, [data-theme="dark"] .ar-report-field strong { color: #f8fafc !important; }
+        [data-theme="dark"] .ar-report-cell > span:not(.ar-report-status), [data-theme="dark"] .ar-date-cell strong, [data-theme="dark"] .ar-review-outcome p, [data-theme="dark"] .ar-review-outcome blockquote strong { color: #cbd5e1 !important; }
+        [data-theme="dark"] .ar-review-box label { color: #93c5fd !important; }
+        [data-theme="dark"] .ar-review-box textarea { background: #0f172a !important; color: #f8fafc !important; border-color: #475569 !important; }
+        [data-theme="dark"] .ar-review-outcome blockquote { background: #0f172a !important; }
+        [data-theme="dark"] .ar-report-status.submitted { background: #451a03 !important; color: #fde68a !important; }
+        [data-theme="dark"] .ar-report-status.approved { background: #052e16 !important; color: #bbf7d0 !important; }
+        [data-theme="dark"] .ar-report-status.revision { background: #450a0a !important; color: #fecaca !important; }
+        [data-theme="dark"] .ar-report-status.pending, [data-theme="dark"] .ar-report-status.none, [data-theme="dark"] .ar-note-source { background: #1e293b !important; color: #cbd5e1 !important; }
+        @media (max-width: 1180px) { .ar-stats, .ar-grid { grid-template-columns: repeat(2, minmax(0,1fr)); } .ar-toolbar, .ar-spotlight { grid-template-columns: 1fr; } .ar-report-grid { grid-template-columns: repeat(2, minmax(0,1fr)); } .ar-actions { justify-content: flex-end; } }
+        @media (max-width: 767px) { .main-content { padding: calc(var(--app-header-height-mobile-1) + 1rem) .75rem 1.5rem; } .ar-stats, .ar-toolbar, .ar-grid, .ar-report-grid { grid-template-columns: 1fr; } .ar-report-field-wide { grid-column: auto; } .ar-actions, .ar-row-actions, .ar-review-actions { display: grid; grid-template-columns: 1fr; } .ar-review-btn { width: 100%; } .ar-feedback-head, .ar-card-head, .ar-panel-head, .ar-report-head { flex-direction: column; align-items: flex-start; } .ar-toast { top: calc(var(--app-header-height-mobile-1) + .5rem); } }
     </style>
 </head>
 <body>
@@ -157,20 +227,20 @@ if ($adminName === '') {
         <div class="main-container ar-shell">
             <section class="ar-hero">
                 <h1>Review &amp; Feedback Console</h1>
-                <p>Hi <?php echo htmlspecialchars($adminName); ?>. Feedback and received survey entries are listed here automatically so the admin team can review them per closed incident.</p>
+                <p>Hi <?php echo htmlspecialchars($adminName); ?>. Review responder after-action reports, approve complete submissions, or return reports that require correction.</p>
             </section>
 
             <section class="ar-stats" aria-live="polite">
-                <article class="ar-stat"><span>Submitted Reviews</span><strong id="statClosed">0</strong><p>Resolved and cancelled incidents sent by dispatcher.</p></article>
-                <article class="ar-stat"><span>With Feedback</span><strong id="statFeedback">0</strong><p>Incidents that already have dispatcher notes or ratings.</p></article>
-                <article class="ar-stat"><span>Average Rating</span><strong id="statRating">--</strong><p>Average score from dispatcher feedback entries.</p></article>
-                <article class="ar-stat"><span>Average Response</span><strong id="statResponse">--</strong><p>Average dispatch-to-scene timing for visible incidents.</p></article>
+                <article class="ar-stat"><span>After-Action Reports</span><strong id="statReports">0</strong><p>Total submitted, approved, and returned responder reports.</p></article>
+                <article class="ar-stat"><span>Awaiting Review</span><strong id="statPending">0</strong><p>Submitted reports that require an admin decision.</p></article>
+                <article class="ar-stat"><span>Approved</span><strong id="statApproved">0</strong><p>Reports available in the responder Approved tab.</p></article>
+                <article class="ar-stat"><span>Needs Revision</span><strong id="statRevision">0</strong><p>Reports returned to responders with an admin note.</p></article>
             </section>
 
             <section class="ar-toolbar">
                 <div class="ar-field">
                     <label for="searchFilterInput">Search</label>
-                    <input type="text" id="searchFilterInput" placeholder="Search incident, location, driver, plate, or vehicle...">
+                    <input type="text" id="searchFilterInput" placeholder="Search incident, responder, report summary, location, unit, or vehicle...">
                 </div>
                 <div class="ar-field">
                     <label for="categoryFilterSelect">Category</label>
@@ -186,11 +256,11 @@ if ($adminName === '') {
                 <div class="ar-field">
                     <label for="statusFilterSelect">Queue Filter</label>
                     <select id="statusFilterSelect">
-                        <option value="">All Closed Cases</option>
-                        <option value="resolved">Resolved Only</option>
-                        <option value="cancelled">Cancelled Only</option>
-                        <option value="with_feedback">With Feedback / Survey</option>
-                        <option value="without_feedback">No Feedback Yet</option>
+                        <option value="">All Review Cases</option>
+                        <option value="submitted">Awaiting Review</option>
+                        <option value="approved">Approved Reports</option>
+                        <option value="revision_required">Needs Revision</option>
+                        <option value="no_report">No After-Action Report</option>
                     </select>
                 </div>
                 <div class="ar-actions">
@@ -202,8 +272,8 @@ if ($adminName === '') {
             <section class="ar-card">
                 <div class="ar-card-head">
                     <div>
-                        <h2>Feedback &amp; Survey Queue</h2>
-                        <p id="tableSubtitle">Loading closed incidents and dispatcher feedback...</p>
+                        <h2>After-Action Review Queue</h2>
+                        <p id="tableSubtitle">Loading responder after-action reports...</p>
                     </div>
                     <span class="ar-count" id="incidentCountBadge">0 incident(s)</span>
                 </div>
@@ -217,8 +287,8 @@ if ($adminName === '') {
                                 <th>Priority</th>
                                 <th>Status</th>
                                 <th>Response</th>
-                                <th>Feedback</th>
-                                <th>Closed</th>
+                                <th>After-Action</th>
+                                <th>Submitted / Reviewed</th>
                                 <th>Actions</th>
                             </tr>
                         </thead>
@@ -233,8 +303,8 @@ if ($adminName === '') {
         <div class="ar-modal-dialog">
             <div class="ar-modal-head">
                 <div>
-                    <p>Dispatcher Feedback</p>
-                    <h3 id="adminFeedbackTitle">Incident Feedback Details</h3>
+                    <p>After-Action Review</p>
+                    <h3 id="adminFeedbackTitle">After-Action Review Details</h3>
                 </div>
                 <button type="button" class="ar-close" id="adminFeedbackClose" aria-label="Close"><i class="fas fa-times"></i></button>
             </div>
@@ -255,11 +325,20 @@ if ($adminName === '') {
                 <section class="ar-grid">
                     <article><h4><i class="fas fa-stopwatch"></i> Timeline</h4><div class="ar-list"><div class="ar-detail"><span>Dispatched</span><strong id="adminModalDispatch">--</strong></div><div class="ar-detail"><span>On Scene</span><strong id="adminModalOnScene">--</strong></div><div class="ar-detail"><span>Response Time</span><strong id="adminModalResponse">--</strong></div><div class="ar-detail"><span>Resolution Time</span><strong id="adminModalResolution">--</strong></div></div></article>
                     <article><h4><i class="fas fa-truck-medical"></i> Unit & Vehicle</h4><div class="ar-list"><div class="ar-detail"><span>Assigned Unit</span><strong id="adminModalUnit">--</strong></div><div class="ar-detail"><span>Driver</span><strong id="adminModalDriver">--</strong></div><div class="ar-detail"><span>Vehicle</span><strong id="adminModalVehicle">--</strong></div><div class="ar-detail"><span>Plate Number</span><strong id="adminModalPlate">--</strong></div></div></article>
-                    <article><h4><i class="fas fa-chart-line"></i> Feedback Summary</h4><div class="ar-list"><div class="ar-detail"><span>Average Rating</span><strong id="adminModalAvgRating">--</strong></div><div class="ar-detail"><span>Rated Entries</span><strong id="adminModalRatingCount">0</strong></div><div class="ar-detail"><span>Total Feedback</span><strong id="adminModalFeedbackCount">0</strong></div><div class="ar-detail"><span>Last Updated</span><strong id="adminModalLastUpdated">--</strong></div></div></article>
+                    <article><h4><i class="fas fa-file-circle-check"></i> After-Action Review</h4><div class="ar-list"><div class="ar-detail"><span>Total Reports</span><strong id="adminModalReportCount">0</strong></div><div class="ar-detail"><span>Awaiting Review</span><strong id="adminModalPendingCount">0</strong></div><div class="ar-detail"><span>Approved</span><strong id="adminModalApprovedCount">0</strong></div><div class="ar-detail"><span>Last Activity</span><strong id="adminModalLastUpdated">--</strong></div></div></article>
                 </section>
                 <section class="ar-feedback-panel">
-                    <h4><i class="fas fa-paper-plane"></i> Feedback &amp; Surveys</h4>
-                    <p>Dispatcher notes, responder messages, after-action entries, and received surveys appear here automatically.</p>
+                    <div class="ar-panel-head">
+                        <div>
+                            <h4><i class="fas fa-file-signature"></i> Responder After-Action Reports</h4>
+                            <p>Approve a complete submission or reject and return it with a required correction note.</p>
+                        </div>
+                    </div>
+                    <div id="adminAfterActionList" class="ar-after-action-list"></div>
+                </section>
+                <section class="ar-feedback-panel">
+                    <h4><i class="fas fa-clipboard-list"></i> Operational Notes</h4>
+                    <p>Separate dispatcher and responder notes are shown without rating scores.</p>
                     <div id="adminFeedbackList" class="ar-feedback-list"></div>
                 </section>
                 <section class="ar-feedback-panel">
@@ -271,400 +350,7 @@ if ($adminName === '') {
         </div>
     </div>
     <?php include $rootDir . '/includes/admin-footer.php'; ?>
-    <script>
-        (function () {
-            const qs = (selector, ctx = document) => ctx.querySelector(selector);
-            const tableBody = qs('#incidentTableBody');
-            const countBadge = qs('#incidentCountBadge');
-            const tableSubtitle = qs('#tableSubtitle');
-            const searchFilterInput = qs('#searchFilterInput');
-            const categoryFilterSelect = qs('#categoryFilterSelect');
-            const statusFilterSelect = qs('#statusFilterSelect');
-            const resetFilterBtn = qs('#resetFilterBtn');
-            const refreshReviewBtn = qs('#refreshReviewBtn');
-            const modal = qs('#adminFeedbackModal');
-            const modalOverlay = qs('#adminFeedbackOverlay');
-            const modalClose = qs('#adminFeedbackClose');
-            let incidentRows = [];
-            const PH_TIME_ZONE = 'Asia/Manila';
-            const PH_DATE_FORMATTER = new Intl.DateTimeFormat('en-PH', {
-                timeZone: PH_TIME_ZONE,
-                year: 'numeric',
-                month: 'short',
-                day: '2-digit',
-                hour: 'numeric',
-                minute: '2-digit',
-                second: '2-digit',
-                hour12: true,
-                timeZoneName: 'short'
-            });
-
-            function escapeHtml(value) {
-                return String(value).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#039;');
-            }
-            function toNumber(value) {
-                if (value === null || value === undefined || value === '') return null;
-                const number = Number(value);
-                return Number.isFinite(number) ? number : null;
-            }
-            function normalizeStatus(status) {
-                return String(status || '').toLowerCase() === 'cancelled' ? 'cancelled' : 'resolved';
-            }
-            function normalizePriority(priority) {
-                const safe = String(priority || '').toLowerCase();
-                if (safe === 'high') return 'high';
-                if (safe === 'medium') return 'medium';
-                return 'low';
-            }
-            function formatDate(value) {
-                if (!value) return '--';
-                const date = parseDateValue(value);
-                return Number.isNaN(date.getTime()) ? String(value) : PH_DATE_FORMATTER.format(date);
-            }
-            function parseDateValue(value) {
-                const raw = String(value || '').trim();
-                if (!raw) return new Date(NaN);
-                if (/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/.test(raw)) {
-                    return new Date(raw.replace(' ', 'T') + 'Z');
-                }
-                if (/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}$/.test(raw)) {
-                    return new Date(raw + 'Z');
-                }
-                return new Date(raw);
-            }
-            function formatMinutes(value) {
-                const minutes = toNumber(value);
-                if (minutes === null) return '--';
-                if (minutes < 60) return Math.round(minutes) + ' min';
-                const hours = Math.floor(minutes / 60);
-                const remaining = Math.round(minutes % 60);
-                return remaining ? (hours + 'h ' + remaining + 'm') : (hours + 'h');
-            }
-            function formatRating(value) {
-                const rating = toNumber(value);
-                return rating === null ? '--' : (rating.toFixed(1) + ' / 5');
-            }
-            function normalizeProofUrl(value) {
-                const raw = String(value || '').trim();
-                if (!raw) return '';
-                if (/^(https?:|data:|blob:)/i.test(raw)) return raw;
-                return raw.replace(/^\/+/, '');
-            }
-            function average(values) {
-                return values.length ? (values.reduce((sum, value) => sum + value, 0) / values.length) : null;
-            }
-            function statusChip(status) {
-                const safe = normalizeStatus(status);
-                const label = safe === 'cancelled' ? 'Cancelled' : 'Resolved';
-                return '<span class="ar-chip ' + safe + '">' + escapeHtml(label) + '</span>';
-            }
-            function priorityChip(priority) {
-                const safe = normalizePriority(priority);
-                const label = safe.charAt(0).toUpperCase() + safe.slice(1) + ' Priority';
-                return '<span class="ar-pill ' + safe + '">' + escapeHtml(label) + '</span>';
-            }
-            function feedbackPill(row) {
-                const count = Number(row.feedback_count || 0);
-                if (!count) return '<span class="ar-pill empty"><i class="fas fa-inbox"></i> No feedback</span>';
-                const rating = toNumber(row.avg_rating);
-                const label = rating === null ? (count + ' note(s)') : ('Response Rating ' + rating.toFixed(1) + ' / 5');
-                return '<span class="ar-pill feedback"><i class="fas fa-paper-plane"></i> ' + escapeHtml(label) + '</span>';
-            }
-            function isCrimeAnalyticsCandidate(row) {
-                if (normalizeStatus(row.status) !== 'resolved') return false;
-                const haystack = [row.type, row.title, row.description].join(' ').toLowerCase();
-                return /\b(police|crime|robbery|theft|fraud|assault|homicide|violence|weapon|gun|knife|patalim|riot)\b/.test(haystack);
-            }
-            function crimeAnalyticsAction(row) {
-                if (!isCrimeAnalyticsCandidate(row)) return '';
-                const status = String(row.crime_analytics_status || '').toLowerCase();
-                if (status === 'sent') {
-                    const sentAt = row.crime_analytics_synced_at ? ' title="Sent ' + escapeHtml(formatDate(row.crime_analytics_synced_at)) + '"' : '';
-                    return '<button type="button" class="ar-action sent" disabled' + sentAt + '><i class="fas fa-circle-check"></i> Crime Sent</button>';
-                }
-                if (status === 'failed') {
-                    return '<button type="button" class="ar-action danger" data-action="send-crime-analytics" data-id="' + escapeHtml(row.id) + '"><i class="fas fa-rotate"></i> Retry Crime</button>';
-                }
-                return '<button type="button" class="ar-action sync" data-action="send-crime-analytics" data-id="' + escapeHtml(row.id) + '"><i class="fas fa-share-from-square"></i> Send Crime</button>';
-            }
-            function renderStars(rating) {
-                const value = toNumber(rating);
-                if (value === null || value < 1) return '<span>No rating</span>';
-                const rounded = Math.max(1, Math.min(5, Math.round(value)));
-                let html = '';
-                for (let i = 1; i <= 5; i += 1) html += '<i class="' + (i <= rounded ? 'fas' : 'far') + ' fa-star"></i>';
-                return html;
-            }
-            function responseRatingLabel(rating) {
-                const value = toNumber(rating);
-                return value === null || value < 1 ? 'No response rating' : 'Response Rating: ' + Math.round(value) + ' / 5';
-            }
-
-            async function loadRows() {
-                tableBody.innerHTML = '<tr><td colspan="9" class="ar-empty">Loading feedback and survey queue...</td></tr>';
-                try {
-                    const response = await fetch('api/incidents_list.php?status=closed', { cache: 'no-store' });
-                    const data = await response.json();
-                    if (!data.ok) throw new Error(data.error || 'Failed to load incidents');
-                    incidentRows = (Array.isArray(data.items) ? data.items : []).filter((row) => {
-                        return Boolean(row.submitted_to_admin) || Number(row.feedback_count || 0) > 0;
-                    });
-                    renderStats(incidentRows);
-                    renderTable();
-                } catch (error) {
-                    tableBody.innerHTML = '<tr><td colspan="9" class="ar-empty">Failed to load feedback queue.</td></tr>';
-                    tableSubtitle.textContent = 'Unable to load feedback and survey entries at the moment.';
-                }
-            }
-
-            function renderStats(rows) {
-                const withFeedback = rows.filter((row) => Number(row.feedback_count || 0) > 0);
-                const ratings = rows.map((row) => toNumber(row.avg_rating)).filter((value) => value !== null);
-                const responses = rows.map((row) => toNumber(row.response_time_min)).filter((value) => value !== null);
-                qs('#statClosed').textContent = String(rows.length);
-                qs('#statFeedback').textContent = String(withFeedback.length);
-                qs('#statRating').textContent = ratings.length ? formatRating(average(ratings)) : '--';
-                qs('#statResponse').textContent = responses.length ? formatMinutes(average(responses)) : '--';
-            }
-
-            function getFilteredRows() {
-                const searchNeedle = String(searchFilterInput.value || '').trim().toLowerCase();
-                const categoryNeedle = String(categoryFilterSelect.value || '').trim().toLowerCase();
-                const statusNeedle = String(statusFilterSelect.value || '').trim().toLowerCase();
-                return incidentRows.filter((row) => {
-                    const rowStatus = normalizeStatus(row.status);
-                    const feedbackCount = Number(row.feedback_count || 0);
-                    if (categoryNeedle && String(row.type || '').toLowerCase() !== categoryNeedle) return false;
-                    if (statusNeedle === 'resolved' && rowStatus !== 'resolved') return false;
-                    if (statusNeedle === 'cancelled' && rowStatus !== 'cancelled') return false;
-                    if (statusNeedle === 'with_feedback' && feedbackCount < 1) return false;
-                    if (statusNeedle === 'without_feedback' && feedbackCount > 0) return false;
-                    if (searchNeedle) {
-                        const haystack = [row.incident_code, row.type, row.location, row.driver_name, row.plate_number, row.vehicle_name, row.assigned_unit].join(' ').toLowerCase();
-                        if (!haystack.includes(searchNeedle)) return false;
-                    }
-                    return true;
-                });
-            }
-
-            function renderTable() {
-                const rows = getFilteredRows();
-                countBadge.textContent = rows.length + ' incident(s)';
-                tableSubtitle.textContent = rows.length ? 'Closed incidents with dispatcher feedback, received surveys, or admin review submissions.' : 'No feedback or survey entries matched the current filter.';
-                if (!rows.length) {
-                    tableBody.innerHTML = '<tr><td colspan="9" class="ar-empty">No feedback or survey entries match the current filter.</td></tr>';
-                    return;
-                }
-                tableBody.innerHTML = rows.map((row) => `
-                    <tr>
-                        <td><div class="ar-ref">${escapeHtml(row.incident_code || 'No reference')}</div><div class="ar-meta">${escapeHtml(row.assigned_unit || 'No assigned unit')}</div></td>
-                        <td>${escapeHtml(row.type || '--')}</td>
-                        <td>${escapeHtml(row.location || '--')}</td>
-                        <td>${priorityChip(row.priority)}</td>
-                        <td>${statusChip(row.status)}</td>
-                        <td>${escapeHtml(formatMinutes(row.response_time_min))}</td>
-                        <td>${feedbackPill(row)}</td>
-                        <td>${escapeHtml(formatDate(row.resolved_at || row.cleared_at))}</td>
-                        <td><div class="ar-row-actions"><button type="button" class="ar-action primary" data-action="view-feedback" data-id="${row.id}"><i class="fas fa-paper-plane"></i> View Feedback</button><button type="button" class="ar-action" data-action="view-feedback" data-id="${row.id}"><i class="fas fa-eye"></i> Details</button>${crimeAnalyticsAction(row)}</div></td>
-                    </tr>
-                `).join('');
-            }
-
-            function setModalLoading() {
-                qs('#adminFeedbackTitle').textContent = 'Incident Feedback Details';
-                qs('#adminModalCode').textContent = '--';
-                qs('#adminModalType').textContent = '--';
-                qs('#adminModalDescription').textContent = '--';
-                qs('#adminModalLocation').textContent = '--';
-                qs('#adminModalClosed').textContent = 'Closed: --';
-                qs('#adminModalDispatch').textContent = '--';
-                qs('#adminModalOnScene').textContent = '--';
-                qs('#adminModalResponse').textContent = '--';
-                qs('#adminModalResolution').textContent = '--';
-                qs('#adminModalUnit').textContent = '--';
-                qs('#adminModalDriver').textContent = '--';
-                qs('#adminModalVehicle').textContent = '--';
-                qs('#adminModalPlate').textContent = '--';
-                qs('#adminModalAvgRating').textContent = '--';
-                qs('#adminModalRatingCount').textContent = '0';
-                qs('#adminModalFeedbackCount').textContent = '0';
-                qs('#adminModalLastUpdated').textContent = '--';
-                qs('#adminModalBadges').innerHTML = '';
-                qs('#adminFeedbackList').innerHTML = '<div class="ar-feedback-empty">Loading dispatcher feedback...</div>';
-                qs('#adminProofGallery').innerHTML = '<div class="ar-feedback-empty">Loading responder proof images...</div>';
-            }
-
-            function renderProofs(proofPayload) {
-                const gallery = qs('#adminProofGallery');
-                const items = proofPayload && proofPayload.ok && Array.isArray(proofPayload.items) ? proofPayload.items : [];
-                if (!proofPayload || !proofPayload.ok) {
-                    gallery.innerHTML = '<div class="ar-feedback-empty">Unable to load responder proof images.</div>';
-                    return;
-                }
-                if (!items.length) {
-                    gallery.innerHTML = '<div class="ar-feedback-empty">No responder proof image was uploaded for this incident.</div>';
-                    return;
-                }
-                gallery.innerHTML = items.map((item) => {
-                    const source = item.source === 'responder_completion'
-                        ? 'Responder completion upload'
-                        : 'Resolution proof upload';
-                    const proofUrl = escapeHtml(normalizeProofUrl(item.url || ''));
-                    return `
-                        <figure class="ar-proof-card">
-                            <a href="${proofUrl}" target="_blank" rel="noopener" title="Open full proof image">
-                                <img src="${proofUrl}" alt="Responder resolution proof">
-                            </a>
-                            <figcaption>
-                                <strong>${escapeHtml(source)}</strong>
-                                <span>${escapeHtml(formatDate(item.created_at))}</span>
-                            </figcaption>
-                        </figure>
-                    `;
-                }).join('');
-            }
-
-            function populateModal(incident, feedbackPayload, proofPayload) {
-                qs('#adminFeedbackTitle').textContent = 'Incident ' + (incident.reference_no || incident.id || '');
-                qs('#adminModalCode').textContent = incident.reference_no || ('Incident #' + (incident.id || '--'));
-                qs('#adminModalType').textContent = incident.type || '--';
-                qs('#adminModalDescription').textContent = incident.description || 'No incident description provided.';
-                qs('#adminModalLocation').textContent = incident.location_address || '--';
-                qs('#adminModalClosed').textContent = 'Closed: ' + formatDate(incident.resolved_at || incident.cleared_at || incident.updated_at);
-                qs('#adminModalDispatch').textContent = formatDate(incident.dispatch_assigned_at || incident.assigned_at || incident.created_at);
-                qs('#adminModalOnScene').textContent = formatDate(incident.on_scene_at);
-                qs('#adminModalResponse').textContent = formatMinutes(incident.response_time_min);
-                qs('#adminModalResolution').textContent = formatMinutes(incident.resolution_time_min);
-                qs('#adminModalUnit').textContent = incident.assigned_unit_identifier || 'Unassigned';
-                qs('#adminModalDriver').textContent = incident.driver_name || 'Not recorded';
-                qs('#adminModalVehicle').textContent = incident.vehicle_name || incident.assigned_unit_identifier || 'Not recorded';
-                qs('#adminModalPlate').textContent = incident.plate_number || 'Not recorded';
-                const feedbackSummary = feedbackPayload && feedbackPayload.ok && feedbackPayload.summary ? feedbackPayload.summary : {};
-                const avgRating = toNumber(feedbackSummary.avg_rating) !== null ? feedbackSummary.avg_rating : incident.avg_rating;
-                const ratingCount = Number(feedbackSummary.rating_count ?? incident.rating_count ?? 0);
-                const feedbackCount = Number(feedbackSummary.feedback_count ?? incident.feedback_count ?? 0);
-                qs('#adminModalAvgRating').textContent = formatRating(avgRating);
-                qs('#adminModalRatingCount').textContent = String(ratingCount);
-                qs('#adminModalFeedbackCount').textContent = String(feedbackCount);
-                qs('#adminModalLastUpdated').textContent = formatDate(incident.updated_at || incident.resolved_at || incident.cleared_at);
-                qs('#adminModalBadges').innerHTML = statusChip(incident.status) + ' ' + priorityChip(incident.priority);
-                const notes = feedbackPayload && feedbackPayload.ok && Array.isArray(feedbackPayload.data) ? feedbackPayload.data : [];
-                qs('#adminFeedbackList').innerHTML = notes.length ? notes.map((note) => `
-                    <div class="ar-feedback">
-                        <div class="ar-feedback-head">
-                            <div><strong>${escapeHtml(note.author_name || 'Dispatcher')}</strong><span>${escapeHtml(formatDate(note.created_at))}</span></div>
-                            <div class="ar-rating-wrap">
-                                <span class="ar-rating-label">${escapeHtml(responseRatingLabel(note.rating))}</span>
-                                <div class="ar-stars">${renderStars(note.rating)}</div>
-                            </div>
-                        </div>
-                        <p class="ar-note">${escapeHtml(note.note || 'No additional note provided.')}</p>
-                    </div>
-                `).join('') : '<div class="ar-feedback-empty">No feedback or survey entry has been received for this incident yet.</div>';
-                renderProofs(proofPayload);
-            }
-
-            async function sendCrimeAnalytics(button, incidentId) {
-                const row = incidentRows.find((item) => Number(item.id) === Number(incidentId));
-                const incidentCode = row ? (row.incident_code || ('#' + incidentId)) : ('#' + incidentId);
-                if (!window.confirm('Send resolved police/crime incident ' + incidentCode + ' to Crime Analytics?')) {
-                    return;
-                }
-
-                const originalHtml = button.innerHTML;
-                button.disabled = true;
-                button.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Sending';
-                try {
-                    const response = await fetch('api/send_crime_analytics.php', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({
-                            incident_id: incidentId,
-                            confirm_send: true
-                        })
-                    });
-                    const raw = await response.text();
-                    let data = {};
-                    try {
-                        data = raw ? JSON.parse(raw) : {};
-                    } catch (parseError) {
-                        throw new Error('Invalid response from send endpoint.');
-                    }
-                    if (!response.ok || !data.ok) {
-                        throw new Error(data.error || data.message || 'Unable to send incident.');
-                    }
-                    if (data.dry_run) {
-                        window.alert('Payload prepared, but not sent. Enable CRIME_ANALYTICS_SEND_ENABLED=true in .env to allow live sending.');
-                    } else if (data.already_sent) {
-                        window.alert('This incident was already sent to Crime Analytics.');
-                    } else {
-                        window.alert('Incident sent to Crime Analytics.');
-                    }
-                    await loadRows();
-                } catch (error) {
-                    window.alert('Crime Analytics send failed: ' + (error.message || 'Unknown error'));
-                    button.disabled = false;
-                    button.innerHTML = originalHtml;
-                }
-            }
-
-            async function openModal(incidentId) {
-                setModalLoading();
-                modalOverlay.hidden = false;
-                modal.hidden = false;
-                try {
-                    const [detailsRes, feedbackRes, proofsRes] = await Promise.all([
-                        fetch('api/incident_details.php?id=' + encodeURIComponent(incidentId), { cache: 'no-store' }),
-                        fetch('api/incident_feedback.php?incident_id=' + encodeURIComponent(incidentId), { cache: 'no-store' }),
-                        fetch('api/incident_proofs.php?incident_id=' + encodeURIComponent(incidentId), { cache: 'no-store' })
-                    ]);
-                    const detailsData = await detailsRes.json();
-                    const feedbackData = await feedbackRes.json();
-                    const proofsData = await proofsRes.json();
-                    if (!detailsData.ok || !detailsData.incident) throw new Error(detailsData.error || 'Incident details not available');
-                    populateModal(detailsData.incident, feedbackData, proofsData);
-                } catch (error) {
-                    qs('#adminFeedbackList').innerHTML = '<div class="ar-feedback-empty">' + escapeHtml(error.message || 'Unable to load feedback.') + '</div>';
-                    qs('#adminProofGallery').innerHTML = '<div class="ar-feedback-empty">Unable to load responder proof images.</div>';
-                }
-            }
-
-            function closeModal() {
-                modalOverlay.hidden = true;
-                modal.hidden = true;
-            }
-
-            tableBody.addEventListener('click', (event) => {
-                const button = event.target.closest('[data-action]');
-                if (!button) return;
-                const incidentId = parseInt(button.getAttribute('data-id') || '', 10);
-                if (!Number.isInteger(incidentId)) return;
-                const action = button.getAttribute('data-action');
-                if (action === 'send-crime-analytics') {
-                    sendCrimeAnalytics(button, incidentId);
-                    return;
-                }
-                openModal(incidentId);
-            });
-            resetFilterBtn.addEventListener('click', () => {
-                searchFilterInput.value = '';
-                categoryFilterSelect.value = '';
-                statusFilterSelect.value = '';
-                renderTable();
-            });
-            refreshReviewBtn.addEventListener('click', loadRows);
-            searchFilterInput.addEventListener('input', renderTable);
-            categoryFilterSelect.addEventListener('change', renderTable);
-            statusFilterSelect.addEventListener('change', renderTable);
-            modalOverlay.addEventListener('click', closeModal);
-            modalClose.addEventListener('click', closeModal);
-            document.addEventListener('keydown', (event) => {
-                if (event.key === 'Escape' && !modal.hidden) closeModal();
-            });
-
-            closeModal();
-            loadRows();
-        })();
-    </script>
+    <div id="adminReviewConfig" data-admin-user-id="<?php echo $adminUserId; ?>" hidden></div>
+    <script src="js/admin-review-after-action.js?v=<?php echo htmlspecialchars($reviewScriptVersion, ENT_QUOTES, 'UTF-8'); ?>" defer></script>
  </body>
  </html>
