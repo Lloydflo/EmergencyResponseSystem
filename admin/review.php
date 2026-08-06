@@ -24,9 +24,12 @@ if ($adminName === '') {
     <link rel="stylesheet" href="css/admin-header.css">
     <link rel="stylesheet" href="css/sidebar-footer.css">
     <style>
-        .main-content { 
-            padding: 4rem; 
-            background: radial-gradient(circle at top right, rgba(56,189,248,.08), transparent 28%), #f3f7fb; 
+        .main-content {
+            padding:
+                calc(var(--app-header-height-1) + 1.25rem)
+                clamp(1rem, 4vw, 4rem)
+                4rem;
+            background: radial-gradient(circle at top right, rgba(56,189,248,.08), transparent 28%), #f3f7fb;
         }
         .ar-shell { 
             width: min(100%, 1360px); 
@@ -144,7 +147,7 @@ if ($adminName === '') {
         [data-theme="dark"] .ar-pill.medium { background: #451a03 !important; color: #fde68a !important; }
         [data-theme="dark"] .ar-pill.low { background: #052e16 !important; color: #bbf7d0 !important; }
         @media (max-width: 1180px) { .ar-stats, .ar-grid { grid-template-columns: repeat(2, minmax(0,1fr)); } .ar-toolbar, .ar-spotlight { grid-template-columns: 1fr; } .ar-actions { justify-content: flex-end; } }
-        @media (max-width: 767px) { .main-content { padding: 1rem .75rem; } .ar-stats, .ar-toolbar, .ar-grid { grid-template-columns: 1fr; } .ar-actions, .ar-row-actions { display: grid; grid-template-columns: 1fr; } .ar-feedback-head, .ar-card-head { flex-direction: column; align-items: flex-start; } }
+        @media (max-width: 767px) { .main-content { padding: calc(var(--app-header-height-mobile-1) + 1rem) .75rem 1.5rem; } .ar-stats, .ar-toolbar, .ar-grid { grid-template-columns: 1fr; } .ar-actions, .ar-row-actions { display: grid; grid-template-columns: 1fr; } .ar-feedback-head, .ar-card-head { flex-direction: column; align-items: flex-start; } }
     </style>
 </head>
 <body>

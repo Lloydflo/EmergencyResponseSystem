@@ -37,13 +37,16 @@ $adminName = $_SESSION['user_name'] ?? 'Admin';
             background:
                 radial-gradient(circle at 95% 0%, rgba(14, 165, 233, 0.12), transparent 34%),
                 var(--um-bg);
-            padding: 3rem 1.5rem;
+            padding:
+                calc(var(--app-header-height-1) + 1.25rem)
+                1.5rem
+                3rem;
             flex: 1 0 auto;
-            min-height: calc(100vh - 180px);
+            min-height: 100vh;
         }
 
         .um-shell {
-            margin-top: 0.8rem;
+            margin-top: 0;
         }
 
         .um-head {
@@ -653,7 +656,10 @@ $adminName = $_SESSION['user_name'] ?? 'Admin';
 
         @media (max-width: 680px) {
             .main-content {
-                padding: 1rem 0.75rem;
+                padding:
+                    calc(var(--app-header-height-mobile-1) + 1rem)
+                    0.75rem
+                    1.5rem;
             }
 
             .um-head h1 {
