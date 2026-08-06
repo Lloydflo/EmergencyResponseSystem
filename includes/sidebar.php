@@ -105,7 +105,7 @@ $isDispatcherSidebar = $sidebarRole === 'dispatcher';
                         </li>
                         <li class="sidebar-menu-item">
                             <a href="admin/audit.php?ui=20260806-grouped-v3" class="sidebar-link <?php echo basename($_SERVER['PHP_SELF']) == 'audit.php' ? 'active' : ''; ?>" aria-current="<?php echo basename($_SERVER['PHP_SELF']) == 'audit.php' ? 'page' : 'false'; ?>">
-                                <i class="fa-solid fa-sliders"></i>
+                                <i class="fa-solid fa-clock-rotate-left"></i>
                                 <span>Operational Audit</span>
                             </a>
                         </li>
