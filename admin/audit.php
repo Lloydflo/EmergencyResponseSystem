@@ -8,6 +8,23 @@ require_once $rootDir . '/includes/db.php';
 
 date_default_timezone_set('Asia/Manila');
 
+// This page changes frequently during audit UI review. Prevent a stale HTML
+// response and force browsers to request the current grouped-view assets.
+if (!headers_sent()) {
+    header('Cache-Control: no-store, no-cache, must-revalidate, max-age=0');
+    header('Pragma: no-cache');
+    header('Expires: 0');
+}
+
+$auditUiBuild = '20260806-grouped-v3';
+if (!headers_sent()) {
+    header('X-Audit-UI-Build: ' . $auditUiBuild);
+}
+$auditCssModified = is_file($rootDir . '/css/audit.css') ? (string)filemtime($rootDir . '/css/audit.css') : '0';
+$auditJsModified = is_file($rootDir . '/js/audit.js') ? (string)filemtime($rootDir . '/js/audit.js') : '0';
+$auditCssVersion = rawurlencode($auditUiBuild . '-' . $auditCssModified);
+$auditJsVersion = rawurlencode($auditUiBuild . '-' . $auditJsModified);
+
 $pageTitle = 'Operational Audit Trail';
 $adminName = trim((string)($_SESSION['user_name'] ?? 'Admin'));
 
@@ -1350,10 +1367,10 @@ if (!in_array($preferredTab, $visibleTabKeys, true)) {
     <link rel="stylesheet" href="css/sidebar.css">
     <link rel="stylesheet" href="css/admin-header.css">
     <link rel="stylesheet" href="css/sidebar-footer.css">
-    <link rel="stylesheet" href="css/audit.css">
-    <script src="js/audit.js" defer></script>
+    <link rel="stylesheet" href="css/audit.css?v=<?php echo audit_h($auditCssVersion); ?>">
+    <script src="js/audit.js?v=<?php echo audit_h($auditJsVersion); ?>" defer></script>
 </head>
-<body>
+<body data-audit-ui-build="<?php echo audit_h($auditUiBuild); ?>">
     <?php include $rootDir . '/includes/sidebar.php'; ?>
     <?php include $rootDir . '/includes/admin-header.php'; ?>
 
@@ -1361,7 +1378,7 @@ if (!in_array($preferredTab, $visibleTabKeys, true)) {
         <div class="main-container audit-page">
             <header class="audit-page-header">
                 <div class="audit-title-block">
-                    <span class="audit-eyebrow"><i class="fas fa-shield-halved" aria-hidden="true"></i> Operational audit trail</span>
+                    <div class="audit-eyebrow-row"><span class="audit-eyebrow"><i class="fas fa-shield-halved" aria-hidden="true"></i> Operational audit trail</span><span class="audit-ui-build"><i class="fas fa-layer-group" aria-hidden="true"></i> Grouped by personnel &amp; day</span></div>
                     <h1>Audit Logs</h1>
                     <p>Review emergency-response activity, trace accountability, and inspect technical context without changing the underlying records.</p>
                 </div>

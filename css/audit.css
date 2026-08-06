@@ -2210,3 +2210,31 @@ html[data-theme="dark"] .audit-person-badge.system {
         padding: 0.72rem;
     }
 }
+
+/* Visible build marker for grouped audit deployment verification. */
+.audit-eyebrow-row {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.55rem;
+}
+
+.audit-ui-build {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    padding: 0.25rem 0.5rem;
+    border: 1px solid var(--audit-border);
+    border-radius: 999px;
+    background: var(--audit-surface);
+    color: var(--audit-text-soft);
+    font-size: 0.65rem;
+    font-weight: 700;
+    letter-spacing: 0;
+    text-transform: none;
+    box-shadow: var(--audit-shadow-sm);
+}
+
+.audit-ui-build i {
+    color: var(--audit-primary);
+}

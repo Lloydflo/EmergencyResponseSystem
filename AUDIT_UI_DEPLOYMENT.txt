@@ -1,0 +1,26 @@
+AUDIT LOGS GROUPED UI — DEPLOYMENT CHECK
+Build: 20260806-grouped-v3
+
+The uploaded project already contained the grouped Responders/Dispatchers code.
+If the old table still appeared, the running web server was serving a stale or
+different project copy.
+
+Replace these exact files inside the ACTIVE project directory:
+  admin/audit.php
+  css/audit.css
+  js/audit.js
+  includes/sidebar.php
+
+Do not extract the files into a second nested folder such as:
+  EmergencyResponseSystem/EmergencyResponseSystem/
+
+After replacement:
+  1. Restart Apache / PHP-FPM to clear OPcache.
+  2. Open the Audit Logs link from the sidebar.
+  3. Hard refresh the browser (Ctrl+F5).
+
+Successful deployment is visible when the page header shows:
+  "Grouped by personnel & day"
+
+The page source/body also contains:
+  data-audit-ui-build="20260806-grouped-v3"
