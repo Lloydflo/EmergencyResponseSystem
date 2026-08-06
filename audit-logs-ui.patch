@@ -1,0 +1,2608 @@
+diff --git a/admin/audit.php b/admin/audit.php
+--- a/admin/audit.php
++++ b/admin/audit.php
+@@ -1015,6 +1015,69 @@
+ 
+ $showStart = $matchingCount > 0 ? $offset + 1 : 0;
+ $showEnd = min($offset + count($auditRows), $matchingCount);
++
++$activeFilters = [];
++$advancedFilterCount = 0;
++
++if ($search !== '') {
++    $activeFilters[] = [
++        'label' => 'Search: “' . $search . '”',
++        'url' => audit_query_url(['q' => null, 'page' => 1]),
++    ];
++}
++if ($referenceFilter !== '') {
++    $activeFilters[] = [
++        'label' => 'Reference: ' . $referenceFilter,
++        'url' => audit_query_url(['reference' => null, 'page' => 1]),
++    ];
++}
++if ($roleFilter !== '') {
++    $advancedFilterCount++;
++    $activeFilters[] = [
++        'label' => 'Role: ' . audit_label($roleFilter),
++        'url' => audit_query_url(['role' => null, 'page' => 1]),
++    ];
++}
++if ($sourceFilter !== '') {
++    $advancedFilterCount++;
++    $activeFilters[] = [
++        'label' => 'Source: ' . audit_source_label($sourceFilter),
++        'url' => audit_query_url(['source' => null, 'page' => 1]),
++    ];
++}
++if ($categoryFilter !== '') {
++    $advancedFilterCount++;
++    $activeFilters[] = [
++        'label' => 'Process: ' . audit_category_label($categoryFilter),
++        'url' => audit_query_url(['category' => null, 'page' => 1]),
++    ];
++}
++if ($outcomeFilter !== '') {
++    $advancedFilterCount++;
++    $activeFilters[] = [
++        'label' => 'Outcome: ' . ucfirst($outcomeFilter),
++        'url' => audit_query_url(['outcome' => null, 'page' => 1]),
++    ];
++}
++if ($dateFrom !== '' || $dateTo !== '') {
++    $advancedFilterCount++;
++    $dateFromLabel = $dateFrom !== '' ? date('M j, Y', strtotime($dateFrom)) : 'Any date';
++    $dateToLabel = $dateTo !== '' ? date('M j, Y', strtotime($dateTo)) : 'Present';
++    $activeFilters[] = [
++        'label' => 'Date: ' . $dateFromLabel . ' – ' . $dateToLabel,
++        'url' => audit_query_url(['date_from' => null, 'date_to' => null, 'page' => 1]),
++    ];
++}
++
++$clearAdvancedUrl = audit_query_url([
++    'role' => null,
++    'source' => null,
++    'category' => null,
++    'outcome' => null,
++    'date_from' => null,
++    'date_to' => null,
++    'page' => 1,
++]);
+ ?>
+ <!DOCTYPE html>
+ <html lang="en">
+@@ -1030,195 +1093,57 @@
+     <link rel="stylesheet" href="css/sidebar.css">
+     <link rel="stylesheet" href="css/admin-header.css">
+     <link rel="stylesheet" href="css/sidebar-footer.css">
+-    <style>
+-        :root {
+-            --audit-bg: #f4f7fb;
+-            --audit-card: #ffffff;
+-            --audit-text: #172033;
+-            --audit-muted: #64748b;
+-            --audit-border: #dbe4ee;
+-            --audit-primary: #0f766e;
+-            --audit-primary-dark: #115e59;
+-            --audit-soft: #eef8f7;
+-            --audit-header: #f8fafc;
+-            --audit-success: #047857;
+-            --audit-success-bg: #d1fae5;
+-            --audit-warning: #a16207;
+-            --audit-warning-bg: #fef3c7;
+-            --audit-danger: #b91c1c;
+-            --audit-danger-bg: #fee2e2;
+-            --audit-info: #1d4ed8;
+-            --audit-info-bg: #dbeafe;
+-            --audit-shadow: 0 8px 24px rgba(15, 23, 42, .07);
+-        }
+-        html[data-theme="dark"] {
+-            --audit-bg: #0b1220;
+-            --audit-card: #111827;
+-            --audit-text: #f8fafc;
+-            --audit-muted: #94a3b8;
+-            --audit-border: #334155;
+-            --audit-primary: #2dd4bf;
+-            --audit-primary-dark: #14b8a6;
+-            --audit-soft: #102725;
+-            --audit-header: #172033;
+-            --audit-success: #6ee7b7;
+-            --audit-success-bg: #063c32;
+-            --audit-warning: #fde68a;
+-            --audit-warning-bg: #49340a;
+-            --audit-danger: #fca5a5;
+-            --audit-danger-bg: #4c1717;
+-            --audit-info: #93c5fd;
+-            --audit-info-bg: #172e58;
+-            --audit-shadow: 0 8px 24px rgba(0, 0, 0, .22);
+-        }
+-        .main-content {
+-            flex: 1 0 auto;
+-            padding: 4rem 1.35rem 3rem;
+-            background: radial-gradient(circle at 100% 0, rgba(20, 184, 166, .12), transparent 32%), var(--audit-bg);
+-        }
+-        .audit-shell { display: grid; gap: 1rem; }
+-        .audit-head { display: flex; justify-content: space-between; align-items: flex-end; gap: 1rem; }
+-        .audit-head h1 { margin: 0; color: var(--audit-text); font-size: 1.72rem; line-height: 1.2; }
+-        .audit-head p { max-width: 860px; margin: .4rem 0 0; color: var(--audit-muted); font-size: .93rem; line-height: 1.5; }
+-        .audit-updated { display: inline-flex; align-items: center; gap: .45rem; padding: .52rem .72rem; border: 1px solid var(--audit-border); border-radius: 999px; background: var(--audit-card); color: var(--audit-muted); font-size: .8rem; font-weight: 800; white-space: nowrap; }
+-        .audit-stats { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: .72rem; }
+-        .audit-stat { position: relative; overflow: hidden; padding: .92rem; border: 1px solid var(--audit-border); border-radius: 13px; background: var(--audit-card); box-shadow: var(--audit-shadow); }
+-        .audit-stat::after { position: absolute; right: -.75rem; bottom: -.9rem; width: 3.6rem; height: 3.6rem; border-radius: 50%; background: rgba(20, 184, 166, .08); content: ""; }
+-        .audit-stat span { display: block; color: var(--audit-muted); font-size: .72rem; font-weight: 850; letter-spacing: .04em; text-transform: uppercase; }
+-        .audit-stat strong { display: block; margin-top: .36rem; color: var(--audit-text); font-size: 1.46rem; line-height: 1; }
+-        .audit-card { overflow: hidden; border: 1px solid var(--audit-border); border-radius: 14px; background: var(--audit-card); box-shadow: var(--audit-shadow); }
+-        .audit-card-title { display: flex; align-items: center; justify-content: space-between; gap: 1rem; padding: .9rem 1rem; border-bottom: 1px solid var(--audit-border); }
+-        .audit-card-title h2 { margin: 0; color: var(--audit-text); font-size: 1.03rem; }
+-        .audit-card-title p { margin: .25rem 0 0; color: var(--audit-muted); font-size: .8rem; }
+-        .audit-toolbar { display: grid; grid-template-columns: minmax(230px, 1.4fr) minmax(180px, .9fr) repeat(4, minmax(145px, .65fr)); gap: .62rem; padding: .9rem; background: var(--audit-soft); border-bottom: 1px solid var(--audit-border); }
+-        .audit-toolbar-secondary { display: grid; grid-template-columns: repeat(3, minmax(150px, .6fr)) minmax(120px, .45fr) auto; gap: .62rem; grid-column: 1 / -1; }
+-        .audit-field { display: grid; gap: .28rem; }
+-        .audit-field label { color: var(--audit-muted); font-size: .68rem; font-weight: 850; letter-spacing: .04em; text-transform: uppercase; }
+-        .audit-input, .audit-select { width: 100%; min-height: 41px; padding: .58rem .68rem; border: 1px solid #cbd5e1; border-radius: 9px; background: #fff; color: #172033; font: inherit; font-size: .84rem; }
+-        html[data-theme="dark"] .audit-input, html[data-theme="dark"] .audit-select { border-color: #334155; background: #0f172a; color: #f8fafc; }
+-        .audit-input:focus, .audit-select:focus { outline: none; border-color: var(--audit-primary); box-shadow: 0 0 0 3px rgba(20, 184, 166, .14); }
+-        .audit-actions { display: flex; align-items: end; gap: .42rem; }
+-        .audit-btn { min-height: 41px; padding: 0 .74rem; border: 1px solid var(--audit-border); border-radius: 9px; background: #fff; color: #172033; font: inherit; font-size: .82rem; font-weight: 850; text-decoration: none; white-space: nowrap; cursor: pointer; display: inline-flex; align-items: center; justify-content: center; gap: .4rem; }
+-        .audit-btn.primary { border-color: var(--audit-primary); background: var(--audit-primary); color: #fff; }
+-        .audit-btn.primary:hover { background: var(--audit-primary-dark); }
+-        html[data-theme="dark"] .audit-btn { border-color: #334155; background: #0f172a; color: #e5e7eb; }
+-        html[data-theme="dark"] .audit-btn.primary { border-color: #0f766e; background: #0f766e; color: #fff; }
+-        .audit-note { display: flex; align-items: flex-start; gap: .52rem; margin: 0; padding: .75rem .9rem; border-bottom: 1px solid var(--audit-border); background: var(--audit-card); color: var(--audit-muted); font-size: .8rem; line-height: 1.45; }
+-        .audit-note i { margin-top: .08rem; color: var(--audit-primary); }
+-        .audit-summary { display: flex; align-items: center; justify-content: space-between; gap: 1rem; padding: .75rem .9rem; border-bottom: 1px solid var(--audit-border); color: var(--audit-muted); font-size: .8rem; }
+-        .audit-summary strong { color: var(--audit-text); }
+-        .audit-table-wrap { overflow: auto; }
+-        .audit-table { width: 100%; min-width: 1460px; border-collapse: collapse; }
+-        .audit-table th, .audit-table td { padding: .72rem .68rem; border-bottom: 1px solid #edf2f7; text-align: left; vertical-align: top; font-size: .81rem; }
+-        html[data-theme="dark"] .audit-table th, html[data-theme="dark"] .audit-table td { border-bottom-color: #1f2937; }
+-        .audit-table th { position: sticky; top: 0; z-index: 2; background: var(--audit-header); color: var(--audit-muted); font-size: .68rem; font-weight: 900; letter-spacing: .045em; text-transform: uppercase; }
+-        .audit-table tbody tr:hover td { background: rgba(20, 184, 166, .035); }
+-        .audit-log-no { color: var(--audit-text); font-size: .9rem; font-weight: 900; text-align: center; }
+-        .audit-time strong { display: block; color: var(--audit-text); white-space: nowrap; }
+-        .audit-time span { display: block; margin-top: .17rem; color: var(--audit-muted); font-size: .72rem; }
+-        .audit-actor { display: flex; gap: .52rem; align-items: flex-start; min-width: 180px; }
+-        .audit-avatar { display: inline-flex; width: 28px; height: 28px; flex: 0 0 28px; align-items: center; justify-content: center; border-radius: 8px; background: var(--audit-soft); color: var(--audit-primary); }
+-        .audit-actor strong, .audit-process strong { display: block; color: var(--audit-text); }
+-        .audit-actor span, .audit-process span { display: block; margin-top: .14rem; color: var(--audit-muted); font-size: .71rem; line-height: 1.35; }
+-        .audit-source { display: inline-flex; align-items: center; gap: .35rem; min-width: 130px; color: var(--audit-text); font-weight: 800; }
+-        .audit-source i { color: var(--audit-primary); }
+-        .audit-chip, .audit-outcome, .audit-reference { display: inline-flex; align-items: center; border-radius: 999px; padding: .24rem .53rem; font-size: .69rem; font-weight: 850; white-space: nowrap; }
+-        .audit-chip { background: var(--audit-soft); color: var(--audit-primary-dark); }
+-        html[data-theme="dark"] .audit-chip { color: var(--audit-primary); }
+-        .audit-reference { max-width: 170px; overflow: hidden; border: 1px solid var(--audit-border); background: var(--audit-card); color: var(--audit-text); text-overflow: ellipsis; text-decoration: none; }
+-        .audit-reference:hover { border-color: var(--audit-primary); color: var(--audit-primary); }
+-        .audit-reference-empty { color: var(--audit-muted); font-size: .74rem; }
+-        .audit-outcome.success { background: var(--audit-success-bg); color: var(--audit-success); }
+-        .audit-outcome.warning { background: var(--audit-warning-bg); color: var(--audit-warning); }
+-        .audit-outcome.failed { background: var(--audit-danger-bg); color: var(--audit-danger); }
+-        .audit-outcome.info { background: var(--audit-info-bg); color: var(--audit-info); }
+-        .audit-detail-text { max-width: 360px; color: var(--audit-text); line-height: 1.43; }
+-        .audit-tech { margin-top: .38rem; }
+-        .audit-tech summary { color: var(--audit-primary); font-size: .7rem; font-weight: 850; cursor: pointer; }
+-        .audit-tech-grid { display: grid; gap: .32rem; margin-top: .45rem; padding: .55rem; border: 1px solid var(--audit-border); border-radius: 8px; background: var(--audit-header); color: var(--audit-muted); font-size: .68rem; line-height: 1.4; }
+-        .audit-tech-grid strong { color: var(--audit-text); }
+-        .audit-tech pre { max-width: 390px; max-height: 210px; margin: .15rem 0 0; padding: .5rem; overflow: auto; border-radius: 7px; background: #0f172a; color: #e2e8f0; font-size: .66rem; white-space: pre-wrap; word-break: break-word; }
+-        .audit-empty, .audit-error { padding: 2rem 1rem; text-align: center; color: var(--audit-muted); }
+-        .audit-error { color: var(--audit-danger); font-weight: 800; }
+-        .audit-pagination { display: flex; align-items: center; justify-content: space-between; gap: 1rem; padding: .78rem .9rem; }
+-        .audit-pages { display: flex; flex-wrap: wrap; gap: .35rem; }
+-        .audit-page { display: inline-flex; min-width: 34px; height: 34px; align-items: center; justify-content: center; border: 1px solid var(--audit-border); border-radius: 8px; background: var(--audit-card); color: var(--audit-text); font-size: .77rem; font-weight: 850; text-decoration: none; }
+-        .audit-page.active { border-color: var(--audit-primary); background: var(--audit-primary); color: #fff; }
+-        .audit-page.disabled { opacity: .45; pointer-events: none; }
+-        .lifecycle-card { overflow: hidden; border: 1px solid var(--audit-border); border-radius: 14px; background: var(--audit-card); box-shadow: var(--audit-shadow); }
+-        .lifecycle-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 1rem; padding: 1rem; border-bottom: 1px solid var(--audit-border); background: linear-gradient(135deg, var(--audit-soft), transparent); }
+-        .lifecycle-head h2 { margin: 0; color: var(--audit-text); font-size: 1.08rem; }
+-        .lifecycle-head p { margin: .3rem 0 0; color: var(--audit-muted); font-size: .8rem; }
+-        .lifecycle-badges { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: .38rem; }
+-        .lifecycle-body { display: grid; grid-template-columns: minmax(280px, .8fr) minmax(420px, 1.4fr); gap: 1rem; padding: 1rem; }
+-        .duration-panel h3, .timeline-panel h3 { margin: 0 0 .72rem; color: var(--audit-text); font-size: .86rem; }
+-        .duration-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .52rem; }
+-        .duration-item { padding: .68rem; border: 1px solid var(--audit-border); border-radius: 10px; background: var(--audit-header); }
+-        .duration-item span { display: block; color: var(--audit-muted); font-size: .67rem; line-height: 1.35; }
+-        .duration-item strong { display: block; margin-top: .25rem; color: var(--audit-text); font-size: .9rem; }
+-        .timeline { position: relative; display: grid; gap: .05rem; }
+-        .timeline::before { position: absolute; top: .5rem; bottom: .5rem; left: 12px; width: 2px; background: var(--audit-border); content: ""; }
+-        .timeline-item { position: relative; display: grid; grid-template-columns: 25px minmax(0, 1fr); gap: .65rem; padding: 0 0 .88rem; }
+-        .timeline-dot { position: relative; z-index: 1; display: inline-flex; width: 25px; height: 25px; align-items: center; justify-content: center; border: 3px solid var(--audit-card); border-radius: 50%; background: var(--audit-primary); color: #fff; font-size: .58rem; }
+-        .timeline-content { padding: .62rem .68rem; border: 1px solid var(--audit-border); border-radius: 10px; background: var(--audit-header); }
+-        .timeline-top { display: flex; align-items: flex-start; justify-content: space-between; gap: .75rem; }
+-        .timeline-top strong { color: var(--audit-text); font-size: .81rem; }
+-        .timeline-top time { color: var(--audit-muted); font-size: .69rem; white-space: nowrap; }
+-        .timeline-content p { margin: .35rem 0 0; color: var(--audit-muted); font-size: .73rem; line-height: 1.42; }
+-        .timeline-meta { display: flex; flex-wrap: wrap; gap: .32rem; margin-top: .42rem; color: var(--audit-muted); font-size: .67rem; }
+-        .lifecycle-missing { padding: 1rem; color: var(--audit-warning); font-size: .82rem; }
+-        @media (max-width: 1280px) {
+-            .audit-stats { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+-            .audit-toolbar { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+-            .audit-toolbar-secondary { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+-            .audit-actions { grid-column: 1 / -1; }
+-        }
+-        @media (max-width: 900px) {
+-            .lifecycle-body { grid-template-columns: 1fr; }
+-            .audit-stats { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+-        }
+-        @media (max-width: 680px) {
+-            .main-content { padding: 1rem .68rem 2rem; }
+-            .audit-head, .lifecycle-head, .audit-summary, .audit-pagination { align-items: flex-start; flex-direction: column; }
+-            .audit-stats, .audit-toolbar, .audit-toolbar-secondary, .duration-grid { grid-template-columns: 1fr; }
+-            .audit-actions { flex-direction: column; width: 100%; }
+-            .audit-btn { width: 100%; }
+-            .lifecycle-badges { justify-content: flex-start; }
+-            .timeline-top { flex-direction: column; gap: .15rem; }
+-        }
+-    </style>
++    <link rel="stylesheet" href="css/audit.css">
++    <script src="js/audit.js" defer></script>
+ </head>
+ <body>
+     <?php include $rootDir . '/includes/sidebar.php'; ?>
+     <?php include $rootDir . '/includes/admin-header.php'; ?>
+ 
+-    <main class="main-content">
+-        <div class="main-container audit-shell">
+-            <section class="audit-head">
+-                <div>
+-                    <h1>Operational Audit Trail</h1>
+-                    <p>Hi <?php echo audit_h($adminName); ?>. Review the accountable sequence of actions performed by responders, dispatchers, administrators, connected APIs, and automated system processes.</p>
++    <main class="main-content audit-main">
++        <div class="main-container audit-page">
++            <header class="audit-page-header">
++                <div class="audit-title-block">
++                    <span class="audit-eyebrow"><i class="fas fa-shield-halved" aria-hidden="true"></i> Operational audit trail</span>
++                    <h1>Audit Logs</h1>
++                    <p>Review system activity, trace accountability, and inspect technical context without changing the underlying records.</p>
+                 </div>
+-                <div class="audit-updated">
+-                    <i class="fas fa-clock"></i>
+-                    <span>Latest log: <?php echo audit_h(audit_format_date($stats['latest'])); ?></span>
++                <div class="audit-header-meta" aria-label="Audit record status">
++                    <span class="audit-record-state"><span class="audit-status-dot" aria-hidden="true"></span> Read-only record</span>
++                    <span class="audit-latest"><i class="far fa-clock" aria-hidden="true"></i> Latest: <?php echo audit_h(audit_format_date($stats['latest'])); ?></span>
+                 </div>
+-            </section>
+-
+-            <section class="audit-stats" aria-label="Audit summary">
+-                <div class="audit-stat"><span>Total logs</span><strong><?php echo number_format($stats['total']); ?></strong></div>
+-                <div class="audit-stat"><span>Logged today</span><strong><?php echo number_format($stats['today']); ?></strong></div>
+-                <div class="audit-stat"><span>Responder actions</span><strong><?php echo number_format($stats['responder']); ?></strong></div>
+-                <div class="audit-stat"><span>Dispatcher actions</span><strong><?php echo number_format($stats['dispatcher']); ?></strong></div>
+-                <div class="audit-stat"><span>Warnings / failures</span><strong><?php echo number_format($stats['attention']); ?></strong></div>
++            </header>
++
++            <section class="audit-metrics" aria-label="Audit summary">
++                <article class="audit-metric">
++                    <span class="audit-metric-icon"><i class="fas fa-list-check" aria-hidden="true"></i></span>
++                    <div><span>Total logs</span><strong><?php echo number_format($stats['total']); ?></strong></div>
++                </article>
++                <article class="audit-metric">
++                    <span class="audit-metric-icon"><i class="fas fa-calendar-day" aria-hidden="true"></i></span>
++                    <div><span>Logged today</span><strong><?php echo number_format($stats['today']); ?></strong></div>
++                </article>
++                <article class="audit-metric">
++                    <span class="audit-metric-icon"><i class="fas fa-truck-medical" aria-hidden="true"></i></span>
++                    <div><span>Responder actions</span><strong><?php echo number_format($stats['responder']); ?></strong></div>
++                </article>
++                <article class="audit-metric">
++                    <span class="audit-metric-icon"><i class="fas fa-headset" aria-hidden="true"></i></span>
++                    <div><span>Dispatcher actions</span><strong><?php echo number_format($stats['dispatcher']); ?></strong></div>
++                </article>
++                <article class="audit-metric audit-metric-attention">
++                    <span class="audit-metric-icon"><i class="fas fa-triangle-exclamation" aria-hidden="true"></i></span>
++                    <div><span>Needs attention</span><strong><?php echo number_format($stats['attention']); ?></strong></div>
++                </article>
+             </section>
+ 
+             <?php if ($lifecycle !== null): ?>
+                 <section class="lifecycle-card" aria-label="Incident lifecycle">
+                     <div class="lifecycle-head">
+                         <div>
+-                            <h2>Incident Lifecycle — <?php echo audit_h($referenceFilter); ?></h2>
+-                            <p>Canonical operational milestones and elapsed response times for the selected incident reference.</p>
++                            <span class="audit-section-kicker">Selected incident</span>
++                            <h2>Lifecycle for <?php echo audit_h($referenceFilter); ?></h2>
++                            <p>Canonical milestones and elapsed response times for the exact reference.</p>
+                         </div>
+                         <div class="lifecycle-badges">
+                             <?php if (is_array($lifecycle['incident'] ?? null)): ?>
+@@ -1229,7 +1154,10 @@
+                         </div>
+                     </div>
+                     <?php if (empty($lifecycle['found'])): ?>
+-                        <div class="lifecycle-missing"><i class="fas fa-triangle-exclamation"></i> No incident, call, or audit lifecycle was found for this exact reference. Check the spelling or clear the reference filter.</div>
++                        <div class="lifecycle-missing">
++                            <i class="fas fa-triangle-exclamation" aria-hidden="true"></i>
++                            <div><strong>No lifecycle found.</strong><span>Check the reference spelling or remove the reference filter.</span></div>
++                        </div>
+                     <?php else: ?>
+                         <div class="lifecycle-body">
+                             <div class="duration-panel">
+@@ -1246,12 +1174,12 @@
+                             <div class="timeline-panel">
+                                 <h3>Recorded process timeline</h3>
+                                 <?php if (empty($lifecycle['events'])): ?>
+-                                    <div class="audit-empty">No timestamped lifecycle events are available.</div>
++                                    <div class="audit-empty-inline">No timestamped lifecycle events are available.</div>
+                                 <?php else: ?>
+                                     <div class="timeline">
+                                         <?php foreach ($lifecycle['events'] as $event): ?>
+                                             <article class="timeline-item">
+-                                                <span class="timeline-dot"><i class="fas fa-check"></i></span>
++                                                <span class="timeline-dot"><i class="fas fa-check" aria-hidden="true"></i></span>
+                                                 <div class="timeline-content">
+                                                     <div class="timeline-top">
+                                                         <strong><?php echo audit_h((string)$event['label']); ?></strong>
+@@ -1259,10 +1187,10 @@
+                                                     </div>
+                                                     <?php if (trim((string)($event['details'] ?? '')) !== ''): ?><p><?php echo audit_h((string)$event['details']); ?></p><?php endif; ?>
+                                                     <div class="timeline-meta">
+-                                                        <span><i class="fas fa-user"></i> <?php echo audit_h((string)$event['actor']); ?></span>
+-                                                        <span>• <?php echo audit_h(audit_source_label((string)$event['source'])); ?></span>
+-                                                        <?php if (trim((string)($event['unit'] ?? '')) !== ''): ?><span>• Unit <?php echo audit_h((string)$event['unit']); ?></span><?php endif; ?>
+-                                                        <span>• <?php echo audit_h(ucfirst((string)$event['outcome'])); ?></span>
++                                                        <span><i class="fas fa-user" aria-hidden="true"></i> <?php echo audit_h((string)$event['actor']); ?></span>
++                                                        <span><?php echo audit_h(audit_source_label((string)$event['source'])); ?></span>
++                                                        <?php if (trim((string)($event['unit'] ?? '')) !== ''): ?><span>Unit <?php echo audit_h((string)$event['unit']); ?></span><?php endif; ?>
++                                                        <span><?php echo audit_h(ucfirst((string)$event['outcome'])); ?></span>
+                                                     </div>
+                                                 </div>
+                                             </article>
+@@ -1275,100 +1203,164 @@
+                 </section>
+             <?php endif; ?>
+ 
+-            <section class="audit-card">
+-                <div class="audit-card-title">
++            <section class="audit-panel" aria-labelledby="auditRecordsTitle">
++                <header class="audit-panel-header">
+                     <div>
+-                        <h2>Search and organize logs</h2>
+-                        <p>Use the incident reference filter to open the complete call-to-review lifecycle above.</p>
++                        <span class="audit-section-kicker">System activity</span>
++                        <h2 id="auditRecordsTitle">Log records</h2>
++                        <p>Search the most useful fields first, then open advanced filters only when needed.</p>
+                     </div>
+-                    <a class="audit-btn" href="<?php echo audit_h(audit_query_url(['export' => 'csv', 'page' => null])); ?>">
+-                        <i class="fas fa-file-csv"></i><span>Export CSV</span>
+-                    </a>
++                    <div class="audit-panel-actions">
++                        <?php if ($activeFilters): ?>
++                            <a class="audit-btn audit-btn-secondary" href="admin/audit.php"><i class="fas fa-rotate-left" aria-hidden="true"></i><span>Reset</span></a>
++                        <?php endif; ?>
++                        <a class="audit-btn audit-btn-secondary" href="<?php echo audit_h(audit_query_url(['export' => 'csv', 'page' => null])); ?>">
++                            <i class="fas fa-file-arrow-down" aria-hidden="true"></i><span>Export CSV</span>
++                        </a>
++                    </div>
++                </header>
++
++                <form class="audit-filter-form" method="get" action="admin/audit.php">
++                    <div class="audit-primary-filters">
++                        <div class="audit-field audit-field-search">
++                            <label for="auditSearch">Search logs</label>
++                            <div class="audit-input-with-icon">
++                                <i class="fas fa-magnifying-glass" aria-hidden="true"></i>
++                                <input id="auditSearch" class="audit-input" type="search" name="q" value="<?php echo audit_h($search); ?>" placeholder="Actor, action, details, request ID...">
++                            </div>
++                        </div>
++                        <div class="audit-field audit-field-reference">
++                            <label for="auditReference">Incident reference</label>
++                            <div class="audit-input-with-icon">
++                                <i class="fas fa-link" aria-hidden="true"></i>
++                                <input id="auditReference" class="audit-input" type="text" name="reference" value="<?php echo audit_h($referenceFilter); ?>" placeholder="e.g. REF-2026...">
++                            </div>
++                        </div>
++                        <button class="audit-btn audit-btn-primary audit-primary-submit" type="submit">
++                            <i class="fas fa-filter" aria-hidden="true"></i><span>Apply</span>
++                        </button>
++                    </div>
++
++                    <details class="audit-advanced-filters" <?php echo $advancedFilterCount > 0 ? 'open' : ''; ?>>
++                        <summary>
++                            <span class="audit-advanced-title"><i class="fas fa-sliders" aria-hidden="true"></i> Advanced filters</span>
++                            <span class="audit-advanced-description">Role, source, process, outcome, date, and page size</span>
++                            <?php if ($advancedFilterCount > 0): ?><span class="audit-filter-count"><?php echo number_format($advancedFilterCount); ?> active</span><?php endif; ?>
++                            <i class="fas fa-chevron-down audit-advanced-chevron" aria-hidden="true"></i>
++                        </summary>
++                        <div class="audit-advanced-content">
++                            <div class="audit-advanced-grid">
++                                <div class="audit-field">
++                                    <label for="auditRole">Actor role</label>
++                                    <select id="auditRole" class="audit-select" name="role">
++                                        <option value="">All roles</option>
++                                        <?php foreach ($allowedRoles as $role): ?><option value="<?php echo audit_h($role); ?>" <?php echo $roleFilter === $role ? 'selected' : ''; ?>><?php echo audit_h(audit_label($role)); ?></option><?php endforeach; ?>
++                                    </select>
++                                </div>
++                                <div class="audit-field">
++                                    <label for="auditSource">System source</label>
++                                    <select id="auditSource" class="audit-select" name="source">
++                                        <option value="">All sources</option>
++                                        <?php foreach ($allowedSources as $source): ?><option value="<?php echo audit_h($source); ?>" <?php echo $sourceFilter === $source ? 'selected' : ''; ?>><?php echo audit_h(audit_source_label($source)); ?></option><?php endforeach; ?>
++                                    </select>
++                                </div>
++                                <div class="audit-field">
++                                    <label for="auditCategory">Process category</label>
++                                    <select id="auditCategory" class="audit-select" name="category">
++                                        <option value="">All processes</option>
++                                        <?php foreach ($allowedCategories as $category): ?><option value="<?php echo audit_h($category); ?>" <?php echo $categoryFilter === $category ? 'selected' : ''; ?>><?php echo audit_h(audit_category_label($category)); ?></option><?php endforeach; ?>
++                                    </select>
++                                </div>
++                                <div class="audit-field">
++                                    <label for="auditOutcome">Outcome</label>
++                                    <select id="auditOutcome" class="audit-select" name="outcome">
++                                        <option value="">All outcomes</option>
++                                        <?php foreach ($allowedOutcomes as $outcome): ?><option value="<?php echo audit_h($outcome); ?>" <?php echo $outcomeFilter === $outcome ? 'selected' : ''; ?>><?php echo audit_h(ucfirst($outcome)); ?></option><?php endforeach; ?>
++                                    </select>
++                                </div>
++                                <div class="audit-field">
++                                    <label for="auditDateFrom">From date</label>
++                                    <input id="auditDateFrom" class="audit-input" type="date" name="date_from" value="<?php echo audit_h($dateFrom); ?>">
++                                </div>
++                                <div class="audit-field">
++                                    <label for="auditDateTo">To date</label>
++                                    <input id="auditDateTo" class="audit-input" type="date" name="date_to" value="<?php echo audit_h($dateTo); ?>">
++                                </div>
++                                <div class="audit-field">
++                                    <label for="auditPageSize">Rows per page</label>
++                                    <select id="auditPageSize" class="audit-select" name="per_page">
++                                        <?php foreach ($allowedPageSizes as $size): ?><option value="<?php echo $size; ?>" <?php echo $perPage === $size ? 'selected' : ''; ?>><?php echo $size; ?> rows</option><?php endforeach; ?>
++                                    </select>
++                                </div>
++                            </div>
++                            <div class="audit-advanced-footer">
++                                <span>Filters apply together and results remain sorted from newest to oldest.</span>
++                                <div>
++                                    <?php if ($advancedFilterCount > 0): ?><a class="audit-btn audit-btn-ghost" href="<?php echo audit_h($clearAdvancedUrl); ?>">Clear advanced</a><?php endif; ?>
++                                    <button class="audit-btn audit-btn-primary" type="submit"><i class="fas fa-check" aria-hidden="true"></i><span>Apply filters</span></button>
++                                </div>
++                            </div>
++                        </div>
++                    </details>
++                </form>
++
++                <?php if ($activeFilters): ?>
++                    <div class="audit-active-filters" aria-label="Active filters">
++                        <span class="audit-active-label"><i class="fas fa-filter" aria-hidden="true"></i> Active filters</span>
++                        <div class="audit-filter-chips">
++                            <?php foreach ($activeFilters as $filter): ?>
++                                <a class="audit-filter-chip" href="<?php echo audit_h((string)$filter['url']); ?>" title="Remove this filter">
++                                    <span><?php echo audit_h((string)$filter['label']); ?></span><i class="fas fa-xmark" aria-hidden="true"></i>
++                                </a>
++                            <?php endforeach; ?>
++                        </div>
++                        <a class="audit-clear-all" href="admin/audit.php">Clear all</a>
++                    </div>
++                <?php endif; ?>
++
++                <div class="audit-results-bar">
++                    <div>
++                        <strong><?php echo number_format($matchingCount); ?></strong> matching <?php echo $matchingCount === 1 ? 'log' : 'logs'; ?>
++                        <span>Showing <?php echo number_format($showStart); ?>–<?php echo number_format($showEnd); ?></span>
++                    </div>
++                    <div class="audit-results-meta">
++                        <span><i class="fas fa-arrow-down-wide-short" aria-hidden="true"></i> Newest first</span>
++                        <span><i class="far fa-clock" aria-hidden="true"></i> Asia/Manila</span>
++                        <span class="audit-help" title="The number shown beside each timestamp is its sequence in the current filtered results—not a user or database ID."><i class="far fa-circle-question" aria-hidden="true"></i><span class="audit-visually-hidden">About log sequence numbers</span></span>
++                    </div>
+                 </div>
+ 
+-                <form class="audit-toolbar" method="get" action="admin/audit.php">
+-                    <div class="audit-field">
+-                        <label for="auditSearch">Search</label>
+-                        <input id="auditSearch" class="audit-input" type="search" name="q" value="<?php echo audit_h($search); ?>" placeholder="Actor, action, details, request ID...">
++                <?php if ($loadError !== ''): ?>
++                    <div class="audit-state audit-state-error" role="alert">
++                        <span class="audit-state-icon"><i class="fas fa-circle-exclamation" aria-hidden="true"></i></span>
++                        <div><h3>Audit logs could not be loaded</h3><p><?php echo audit_h($loadError); ?></p></div>
+                     </div>
+-                    <div class="audit-field">
+-                        <label for="auditReference">Incident reference</label>
+-                        <input id="auditReference" class="audit-input" type="text" name="reference" value="<?php echo audit_h($referenceFilter); ?>" placeholder="e.g. REF-2026...">
++                <?php elseif (!$auditRows): ?>
++                    <div class="audit-state">
++                        <span class="audit-state-icon"><i class="fas fa-magnifying-glass" aria-hidden="true"></i></span>
++                        <div><h3>No matching logs</h3><p>Adjust the search or remove one or more filters to see additional records.</p></div>
++                        <?php if ($activeFilters): ?><a class="audit-btn audit-btn-secondary" href="admin/audit.php">Clear filters</a><?php endif; ?>
+                     </div>
+-                    <div class="audit-field">
+-                        <label for="auditRole">Actor role</label>
+-                        <select id="auditRole" class="audit-select" name="role">
+-                            <option value="">All roles</option>
+-                            <?php foreach ($allowedRoles as $role): ?><option value="<?php echo audit_h($role); ?>" <?php echo $roleFilter === $role ? 'selected' : ''; ?>><?php echo audit_h(audit_label($role)); ?></option><?php endforeach; ?>
+-                        </select>
+-                    </div>
+-                    <div class="audit-field">
+-                        <label for="auditSource">System source</label>
+-                        <select id="auditSource" class="audit-select" name="source">
+-                            <option value="">All sources</option>
+-                            <?php foreach ($allowedSources as $source): ?><option value="<?php echo audit_h($source); ?>" <?php echo $sourceFilter === $source ? 'selected' : ''; ?>><?php echo audit_h(audit_source_label($source)); ?></option><?php endforeach; ?>
+-                        </select>
+-                    </div>
+-                    <div class="audit-field">
+-                        <label for="auditCategory">Process category</label>
+-                        <select id="auditCategory" class="audit-select" name="category">
+-                            <option value="">All processes</option>
+-                            <?php foreach ($allowedCategories as $category): ?><option value="<?php echo audit_h($category); ?>" <?php echo $categoryFilter === $category ? 'selected' : ''; ?>><?php echo audit_h(audit_category_label($category)); ?></option><?php endforeach; ?>
+-                        </select>
+-                    </div>
+-                    <div class="audit-field">
+-                        <label for="auditOutcome">Outcome</label>
+-                        <select id="auditOutcome" class="audit-select" name="outcome">
+-                            <option value="">All outcomes</option>
+-                            <?php foreach ($allowedOutcomes as $outcome): ?><option value="<?php echo audit_h($outcome); ?>" <?php echo $outcomeFilter === $outcome ? 'selected' : ''; ?>><?php echo audit_h(ucfirst($outcome)); ?></option><?php endforeach; ?>
+-                        </select>
+-                    </div>
+-
+-                    <div class="audit-toolbar-secondary">
+-                        <div class="audit-field">
+-                            <label for="auditDateFrom">From date</label>
+-                            <input id="auditDateFrom" class="audit-input" type="date" name="date_from" value="<?php echo audit_h($dateFrom); ?>">
+-                        </div>
+-                        <div class="audit-field">
+-                            <label for="auditDateTo">To date</label>
+-                            <input id="auditDateTo" class="audit-input" type="date" name="date_to" value="<?php echo audit_h($dateTo); ?>">
+-                        </div>
+-                        <div class="audit-field">
+-                            <label for="auditPageSize">Rows per page</label>
+-                            <select id="auditPageSize" class="audit-select" name="per_page">
+-                                <?php foreach ($allowedPageSizes as $size): ?><option value="<?php echo $size; ?>" <?php echo $perPage === $size ? 'selected' : ''; ?>><?php echo $size; ?> rows</option><?php endforeach; ?>
+-                            </select>
+-                        </div>
+-                        <div class="audit-actions">
+-                            <button class="audit-btn primary" type="submit"><i class="fas fa-filter"></i><span>Apply filters</span></button>
+-                            <a class="audit-btn" href="admin/audit.php"><i class="fas fa-rotate-left"></i><span>Reset</span></a>
+-                        </div>
+-                    </div>
+-                </form>
+-
+-                <p class="audit-note"><i class="fas fa-circle-info"></i><span><strong>Log No.</strong> is the sequential position in the current filtered results (1, 2, 3, …). It is not a user ID, employee ID, responder ID, or database ID.</span></p>
+-                <div class="audit-summary">
+-                    <span>Showing <strong><?php echo number_format($showStart); ?>–<?php echo number_format($showEnd); ?></strong> of <strong><?php echo number_format($matchingCount); ?></strong> matching logs</span>
+-                    <span>Times shown in Asia/Manila</span>
+-                </div>
+-
+-                <?php if ($loadError !== ''): ?>
+-                    <div class="audit-error">Unable to load the operational audit trail: <?php echo audit_h($loadError); ?></div>
+-                <?php elseif (!$auditRows): ?>
+-                    <div class="audit-empty"><i class="fas fa-magnifying-glass"></i><br>No logs matched the selected filters.</div>
+                 <?php else: ?>
+-                    <div class="audit-table-wrap">
+-                        <table class="audit-table">
++                    <div class="audit-table-shell">
++                        <table class="audit-log-table">
++                            <caption class="audit-visually-hidden">Operational audit log records</caption>
++                            <colgroup>
++                                <col class="audit-col-time">
++                                <col class="audit-col-actor">
++                                <col class="audit-col-activity">
++                                <col class="audit-col-reference">
++                                <col class="audit-col-outcome">
++                                <col class="audit-col-action">
++                            </colgroup>
+                             <thead>
+                                 <tr>
+-                                    <th title="Sequential position, not an account ID">Log No.</th>
+-                                    <th>Date &amp; Time</th>
+-                                    <th>Actor</th>
+-                                    <th>Source</th>
+-                                    <th>Process / Action</th>
+-                                    <th>Incident / Reference</th>
+-                                    <th>Outcome</th>
+-                                    <th>Details</th>
++                                    <th scope="col">Date &amp; time</th>
++                                    <th scope="col">Actor &amp; source</th>
++                                    <th scope="col">Activity</th>
++                                    <th scope="col">Reference</th>
++                                    <th scope="col">Outcome</th>
++                                    <th scope="col"><span class="audit-visually-hidden">Actions</span></th>
+                                 </tr>
+                             </thead>
+                             <tbody>
+@@ -1386,49 +1378,100 @@
+                                     }
+                                     $reference = trim((string)($row['reference_no'] ?? ''));
+                                     $metadataPretty = audit_json_pretty($row['metadata_json'] ?? null);
++                                    $detailsSummary = audit_details_summary($row['details'] ?? '');
+                                     $sourceIcon = $source === 'responder_app' ? 'fa-mobile-screen-button' : ($source === 'dispatcher_web' ? 'fa-headset' : ($source === 'admin_web' ? 'fa-user-shield' : ($source === 'external_api' ? 'fa-plug' : 'fa-server')));
++                                    $rowIdentity = (int)($row['id'] ?? 0) > 0 ? (string)(int)$row['id'] : (string)$logNo;
++                                    $dialogId = 'audit-detail-' . $rowIdentity . '-' . $index;
++                                    $dialogTitleId = $dialogId . '-title';
++                                    $entityText = audit_label((string)($row['entity_type'] ?? 'system'));
++                                    if ((int)($row['entity_id'] ?? 0) > 0) {
++                                        $entityText .= ' · record ' . number_format((int)$row['entity_id']);
++                                    }
+                                     ?>
+                                     <tr>
+-                                        <td class="audit-log-no"><?php echo number_format($logNo); ?></td>
+-                                        <td class="audit-time">
+-                                            <strong><?php echo audit_h(audit_format_date($row['created_at'] ?? null)); ?></strong>
+-                                            <span>Asia/Manila</span>
++                                        <td class="audit-cell-time" data-label="Date &amp; time">
++                                            <div class="audit-time-block">
++                                                <span class="audit-sequence" title="Sequence in current filtered results">#<?php echo number_format($logNo); ?></span>
++                                                <time datetime="<?php echo audit_h(audit_iso_datetime((string)($row['created_at'] ?? ''))); ?>">
++                                                    <strong><?php echo audit_h(audit_format_date($row['created_at'] ?? null)); ?></strong>
++                                                    <span>Asia/Manila</span>
++                                                </time>
++                                            </div>
+                                         </td>
+-                                        <td>
+-                                            <div class="audit-actor">
+-                                                <span class="audit-avatar"><i class="fas <?php echo $actorRole === 'system' ? 'fa-gears' : 'fa-user'; ?>"></i></span>
++                                        <td class="audit-cell-actor" data-label="Actor &amp; source">
++                                            <div class="audit-actor-block">
++                                                <span class="audit-avatar"><i class="fas <?php echo $actorRole === 'system' ? 'fa-gears' : 'fa-user'; ?>" aria-hidden="true"></i></span>
+                                                 <div>
+                                                     <strong><?php echo audit_h($actorName); ?></strong>
+-                                                    <span><?php echo audit_h(audit_label($actorRole)); ?><?php echo $actorEmail !== '' ? (' · ' . audit_h($actorEmail)) : ''; ?></span>
++                                                    <span class="audit-actor-role"><?php echo audit_h(audit_label($actorRole)); ?><?php echo $actorEmail !== '' ? (' · ' . audit_h($actorEmail)) : ''; ?></span>
++                                                    <span class="audit-source-line"><i class="fas <?php echo audit_h($sourceIcon); ?>" aria-hidden="true"></i><?php echo audit_h(audit_source_label($source)); ?></span>
+                                                 </div>
+                                             </div>
+                                         </td>
+-                                        <td><span class="audit-source"><i class="fas <?php echo audit_h($sourceIcon); ?>"></i><?php echo audit_h(audit_source_label($source)); ?></span></td>
+-                                        <td>
+-                                            <div class="audit-process">
++                                        <td class="audit-cell-activity" data-label="Activity">
++                                            <div class="audit-activity-heading">
+                                                 <strong><?php echo audit_h(audit_label((string)($row['action'] ?? ''))); ?></strong>
+                                                 <span class="audit-chip"><?php echo audit_h(audit_category_label($category)); ?></span>
+                                             </div>
++                                            <p><?php echo audit_h($detailsSummary !== '' ? $detailsSummary : 'No description recorded.'); ?></p>
+                                         </td>
+-                                        <td>
++                                        <td class="audit-cell-reference" data-label="Reference">
+                                             <?php if ($reference !== ''): ?>
+                                                 <a class="audit-reference" href="<?php echo audit_h(audit_query_url(['reference' => $reference, 'page' => 1])); ?>" title="Open lifecycle for <?php echo audit_h($reference); ?>"><?php echo audit_h($reference); ?></a>
+                                             <?php else: ?>
+-                                                <span class="audit-reference-empty">No incident reference</span>
++                                                <span class="audit-reference-empty">Not linked</span>
+                                             <?php endif; ?>
+                                         </td>
+-                                        <td><span class="audit-outcome <?php echo audit_h($outcome); ?>"><?php echo audit_h(ucfirst($outcome)); ?></span></td>
+-                                        <td>
+-                                            <div class="audit-detail-text"><?php echo audit_h(audit_details_summary($row['details'] ?? '')); ?></div>
+-                                            <details class="audit-tech">
+-                                                <summary>Technical context</summary>
+-                                                <div class="audit-tech-grid">
+-                                                    <div><strong>Entity:</strong> <?php echo audit_h(audit_label((string)($row['entity_type'] ?? 'system'))); ?><?php echo (int)($row['entity_id'] ?? 0) > 0 ? (' · record ' . number_format((int)$row['entity_id'])) : ''; ?></div>
+-                                                    <div><strong>Request ID:</strong> <?php echo audit_h(trim((string)($row['request_id'] ?? '')) ?: 'Legacy log / not recorded'); ?></div>
+-                                                    <div><strong>IP:</strong> <?php echo audit_h(trim((string)($row['ip_address'] ?? '')) ?: 'Not recorded'); ?></div>
+-                                                    <?php if ($metadataPretty !== ''): ?><div><strong>Structured metadata:</strong><pre><?php echo audit_h($metadataPretty); ?></pre></div><?php endif; ?>
++                                        <td class="audit-cell-outcome" data-label="Outcome">
++                                            <span class="audit-outcome <?php echo audit_h($outcome); ?>"><span aria-hidden="true"></span><?php echo audit_h(ucfirst($outcome)); ?></span>
++                                        </td>
++                                        <td class="audit-cell-action">
++                                            <button class="audit-row-action" type="button" data-audit-dialog="<?php echo audit_h($dialogId); ?>" aria-haspopup="dialog">
++                                                <i class="far fa-eye" aria-hidden="true"></i><span>View</span>
++                                            </button>
++
++                                            <dialog class="audit-detail-dialog" id="<?php echo audit_h($dialogId); ?>" aria-labelledby="<?php echo audit_h($dialogTitleId); ?>">
++                                                <div class="audit-dialog-shell">
++                                                    <header class="audit-dialog-header">
++                                                        <div>
++                                                            <span>Log #<?php echo number_format($logNo); ?> · <?php echo audit_h(audit_format_date($row['created_at'] ?? null)); ?></span>
++                                                            <h2 id="<?php echo audit_h($dialogTitleId); ?>"><?php echo audit_h(audit_label((string)($row['action'] ?? ''))); ?></h2>
++                                                            <p><?php echo audit_h(audit_category_label($category)); ?> activity from <?php echo audit_h(audit_source_label($source)); ?></p>
++                                                        </div>
++                                                        <button class="audit-dialog-close" type="button" data-audit-dialog-close aria-label="Close details"><i class="fas fa-xmark" aria-hidden="true"></i></button>
++                                                    </header>
++                                                    <div class="audit-dialog-body">
++                                                        <section class="audit-dialog-summary" aria-label="Log summary">
++                                                            <div>
++                                                                <span class="audit-outcome <?php echo audit_h($outcome); ?>"><span aria-hidden="true"></span><?php echo audit_h(ucfirst($outcome)); ?></span>
++                                                                <?php if ($reference !== ''): ?><span class="audit-reference audit-reference-static"><?php echo audit_h($reference); ?></span><?php endif; ?>
++                                                            </div>
++                                                            <p><?php echo audit_h($detailsSummary !== '' ? $detailsSummary : 'No description was recorded for this event.'); ?></p>
++                                                        </section>
++                                                        <dl class="audit-detail-grid">
++                                                            <div><dt>Actor</dt><dd><?php echo audit_h($actorName); ?></dd></div>
++                                                            <div><dt>Actor role</dt><dd><?php echo audit_h(audit_label($actorRole)); ?></dd></div>
++                                                            <div><dt>Source</dt><dd><?php echo audit_h(audit_source_label($source)); ?></dd></div>
++                                                            <div><dt>Category</dt><dd><?php echo audit_h(audit_category_label($category)); ?></dd></div>
++                                                            <div><dt>Date and time</dt><dd><?php echo audit_h(audit_format_date($row['created_at'] ?? null)); ?></dd></div>
++                                                            <div><dt>Entity</dt><dd><?php echo audit_h($entityText); ?></dd></div>
++                                                            <div><dt>Request ID</dt><dd class="audit-mono"><?php echo audit_h(trim((string)($row['request_id'] ?? '')) ?: 'Legacy log / not recorded'); ?></dd></div>
++                                                            <div><dt>IP address</dt><dd class="audit-mono"><?php echo audit_h(trim((string)($row['ip_address'] ?? '')) ?: 'Not recorded'); ?></dd></div>
++                                                            <div class="audit-detail-wide"><dt>Actor email</dt><dd><?php echo audit_h($actorEmail !== '' ? $actorEmail : 'Not recorded'); ?></dd></div>
++                                                            <div class="audit-detail-wide"><dt>User agent</dt><dd class="audit-breakable"><?php echo audit_h(trim((string)($row['user_agent'] ?? '')) ?: 'Not recorded'); ?></dd></div>
++                                                        </dl>
++                                                        <?php if ($metadataPretty !== ''): ?>
++                                                            <section class="audit-metadata">
++                                                                <div><h3>Structured metadata</h3><span>Raw context captured with this event</span></div>
++                                                                <pre><?php echo audit_h($metadataPretty); ?></pre>
++                                                            </section>
++                                                        <?php endif; ?>
++                                                    </div>
++                                                    <footer class="audit-dialog-footer">
++                                                        <button class="audit-btn audit-btn-secondary" type="button" data-audit-dialog-close>Close</button>
++                                                    </footer>
+                                                 </div>
+-                                            </details>
++                                            </dialog>
+                                         </td>
+                                     </tr>
+                                 <?php endforeach; ?>
+@@ -1441,16 +1484,16 @@
+                     <nav class="audit-pagination" aria-label="Audit log pages">
+                         <span>Page <strong><?php echo number_format($page); ?></strong> of <strong><?php echo number_format($pageCount); ?></strong></span>
+                         <div class="audit-pages">
+-                            <a class="audit-page <?php echo $page <= 1 ? 'disabled' : ''; ?>" href="<?php echo audit_h(audit_query_url(['page' => max(1, $page - 1)])); ?>" aria-label="Previous page"><i class="fas fa-chevron-left"></i></a>
++                            <a class="audit-page-link audit-page-nav <?php echo $page <= 1 ? 'disabled' : ''; ?>" href="<?php echo audit_h(audit_query_url(['page' => max(1, $page - 1)])); ?>" aria-label="Previous page" <?php echo $page <= 1 ? 'aria-disabled="true" tabindex="-1"' : ''; ?>><i class="fas fa-chevron-left" aria-hidden="true"></i></a>
+                             <?php
+                             $pageStart = max(1, $page - 2);
+                             $pageEnd = min($pageCount, $page + 2);
+-                            if ($pageStart > 1): ?><a class="audit-page" href="<?php echo audit_h(audit_query_url(['page' => 1])); ?>">1</a><?php if ($pageStart > 2): ?><span class="audit-page disabled">…</span><?php endif; ?><?php endif;
++                            if ($pageStart > 1): ?><a class="audit-page-link" href="<?php echo audit_h(audit_query_url(['page' => 1])); ?>">1</a><?php if ($pageStart > 2): ?><span class="audit-page-link disabled" aria-hidden="true">…</span><?php endif; ?><?php endif;
+                             for ($pageNumber = $pageStart; $pageNumber <= $pageEnd; $pageNumber++): ?>
+-                                <a class="audit-page <?php echo $pageNumber === $page ? 'active' : ''; ?>" href="<?php echo audit_h(audit_query_url(['page' => $pageNumber])); ?>"><?php echo number_format($pageNumber); ?></a>
++                                <a class="audit-page-link <?php echo $pageNumber === $page ? 'active' : ''; ?>" href="<?php echo audit_h(audit_query_url(['page' => $pageNumber])); ?>" <?php echo $pageNumber === $page ? 'aria-current="page"' : ''; ?>><?php echo number_format($pageNumber); ?></a>
+                             <?php endfor;
+-                            if ($pageEnd < $pageCount): ?><?php if ($pageEnd < $pageCount - 1): ?><span class="audit-page disabled">…</span><?php endif; ?><a class="audit-page" href="<?php echo audit_h(audit_query_url(['page' => $pageCount])); ?>"><?php echo number_format($pageCount); ?></a><?php endif; ?>
+-                            <a class="audit-page <?php echo $page >= $pageCount ? 'disabled' : ''; ?>" href="<?php echo audit_h(audit_query_url(['page' => min($pageCount, $page + 1)])); ?>" aria-label="Next page"><i class="fas fa-chevron-right"></i></a>
++                            if ($pageEnd < $pageCount): ?><?php if ($pageEnd < $pageCount - 1): ?><span class="audit-page-link disabled" aria-hidden="true">…</span><?php endif; ?><a class="audit-page-link" href="<?php echo audit_h(audit_query_url(['page' => $pageCount])); ?>"><?php echo number_format($pageCount); ?></a><?php endif; ?>
++                            <a class="audit-page-link audit-page-nav <?php echo $page >= $pageCount ? 'disabled' : ''; ?>" href="<?php echo audit_h(audit_query_url(['page' => min($pageCount, $page + 1)])); ?>" aria-label="Next page" <?php echo $page >= $pageCount ? 'aria-disabled="true" tabindex="-1"' : ''; ?>><i class="fas fa-chevron-right" aria-hidden="true"></i></a>
+                         </div>
+                     </nav>
+                 <?php endif; ?>
+diff --git a/css/audit.css b/css/audit.css
+new file mode 100644
+--- /dev/null
++++ b/css/audit.css
+@@ -0,0 +1,1767 @@
++:root {
++    --audit-bg: #f4f7f9;
++    --audit-surface: #ffffff;
++    --audit-surface-subtle: #f7f9fa;
++    --audit-surface-accent: #eef6f5;
++    --audit-text: #172126;
++    --audit-text-soft: #4f5f68;
++    --audit-muted: #6f7f87;
++    --audit-border: #dbe3e7;
++    --audit-border-strong: #c8d3d8;
++    --audit-primary: #3f7f7d;
++    --audit-primary-strong: #326a68;
++    --audit-primary-soft: #e5f1f0;
++    --audit-success: #157347;
++    --audit-success-soft: #e8f5ee;
++    --audit-warning: #946200;
++    --audit-warning-soft: #fff4d6;
++    --audit-danger: #b42318;
++    --audit-danger-soft: #fdecea;
++    --audit-info: #1d5fa7;
++    --audit-info-soft: #e9f2fb;
++    --audit-shadow-sm: 0 1px 2px rgba(15, 23, 42, 0.04), 0 4px 12px rgba(15, 23, 42, 0.04);
++    --audit-shadow-md: 0 16px 44px rgba(15, 23, 42, 0.12);
++    --audit-radius-sm: 8px;
++    --audit-radius: 12px;
++    --audit-radius-lg: 16px;
++}
++
++html[data-theme="dark"] {
++    --audit-bg: #080d10;
++    --audit-surface: #10171b;
++    --audit-surface-subtle: #151e23;
++    --audit-surface-accent: #132321;
++    --audit-text: #eef4f5;
++    --audit-text-soft: #bdc9ce;
++    --audit-muted: #8fa0a8;
++    --audit-border: #29353b;
++    --audit-border-strong: #3a484f;
++    --audit-primary: #79b7b3;
++    --audit-primary-strong: #94cbc7;
++    --audit-primary-soft: #18302e;
++    --audit-success: #79d6a6;
++    --audit-success-soft: #143327;
++    --audit-warning: #f2ca6b;
++    --audit-warning-soft: #3b3016;
++    --audit-danger: #ff9d96;
++    --audit-danger-soft: #431f1d;
++    --audit-info: #91c4f5;
++    --audit-info-soft: #182f46;
++    --audit-shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.24), 0 7px 18px rgba(0, 0, 0, 0.16);
++    --audit-shadow-md: 0 22px 60px rgba(0, 0, 0, 0.46);
++}
++
++html[data-theme="dark"] .audit-page {
++    color-scheme: dark;
++}
++
++.audit-main {
++    background:
++        radial-gradient(circle at 88% 2%, rgba(76, 138, 137, 0.12), transparent 26rem),
++        var(--audit-bg);
++}
++
++.audit-page {
++    display: grid;
++    gap: 1rem;
++    color: var(--audit-text);
++}
++
++.audit-page :where(button, input, select, summary, a) {
++    font-family: inherit;
++}
++
++.audit-visually-hidden {
++    position: absolute !important;
++    width: 1px !important;
++    height: 1px !important;
++    padding: 0 !important;
++    margin: -1px !important;
++    overflow: hidden !important;
++    clip: rect(0, 0, 0, 0) !important;
++    white-space: nowrap !important;
++    border: 0 !important;
++}
++
++/* Page heading */
++.audit-page-header {
++    display: flex;
++    align-items: flex-end;
++    justify-content: space-between;
++    gap: 2rem;
++    padding: 0.4rem 0 0.2rem;
++}
++
++.audit-title-block {
++    min-width: 0;
++}
++
++.audit-eyebrow,
++.audit-section-kicker {
++    display: inline-flex;
++    align-items: center;
++    gap: 0.42rem;
++    color: var(--audit-primary-strong);
++    font-size: 0.72rem;
++    font-weight: 700;
++    letter-spacing: 0.08em;
++    text-transform: uppercase;
++}
++
++.audit-title-block h1 {
++    margin: 0.35rem 0 0;
++    color: var(--audit-text);
++    font-size: clamp(1.75rem, 2.4vw, 2.25rem);
++    font-weight: 750;
++    letter-spacing: -0.035em;
++    line-height: 1.12;
++}
++
++.audit-title-block p {
++    max-width: 760px;
++    margin: 0.55rem 0 0;
++    color: var(--audit-text-soft);
++    font-size: 0.93rem;
++    line-height: 1.58;
++}
++
++.audit-header-meta {
++    display: grid;
++    justify-items: end;
++    gap: 0.45rem;
++    flex: 0 0 auto;
++    color: var(--audit-muted);
++    font-size: 0.76rem;
++}
++
++.audit-record-state,
++.audit-latest {
++    display: inline-flex;
++    align-items: center;
++    gap: 0.45rem;
++    white-space: nowrap;
++}
++
++.audit-record-state {
++    padding: 0.4rem 0.65rem;
++    border: 1px solid var(--audit-border);
++    border-radius: 999px;
++    background: var(--audit-surface);
++    color: var(--audit-text-soft);
++    font-weight: 650;
++    box-shadow: var(--audit-shadow-sm);
++}
++
++.audit-status-dot {
++    width: 0.5rem;
++    height: 0.5rem;
++    border-radius: 50%;
++    background: var(--audit-success);
++    box-shadow: 0 0 0 3px var(--audit-success-soft);
++}
++
++/* Summary metrics */
++.audit-metrics {
++    display: grid;
++    grid-template-columns: repeat(5, minmax(0, 1fr));
++    gap: 0.7rem;
++}
++
++.audit-metric {
++    display: flex;
++    min-width: 0;
++    align-items: center;
++    gap: 0.75rem;
++    padding: 0.9rem;
++    border: 1px solid var(--audit-border);
++    border-radius: var(--audit-radius);
++    background: var(--audit-surface);
++    box-shadow: var(--audit-shadow-sm);
++}
++
++.audit-metric-icon {
++    display: inline-flex;
++    width: 2.35rem;
++    height: 2.35rem;
++    flex: 0 0 2.35rem;
++    align-items: center;
++    justify-content: center;
++    border-radius: 10px;
++    background: var(--audit-primary-soft);
++    color: var(--audit-primary-strong);
++    font-size: 0.92rem;
++}
++
++.audit-metric-attention .audit-metric-icon {
++    background: var(--audit-warning-soft);
++    color: var(--audit-warning);
++}
++
++.audit-metric > div {
++    min-width: 0;
++}
++
++.audit-metric span:not(.audit-metric-icon) {
++    display: block;
++    overflow: hidden;
++    color: var(--audit-muted);
++    font-size: 0.7rem;
++    font-weight: 650;
++    letter-spacing: 0.03em;
++    text-overflow: ellipsis;
++    text-transform: uppercase;
++    white-space: nowrap;
++}
++
++.audit-metric strong {
++    display: block;
++    margin-top: 0.24rem;
++    color: var(--audit-text);
++    font-size: 1.32rem;
++    font-weight: 750;
++    line-height: 1;
++}
++
++/* Shared cards and buttons */
++.audit-panel,
++.lifecycle-card {
++    overflow: hidden;
++    border: 1px solid var(--audit-border);
++    border-radius: var(--audit-radius-lg);
++    background: var(--audit-surface);
++    box-shadow: var(--audit-shadow-sm);
++}
++
++.audit-panel {
++    container-name: audit-records;
++    container-type: inline-size;
++}
++
++.audit-panel-header,
++.lifecycle-head {
++    display: flex;
++    align-items: flex-start;
++    justify-content: space-between;
++    gap: 1.5rem;
++    padding: 1rem 1.1rem;
++    border-bottom: 1px solid var(--audit-border);
++}
++
++.audit-panel-header h2,
++.lifecycle-head h2 {
++    margin: 0.24rem 0 0;
++    color: var(--audit-text);
++    font-size: 1.12rem;
++    font-weight: 720;
++    letter-spacing: -0.015em;
++}
++
++.audit-panel-header p,
++.lifecycle-head p {
++    margin: 0.35rem 0 0;
++    color: var(--audit-muted);
++    font-size: 0.79rem;
++    line-height: 1.45;
++}
++
++.audit-panel-actions {
++    display: flex;
++    flex-wrap: wrap;
++    justify-content: flex-end;
++    gap: 0.5rem;
++}
++
++.audit-btn {
++    display: inline-flex;
++    min-height: 2.45rem;
++    align-items: center;
++    justify-content: center;
++    gap: 0.45rem;
++    padding: 0 0.78rem;
++    border: 1px solid transparent;
++    border-radius: var(--audit-radius-sm);
++    font-size: 0.79rem;
++    font-weight: 700;
++    line-height: 1;
++    text-decoration: none;
++    white-space: nowrap;
++    cursor: pointer;
++    transition: border-color 0.16s ease, background-color 0.16s ease, color 0.16s ease, transform 0.16s ease;
++}
++
++.audit-btn:hover {
++    transform: translateY(-1px);
++}
++
++.audit-btn:focus-visible,
++.audit-row-action:focus-visible,
++.audit-dialog-close:focus-visible,
++.audit-page-link:focus-visible,
++.audit-filter-chip:focus-visible,
++.audit-advanced-filters summary:focus-visible {
++    outline: 3px solid color-mix(in srgb, var(--audit-primary) 28%, transparent);
++    outline-offset: 2px;
++}
++
++.audit-btn-primary {
++    border-color: var(--audit-primary);
++    background: var(--audit-primary);
++    color: #ffffff;
++}
++
++.audit-btn-primary:hover {
++    border-color: var(--audit-primary-strong);
++    background: var(--audit-primary-strong);
++}
++
++.audit-btn-secondary {
++    border-color: var(--audit-border-strong);
++    background: var(--audit-surface);
++    color: var(--audit-text);
++}
++
++.audit-btn-secondary:hover,
++.audit-btn-ghost:hover {
++    border-color: var(--audit-primary);
++    background: var(--audit-primary-soft);
++    color: var(--audit-primary-strong);
++}
++
++.audit-btn-ghost {
++    border-color: transparent;
++    background: transparent;
++    color: var(--audit-text-soft);
++}
++
++/* Filter area */
++.audit-filter-form {
++    background: var(--audit-surface-subtle);
++    border-bottom: 1px solid var(--audit-border);
++}
++
++.audit-primary-filters {
++    display: grid;
++    grid-template-columns: minmax(260px, 1.5fr) minmax(220px, 0.8fr) auto;
++    gap: 0.7rem;
++    align-items: end;
++    padding: 0.95rem 1.1rem;
++}
++
++.audit-field {
++    display: grid;
++    min-width: 0;
++    gap: 0.34rem;
++}
++
++.audit-field label {
++    color: var(--audit-text-soft);
++    font-size: 0.69rem;
++    font-weight: 700;
++    letter-spacing: 0.025em;
++}
++
++.audit-input,
++.audit-select {
++    width: 100%;
++    min-width: 0;
++    min-height: 2.5rem;
++    padding: 0.58rem 0.68rem;
++    border: 1px solid var(--audit-border-strong);
++    border-radius: var(--audit-radius-sm);
++    background: var(--audit-surface);
++    color: var(--audit-text);
++    font-size: 0.8rem;
++    line-height: 1.2;
++    transition: border-color 0.16s ease, box-shadow 0.16s ease, background-color 0.16s ease;
++}
++
++.audit-input::placeholder {
++    color: var(--audit-muted);
++    opacity: 0.8;
++}
++
++.audit-input:hover,
++.audit-select:hover {
++    border-color: color-mix(in srgb, var(--audit-primary) 55%, var(--audit-border-strong));
++}
++
++.audit-input:focus,
++.audit-select:focus {
++    border-color: var(--audit-primary);
++    outline: none;
++    box-shadow: 0 0 0 3px color-mix(in srgb, var(--audit-primary) 16%, transparent);
++}
++
++.audit-input-with-icon {
++    position: relative;
++}
++
++.audit-input-with-icon > i {
++    position: absolute;
++    top: 50%;
++    left: 0.72rem;
++    z-index: 1;
++    color: var(--audit-muted);
++    font-size: 0.76rem;
++    transform: translateY(-50%);
++    pointer-events: none;
++}
++
++.audit-input-with-icon .audit-input {
++    padding-left: 2.05rem;
++}
++
++.audit-primary-submit {
++    min-width: 5.7rem;
++}
++
++.audit-advanced-filters {
++    border-top: 1px solid var(--audit-border);
++}
++
++.audit-advanced-filters summary {
++    display: grid;
++    grid-template-columns: auto minmax(0, 1fr) auto auto;
++    align-items: center;
++    gap: 0.75rem;
++    min-height: 2.8rem;
++    padding: 0.65rem 1.1rem;
++    color: var(--audit-text-soft);
++    font-size: 0.76rem;
++    cursor: pointer;
++    list-style: none;
++    user-select: none;
++}
++
++.audit-advanced-filters summary::-webkit-details-marker {
++    display: none;
++}
++
++.audit-advanced-filters summary:hover {
++    background: var(--audit-surface-accent);
++}
++
++.audit-advanced-title {
++    display: inline-flex;
++    align-items: center;
++    gap: 0.45rem;
++    color: var(--audit-text);
++    font-weight: 700;
++}
++
++.audit-advanced-title i {
++    color: var(--audit-primary);
++}
++
++.audit-advanced-description {
++    overflow: hidden;
++    color: var(--audit-muted);
++    text-overflow: ellipsis;
++    white-space: nowrap;
++}
++
++.audit-filter-count {
++    padding: 0.24rem 0.5rem;
++    border-radius: 999px;
++    background: var(--audit-primary-soft);
++    color: var(--audit-primary-strong);
++    font-size: 0.67rem;
++    font-weight: 750;
++}
++
++.audit-advanced-chevron {
++    color: var(--audit-muted);
++    font-size: 0.68rem;
++    transition: transform 0.18s ease;
++}
++
++.audit-advanced-filters[open] .audit-advanced-chevron {
++    transform: rotate(180deg);
++}
++
++.audit-advanced-content {
++    padding: 0.95rem 1.1rem 1.05rem;
++    border-top: 1px solid var(--audit-border);
++    background: var(--audit-surface);
++}
++
++.audit-advanced-grid {
++    display: grid;
++    grid-template-columns: repeat(4, minmax(150px, 1fr));
++    gap: 0.72rem;
++}
++
++.audit-advanced-footer {
++    display: flex;
++    align-items: center;
++    justify-content: space-between;
++    gap: 1rem;
++    margin-top: 0.9rem;
++    padding-top: 0.85rem;
++    border-top: 1px dashed var(--audit-border);
++}
++
++.audit-advanced-footer > span {
++    color: var(--audit-muted);
++    font-size: 0.72rem;
++    line-height: 1.45;
++}
++
++.audit-advanced-footer > div {
++    display: flex;
++    flex: 0 0 auto;
++    gap: 0.45rem;
++}
++
++/* Active filters and result context */
++.audit-active-filters {
++    display: flex;
++    align-items: center;
++    gap: 0.65rem;
++    padding: 0.65rem 1.1rem;
++    border-bottom: 1px solid var(--audit-border);
++    background: var(--audit-surface);
++}
++
++.audit-active-label {
++    display: inline-flex;
++    flex: 0 0 auto;
++    align-items: center;
++    gap: 0.4rem;
++    color: var(--audit-text-soft);
++    font-size: 0.7rem;
++    font-weight: 700;
++}
++
++.audit-active-label i {
++    color: var(--audit-primary);
++}
++
++.audit-filter-chips {
++    display: flex;
++    min-width: 0;
++    flex: 1 1 auto;
++    flex-wrap: wrap;
++    gap: 0.35rem;
++}
++
++.audit-filter-chip {
++    display: inline-flex;
++    max-width: 280px;
++    align-items: center;
++    gap: 0.4rem;
++    padding: 0.3rem 0.52rem;
++    border: 1px solid var(--audit-border);
++    border-radius: 999px;
++    background: var(--audit-surface-subtle);
++    color: var(--audit-text-soft);
++    font-size: 0.68rem;
++    font-weight: 650;
++    text-decoration: none;
++}
++
++.audit-filter-chip span {
++    overflow: hidden;
++    text-overflow: ellipsis;
++    white-space: nowrap;
++}
++
++.audit-filter-chip i {
++    flex: 0 0 auto;
++    color: var(--audit-muted);
++}
++
++.audit-filter-chip:hover {
++    border-color: var(--audit-primary);
++    background: var(--audit-primary-soft);
++    color: var(--audit-primary-strong);
++}
++
++.audit-clear-all {
++    flex: 0 0 auto;
++    color: var(--audit-primary-strong);
++    font-size: 0.7rem;
++    font-weight: 700;
++    text-decoration: none;
++}
++
++.audit-clear-all:hover {
++    text-decoration: underline;
++}
++
++.audit-results-bar {
++    display: flex;
++    align-items: center;
++    justify-content: space-between;
++    gap: 1rem;
++    min-height: 3rem;
++    padding: 0.65rem 1.1rem;
++    border-bottom: 1px solid var(--audit-border);
++    background: var(--audit-surface);
++    color: var(--audit-muted);
++    font-size: 0.73rem;
++}
++
++.audit-results-bar > div:first-child {
++    display: flex;
++    flex-wrap: wrap;
++    align-items: baseline;
++    gap: 0.35rem;
++}
++
++.audit-results-bar strong {
++    color: var(--audit-text);
++    font-size: 0.82rem;
++}
++
++.audit-results-bar > div:first-child span::before {
++    margin-right: 0.35rem;
++    content: "·";
++}
++
++.audit-results-meta {
++    display: flex;
++    flex-wrap: wrap;
++    justify-content: flex-end;
++    gap: 0.85rem;
++}
++
++.audit-results-meta > span {
++    display: inline-flex;
++    align-items: center;
++    gap: 0.35rem;
++}
++
++.audit-results-meta i {
++    color: var(--audit-primary);
++}
++
++.audit-help {
++    cursor: help;
++}
++
++/* Table */
++.audit-table-shell {
++    width: 100%;
++    overflow-x: auto;
++    background: var(--audit-surface);
++    scrollbar-gutter: stable;
++}
++
++.audit-log-table {
++    width: 100%;
++    min-width: 1060px;
++    border-collapse: separate;
++    border-spacing: 0;
++    table-layout: fixed;
++}
++
++.audit-col-time { width: 178px; }
++.audit-col-actor { width: 225px; }
++.audit-col-activity { width: auto; }
++.audit-col-reference { width: 170px; }
++.audit-col-outcome { width: 112px; }
++.audit-col-action { width: 84px; }
++
++.audit-log-table th,
++.audit-log-table td {
++    padding: 0.86rem 0.9rem;
++    border-bottom: 1px solid var(--audit-border);
++    text-align: left;
++    vertical-align: top;
++}
++
++.audit-log-table th {
++    position: sticky;
++    top: 0;
++    z-index: 2;
++    background: var(--audit-surface-subtle);
++    color: var(--audit-muted);
++    font-size: 0.66rem;
++    font-weight: 750;
++    letter-spacing: 0.055em;
++    text-transform: uppercase;
++}
++
++.audit-log-table tbody tr {
++    transition: background-color 0.15s ease;
++}
++
++.audit-log-table tbody tr:hover {
++    background: color-mix(in srgb, var(--audit-primary-soft) 48%, transparent);
++}
++
++.audit-log-table tbody tr:last-child td {
++    border-bottom: 0;
++}
++
++.audit-time-block {
++    display: flex;
++    align-items: flex-start;
++    gap: 0.55rem;
++}
++
++.audit-sequence {
++    display: inline-flex;
++    min-width: 2.15rem;
++    flex: 0 0 auto;
++    justify-content: center;
++    padding: 0.2rem 0.32rem;
++    border: 1px solid var(--audit-border);
++    border-radius: 6px;
++    background: var(--audit-surface-subtle);
++    color: var(--audit-muted);
++    font-size: 0.64rem;
++    font-weight: 750;
++    line-height: 1.15;
++}
++
++.audit-time-block time {
++    min-width: 0;
++}
++
++.audit-time-block strong {
++    display: block;
++    color: var(--audit-text);
++    font-size: 0.75rem;
++    font-weight: 680;
++    line-height: 1.35;
++}
++
++.audit-time-block time > span {
++    display: block;
++    margin-top: 0.18rem;
++    color: var(--audit-muted);
++    font-size: 0.65rem;
++}
++
++.audit-actor-block {
++    display: flex;
++    min-width: 0;
++    gap: 0.58rem;
++}
++
++.audit-avatar {
++    display: inline-flex;
++    width: 2rem;
++    height: 2rem;
++    flex: 0 0 2rem;
++    align-items: center;
++    justify-content: center;
++    border-radius: 9px;
++    background: var(--audit-primary-soft);
++    color: var(--audit-primary-strong);
++    font-size: 0.75rem;
++}
++
++.audit-actor-block > div {
++    min-width: 0;
++}
++
++.audit-actor-block strong {
++    display: block;
++    overflow: hidden;
++    color: var(--audit-text);
++    font-size: 0.78rem;
++    font-weight: 700;
++    line-height: 1.3;
++    text-overflow: ellipsis;
++    white-space: nowrap;
++}
++
++.audit-actor-role {
++    display: block;
++    overflow: hidden;
++    margin-top: 0.16rem;
++    color: var(--audit-muted);
++    font-size: 0.66rem;
++    line-height: 1.3;
++    text-overflow: ellipsis;
++    white-space: nowrap;
++}
++
++.audit-source-line {
++    display: inline-flex;
++    max-width: 100%;
++    align-items: center;
++    gap: 0.32rem;
++    margin-top: 0.3rem;
++    color: var(--audit-text-soft);
++    font-size: 0.67rem;
++    font-weight: 650;
++}
++
++.audit-source-line i {
++    color: var(--audit-primary);
++}
++
++.audit-activity-heading {
++    display: flex;
++    align-items: flex-start;
++    gap: 0.5rem;
++}
++
++.audit-activity-heading strong {
++    min-width: 0;
++    flex: 0 1 auto;
++    color: var(--audit-text);
++    font-size: 0.79rem;
++    font-weight: 710;
++    line-height: 1.35;
++}
++
++.audit-chip,
++.audit-reference,
++.audit-outcome {
++    display: inline-flex;
++    align-items: center;
++    border-radius: 999px;
++    font-size: 0.64rem;
++    font-weight: 720;
++    line-height: 1.2;
++}
++
++.audit-chip {
++    flex: 0 0 auto;
++    padding: 0.25rem 0.48rem;
++    background: var(--audit-primary-soft);
++    color: var(--audit-primary-strong);
++    white-space: nowrap;
++}
++
++.audit-cell-activity > p {
++    display: -webkit-box;
++    max-width: 650px;
++    margin: 0.38rem 0 0;
++    overflow: hidden;
++    color: var(--audit-text-soft);
++    font-size: 0.7rem;
++    line-height: 1.48;
++    -webkit-box-orient: vertical;
++    -webkit-line-clamp: 2;
++}
++
++.audit-reference {
++    max-width: 100%;
++    padding: 0.3rem 0.5rem;
++    overflow: hidden;
++    border: 1px solid var(--audit-border);
++    background: var(--audit-surface-subtle);
++    color: var(--audit-text-soft);
++    text-decoration: none;
++    text-overflow: ellipsis;
++    white-space: nowrap;
++}
++
++.audit-reference:hover {
++    border-color: var(--audit-primary);
++    color: var(--audit-primary-strong);
++}
++
++.audit-reference-static {
++    pointer-events: none;
++}
++
++.audit-reference-empty {
++    color: var(--audit-muted);
++    font-size: 0.68rem;
++}
++
++.audit-outcome {
++    gap: 0.35rem;
++    padding: 0.3rem 0.52rem;
++    white-space: nowrap;
++}
++
++.audit-outcome > span {
++    width: 0.42rem;
++    height: 0.42rem;
++    border-radius: 50%;
++    background: currentColor;
++}
++
++.audit-outcome.success {
++    background: var(--audit-success-soft);
++    color: var(--audit-success);
++}
++
++.audit-outcome.warning {
++    background: var(--audit-warning-soft);
++    color: var(--audit-warning);
++}
++
++.audit-outcome.failed {
++    background: var(--audit-danger-soft);
++    color: var(--audit-danger);
++}
++
++.audit-outcome.info {
++    background: var(--audit-info-soft);
++    color: var(--audit-info);
++}
++
++.audit-cell-action {
++    text-align: right !important;
++}
++
++.audit-row-action {
++    display: inline-flex;
++    min-height: 2rem;
++    align-items: center;
++    justify-content: center;
++    gap: 0.34rem;
++    padding: 0 0.55rem;
++    border: 1px solid var(--audit-border);
++    border-radius: 7px;
++    background: var(--audit-surface);
++    color: var(--audit-text-soft);
++    font-size: 0.68rem;
++    font-weight: 700;
++    cursor: pointer;
++}
++
++.audit-row-action:hover {
++    border-color: var(--audit-primary);
++    background: var(--audit-primary-soft);
++    color: var(--audit-primary-strong);
++}
++
++/* Empty and error states */
++.audit-state {
++    display: flex;
++    min-height: 190px;
++    align-items: center;
++    justify-content: center;
++    gap: 0.9rem;
++    padding: 2rem;
++    color: var(--audit-text-soft);
++    text-align: left;
++}
++
++.audit-state-icon {
++    display: inline-flex;
++    width: 2.7rem;
++    height: 2.7rem;
++    flex: 0 0 2.7rem;
++    align-items: center;
++    justify-content: center;
++    border-radius: 50%;
++    background: var(--audit-primary-soft);
++    color: var(--audit-primary-strong);
++}
++
++.audit-state h3 {
++    margin: 0;
++    color: var(--audit-text);
++    font-size: 0.95rem;
++}
++
++.audit-state p {
++    max-width: 620px;
++    margin: 0.28rem 0 0;
++    color: var(--audit-muted);
++    font-size: 0.76rem;
++    line-height: 1.5;
++}
++
++.audit-state > .audit-btn {
++    margin-left: 0.5rem;
++}
++
++.audit-state-error .audit-state-icon {
++    background: var(--audit-danger-soft);
++    color: var(--audit-danger);
++}
++
++.audit-state-error p {
++    color: var(--audit-danger);
++}
++
++.audit-empty-inline {
++    padding: 1rem;
++    border: 1px dashed var(--audit-border);
++    border-radius: var(--audit-radius-sm);
++    color: var(--audit-muted);
++    font-size: 0.74rem;
++    text-align: center;
++}
++
++/* Pagination */
++.audit-pagination {
++    display: flex;
++    align-items: center;
++    justify-content: space-between;
++    gap: 1rem;
++    padding: 0.78rem 1.1rem;
++    border-top: 1px solid var(--audit-border);
++    color: var(--audit-muted);
++    font-size: 0.72rem;
++}
++
++.audit-pagination strong {
++    color: var(--audit-text);
++}
++
++.audit-pages {
++    display: flex;
++    flex-wrap: wrap;
++    justify-content: flex-end;
++    gap: 0.3rem;
++}
++
++.audit-page-link {
++    display: inline-flex;
++    min-width: 2rem;
++    height: 2rem;
++    align-items: center;
++    justify-content: center;
++    padding: 0 0.42rem;
++    border: 1px solid var(--audit-border);
++    border-radius: 7px;
++    background: var(--audit-surface);
++    color: var(--audit-text-soft);
++    font-size: 0.7rem;
++    font-weight: 700;
++    text-decoration: none;
++}
++
++.audit-page-link:hover:not(.disabled):not(.active) {
++    border-color: var(--audit-primary);
++    color: var(--audit-primary-strong);
++}
++
++.audit-page-link.active {
++    border-color: var(--audit-primary);
++    background: var(--audit-primary);
++    color: #ffffff;
++}
++
++.audit-page-link.disabled {
++    opacity: 0.45;
++    pointer-events: none;
++}
++
++.audit-page-nav {
++    font-size: 0.62rem !important;
++}
++
++/* Incident lifecycle */
++.lifecycle-head {
++    background: linear-gradient(135deg, var(--audit-surface-accent), var(--audit-surface));
++}
++
++.lifecycle-badges {
++    display: flex;
++    max-width: 52%;
++    flex-wrap: wrap;
++    justify-content: flex-end;
++    gap: 0.35rem;
++}
++
++.lifecycle-body {
++    display: grid;
++    grid-template-columns: minmax(270px, 0.82fr) minmax(420px, 1.35fr);
++    gap: 1rem;
++    padding: 1rem 1.1rem 1.1rem;
++}
++
++.duration-panel h3,
++.timeline-panel h3 {
++    margin: 0 0 0.68rem;
++    color: var(--audit-text);
++    font-size: 0.78rem;
++    font-weight: 710;
++}
++
++.duration-grid {
++    display: grid;
++    grid-template-columns: repeat(2, minmax(0, 1fr));
++    gap: 0.52rem;
++}
++
++.duration-item {
++    min-width: 0;
++    padding: 0.66rem;
++    border: 1px solid var(--audit-border);
++    border-radius: 9px;
++    background: var(--audit-surface-subtle);
++}
++
++.duration-item span {
++    display: block;
++    color: var(--audit-muted);
++    font-size: 0.64rem;
++    line-height: 1.35;
++}
++
++.duration-item strong {
++    display: block;
++    margin-top: 0.28rem;
++    color: var(--audit-text);
++    font-size: 0.82rem;
++    font-weight: 720;
++}
++
++.timeline {
++    position: relative;
++    display: grid;
++    gap: 0.1rem;
++}
++
++.timeline::before {
++    position: absolute;
++    top: 0.6rem;
++    bottom: 0.6rem;
++    left: 0.72rem;
++    width: 2px;
++    background: var(--audit-border);
++    content: "";
++}
++
++.timeline-item {
++    position: relative;
++    display: grid;
++    grid-template-columns: 1.5rem minmax(0, 1fr);
++    gap: 0.6rem;
++    padding: 0 0 0.72rem;
++}
++
++.timeline-dot {
++    position: relative;
++    z-index: 1;
++    display: inline-flex;
++    width: 1.5rem;
++    height: 1.5rem;
++    align-items: center;
++    justify-content: center;
++    border: 3px solid var(--audit-surface);
++    border-radius: 50%;
++    background: var(--audit-primary);
++    color: #ffffff;
++    font-size: 0.48rem;
++}
++
++.timeline-content {
++    min-width: 0;
++    padding: 0.62rem 0.68rem;
++    border: 1px solid var(--audit-border);
++    border-radius: 9px;
++    background: var(--audit-surface-subtle);
++}
++
++.timeline-top {
++    display: flex;
++    align-items: flex-start;
++    justify-content: space-between;
++    gap: 0.7rem;
++}
++
++.timeline-top strong {
++    color: var(--audit-text);
++    font-size: 0.73rem;
++    line-height: 1.35;
++}
++
++.timeline-top time {
++    flex: 0 0 auto;
++    color: var(--audit-muted);
++    font-size: 0.63rem;
++    white-space: nowrap;
++}
++
++.timeline-content p {
++    margin: 0.34rem 0 0;
++    color: var(--audit-text-soft);
++    font-size: 0.67rem;
++    line-height: 1.45;
++}
++
++.timeline-meta {
++    display: flex;
++    flex-wrap: wrap;
++    gap: 0.3rem 0.62rem;
++    margin-top: 0.42rem;
++    color: var(--audit-muted);
++    font-size: 0.61rem;
++}
++
++.timeline-meta span:not(:first-child)::before {
++    margin-right: 0.62rem;
++    color: var(--audit-border-strong);
++    content: "•";
++}
++
++.lifecycle-missing {
++    display: flex;
++    align-items: center;
++    gap: 0.7rem;
++    padding: 1rem 1.1rem;
++    color: var(--audit-warning);
++}
++
++.lifecycle-missing > i {
++    font-size: 1rem;
++}
++
++.lifecycle-missing strong,
++.lifecycle-missing span {
++    display: block;
++}
++
++.lifecycle-missing strong {
++    color: var(--audit-text);
++    font-size: 0.8rem;
++}
++
++.lifecycle-missing span {
++    margin-top: 0.16rem;
++    color: var(--audit-muted);
++    font-size: 0.7rem;
++}
++
++/* Log details dialog */
++.audit-detail-dialog {
++    width: min(740px, calc(100vw - 2rem));
++    max-height: min(86vh, 820px);
++    padding: 0;
++    overflow: hidden;
++    border: 1px solid var(--audit-border-strong);
++    border-radius: var(--audit-radius-lg);
++    background: var(--audit-surface);
++    color: var(--audit-text);
++    box-shadow: var(--audit-shadow-md);
++}
++
++.audit-detail-dialog:not([open]) {
++    display: none;
++}
++
++.audit-detail-dialog::backdrop {
++    background: rgba(7, 16, 20, 0.62);
++    backdrop-filter: blur(2px);
++}
++
++.audit-dialog-shell {
++    display: grid;
++    max-height: inherit;
++    grid-template-rows: auto minmax(0, 1fr) auto;
++}
++
++.audit-dialog-header {
++    display: flex;
++    align-items: flex-start;
++    justify-content: space-between;
++    gap: 1rem;
++    padding: 1.1rem 1.2rem;
++    border-bottom: 1px solid var(--audit-border);
++    background: var(--audit-surface-subtle);
++}
++
++.audit-dialog-header > div {
++    min-width: 0;
++}
++
++.audit-dialog-header > div > span {
++    display: block;
++    color: var(--audit-muted);
++    font-size: 0.68rem;
++    font-weight: 650;
++}
++
++.audit-dialog-header h2 {
++    margin: 0.28rem 0 0;
++    color: var(--audit-text);
++    font-size: 1.12rem;
++    font-weight: 740;
++    letter-spacing: -0.015em;
++}
++
++.audit-dialog-header p {
++    margin: 0.28rem 0 0;
++    color: var(--audit-muted);
++    font-size: 0.72rem;
++}
++
++.audit-dialog-close {
++    display: inline-flex;
++    width: 2.1rem;
++    height: 2.1rem;
++    flex: 0 0 2.1rem;
++    align-items: center;
++    justify-content: center;
++    border: 1px solid var(--audit-border);
++    border-radius: 8px;
++    background: var(--audit-surface);
++    color: var(--audit-text-soft);
++    cursor: pointer;
++}
++
++.audit-dialog-close:hover {
++    border-color: var(--audit-danger);
++    color: var(--audit-danger);
++}
++
++.audit-dialog-body {
++    overflow-y: auto;
++    padding: 1rem 1.2rem 1.2rem;
++}
++
++.audit-dialog-summary {
++    padding: 0.85rem;
++    border: 1px solid var(--audit-border);
++    border-radius: var(--audit-radius);
++    background: var(--audit-surface-subtle);
++}
++
++.audit-dialog-summary > div {
++    display: flex;
++    flex-wrap: wrap;
++    gap: 0.4rem;
++}
++
++.audit-dialog-summary p {
++    margin: 0.62rem 0 0;
++    color: var(--audit-text-soft);
++    font-size: 0.76rem;
++    line-height: 1.55;
++}
++
++.audit-detail-grid {
++    display: grid;
++    grid-template-columns: repeat(2, minmax(0, 1fr));
++    gap: 0;
++    margin: 1rem 0 0;
++    overflow: hidden;
++    border: 1px solid var(--audit-border);
++    border-radius: var(--audit-radius);
++}
++
++.audit-detail-grid > div {
++    min-width: 0;
++    padding: 0.68rem 0.78rem;
++    border-right: 1px solid var(--audit-border);
++    border-bottom: 1px solid var(--audit-border);
++}
++
++.audit-detail-grid > div:nth-child(even) {
++    border-right: 0;
++}
++
++.audit-detail-grid > div:nth-last-child(-n + 2) {
++    border-bottom: 0;
++}
++
++.audit-detail-grid > .audit-detail-wide {
++    grid-column: 1 / -1;
++    border-right: 0;
++}
++
++.audit-detail-grid > .audit-detail-wide:not(:last-child) {
++    border-bottom: 1px solid var(--audit-border);
++}
++
++.audit-detail-grid dt {
++    color: var(--audit-muted);
++    font-size: 0.62rem;
++    font-weight: 700;
++    letter-spacing: 0.035em;
++    text-transform: uppercase;
++}
++
++.audit-detail-grid dd {
++    margin: 0.28rem 0 0;
++    color: var(--audit-text);
++    font-size: 0.72rem;
++    line-height: 1.45;
++}
++
++.audit-mono {
++    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
++    font-size: 0.66rem !important;
++}
++
++.audit-breakable {
++    overflow-wrap: anywhere;
++}
++
++.audit-metadata {
++    margin-top: 1rem;
++}
++
++.audit-metadata > div {
++    display: flex;
++    align-items: baseline;
++    justify-content: space-between;
++    gap: 1rem;
++}
++
++.audit-metadata h3 {
++    margin: 0;
++    color: var(--audit-text);
++    font-size: 0.78rem;
++}
++
++.audit-metadata > div > span {
++    color: var(--audit-muted);
++    font-size: 0.65rem;
++}
++
++.audit-metadata pre {
++    max-height: 250px;
++    margin: 0.48rem 0 0;
++    padding: 0.8rem;
++    overflow: auto;
++    border: 1px solid var(--audit-border);
++    border-radius: var(--audit-radius-sm);
++    background: #111820;
++    color: #d9e5eb;
++    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
++    font-size: 0.66rem;
++    line-height: 1.5;
++    white-space: pre-wrap;
++    word-break: break-word;
++}
++
++.audit-dialog-footer {
++    display: flex;
++    justify-content: flex-end;
++    padding: 0.8rem 1.2rem;
++    border-top: 1px solid var(--audit-border);
++    background: var(--audit-surface-subtle);
++}
++
++html.audit-dialog-is-open,
++html.audit-dialog-is-open body {
++    overflow: hidden;
++}
++
++/* Switch records to cards whenever the panel itself becomes narrow. */
++@container audit-records (max-width: 1000px) {
++    .audit-table-shell {
++        overflow: visible;
++        padding: 0.72rem;
++        background: var(--audit-surface-subtle);
++    }
++
++    .audit-log-table,
++    .audit-log-table tbody {
++        display: block;
++        width: 100%;
++        min-width: 0;
++    }
++
++    .audit-log-table colgroup,
++    .audit-log-table thead {
++        display: none;
++    }
++
++    .audit-log-table tbody {
++        display: grid;
++        gap: 0.68rem;
++    }
++
++    .audit-log-table tr {
++        display: grid;
++        grid-template-columns: minmax(155px, 0.62fr) minmax(0, 1.38fr) auto;
++        gap: 0.72rem 0.85rem;
++        padding: 0.82rem;
++        border: 1px solid var(--audit-border);
++        border-radius: var(--audit-radius);
++        background: var(--audit-surface);
++        box-shadow: var(--audit-shadow-sm);
++    }
++
++    .audit-log-table tbody tr:hover {
++        background: var(--audit-surface);
++    }
++
++    .audit-log-table td {
++        display: block;
++        padding: 0;
++        border: 0 !important;
++    }
++
++    .audit-log-table td::before {
++        display: block;
++        margin-bottom: 0.35rem;
++        color: var(--audit-muted);
++        content: attr(data-label);
++        font-size: 0.61rem;
++        font-weight: 750;
++        letter-spacing: 0.05em;
++        text-transform: uppercase;
++    }
++
++    .audit-cell-time {
++        grid-column: 1;
++    }
++
++    .audit-cell-actor {
++        grid-column: 2 / -1;
++    }
++
++    .audit-cell-activity {
++        grid-column: 1 / -1;
++        padding-top: 0.7rem !important;
++        border-top: 1px solid var(--audit-border) !important;
++    }
++
++    .audit-cell-reference {
++        grid-column: 1 / 3;
++    }
++
++    .audit-cell-outcome {
++        grid-column: 3;
++    }
++
++    .audit-cell-action {
++        grid-column: 1 / -1;
++        text-align: left !important;
++    }
++
++    .audit-cell-action::before {
++        display: none !important;
++    }
++
++    .audit-row-action {
++        width: 100%;
++    }
++}
++
++/* Responsive organization */
++@media (max-width: 1280px) {
++    .audit-metrics {
++        grid-template-columns: repeat(3, minmax(0, 1fr));
++    }
++
++    .audit-advanced-grid {
++        grid-template-columns: repeat(3, minmax(150px, 1fr));
++    }
++}
++
++@media (max-width: 960px) {
++    .audit-page-header {
++        align-items: flex-start;
++        flex-direction: column;
++        gap: 0.8rem;
++    }
++
++    .audit-header-meta {
++        display: flex;
++        align-items: center;
++        justify-items: start;
++        flex-wrap: wrap;
++    }
++
++    .audit-primary-filters {
++        grid-template-columns: minmax(0, 1fr) minmax(0, 0.75fr) auto;
++    }
++
++    .audit-advanced-grid {
++        grid-template-columns: repeat(2, minmax(150px, 1fr));
++    }
++
++    .lifecycle-body {
++        grid-template-columns: 1fr;
++    }
++}
++
++@media (max-width: 760px) {
++    .audit-main {
++        padding-left: 0.8rem;
++        padding-right: 0.8rem;
++    }
++
++    .audit-page {
++        gap: 0.8rem;
++    }
++
++    .audit-metrics {
++        grid-template-columns: repeat(2, minmax(0, 1fr));
++        gap: 0.55rem;
++    }
++
++    .audit-metric {
++        padding: 0.72rem;
++    }
++
++    .audit-panel-header,
++    .lifecycle-head {
++        align-items: stretch;
++        flex-direction: column;
++        gap: 0.8rem;
++    }
++
++    .audit-panel-actions,
++    .lifecycle-badges {
++        max-width: none;
++        justify-content: flex-start;
++    }
++
++    .audit-primary-filters {
++        grid-template-columns: 1fr;
++    }
++
++    .audit-primary-submit {
++        width: 100%;
++    }
++
++    .audit-advanced-filters summary {
++        grid-template-columns: minmax(0, 1fr) auto auto;
++    }
++
++    .audit-advanced-description {
++        display: none;
++    }
++
++    .audit-advanced-grid {
++        grid-template-columns: 1fr;
++    }
++
++    .audit-advanced-footer,
++    .audit-active-filters,
++    .audit-results-bar,
++    .audit-pagination {
++        align-items: flex-start;
++        flex-direction: column;
++    }
++
++    .audit-advanced-footer > div,
++    .audit-panel-actions {
++        width: 100%;
++    }
++
++    .audit-advanced-footer .audit-btn,
++    .audit-panel-actions .audit-btn {
++        flex: 1 1 auto;
++    }
++
++    .audit-active-filters {
++        gap: 0.5rem;
++    }
++
++    .audit-filter-chips {
++        width: 100%;
++    }
++
++    .audit-results-meta {
++        justify-content: flex-start;
++    }
++
++    .audit-log-table tr {
++        grid-template-columns: minmax(0, 1fr) auto;
++    }
++
++    .audit-cell-time,
++    .audit-cell-actor,
++    .audit-cell-activity {
++        grid-column: 1 / -1;
++    }
++
++    .audit-cell-actor {
++        padding-top: 0.7rem !important;
++        border-top: 1px solid var(--audit-border) !important;
++    }
++
++    .audit-cell-reference {
++        grid-column: 1;
++    }
++
++    .audit-cell-outcome {
++        grid-column: 2;
++    }
++
++    .audit-detail-dialog {
++        width: calc(100vw - 1rem);
++        max-height: calc(100vh - 1rem);
++        border-radius: 13px;
++    }
++
++    .audit-detail-grid {
++        grid-template-columns: 1fr;
++    }
++
++    .audit-detail-grid > div,
++    .audit-detail-grid > div:nth-child(even) {
++        grid-column: 1;
++        border-right: 0;
++        border-bottom: 1px solid var(--audit-border);
++    }
++
++    .audit-detail-grid > div:last-child {
++        border-bottom: 0;
++    }
++
++    .audit-detail-grid > div:nth-last-child(-n + 2) {
++        border-bottom: 1px solid var(--audit-border);
++    }
++
++    .audit-detail-grid > div:last-child {
++        border-bottom: 0;
++    }
++
++    .duration-grid {
++        grid-template-columns: 1fr;
++    }
++}
++
++@media (max-width: 480px) {
++    .audit-metrics {
++        grid-template-columns: 1fr;
++    }
++
++    .audit-record-state,
++    .audit-latest {
++        white-space: normal;
++    }
++
++    .audit-advanced-footer > div,
++    .audit-panel-actions {
++        flex-direction: column;
++    }
++
++    .audit-filter-chip {
++        max-width: 100%;
++    }
++
++    .audit-log-table tr {
++        grid-template-columns: 1fr;
++    }
++
++    .audit-cell-reference,
++    .audit-cell-outcome {
++        grid-column: 1;
++    }
++
++    .timeline-top {
++        flex-direction: column;
++        gap: 0.2rem;
++    }
++
++    .timeline-top time {
++        white-space: normal;
++    }
++
++    .audit-dialog-header,
++    .audit-dialog-body,
++    .audit-dialog-footer {
++        padding-left: 0.9rem;
++        padding-right: 0.9rem;
++    }
++
++    .audit-metadata > div {
++        align-items: flex-start;
++        flex-direction: column;
++        gap: 0.2rem;
++    }
++}
++
++@media (prefers-reduced-motion: reduce) {
++    .audit-btn,
++    .audit-advanced-chevron,
++    .audit-input,
++    .audit-select,
++    .audit-log-table tbody tr {
++        transition: none;
++    }
++}
+diff --git a/js/audit.js b/js/audit.js
+new file mode 100644
+--- /dev/null
++++ b/js/audit.js
+@@ -0,0 +1,85 @@
++(() => {
++    'use strict';
++
++    const root = document.documentElement;
++    const isDialogElement = (value) => typeof Element !== 'undefined'
++        && value instanceof Element
++        && value.tagName === 'DIALOG';
++
++    const openDialog = (dialog) => {
++        if (!isDialogElement(dialog)) {
++            return;
++        }
++
++        if (typeof dialog.showModal === 'function') {
++            dialog.showModal();
++        } else {
++            dialog.setAttribute('open', '');
++        }
++
++        root.classList.add('audit-dialog-is-open');
++    };
++
++    const closeDialog = (dialog) => {
++        if (!isDialogElement(dialog)) {
++            return;
++        }
++
++        if (typeof dialog.close === 'function') {
++            dialog.close();
++        } else {
++            dialog.removeAttribute('open');
++            root.classList.remove('audit-dialog-is-open');
++        }
++    };
++
++    document.addEventListener('click', (event) => {
++        const target = event.target;
++        if (!(target instanceof Element)) {
++            return;
++        }
++
++        const opener = target.closest('[data-audit-dialog]');
++        if (opener) {
++            const dialogId = opener.getAttribute('data-audit-dialog');
++            const dialog = dialogId ? document.getElementById(dialogId) : null;
++            if (isDialogElement(dialog)) {
++                openDialog(dialog);
++            }
++            return;
++        }
++
++        const closer = target.closest('[data-audit-dialog-close]');
++        if (closer) {
++            closeDialog(closer.closest('dialog'));
++        }
++    });
++
++    document.querySelectorAll('.audit-detail-dialog').forEach((dialog) => {
++        dialog.addEventListener('close', () => {
++            if (!document.querySelector('.audit-detail-dialog[open]')) {
++                root.classList.remove('audit-dialog-is-open');
++            }
++        });
++
++        dialog.addEventListener('cancel', () => {
++            root.classList.remove('audit-dialog-is-open');
++        });
++
++        dialog.addEventListener('click', (event) => {
++            if (event.target !== dialog) {
++                return;
++            }
++
++            const bounds = dialog.getBoundingClientRect();
++            const outside = event.clientX < bounds.left
++                || event.clientX > bounds.right
++                || event.clientY < bounds.top
++                || event.clientY > bounds.bottom;
++
++            if (outside) {
++                closeDialog(dialog);
++            }
++        });
++    });
++})();

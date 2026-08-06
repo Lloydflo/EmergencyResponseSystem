@@ -1015,6 +1015,69 @@ try {
 
 $showStart = $matchingCount > 0 ? $offset + 1 : 0;
 $showEnd = min($offset + count($auditRows), $matchingCount);
+
+$activeFilters = [];
+$advancedFilterCount = 0;
+
+if ($search !== '') {
+    $activeFilters[] = [
+        'label' => 'Search: “' . $search . '”',
+        'url' => audit_query_url(['q' => null, 'page' => 1]),
+    ];
+}
+if ($referenceFilter !== '') {
+    $activeFilters[] = [
+        'label' => 'Reference: ' . $referenceFilter,
+        'url' => audit_query_url(['reference' => null, 'page' => 1]),
+    ];
+}
+if ($roleFilter !== '') {
+    $advancedFilterCount++;
+    $activeFilters[] = [
+        'label' => 'Role: ' . audit_label($roleFilter),
+        'url' => audit_query_url(['role' => null, 'page' => 1]),
+    ];
+}
+if ($sourceFilter !== '') {
+    $advancedFilterCount++;
+    $activeFilters[] = [
+        'label' => 'Source: ' . audit_source_label($sourceFilter),
+        'url' => audit_query_url(['source' => null, 'page' => 1]),
+    ];
+}
+if ($categoryFilter !== '') {
+    $advancedFilterCount++;
+    $activeFilters[] = [
+        'label' => 'Process: ' . audit_category_label($categoryFilter),
+        'url' => audit_query_url(['category' => null, 'page' => 1]),
+    ];
+}
+if ($outcomeFilter !== '') {
+    $advancedFilterCount++;
+    $activeFilters[] = [
+        'label' => 'Outcome: ' . ucfirst($outcomeFilter),
+        'url' => audit_query_url(['outcome' => null, 'page' => 1]),
+    ];
+}
+if ($dateFrom !== '' || $dateTo !== '') {
+    $advancedFilterCount++;
+    $dateFromLabel = $dateFrom !== '' ? date('M j, Y', strtotime($dateFrom)) : 'Any date';
+    $dateToLabel = $dateTo !== '' ? date('M j, Y', strtotime($dateTo)) : 'Present';
+    $activeFilters[] = [
+        'label' => 'Date: ' . $dateFromLabel . ' – ' . $dateToLabel,
+        'url' => audit_query_url(['date_from' => null, 'date_to' => null, 'page' => 1]),
+    ];
+}
+
+$clearAdvancedUrl = audit_query_url([
+    'role' => null,
+    'source' => null,
+    'category' => null,
+    'outcome' => null,
+    'date_from' => null,
+    'date_to' => null,
+    'page' => 1,
+]);
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -1030,195 +1093,57 @@ $showEnd = min($offset + count($auditRows), $matchingCount);
     <link rel="stylesheet" href="css/sidebar.css">
     <link rel="stylesheet" href="css/admin-header.css">
     <link rel="stylesheet" href="css/sidebar-footer.css">
-    <style>
-        :root {
-            --audit-bg: #f4f7fb;
-            --audit-card: #ffffff;
-            --audit-text: #172033;
-            --audit-muted: #64748b;
-            --audit-border: #dbe4ee;
-            --audit-primary: #0f766e;
-            --audit-primary-dark: #115e59;
-            --audit-soft: #eef8f7;
-            --audit-header: #f8fafc;
-            --audit-success: #047857;
-            --audit-success-bg: #d1fae5;
-            --audit-warning: #a16207;
-            --audit-warning-bg: #fef3c7;
-            --audit-danger: #b91c1c;
-            --audit-danger-bg: #fee2e2;
-            --audit-info: #1d4ed8;
-            --audit-info-bg: #dbeafe;
-            --audit-shadow: 0 8px 24px rgba(15, 23, 42, .07);
-        }
-        html[data-theme="dark"] {
-            --audit-bg: #0b1220;
-            --audit-card: #111827;
-            --audit-text: #f8fafc;
-            --audit-muted: #94a3b8;
-            --audit-border: #334155;
-            --audit-primary: #2dd4bf;
-            --audit-primary-dark: #14b8a6;
-            --audit-soft: #102725;
-            --audit-header: #172033;
-            --audit-success: #6ee7b7;
-            --audit-success-bg: #063c32;
-            --audit-warning: #fde68a;
-            --audit-warning-bg: #49340a;
-            --audit-danger: #fca5a5;
-            --audit-danger-bg: #4c1717;
-            --audit-info: #93c5fd;
-            --audit-info-bg: #172e58;
-            --audit-shadow: 0 8px 24px rgba(0, 0, 0, .22);
-        }
-        .main-content {
-            flex: 1 0 auto;
-            padding: 4rem 1.35rem 3rem;
-            background: radial-gradient(circle at 100% 0, rgba(20, 184, 166, .12), transparent 32%), var(--audit-bg);
-        }
-        .audit-shell { display: grid; gap: 1rem; }
-        .audit-head { display: flex; justify-content: space-between; align-items: flex-end; gap: 1rem; }
-        .audit-head h1 { margin: 0; color: var(--audit-text); font-size: 1.72rem; line-height: 1.2; }
-        .audit-head p { max-width: 860px; margin: .4rem 0 0; color: var(--audit-muted); font-size: .93rem; line-height: 1.5; }
-        .audit-updated { display: inline-flex; align-items: center; gap: .45rem; padding: .52rem .72rem; border: 1px solid var(--audit-border); border-radius: 999px; background: var(--audit-card); color: var(--audit-muted); font-size: .8rem; font-weight: 800; white-space: nowrap; }
-        .audit-stats { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: .72rem; }
-        .audit-stat { position: relative; overflow: hidden; padding: .92rem; border: 1px solid var(--audit-border); border-radius: 13px; background: var(--audit-card); box-shadow: var(--audit-shadow); }
-        .audit-stat::after { position: absolute; right: -.75rem; bottom: -.9rem; width: 3.6rem; height: 3.6rem; border-radius: 50%; background: rgba(20, 184, 166, .08); content: ""; }
-        .audit-stat span { display: block; color: var(--audit-muted); font-size: .72rem; font-weight: 850; letter-spacing: .04em; text-transform: uppercase; }
-        .audit-stat strong { display: block; margin-top: .36rem; color: var(--audit-text); font-size: 1.46rem; line-height: 1; }
-        .audit-card { overflow: hidden; border: 1px solid var(--audit-border); border-radius: 14px; background: var(--audit-card); box-shadow: var(--audit-shadow); }
-        .audit-card-title { display: flex; align-items: center; justify-content: space-between; gap: 1rem; padding: .9rem 1rem; border-bottom: 1px solid var(--audit-border); }
-        .audit-card-title h2 { margin: 0; color: var(--audit-text); font-size: 1.03rem; }
-        .audit-card-title p { margin: .25rem 0 0; color: var(--audit-muted); font-size: .8rem; }
-        .audit-toolbar { display: grid; grid-template-columns: minmax(230px, 1.4fr) minmax(180px, .9fr) repeat(4, minmax(145px, .65fr)); gap: .62rem; padding: .9rem; background: var(--audit-soft); border-bottom: 1px solid var(--audit-border); }
-        .audit-toolbar-secondary { display: grid; grid-template-columns: repeat(3, minmax(150px, .6fr)) minmax(120px, .45fr) auto; gap: .62rem; grid-column: 1 / -1; }
-        .audit-field { display: grid; gap: .28rem; }
-        .audit-field label { color: var(--audit-muted); font-size: .68rem; font-weight: 850; letter-spacing: .04em; text-transform: uppercase; }
-        .audit-input, .audit-select { width: 100%; min-height: 41px; padding: .58rem .68rem; border: 1px solid #cbd5e1; border-radius: 9px; background: #fff; color: #172033; font: inherit; font-size: .84rem; }
-        html[data-theme="dark"] .audit-input, html[data-theme="dark"] .audit-select { border-color: #334155; background: #0f172a; color: #f8fafc; }
-        .audit-input:focus, .audit-select:focus { outline: none; border-color: var(--audit-primary); box-shadow: 0 0 0 3px rgba(20, 184, 166, .14); }
-        .audit-actions { display: flex; align-items: end; gap: .42rem; }
-        .audit-btn { min-height: 41px; padding: 0 .74rem; border: 1px solid var(--audit-border); border-radius: 9px; background: #fff; color: #172033; font: inherit; font-size: .82rem; font-weight: 850; text-decoration: none; white-space: nowrap; cursor: pointer; display: inline-flex; align-items: center; justify-content: center; gap: .4rem; }
-        .audit-btn.primary { border-color: var(--audit-primary); background: var(--audit-primary); color: #fff; }
-        .audit-btn.primary:hover { background: var(--audit-primary-dark); }
-        html[data-theme="dark"] .audit-btn { border-color: #334155; background: #0f172a; color: #e5e7eb; }
-        html[data-theme="dark"] .audit-btn.primary { border-color: #0f766e; background: #0f766e; color: #fff; }
-        .audit-note { display: flex; align-items: flex-start; gap: .52rem; margin: 0; padding: .75rem .9rem; border-bottom: 1px solid var(--audit-border); background: var(--audit-card); color: var(--audit-muted); font-size: .8rem; line-height: 1.45; }
-        .audit-note i { margin-top: .08rem; color: var(--audit-primary); }
-        .audit-summary { display: flex; align-items: center; justify-content: space-between; gap: 1rem; padding: .75rem .9rem; border-bottom: 1px solid var(--audit-border); color: var(--audit-muted); font-size: .8rem; }
-        .audit-summary strong { color: var(--audit-text); }
-        .audit-table-wrap { overflow: auto; }
-        .audit-table { width: 100%; min-width: 1460px; border-collapse: collapse; }
-        .audit-table th, .audit-table td { padding: .72rem .68rem; border-bottom: 1px solid #edf2f7; text-align: left; vertical-align: top; font-size: .81rem; }
-        html[data-theme="dark"] .audit-table th, html[data-theme="dark"] .audit-table td { border-bottom-color: #1f2937; }
-        .audit-table th { position: sticky; top: 0; z-index: 2; background: var(--audit-header); color: var(--audit-muted); font-size: .68rem; font-weight: 900; letter-spacing: .045em; text-transform: uppercase; }
-        .audit-table tbody tr:hover td { background: rgba(20, 184, 166, .035); }
-        .audit-log-no { color: var(--audit-text); font-size: .9rem; font-weight: 900; text-align: center; }
-        .audit-time strong { display: block; color: var(--audit-text); white-space: nowrap; }
-        .audit-time span { display: block; margin-top: .17rem; color: var(--audit-muted); font-size: .72rem; }
-        .audit-actor { display: flex; gap: .52rem; align-items: flex-start; min-width: 180px; }
-        .audit-avatar { display: inline-flex; width: 28px; height: 28px; flex: 0 0 28px; align-items: center; justify-content: center; border-radius: 8px; background: var(--audit-soft); color: var(--audit-primary); }
-        .audit-actor strong, .audit-process strong { display: block; color: var(--audit-text); }
-        .audit-actor span, .audit-process span { display: block; margin-top: .14rem; color: var(--audit-muted); font-size: .71rem; line-height: 1.35; }
-        .audit-source { display: inline-flex; align-items: center; gap: .35rem; min-width: 130px; color: var(--audit-text); font-weight: 800; }
-        .audit-source i { color: var(--audit-primary); }
-        .audit-chip, .audit-outcome, .audit-reference { display: inline-flex; align-items: center; border-radius: 999px; padding: .24rem .53rem; font-size: .69rem; font-weight: 850; white-space: nowrap; }
-        .audit-chip { background: var(--audit-soft); color: var(--audit-primary-dark); }
-        html[data-theme="dark"] .audit-chip { color: var(--audit-primary); }
-        .audit-reference { max-width: 170px; overflow: hidden; border: 1px solid var(--audit-border); background: var(--audit-card); color: var(--audit-text); text-overflow: ellipsis; text-decoration: none; }
-        .audit-reference:hover { border-color: var(--audit-primary); color: var(--audit-primary); }
-        .audit-reference-empty { color: var(--audit-muted); font-size: .74rem; }
-        .audit-outcome.success { background: var(--audit-success-bg); color: var(--audit-success); }
-        .audit-outcome.warning { background: var(--audit-warning-bg); color: var(--audit-warning); }
-        .audit-outcome.failed { background: var(--audit-danger-bg); color: var(--audit-danger); }
-        .audit-outcome.info { background: var(--audit-info-bg); color: var(--audit-info); }
-        .audit-detail-text { max-width: 360px; color: var(--audit-text); line-height: 1.43; }
-        .audit-tech { margin-top: .38rem; }
-        .audit-tech summary { color: var(--audit-primary); font-size: .7rem; font-weight: 850; cursor: pointer; }
-        .audit-tech-grid { display: grid; gap: .32rem; margin-top: .45rem; padding: .55rem; border: 1px solid var(--audit-border); border-radius: 8px; background: var(--audit-header); color: var(--audit-muted); font-size: .68rem; line-height: 1.4; }
-        .audit-tech-grid strong { color: var(--audit-text); }
-        .audit-tech pre { max-width: 390px; max-height: 210px; margin: .15rem 0 0; padding: .5rem; overflow: auto; border-radius: 7px; background: #0f172a; color: #e2e8f0; font-size: .66rem; white-space: pre-wrap; word-break: break-word; }
-        .audit-empty, .audit-error { padding: 2rem 1rem; text-align: center; color: var(--audit-muted); }
-        .audit-error { color: var(--audit-danger); font-weight: 800; }
-        .audit-pagination { display: flex; align-items: center; justify-content: space-between; gap: 1rem; padding: .78rem .9rem; }
-        .audit-pages { display: flex; flex-wrap: wrap; gap: .35rem; }
-        .audit-page { display: inline-flex; min-width: 34px; height: 34px; align-items: center; justify-content: center; border: 1px solid var(--audit-border); border-radius: 8px; background: var(--audit-card); color: var(--audit-text); font-size: .77rem; font-weight: 850; text-decoration: none; }
-        .audit-page.active { border-color: var(--audit-primary); background: var(--audit-primary); color: #fff; }
-        .audit-page.disabled { opacity: .45; pointer-events: none; }
-        .lifecycle-card { overflow: hidden; border: 1px solid var(--audit-border); border-radius: 14px; background: var(--audit-card); box-shadow: var(--audit-shadow); }
-        .lifecycle-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 1rem; padding: 1rem; border-bottom: 1px solid var(--audit-border); background: linear-gradient(135deg, var(--audit-soft), transparent); }
-        .lifecycle-head h2 { margin: 0; color: var(--audit-text); font-size: 1.08rem; }
-        .lifecycle-head p { margin: .3rem 0 0; color: var(--audit-muted); font-size: .8rem; }
-        .lifecycle-badges { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: .38rem; }
-        .lifecycle-body { display: grid; grid-template-columns: minmax(280px, .8fr) minmax(420px, 1.4fr); gap: 1rem; padding: 1rem; }
-        .duration-panel h3, .timeline-panel h3 { margin: 0 0 .72rem; color: var(--audit-text); font-size: .86rem; }
-        .duration-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .52rem; }
-        .duration-item { padding: .68rem; border: 1px solid var(--audit-border); border-radius: 10px; background: var(--audit-header); }
-        .duration-item span { display: block; color: var(--audit-muted); font-size: .67rem; line-height: 1.35; }
-        .duration-item strong { display: block; margin-top: .25rem; color: var(--audit-text); font-size: .9rem; }
-        .timeline { position: relative; display: grid; gap: .05rem; }
-        .timeline::before { position: absolute; top: .5rem; bottom: .5rem; left: 12px; width: 2px; background: var(--audit-border); content: ""; }
-        .timeline-item { position: relative; display: grid; grid-template-columns: 25px minmax(0, 1fr); gap: .65rem; padding: 0 0 .88rem; }
-        .timeline-dot { position: relative; z-index: 1; display: inline-flex; width: 25px; height: 25px; align-items: center; justify-content: center; border: 3px solid var(--audit-card); border-radius: 50%; background: var(--audit-primary); color: #fff; font-size: .58rem; }
-        .timeline-content { padding: .62rem .68rem; border: 1px solid var(--audit-border); border-radius: 10px; background: var(--audit-header); }
-        .timeline-top { display: flex; align-items: flex-start; justify-content: space-between; gap: .75rem; }
-        .timeline-top strong { color: var(--audit-text); font-size: .81rem; }
-        .timeline-top time { color: var(--audit-muted); font-size: .69rem; white-space: nowrap; }
-        .timeline-content p { margin: .35rem 0 0; color: var(--audit-muted); font-size: .73rem; line-height: 1.42; }
-        .timeline-meta { display: flex; flex-wrap: wrap; gap: .32rem; margin-top: .42rem; color: var(--audit-muted); font-size: .67rem; }
-        .lifecycle-missing { padding: 1rem; color: var(--audit-warning); font-size: .82rem; }
-        @media (max-width: 1280px) {
-            .audit-stats { grid-template-columns: repeat(3, minmax(0, 1fr)); }
-            .audit-toolbar { grid-template-columns: repeat(3, minmax(0, 1fr)); }
-            .audit-toolbar-secondary { grid-template-columns: repeat(3, minmax(0, 1fr)); }
-            .audit-actions { grid-column: 1 / -1; }
-        }
-        @media (max-width: 900px) {
-            .lifecycle-body { grid-template-columns: 1fr; }
-            .audit-stats { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-        }
-        @media (max-width: 680px) {
-            .main-content { padding: 1rem .68rem 2rem; }
-            .audit-head, .lifecycle-head, .audit-summary, .audit-pagination { align-items: flex-start; flex-direction: column; }
-            .audit-stats, .audit-toolbar, .audit-toolbar-secondary, .duration-grid { grid-template-columns: 1fr; }
-            .audit-actions { flex-direction: column; width: 100%; }
-            .audit-btn { width: 100%; }
-            .lifecycle-badges { justify-content: flex-start; }
-            .timeline-top { flex-direction: column; gap: .15rem; }
-        }
-    </style>
+    <link rel="stylesheet" href="css/audit.css">
+    <script src="js/audit.js" defer></script>
 </head>
 <body>
     <?php include $rootDir . '/includes/sidebar.php'; ?>
     <?php include $rootDir . '/includes/admin-header.php'; ?>
 
-    <main class="main-content">
-        <div class="main-container audit-shell">
-            <section class="audit-head">
-                <div>
-                    <h1>Operational Audit Trail</h1>
-                    <p>Hi <?php echo audit_h($adminName); ?>. Review the accountable sequence of actions performed by responders, dispatchers, administrators, connected APIs, and automated system processes.</p>
+    <main class="main-content audit-main">
+        <div class="main-container audit-page">
+            <header class="audit-page-header">
+                <div class="audit-title-block">
+                    <span class="audit-eyebrow"><i class="fas fa-shield-halved" aria-hidden="true"></i> Operational audit trail</span>
+                    <h1>Audit Logs</h1>
+                    <p>Review system activity, trace accountability, and inspect technical context without changing the underlying records.</p>
                 </div>
-                <div class="audit-updated">
-                    <i class="fas fa-clock"></i>
-                    <span>Latest log: <?php echo audit_h(audit_format_date($stats['latest'])); ?></span>
+                <div class="audit-header-meta" aria-label="Audit record status">
+                    <span class="audit-record-state"><span class="audit-status-dot" aria-hidden="true"></span> Read-only record</span>
+                    <span class="audit-latest"><i class="far fa-clock" aria-hidden="true"></i> Latest: <?php echo audit_h(audit_format_date($stats['latest'])); ?></span>
                 </div>
-            </section>
+            </header>
 
-            <section class="audit-stats" aria-label="Audit summary">
-                <div class="audit-stat"><span>Total logs</span><strong><?php echo number_format($stats['total']); ?></strong></div>
-                <div class="audit-stat"><span>Logged today</span><strong><?php echo number_format($stats['today']); ?></strong></div>
-                <div class="audit-stat"><span>Responder actions</span><strong><?php echo number_format($stats['responder']); ?></strong></div>
-                <div class="audit-stat"><span>Dispatcher actions</span><strong><?php echo number_format($stats['dispatcher']); ?></strong></div>
-                <div class="audit-stat"><span>Warnings / failures</span><strong><?php echo number_format($stats['attention']); ?></strong></div>
+            <section class="audit-metrics" aria-label="Audit summary">
+                <article class="audit-metric">
+                    <span class="audit-metric-icon"><i class="fas fa-list-check" aria-hidden="true"></i></span>
+                    <div><span>Total logs</span><strong><?php echo number_format($stats['total']); ?></strong></div>
+                </article>
+                <article class="audit-metric">
+                    <span class="audit-metric-icon"><i class="fas fa-calendar-day" aria-hidden="true"></i></span>
+                    <div><span>Logged today</span><strong><?php echo number_format($stats['today']); ?></strong></div>
+                </article>
+                <article class="audit-metric">
+                    <span class="audit-metric-icon"><i class="fas fa-truck-medical" aria-hidden="true"></i></span>
+                    <div><span>Responder actions</span><strong><?php echo number_format($stats['responder']); ?></strong></div>
+                </article>
+                <article class="audit-metric">
+                    <span class="audit-metric-icon"><i class="fas fa-headset" aria-hidden="true"></i></span>
+                    <div><span>Dispatcher actions</span><strong><?php echo number_format($stats['dispatcher']); ?></strong></div>
+                </article>
+                <article class="audit-metric audit-metric-attention">
+                    <span class="audit-metric-icon"><i class="fas fa-triangle-exclamation" aria-hidden="true"></i></span>
+                    <div><span>Needs attention</span><strong><?php echo number_format($stats['attention']); ?></strong></div>
+                </article>
             </section>
 
             <?php if ($lifecycle !== null): ?>
                 <section class="lifecycle-card" aria-label="Incident lifecycle">
                     <div class="lifecycle-head">
                         <div>
-                            <h2>Incident Lifecycle — <?php echo audit_h($referenceFilter); ?></h2>
-                            <p>Canonical operational milestones and elapsed response times for the selected incident reference.</p>
+                            <span class="audit-section-kicker">Selected incident</span>
+                            <h2>Lifecycle for <?php echo audit_h($referenceFilter); ?></h2>
+                            <p>Canonical milestones and elapsed response times for the exact reference.</p>
                         </div>
                         <div class="lifecycle-badges">
                             <?php if (is_array($lifecycle['incident'] ?? null)): ?>
@@ -1229,7 +1154,10 @@ $showEnd = min($offset + count($auditRows), $matchingCount);
                         </div>
                     </div>
                     <?php if (empty($lifecycle['found'])): ?>
-                        <div class="lifecycle-missing"><i class="fas fa-triangle-exclamation"></i> No incident, call, or audit lifecycle was found for this exact reference. Check the spelling or clear the reference filter.</div>
+                        <div class="lifecycle-missing">
+                            <i class="fas fa-triangle-exclamation" aria-hidden="true"></i>
+                            <div><strong>No lifecycle found.</strong><span>Check the reference spelling or remove the reference filter.</span></div>
+                        </div>
                     <?php else: ?>
                         <div class="lifecycle-body">
                             <div class="duration-panel">
@@ -1246,12 +1174,12 @@ $showEnd = min($offset + count($auditRows), $matchingCount);
                             <div class="timeline-panel">
                                 <h3>Recorded process timeline</h3>
                                 <?php if (empty($lifecycle['events'])): ?>
-                                    <div class="audit-empty">No timestamped lifecycle events are available.</div>
+                                    <div class="audit-empty-inline">No timestamped lifecycle events are available.</div>
                                 <?php else: ?>
                                     <div class="timeline">
                                         <?php foreach ($lifecycle['events'] as $event): ?>
                                             <article class="timeline-item">
-                                                <span class="timeline-dot"><i class="fas fa-check"></i></span>
+                                                <span class="timeline-dot"><i class="fas fa-check" aria-hidden="true"></i></span>
                                                 <div class="timeline-content">
                                                     <div class="timeline-top">
                                                         <strong><?php echo audit_h((string)$event['label']); ?></strong>
@@ -1259,10 +1187,10 @@ $showEnd = min($offset + count($auditRows), $matchingCount);
                                                     </div>
                                                     <?php if (trim((string)($event['details'] ?? '')) !== ''): ?><p><?php echo audit_h((string)$event['details']); ?></p><?php endif; ?>
                                                     <div class="timeline-meta">
-                                                        <span><i class="fas fa-user"></i> <?php echo audit_h((string)$event['actor']); ?></span>
-                                                        <span>• <?php echo audit_h(audit_source_label((string)$event['source'])); ?></span>
-                                                        <?php if (trim((string)($event['unit'] ?? '')) !== ''): ?><span>• Unit <?php echo audit_h((string)$event['unit']); ?></span><?php endif; ?>
-                                                        <span>• <?php echo audit_h(ucfirst((string)$event['outcome'])); ?></span>
+                                                        <span><i class="fas fa-user" aria-hidden="true"></i> <?php echo audit_h((string)$event['actor']); ?></span>
+                                                        <span><?php echo audit_h(audit_source_label((string)$event['source'])); ?></span>
+                                                        <?php if (trim((string)($event['unit'] ?? '')) !== ''): ?><span>Unit <?php echo audit_h((string)$event['unit']); ?></span><?php endif; ?>
+                                                        <span><?php echo audit_h(ucfirst((string)$event['outcome'])); ?></span>
                                                     </div>
                                                 </div>
                                             </article>
@@ -1275,100 +1203,164 @@ $showEnd = min($offset + count($auditRows), $matchingCount);
                 </section>
             <?php endif; ?>
 
-            <section class="audit-card">
-                <div class="audit-card-title">
+            <section class="audit-panel" aria-labelledby="auditRecordsTitle">
+                <header class="audit-panel-header">
                     <div>
-                        <h2>Search and organize logs</h2>
-                        <p>Use the incident reference filter to open the complete call-to-review lifecycle above.</p>
+                        <span class="audit-section-kicker">System activity</span>
+                        <h2 id="auditRecordsTitle">Log records</h2>
+                        <p>Search the most useful fields first, then open advanced filters only when needed.</p>
                     </div>
-                    <a class="audit-btn" href="<?php echo audit_h(audit_query_url(['export' => 'csv', 'page' => null])); ?>">
-                        <i class="fas fa-file-csv"></i><span>Export CSV</span>
-                    </a>
-                </div>
+                    <div class="audit-panel-actions">
+                        <?php if ($activeFilters): ?>
+                            <a class="audit-btn audit-btn-secondary" href="admin/audit.php"><i class="fas fa-rotate-left" aria-hidden="true"></i><span>Reset</span></a>
+                        <?php endif; ?>
+                        <a class="audit-btn audit-btn-secondary" href="<?php echo audit_h(audit_query_url(['export' => 'csv', 'page' => null])); ?>">
+                            <i class="fas fa-file-arrow-down" aria-hidden="true"></i><span>Export CSV</span>
+                        </a>
+                    </div>
+                </header>
 
-                <form class="audit-toolbar" method="get" action="admin/audit.php">
-                    <div class="audit-field">
-                        <label for="auditSearch">Search</label>
-                        <input id="auditSearch" class="audit-input" type="search" name="q" value="<?php echo audit_h($search); ?>" placeholder="Actor, action, details, request ID...">
-                    </div>
-                    <div class="audit-field">
-                        <label for="auditReference">Incident reference</label>
-                        <input id="auditReference" class="audit-input" type="text" name="reference" value="<?php echo audit_h($referenceFilter); ?>" placeholder="e.g. REF-2026...">
-                    </div>
-                    <div class="audit-field">
-                        <label for="auditRole">Actor role</label>
-                        <select id="auditRole" class="audit-select" name="role">
-                            <option value="">All roles</option>
-                            <?php foreach ($allowedRoles as $role): ?><option value="<?php echo audit_h($role); ?>" <?php echo $roleFilter === $role ? 'selected' : ''; ?>><?php echo audit_h(audit_label($role)); ?></option><?php endforeach; ?>
-                        </select>
-                    </div>
-                    <div class="audit-field">
-                        <label for="auditSource">System source</label>
-                        <select id="auditSource" class="audit-select" name="source">
-                            <option value="">All sources</option>
-                            <?php foreach ($allowedSources as $source): ?><option value="<?php echo audit_h($source); ?>" <?php echo $sourceFilter === $source ? 'selected' : ''; ?>><?php echo audit_h(audit_source_label($source)); ?></option><?php endforeach; ?>
-                        </select>
-                    </div>
-                    <div class="audit-field">
-                        <label for="auditCategory">Process category</label>
-                        <select id="auditCategory" class="audit-select" name="category">
-                            <option value="">All processes</option>
-                            <?php foreach ($allowedCategories as $category): ?><option value="<?php echo audit_h($category); ?>" <?php echo $categoryFilter === $category ? 'selected' : ''; ?>><?php echo audit_h(audit_category_label($category)); ?></option><?php endforeach; ?>
-                        </select>
-                    </div>
-                    <div class="audit-field">
-                        <label for="auditOutcome">Outcome</label>
-                        <select id="auditOutcome" class="audit-select" name="outcome">
-                            <option value="">All outcomes</option>
-                            <?php foreach ($allowedOutcomes as $outcome): ?><option value="<?php echo audit_h($outcome); ?>" <?php echo $outcomeFilter === $outcome ? 'selected' : ''; ?>><?php echo audit_h(ucfirst($outcome)); ?></option><?php endforeach; ?>
-                        </select>
+                <form class="audit-filter-form" method="get" action="admin/audit.php">
+                    <div class="audit-primary-filters">
+                        <div class="audit-field audit-field-search">
+                            <label for="auditSearch">Search logs</label>
+                            <div class="audit-input-with-icon">
+                                <i class="fas fa-magnifying-glass" aria-hidden="true"></i>
+                                <input id="auditSearch" class="audit-input" type="search" name="q" value="<?php echo audit_h($search); ?>" placeholder="Actor, action, details, request ID...">
+                            </div>
+                        </div>
+                        <div class="audit-field audit-field-reference">
+                            <label for="auditReference">Incident reference</label>
+                            <div class="audit-input-with-icon">
+                                <i class="fas fa-link" aria-hidden="true"></i>
+                                <input id="auditReference" class="audit-input" type="text" name="reference" value="<?php echo audit_h($referenceFilter); ?>" placeholder="e.g. REF-2026...">
+                            </div>
+                        </div>
+                        <button class="audit-btn audit-btn-primary audit-primary-submit" type="submit">
+                            <i class="fas fa-filter" aria-hidden="true"></i><span>Apply</span>
+                        </button>
                     </div>
 
-                    <div class="audit-toolbar-secondary">
-                        <div class="audit-field">
-                            <label for="auditDateFrom">From date</label>
-                            <input id="auditDateFrom" class="audit-input" type="date" name="date_from" value="<?php echo audit_h($dateFrom); ?>">
+                    <details class="audit-advanced-filters" <?php echo $advancedFilterCount > 0 ? 'open' : ''; ?>>
+                        <summary>
+                            <span class="audit-advanced-title"><i class="fas fa-sliders" aria-hidden="true"></i> Advanced filters</span>
+                            <span class="audit-advanced-description">Role, source, process, outcome, date, and page size</span>
+                            <?php if ($advancedFilterCount > 0): ?><span class="audit-filter-count"><?php echo number_format($advancedFilterCount); ?> active</span><?php endif; ?>
+                            <i class="fas fa-chevron-down audit-advanced-chevron" aria-hidden="true"></i>
+                        </summary>
+                        <div class="audit-advanced-content">
+                            <div class="audit-advanced-grid">
+                                <div class="audit-field">
+                                    <label for="auditRole">Actor role</label>
+                                    <select id="auditRole" class="audit-select" name="role">
+                                        <option value="">All roles</option>
+                                        <?php foreach ($allowedRoles as $role): ?><option value="<?php echo audit_h($role); ?>" <?php echo $roleFilter === $role ? 'selected' : ''; ?>><?php echo audit_h(audit_label($role)); ?></option><?php endforeach; ?>
+                                    </select>
+                                </div>
+                                <div class="audit-field">
+                                    <label for="auditSource">System source</label>
+                                    <select id="auditSource" class="audit-select" name="source">
+                                        <option value="">All sources</option>
+                                        <?php foreach ($allowedSources as $source): ?><option value="<?php echo audit_h($source); ?>" <?php echo $sourceFilter === $source ? 'selected' : ''; ?>><?php echo audit_h(audit_source_label($source)); ?></option><?php endforeach; ?>
+                                    </select>
+                                </div>
+                                <div class="audit-field">
+                                    <label for="auditCategory">Process category</label>
+                                    <select id="auditCategory" class="audit-select" name="category">
+                                        <option value="">All processes</option>
+                                        <?php foreach ($allowedCategories as $category): ?><option value="<?php echo audit_h($category); ?>" <?php echo $categoryFilter === $category ? 'selected' : ''; ?>><?php echo audit_h(audit_category_label($category)); ?></option><?php endforeach; ?>
+                                    </select>
+                                </div>
+                                <div class="audit-field">
+                                    <label for="auditOutcome">Outcome</label>
+                                    <select id="auditOutcome" class="audit-select" name="outcome">
+                                        <option value="">All outcomes</option>
+                                        <?php foreach ($allowedOutcomes as $outcome): ?><option value="<?php echo audit_h($outcome); ?>" <?php echo $outcomeFilter === $outcome ? 'selected' : ''; ?>><?php echo audit_h(ucfirst($outcome)); ?></option><?php endforeach; ?>
+                                    </select>
+                                </div>
+                                <div class="audit-field">
+                                    <label for="auditDateFrom">From date</label>
+                                    <input id="auditDateFrom" class="audit-input" type="date" name="date_from" value="<?php echo audit_h($dateFrom); ?>">
+                                </div>
+                                <div class="audit-field">
+                                    <label for="auditDateTo">To date</label>
+                                    <input id="auditDateTo" class="audit-input" type="date" name="date_to" value="<?php echo audit_h($dateTo); ?>">
+                                </div>
+                                <div class="audit-field">
+                                    <label for="auditPageSize">Rows per page</label>
+                                    <select id="auditPageSize" class="audit-select" name="per_page">
+                                        <?php foreach ($allowedPageSizes as $size): ?><option value="<?php echo $size; ?>" <?php echo $perPage === $size ? 'selected' : ''; ?>><?php echo $size; ?> rows</option><?php endforeach; ?>
+                                    </select>
+                                </div>
+                            </div>
+                            <div class="audit-advanced-footer">
+                                <span>Filters apply together and results remain sorted from newest to oldest.</span>
+                                <div>
+                                    <?php if ($advancedFilterCount > 0): ?><a class="audit-btn audit-btn-ghost" href="<?php echo audit_h($clearAdvancedUrl); ?>">Clear advanced</a><?php endif; ?>
+                                    <button class="audit-btn audit-btn-primary" type="submit"><i class="fas fa-check" aria-hidden="true"></i><span>Apply filters</span></button>
+                                </div>
+                            </div>
                         </div>
-                        <div class="audit-field">
-                            <label for="auditDateTo">To date</label>
-                            <input id="auditDateTo" class="audit-input" type="date" name="date_to" value="<?php echo audit_h($dateTo); ?>">
-                        </div>
-                        <div class="audit-field">
-                            <label for="auditPageSize">Rows per page</label>
-                            <select id="auditPageSize" class="audit-select" name="per_page">
-                                <?php foreach ($allowedPageSizes as $size): ?><option value="<?php echo $size; ?>" <?php echo $perPage === $size ? 'selected' : ''; ?>><?php echo $size; ?> rows</option><?php endforeach; ?>
-                            </select>
-                        </div>
-                        <div class="audit-actions">
-                            <button class="audit-btn primary" type="submit"><i class="fas fa-filter"></i><span>Apply filters</span></button>
-                            <a class="audit-btn" href="admin/audit.php"><i class="fas fa-rotate-left"></i><span>Reset</span></a>
-                        </div>
-                    </div>
+                    </details>
                 </form>
 
-                <p class="audit-note"><i class="fas fa-circle-info"></i><span><strong>Log No.</strong> is the sequential position in the current filtered results (1, 2, 3, …). It is not a user ID, employee ID, responder ID, or database ID.</span></p>
-                <div class="audit-summary">
-                    <span>Showing <strong><?php echo number_format($showStart); ?>–<?php echo number_format($showEnd); ?></strong> of <strong><?php echo number_format($matchingCount); ?></strong> matching logs</span>
-                    <span>Times shown in Asia/Manila</span>
+                <?php if ($activeFilters): ?>
+                    <div class="audit-active-filters" aria-label="Active filters">
+                        <span class="audit-active-label"><i class="fas fa-filter" aria-hidden="true"></i> Active filters</span>
+                        <div class="audit-filter-chips">
+                            <?php foreach ($activeFilters as $filter): ?>
+                                <a class="audit-filter-chip" href="<?php echo audit_h((string)$filter['url']); ?>" title="Remove this filter">
+                                    <span><?php echo audit_h((string)$filter['label']); ?></span><i class="fas fa-xmark" aria-hidden="true"></i>
+                                </a>
+                            <?php endforeach; ?>
+                        </div>
+                        <a class="audit-clear-all" href="admin/audit.php">Clear all</a>
+                    </div>
+                <?php endif; ?>
+
+                <div class="audit-results-bar">
+                    <div>
+                        <strong><?php echo number_format($matchingCount); ?></strong> matching <?php echo $matchingCount === 1 ? 'log' : 'logs'; ?>
+                        <span>Showing <?php echo number_format($showStart); ?>–<?php echo number_format($showEnd); ?></span>
+                    </div>
+                    <div class="audit-results-meta">
+                        <span><i class="fas fa-arrow-down-wide-short" aria-hidden="true"></i> Newest first</span>
+                        <span><i class="far fa-clock" aria-hidden="true"></i> Asia/Manila</span>
+                        <span class="audit-help" title="The number shown beside each timestamp is its sequence in the current filtered results—not a user or database ID."><i class="far fa-circle-question" aria-hidden="true"></i><span class="audit-visually-hidden">About log sequence numbers</span></span>
+                    </div>
                 </div>
 
                 <?php if ($loadError !== ''): ?>
-                    <div class="audit-error">Unable to load the operational audit trail: <?php echo audit_h($loadError); ?></div>
+                    <div class="audit-state audit-state-error" role="alert">
+                        <span class="audit-state-icon"><i class="fas fa-circle-exclamation" aria-hidden="true"></i></span>
+                        <div><h3>Audit logs could not be loaded</h3><p><?php echo audit_h($loadError); ?></p></div>
+                    </div>
                 <?php elseif (!$auditRows): ?>
-                    <div class="audit-empty"><i class="fas fa-magnifying-glass"></i><br>No logs matched the selected filters.</div>
+                    <div class="audit-state">
+                        <span class="audit-state-icon"><i class="fas fa-magnifying-glass" aria-hidden="true"></i></span>
+                        <div><h3>No matching logs</h3><p>Adjust the search or remove one or more filters to see additional records.</p></div>
+                        <?php if ($activeFilters): ?><a class="audit-btn audit-btn-secondary" href="admin/audit.php">Clear filters</a><?php endif; ?>
+                    </div>
                 <?php else: ?>
-                    <div class="audit-table-wrap">
-                        <table class="audit-table">
+                    <div class="audit-table-shell">
+                        <table class="audit-log-table">
+                            <caption class="audit-visually-hidden">Operational audit log records</caption>
+                            <colgroup>
+                                <col class="audit-col-time">
+                                <col class="audit-col-actor">
+                                <col class="audit-col-activity">
+                                <col class="audit-col-reference">
+                                <col class="audit-col-outcome">
+                                <col class="audit-col-action">
+                            </colgroup>
                             <thead>
                                 <tr>
-                                    <th title="Sequential position, not an account ID">Log No.</th>
-                                    <th>Date &amp; Time</th>
-                                    <th>Actor</th>
-                                    <th>Source</th>
-                                    <th>Process / Action</th>
-                                    <th>Incident / Reference</th>
-                                    <th>Outcome</th>
-                                    <th>Details</th>
+                                    <th scope="col">Date &amp; time</th>
+                                    <th scope="col">Actor &amp; source</th>
+                                    <th scope="col">Activity</th>
+                                    <th scope="col">Reference</th>
+                                    <th scope="col">Outcome</th>
+                                    <th scope="col"><span class="audit-visually-hidden">Actions</span></th>
                                 </tr>
                             </thead>
                             <tbody>
@@ -1386,49 +1378,100 @@ $showEnd = min($offset + count($auditRows), $matchingCount);
                                     }
                                     $reference = trim((string)($row['reference_no'] ?? ''));
                                     $metadataPretty = audit_json_pretty($row['metadata_json'] ?? null);
+                                    $detailsSummary = audit_details_summary($row['details'] ?? '');
                                     $sourceIcon = $source === 'responder_app' ? 'fa-mobile-screen-button' : ($source === 'dispatcher_web' ? 'fa-headset' : ($source === 'admin_web' ? 'fa-user-shield' : ($source === 'external_api' ? 'fa-plug' : 'fa-server')));
+                                    $rowIdentity = (int)($row['id'] ?? 0) > 0 ? (string)(int)$row['id'] : (string)$logNo;
+                                    $dialogId = 'audit-detail-' . $rowIdentity . '-' . $index;
+                                    $dialogTitleId = $dialogId . '-title';
+                                    $entityText = audit_label((string)($row['entity_type'] ?? 'system'));
+                                    if ((int)($row['entity_id'] ?? 0) > 0) {
+                                        $entityText .= ' · record ' . number_format((int)$row['entity_id']);
+                                    }
                                     ?>
                                     <tr>
-                                        <td class="audit-log-no"><?php echo number_format($logNo); ?></td>
-                                        <td class="audit-time">
-                                            <strong><?php echo audit_h(audit_format_date($row['created_at'] ?? null)); ?></strong>
-                                            <span>Asia/Manila</span>
+                                        <td class="audit-cell-time" data-label="Date &amp; time">
+                                            <div class="audit-time-block">
+                                                <span class="audit-sequence" title="Sequence in current filtered results">#<?php echo number_format($logNo); ?></span>
+                                                <time datetime="<?php echo audit_h(audit_iso_datetime((string)($row['created_at'] ?? ''))); ?>">
+                                                    <strong><?php echo audit_h(audit_format_date($row['created_at'] ?? null)); ?></strong>
+                                                    <span>Asia/Manila</span>
+                                                </time>
+                                            </div>
                                         </td>
-                                        <td>
-                                            <div class="audit-actor">
-                                                <span class="audit-avatar"><i class="fas <?php echo $actorRole === 'system' ? 'fa-gears' : 'fa-user'; ?>"></i></span>
+                                        <td class="audit-cell-actor" data-label="Actor &amp; source">
+                                            <div class="audit-actor-block">
+                                                <span class="audit-avatar"><i class="fas <?php echo $actorRole === 'system' ? 'fa-gears' : 'fa-user'; ?>" aria-hidden="true"></i></span>
                                                 <div>
                                                     <strong><?php echo audit_h($actorName); ?></strong>
-                                                    <span><?php echo audit_h(audit_label($actorRole)); ?><?php echo $actorEmail !== '' ? (' · ' . audit_h($actorEmail)) : ''; ?></span>
+                                                    <span class="audit-actor-role"><?php echo audit_h(audit_label($actorRole)); ?><?php echo $actorEmail !== '' ? (' · ' . audit_h($actorEmail)) : ''; ?></span>
+                                                    <span class="audit-source-line"><i class="fas <?php echo audit_h($sourceIcon); ?>" aria-hidden="true"></i><?php echo audit_h(audit_source_label($source)); ?></span>
                                                 </div>
                                             </div>
                                         </td>
-                                        <td><span class="audit-source"><i class="fas <?php echo audit_h($sourceIcon); ?>"></i><?php echo audit_h(audit_source_label($source)); ?></span></td>
-                                        <td>
-                                            <div class="audit-process">
+                                        <td class="audit-cell-activity" data-label="Activity">
+                                            <div class="audit-activity-heading">
                                                 <strong><?php echo audit_h(audit_label((string)($row['action'] ?? ''))); ?></strong>
                                                 <span class="audit-chip"><?php echo audit_h(audit_category_label($category)); ?></span>
                                             </div>
+                                            <p><?php echo audit_h($detailsSummary !== '' ? $detailsSummary : 'No description recorded.'); ?></p>
                                         </td>
-                                        <td>
+                                        <td class="audit-cell-reference" data-label="Reference">
                                             <?php if ($reference !== ''): ?>
                                                 <a class="audit-reference" href="<?php echo audit_h(audit_query_url(['reference' => $reference, 'page' => 1])); ?>" title="Open lifecycle for <?php echo audit_h($reference); ?>"><?php echo audit_h($reference); ?></a>
                                             <?php else: ?>
-                                                <span class="audit-reference-empty">No incident reference</span>
+                                                <span class="audit-reference-empty">Not linked</span>
                                             <?php endif; ?>
                                         </td>
-                                        <td><span class="audit-outcome <?php echo audit_h($outcome); ?>"><?php echo audit_h(ucfirst($outcome)); ?></span></td>
-                                        <td>
-                                            <div class="audit-detail-text"><?php echo audit_h(audit_details_summary($row['details'] ?? '')); ?></div>
-                                            <details class="audit-tech">
-                                                <summary>Technical context</summary>
-                                                <div class="audit-tech-grid">
-                                                    <div><strong>Entity:</strong> <?php echo audit_h(audit_label((string)($row['entity_type'] ?? 'system'))); ?><?php echo (int)($row['entity_id'] ?? 0) > 0 ? (' · record ' . number_format((int)$row['entity_id'])) : ''; ?></div>
-                                                    <div><strong>Request ID:</strong> <?php echo audit_h(trim((string)($row['request_id'] ?? '')) ?: 'Legacy log / not recorded'); ?></div>
-                                                    <div><strong>IP:</strong> <?php echo audit_h(trim((string)($row['ip_address'] ?? '')) ?: 'Not recorded'); ?></div>
-                                                    <?php if ($metadataPretty !== ''): ?><div><strong>Structured metadata:</strong><pre><?php echo audit_h($metadataPretty); ?></pre></div><?php endif; ?>
+                                        <td class="audit-cell-outcome" data-label="Outcome">
+                                            <span class="audit-outcome <?php echo audit_h($outcome); ?>"><span aria-hidden="true"></span><?php echo audit_h(ucfirst($outcome)); ?></span>
+                                        </td>
+                                        <td class="audit-cell-action">
+                                            <button class="audit-row-action" type="button" data-audit-dialog="<?php echo audit_h($dialogId); ?>" aria-haspopup="dialog">
+                                                <i class="far fa-eye" aria-hidden="true"></i><span>View</span>
+                                            </button>
+
+                                            <dialog class="audit-detail-dialog" id="<?php echo audit_h($dialogId); ?>" aria-labelledby="<?php echo audit_h($dialogTitleId); ?>">
+                                                <div class="audit-dialog-shell">
+                                                    <header class="audit-dialog-header">
+                                                        <div>
+                                                            <span>Log #<?php echo number_format($logNo); ?> · <?php echo audit_h(audit_format_date($row['created_at'] ?? null)); ?></span>
+                                                            <h2 id="<?php echo audit_h($dialogTitleId); ?>"><?php echo audit_h(audit_label((string)($row['action'] ?? ''))); ?></h2>
+                                                            <p><?php echo audit_h(audit_category_label($category)); ?> activity from <?php echo audit_h(audit_source_label($source)); ?></p>
+                                                        </div>
+                                                        <button class="audit-dialog-close" type="button" data-audit-dialog-close aria-label="Close details"><i class="fas fa-xmark" aria-hidden="true"></i></button>
+                                                    </header>
+                                                    <div class="audit-dialog-body">
+                                                        <section class="audit-dialog-summary" aria-label="Log summary">
+                                                            <div>
+                                                                <span class="audit-outcome <?php echo audit_h($outcome); ?>"><span aria-hidden="true"></span><?php echo audit_h(ucfirst($outcome)); ?></span>
+                                                                <?php if ($reference !== ''): ?><span class="audit-reference audit-reference-static"><?php echo audit_h($reference); ?></span><?php endif; ?>
+                                                            </div>
+                                                            <p><?php echo audit_h($detailsSummary !== '' ? $detailsSummary : 'No description was recorded for this event.'); ?></p>
+                                                        </section>
+                                                        <dl class="audit-detail-grid">
+                                                            <div><dt>Actor</dt><dd><?php echo audit_h($actorName); ?></dd></div>
+                                                            <div><dt>Actor role</dt><dd><?php echo audit_h(audit_label($actorRole)); ?></dd></div>
+                                                            <div><dt>Source</dt><dd><?php echo audit_h(audit_source_label($source)); ?></dd></div>
+                                                            <div><dt>Category</dt><dd><?php echo audit_h(audit_category_label($category)); ?></dd></div>
+                                                            <div><dt>Date and time</dt><dd><?php echo audit_h(audit_format_date($row['created_at'] ?? null)); ?></dd></div>
+                                                            <div><dt>Entity</dt><dd><?php echo audit_h($entityText); ?></dd></div>
+                                                            <div><dt>Request ID</dt><dd class="audit-mono"><?php echo audit_h(trim((string)($row['request_id'] ?? '')) ?: 'Legacy log / not recorded'); ?></dd></div>
+                                                            <div><dt>IP address</dt><dd class="audit-mono"><?php echo audit_h(trim((string)($row['ip_address'] ?? '')) ?: 'Not recorded'); ?></dd></div>
+                                                            <div class="audit-detail-wide"><dt>Actor email</dt><dd><?php echo audit_h($actorEmail !== '' ? $actorEmail : 'Not recorded'); ?></dd></div>
+                                                            <div class="audit-detail-wide"><dt>User agent</dt><dd class="audit-breakable"><?php echo audit_h(trim((string)($row['user_agent'] ?? '')) ?: 'Not recorded'); ?></dd></div>
+                                                        </dl>
+                                                        <?php if ($metadataPretty !== ''): ?>
+                                                            <section class="audit-metadata">
+                                                                <div><h3>Structured metadata</h3><span>Raw context captured with this event</span></div>
+                                                                <pre><?php echo audit_h($metadataPretty); ?></pre>
+                                                            </section>
+                                                        <?php endif; ?>
+                                                    </div>
+                                                    <footer class="audit-dialog-footer">
+                                                        <button class="audit-btn audit-btn-secondary" type="button" data-audit-dialog-close>Close</button>
+                                                    </footer>
                                                 </div>
-                                            </details>
+                                            </dialog>
                                         </td>
                                     </tr>
                                 <?php endforeach; ?>
@@ -1441,16 +1484,16 @@ $showEnd = min($offset + count($auditRows), $matchingCount);
                     <nav class="audit-pagination" aria-label="Audit log pages">
                         <span>Page <strong><?php echo number_format($page); ?></strong> of <strong><?php echo number_format($pageCount); ?></strong></span>
                         <div class="audit-pages">
-                            <a class="audit-page <?php echo $page <= 1 ? 'disabled' : ''; ?>" href="<?php echo audit_h(audit_query_url(['page' => max(1, $page - 1)])); ?>" aria-label="Previous page"><i class="fas fa-chevron-left"></i></a>
+                            <a class="audit-page-link audit-page-nav <?php echo $page <= 1 ? 'disabled' : ''; ?>" href="<?php echo audit_h(audit_query_url(['page' => max(1, $page - 1)])); ?>" aria-label="Previous page" <?php echo $page <= 1 ? 'aria-disabled="true" tabindex="-1"' : ''; ?>><i class="fas fa-chevron-left" aria-hidden="true"></i></a>
                             <?php
                             $pageStart = max(1, $page - 2);
                             $pageEnd = min($pageCount, $page + 2);
-                            if ($pageStart > 1): ?><a class="audit-page" href="<?php echo audit_h(audit_query_url(['page' => 1])); ?>">1</a><?php if ($pageStart > 2): ?><span class="audit-page disabled">…</span><?php endif; ?><?php endif;
+                            if ($pageStart > 1): ?><a class="audit-page-link" href="<?php echo audit_h(audit_query_url(['page' => 1])); ?>">1</a><?php if ($pageStart > 2): ?><span class="audit-page-link disabled" aria-hidden="true">…</span><?php endif; ?><?php endif;
                             for ($pageNumber = $pageStart; $pageNumber <= $pageEnd; $pageNumber++): ?>
-                                <a class="audit-page <?php echo $pageNumber === $page ? 'active' : ''; ?>" href="<?php echo audit_h(audit_query_url(['page' => $pageNumber])); ?>"><?php echo number_format($pageNumber); ?></a>
+                                <a class="audit-page-link <?php echo $pageNumber === $page ? 'active' : ''; ?>" href="<?php echo audit_h(audit_query_url(['page' => $pageNumber])); ?>" <?php echo $pageNumber === $page ? 'aria-current="page"' : ''; ?>><?php echo number_format($pageNumber); ?></a>
                             <?php endfor;
-                            if ($pageEnd < $pageCount): ?><?php if ($pageEnd < $pageCount - 1): ?><span class="audit-page disabled">…</span><?php endif; ?><a class="audit-page" href="<?php echo audit_h(audit_query_url(['page' => $pageCount])); ?>"><?php echo number_format($pageCount); ?></a><?php endif; ?>
-                            <a class="audit-page <?php echo $page >= $pageCount ? 'disabled' : ''; ?>" href="<?php echo audit_h(audit_query_url(['page' => min($pageCount, $page + 1)])); ?>" aria-label="Next page"><i class="fas fa-chevron-right"></i></a>
+                            if ($pageEnd < $pageCount): ?><?php if ($pageEnd < $pageCount - 1): ?><span class="audit-page-link disabled" aria-hidden="true">…</span><?php endif; ?><a class="audit-page-link" href="<?php echo audit_h(audit_query_url(['page' => $pageCount])); ?>"><?php echo number_format($pageCount); ?></a><?php endif; ?>
+                            <a class="audit-page-link audit-page-nav <?php echo $page >= $pageCount ? 'disabled' : ''; ?>" href="<?php echo audit_h(audit_query_url(['page' => min($pageCount, $page + 1)])); ?>" aria-label="Next page" <?php echo $page >= $pageCount ? 'aria-disabled="true" tabindex="-1"' : ''; ?>><i class="fas fa-chevron-right" aria-hidden="true"></i></a>
                         </div>
                     </nav>
                 <?php endif; ?>
