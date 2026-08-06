@@ -714,6 +714,7 @@ html[data-theme="dark"] .audit-page {
     font-size: 0.64rem;
     font-weight: 750;
     line-height: 1.15;
+    white-space: nowrap;
 }
 
 .audit-time-block time {

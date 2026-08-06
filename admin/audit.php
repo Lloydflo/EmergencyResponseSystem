@@ -16,7 +16,7 @@ if (!headers_sent()) {
     header('Expires: 0');
 }
 
-$auditUiBuild = '20260806-tabs-modal-v4';
+$auditUiBuild = '20260806-activity-number-v5';
 if (!headers_sent()) {
     header('X-Audit-UI-Build: ' . $auditUiBuild);
 }
@@ -1592,7 +1592,7 @@ if ($sourceFilter === 'dispatcher_web' || in_array($roleFilter, ['dispatcher', '
                     <div class="audit-results-meta">
                         <span><i class="fas fa-arrow-down-wide-short" aria-hidden="true"></i> Newest first</span>
                         <span><i class="far fa-clock" aria-hidden="true"></i> Asia/Manila</span>
-                        <span class="audit-help" title="The number shown beside each timestamp is its sequence in the current filtered results—not a user or database ID."><i class="far fa-circle-question" aria-hidden="true"></i><span class="audit-visually-hidden">About log sequence numbers</span></span>
+                        <span class="audit-help" title="Activity no. is the sequential position in the current filtered results—not a user, responder, employee, or database ID."><i class="far fa-circle-question" aria-hidden="true"></i><span class="audit-visually-hidden">About activity numbers</span></span>
                     </div>
                 </div>
 
@@ -1699,7 +1699,7 @@ if ($sourceFilter === 'dispatcher_web' || in_array($roleFilter, ['dispatcher', '
                                                             <li class="audit-entry-card">
                                                                 <div class="audit-entry-top">
                                                                     <div class="audit-entry-time">
-                                                                        <span class="audit-sequence" title="Sequence in current filtered results">#<?php echo number_format((int)$entry['log_no']); ?></span>
+                                                                        <span class="audit-sequence" title="Activity number in the current filtered results">Activity no. <?php echo number_format((int)$entry['log_no']); ?></span>
                                                                         <time datetime="<?php echo audit_h((string)$entry['created_at_iso']); ?>">
                                                                             <strong><?php echo audit_h((string)$entry['created_time_label']); ?></strong>
                                                                             <span><?php echo audit_h((string)$entry['created_full_label']); ?></span>
@@ -1734,7 +1734,7 @@ if ($sourceFilter === 'dispatcher_web' || in_array($roleFilter, ['dispatcher', '
                                                                     <div class="audit-dialog-shell">
                                                                         <header class="audit-dialog-header">
                                                                             <div>
-                                                                                <span>Log #<?php echo number_format((int)$entry['log_no']); ?> · <?php echo audit_h((string)$entry['created_full_label']); ?></span>
+                                                                                <span>Activity no. <?php echo number_format((int)$entry['log_no']); ?> · <?php echo audit_h((string)$entry['created_full_label']); ?></span>
                                                                                 <h2 id="<?php echo audit_h((string)$entry['dialog_title_id']); ?>"><?php echo audit_h((string)$entry['action_label']); ?></h2>
                                                                                 <p><?php echo audit_h((string)$entry['category_label']); ?> activity from <?php echo audit_h((string)$entry['source_label']); ?></p>
                                                                             </div>
