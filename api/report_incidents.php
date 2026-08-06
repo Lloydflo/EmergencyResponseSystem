@@ -16,23 +16,22 @@ try {
     }
 
     $scope = ers_report_scope($_GET);
-    $daily = ers_report_fetch_daily_response($pdo, $scope);
+    $limit = isset($_GET['limit']) ? (int)$_GET['limit'] : 100;
+    $items = ers_report_fetch_incidents($pdo, $scope, $limit);
 
     echo json_encode([
         'ok' => true,
         'meta' => array_merge(ers_report_public_scope($scope), [
-            'definition' => 'Average dispatch assigned_at to recorded on_scene_at. Days without valid arrivals are null, not zero.',
+            'definition' => 'Incidents created within the selected date range. Response time is dispatch assignment to recorded on-scene arrival.',
+            'returned_count' => count($items),
         ]),
-        'labels' => $daily['labels'],
-        'data' => $daily['data'],
-        'sample_counts' => $daily['sample_counts'],
-        'unit' => $daily['unit'],
+        'items' => $items,
     ], JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
 } catch (InvalidArgumentException $e) {
     http_response_code(422);
     echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
 } catch (Throwable $e) {
-    error_log('report_response_times_daily.php failed: ' . $e->getMessage());
+    error_log('report_incidents.php failed: ' . $e->getMessage());
     http_response_code(500);
-    echo json_encode(['ok' => false, 'error' => 'Unable to calculate daily response times.']);
+    echo json_encode(['ok' => false, 'error' => 'Unable to load report incidents.']);
 }

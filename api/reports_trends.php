@@ -1,225 +1,90 @@
 <?php
 declare(strict_types=1);
+
 require_once __DIR__ . '/../includes/admin_api_auth.php';
 require_admin_api_access(false);
 require_once __DIR__ . '/../includes/db.php';
-$pdo = get_db_connection();
-if (!$pdo) { http_response_code(500); echo 'Database connection unavailable'; exit; }
+require_once __DIR__ . '/../includes/report_analytics.php';
 
-function period_to_range(): array {
-    $period = isset($_GET['period']) ? strtolower(trim((string)$_GET['period'])) : '';
-    $start = isset($_GET['start']) ? trim((string)$_GET['start']) : '';
-    $end = isset($_GET['end']) ? trim((string)$_GET['end']) : '';
-    if ($start !== '' && $end !== '') {
-        return [$start . ' 00:00:00', $end . ' 23:59:59', 'Custom'];
-    }
-
-    $today = new DateTime('today');
-    if ($period === '') {
-        $rangeStart = (clone $today)->modify('-29 days');
-        $rangeEnd = $today;
-        return [$rangeStart->format('Y-m-d') . ' 00:00:00', $rangeEnd->format('Y-m-d') . ' 23:59:59', 'Last 30 Days'];
-    }
-
-    switch ($period) {
-        case 'today':
-            return [$today->format('Y-m-d') . ' 00:00:00', $today->format('Y-m-d') . ' 23:59:59', 'Today'];
-        case 'week':
-            $rangeStart = (clone $today)->modify('monday this week');
-            $rangeEnd = (clone $rangeStart)->modify('+6 days');
-            $label = 'This Week';
-            break;
-        case 'quarter':
-            $month = (int)$today->format('n');
-            $quarterStartMonth = [1 => 1, 2 => 4, 3 => 7, 4 => 10][intdiv($month - 1, 3) + 1];
-            $rangeStart = new DateTime($today->format('Y') . '-' . str_pad((string)$quarterStartMonth, 2, '0', STR_PAD_LEFT) . '-01');
-            $rangeEnd = (clone $rangeStart)->modify('+3 months -1 day');
-            $label = 'This Quarter';
-            break;
-        case 'year':
-            $rangeStart = new DateTime($today->format('Y-01-01'));
-            $rangeEnd = new DateTime($today->format('Y-12-31'));
-            $label = 'This Year';
-            break;
-        case 'month':
-        default:
-            $rangeStart = new DateTime($today->format('Y-m-01'));
-            $rangeEnd = (clone $rangeStart)->modify('+1 month -1 day');
-            $label = 'This Month';
-            break;
-    }
-
-    return [$rangeStart->format('Y-m-d') . ' 00:00:00', $rangeEnd->format('Y-m-d') . ' 23:59:59', $label];
+function trends_h($value): string
+{
+    return htmlspecialchars((string)$value, ENT_QUOTES, 'UTF-8');
 }
 
-function normalized_type_values(string $typeFilter): array {
-    $typeFilter = strtolower(trim($typeFilter));
-    if ($typeFilter === '') {
-        return [];
+try {
+    $pdo = get_db_connection();
+    if (!$pdo) {
+        throw new RuntimeException('Database connection unavailable.');
     }
-    if ($typeFilter === 'traffic' || $typeFilter === 'accident') {
-        return ['traffic', 'accident'];
+    $scope = ers_report_scope($_GET);
+    $labels = [];
+    $series = [
+        'medical' => [],
+        'fire' => [],
+        'police' => [],
+        'traffic' => [],
+        'other' => [],
+    ];
+    $daily = [];
+    $cursor = ers_report_parse_date((string)$scope['start_date'], 'start');
+    $end = ers_report_parse_date((string)$scope['end_date'], 'end');
+    while ($cursor <= $end) {
+        $key = $cursor->format('Y-m-d');
+        $labels[] = $key;
+        $daily[$key] = ['medical' => 0, 'fire' => 0, 'police' => 0, 'traffic' => 0, 'other' => 0];
+        $cursor = $cursor->modify('+1 day');
     }
-    if ($typeFilter === 'police' || $typeFilter === 'crime') {
-        return ['police', 'crime'];
+
+    $parts = ers_report_incident_where($scope, 'i', 'trend', false);
+    $stmt = $pdo->prepare("SELECT DATE(i.created_at) AS date_key, i.type, COUNT(*) AS count_value FROM incidents i WHERE {$parts['where']} GROUP BY DATE(i.created_at), i.type ORDER BY DATE(i.created_at)");
+    $stmt->execute($parts['params']);
+    foreach ($stmt->fetchAll(PDO::FETCH_ASSOC) as $row) {
+        $dateKey = (string)($row['date_key'] ?? '');
+        if (!isset($daily[$dateKey])) {
+            continue;
+        }
+        $typeKey = ers_report_incident_type_key((string)($row['type'] ?? ''));
+        $daily[$dateKey][$typeKey] += (int)($row['count_value'] ?? 0);
     }
-    return [$typeFilter];
+
+    $totals = [];
+    foreach ($labels as $dateKey) {
+        $totals[] = array_sum($daily[$dateKey]);
+        foreach ($series as $typeKey => $_) {
+            $series[$typeKey][] = $daily[$dateKey][$typeKey];
+        }
+    }
+    $grandTotal = array_sum($totals);
+    $peakValue = $totals ? max($totals) : 0;
+    $peakIndex = $peakValue > 0 ? array_search($peakValue, $totals, true) : false;
+    $peakDate = $peakIndex === false ? null : $labels[(int)$peakIndex];
+    $activeDays = count(array_filter($totals, static fn(int $value): bool => $value > 0));
+} catch (InvalidArgumentException $e) {
+    http_response_code(422);
+    echo trends_h($e->getMessage());
+    exit;
+} catch (Throwable $e) {
+    error_log('reports_trends.php failed: ' . $e->getMessage());
+    http_response_code(500);
+    echo 'Unable to generate the trends report.';
+    exit;
 }
-
-function normalize_type_key(string $type): string {
-    $type = strtolower(trim($type));
-    if ($type === 'crime') {
-        return 'police';
-    }
-    if ($type === 'accident') {
-        return 'traffic';
-    }
-    return in_array($type, ['medical', 'fire', 'police', 'traffic'], true) ? $type : 'other';
-}
-
-function append_type_filter(string &$sql, array &$params, string $column, array $typeValues, string $prefix): void {
-    if (!$typeValues) {
-        return;
-    }
-    $placeholders = [];
-    foreach ($typeValues as $index => $value) {
-        $placeholder = ':' . $prefix . '_type_' . $index;
-        $placeholders[] = $placeholder;
-        $params[$placeholder] = $value;
-    }
-    $sql .= ' AND LOWER(' . $column . ') IN (' . implode(', ', $placeholders) . ')';
-}
-
-[$startAt, $endAt, $periodLabel] = period_to_range();
-$typeFilter = isset($_GET['type']) ? trim((string)$_GET['type']) : '';
-$priorityFilter = isset($_GET['priority']) ? trim((string)$_GET['priority']) : '';
-$typeValues = normalized_type_values($typeFilter);
-
-$labels = [];
-$dataTotal = [];
-$types = ['medical','fire','police','traffic','other'];
-$typeSeries = array_fill_keys($types, []);
-
-$startDate = new DateTime(substr($startAt, 0, 10));
-$endDate = new DateTime(substr($endAt, 0, 10));
-$indexByDay = [];
-$cursor = clone $startDate;
-$index = 0;
-while ($cursor <= $endDate) {
-    $dayKey = $cursor->format('Y-m-d');
-    $labels[] = $dayKey;
-    $indexByDay[$dayKey] = $index;
-    $dataTotal[$index] = 0;
-    foreach ($types as $typeKey) {
-        $typeSeries[$typeKey][$index] = 0;
-    }
-    $cursor->modify('+1 day');
-    $index++;
-}
-
-$sql = "
-    SELECT DATE(i.created_at) AS incident_day, LOWER(i.type) AS type_name, COUNT(*) AS total_count
-    FROM incidents i
-    WHERE i.created_at BETWEEN :start AND :end
-";
-$params = [
-    ':start' => $startAt,
-    ':end' => $endAt,
-];
-append_type_filter($sql, $params, 'i.type', $typeValues, 'trend');
-if ($priorityFilter !== '') {
-    $sql .= ' AND i.priority = :priority';
-    $params[':priority'] = $priorityFilter;
-}
-$sql .= ' GROUP BY DATE(i.created_at), LOWER(i.type) ORDER BY DATE(i.created_at) ASC';
-$stmt = $pdo->prepare($sql);
-$stmt->execute($params);
-foreach ($stmt->fetchAll() as $row) {
-    $dayKey = (string)($row['incident_day'] ?? '');
-    if (!isset($indexByDay[$dayKey])) {
-        continue;
-    }
-    $slot = $indexByDay[$dayKey];
-    $count = (int)($row['total_count'] ?? 0);
-    $typeKey = normalize_type_key((string)($row['type_name'] ?? 'other'));
-    $dataTotal[$slot] += $count;
-    $typeSeries[$typeKey][$slot] += $count;
-}
-
-?><!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Trend Analysis Report</title>
-    <link rel="icon" type="image/x-icon" href="../images/favicon.ico">
-    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
-    <style>
-        body { font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif; margin: 24px; color: #111827; }
-        h1 { margin: 0 0 4px; font-size: 22px; }
-        .sub { color: #6b7280; margin-bottom: 16px; }
-        .card { border: 1px solid #e5e7eb; border-radius: 10px; padding: 12px; background: #fff; margin-top: 12px; }
-        .muted { color: #6b7280; }
-        .btn { padding: 8px 12px; border: 1px solid #e5e7eb; background:#fff; border-radius:8px; cursor:pointer; }
-        .toolbar { display:flex; gap:8px; margin: 8px 0 16px; }
-        .chart-wrap { position: relative; width: 100%; height: 360px; }
-        .chart-canvas { width: 100% !important; height: 100% !important; display: block; }
-        table { width: 100%; border-collapse: collapse; margin-top: 8px; }
-        th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid #eef2f7; font-size: 14px; }
-        th { background: #f9fafb; font-weight: 700; }
-    </style>
-</head>
-<body>
-    <h1>Trend Analysis Report</h1>
-    <div class="sub"><?php echo htmlspecialchars($periodLabel); ?> trend from <?php echo htmlspecialchars(substr($startAt, 0, 10)); ?> to <?php echo htmlspecialchars(substr($endAt, 0, 10)); ?></div>
-    <div class="toolbar"><button class="btn" onclick="window.print()">Print / Save as PDF</button></div>
-
-    <div class="card">
-        <div class="muted">Total Incidents</div>
-        <div class="chart-wrap"><canvas id="trendTotal" class="chart-canvas"></canvas></div>
-    </div>
-
-    <div class="card">
-        <div class="muted">Incidents by Type</div>
-        <div class="chart-wrap"><canvas id="trendByType" class="chart-canvas"></canvas></div>
-    </div>
-
-    <div class="card">
-        <div class="muted">Tabular Summary</div>
-        <table>
-            <thead><tr><th>Date</th><th>Total</th><th>Medical</th><th>Fire</th><th>Police</th><th>Traffic</th><th>Other</th></tr></thead>
-            <tbody>
-                <?php for ($i = 0; $i < count($labels); $i++): ?>
-                <tr>
-                    <td><?php echo htmlspecialchars($labels[$i]); ?></td>
-                    <td><?php echo (int)$dataTotal[$i]; ?></td>
-                    <td><?php echo (int)$typeSeries['medical'][$i]; ?></td>
-                    <td><?php echo (int)$typeSeries['fire'][$i]; ?></td>
-                    <td><?php echo (int)$typeSeries['police'][$i]; ?></td>
-                    <td><?php echo (int)$typeSeries['traffic'][$i]; ?></td>
-                    <td><?php echo (int)$typeSeries['other'][$i]; ?></td>
-                </tr>
-                <?php endfor; ?>
-            </tbody>
-        </table>
-    </div>
-
-    <script>
-        const labels = <?php echo json_encode($labels); ?>;
-        const totalData = <?php echo json_encode($dataTotal); ?>;
-        const typeSeries = <?php echo json_encode($typeSeries); ?>;
-        document.addEventListener('DOMContentLoaded', () => {
-            const c1 = document.getElementById('trendTotal');
-            new Chart(c1, { type:'line', data:{ labels, datasets:[{ label:'Total Incidents', data: totalData, borderColor:'#111827', backgroundColor:'rgba(17,24,39,0.1)', tension:0.3, fill:true }] }, options:{ responsive:true, maintainAspectRatio:false, scales:{ y:{ beginAtZero:true, ticks:{ precision:0 } } } } });
-            const c2 = document.getElementById('trendByType');
-            new Chart(c2, { type:'line', data:{ labels, datasets:[
-                { label:'Medical', data:typeSeries.medical, borderColor:'#22c55e', fill:false, tension:0.3 },
-                { label:'Fire', data:typeSeries.fire, borderColor:'#ef4444', fill:false, tension:0.3 },
-                { label:'Police', data:typeSeries.police, borderColor:'#3b82f6', fill:false, tension:0.3 },
-                { label:'Traffic', data:typeSeries.traffic, borderColor:'#f59e0b', fill:false, tension:0.3 },
-                { label:'Other', data:typeSeries.other, borderColor:'#6b7280', fill:false, tension:0.3 },
-            ] }, options:{ responsive:true, maintainAspectRatio:false, scales:{ y:{ beginAtZero:true, ticks:{ precision:0 } } } } });
-        });
-    </script>
-</body>
-</html>
+?>
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0"><title>Trend Monitoring Report</title><link rel="icon" href="../images/favicon.ico"><script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+<style>
+*{box-sizing:border-box}body{margin:0;padding:28px;background:#f4f7f9;color:#172126;font-family:Inter,system-ui,-apple-system,Segoe UI,Arial,sans-serif}.report{max-width:1180px;margin:auto}.head,.card{background:#fff;border:1px solid #dbe3e7;border-radius:14px}.head{display:flex;justify-content:space-between;gap:20px;padding:20px}h1{margin:0;font-size:24px}h2{margin:0 0 12px;font-size:16px}.sub,.muted{color:#60717a;font-size:13px;line-height:1.5}button{padding:9px 13px;border:1px solid #cbd5db;border-radius:8px;background:#fff;font-weight:700;cursor:pointer}.grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;margin-top:12px}.card{padding:16px}.label{color:#60717a;font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.05em}.value{font-size:25px;font-weight:800;margin-top:6px}.charts{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:12px}.chart{height:340px;position:relative}.note{margin-top:12px;padding:13px 15px;border-left:4px solid #3f7f7d;background:#eef6f5;color:#3e555d;font-size:12px;line-height:1.6}.table-card{margin-top:12px}.scroll{max-height:560px;overflow:auto}table{width:100%;border-collapse:collapse}th,td{padding:9px 10px;border-bottom:1px solid #e7edef;text-align:left;font-size:12px}th{position:sticky;top:0;background:#f7f9fa;color:#54656e;text-transform:uppercase;font-size:10px;letter-spacing:.04em}@media(max-width:900px){.grid{grid-template-columns:repeat(2,1fr)}.charts{grid-template-columns:1fr}.head{flex-direction:column}}@media print{body{padding:0;background:#fff}button{display:none}.charts{grid-template-columns:1fr}.scroll{max-height:none;overflow:visible}.card,.head{break-inside:avoid}}
+</style></head><body><div class="report">
+<header class="head"><div><h1>Trend Monitoring Report</h1><div class="sub"><?php echo trends_h($scope['period_label'] . ': ' . $scope['start_date'] . ' to ' . $scope['end_date']); ?> · Asia/Manila</div><div class="sub">Counts use incident creation date only.</div></div><button onclick="window.print()">Print / Save as PDF</button></header>
+<section class="grid"><article class="card"><div class="label">Incidents created</div><div class="value"><?php echo number_format($grandTotal); ?></div></article><article class="card"><div class="label">Days in range</div><div class="value"><?php echo number_format((int)$scope['range_days']); ?></div></article><article class="card"><div class="label">Days with incidents</div><div class="value"><?php echo number_format($activeDays); ?></div></article><article class="card"><div class="label">Peak day</div><div class="value" style="font-size:18px"><?php echo trends_h($peakDate ?: '—'); ?></div><div class="muted"><?php echo $peakValue > 0 ? number_format($peakValue) . ' incident(s)' : 'No incidents'; ?></div></article></section>
+<div class="note"><strong>Accurate period semantics:</strong> An incident is counted once, on the date in <code>incidents.created_at</code>. Later edits and dispatch activity do not move that incident into another period. Missing days remain zero-count days.</div>
+<section class="charts"><article class="card"><h2>Total incidents by day</h2><div class="chart"><canvas id="totalTrend"></canvas></div></article><article class="card"><h2>Incidents by type</h2><div class="chart"><canvas id="typeTrend"></canvas></div></article></section>
+<section class="card table-card"><h2>Daily source data</h2><div class="scroll"><table><thead><tr><th>Date</th><th>Total</th><th>Medical</th><th>Fire</th><th>Police</th><th>Traffic</th><th>Other</th></tr></thead><tbody><?php foreach($labels as $index=>$date): ?><tr><td><?php echo trends_h($date); ?></td><td><?php echo number_format((int)$totals[$index]); ?></td><?php foreach(['medical','fire','police','traffic','other'] as $type): ?><td><?php echo number_format((int)$series[$type][$index]); ?></td><?php endforeach; ?></tr><?php endforeach; ?></tbody></table></div></section>
+</div>
+<script>
+const labels=<?php echo json_encode($labels, JSON_UNESCAPED_SLASHES); ?>;
+const totals=<?php echo json_encode($totals); ?>;
+const series=<?php echo json_encode($series); ?>;
+new Chart(document.getElementById('totalTrend'),{type:'line',data:{labels,datasets:[{label:'Incidents created',data:totals,borderColor:'#3f7f7d',backgroundColor:'rgba(63,127,125,.15)',fill:true,tension:.25,spanGaps:false}]},options:{responsive:true,maintainAspectRatio:false,scales:{y:{beginAtZero:true,ticks:{precision:0}}}}});
+new Chart(document.getElementById('typeTrend'),{type:'line',data:{labels,datasets:[{label:'Medical',data:series.medical,borderColor:'#22c55e',tension:.25},{label:'Fire',data:series.fire,borderColor:'#ef4444',tension:.25},{label:'Police',data:series.police,borderColor:'#3b82f6',tension:.25},{label:'Traffic',data:series.traffic,borderColor:'#f59e0b',tension:.25},{label:'Other',data:series.other,borderColor:'#64748b',tension:.25}]},options:{responsive:true,maintainAspectRatio:false,scales:{y:{beginAtZero:true,ticks:{precision:0}}}}});
+</script></body></html>

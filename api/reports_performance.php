@@ -1,238 +1,115 @@
 <?php
 declare(strict_types=1);
+
 require_once __DIR__ . '/../includes/admin_api_auth.php';
 require_admin_api_access(false);
 require_once __DIR__ . '/../includes/db.php';
+require_once __DIR__ . '/../includes/report_analytics.php';
 
-$pdo = get_db_connection();
-if (!$pdo) { http_response_code(500); echo 'Database connection unavailable'; exit; }
-
-function period_to_range(): array {
-    $period = isset($_GET['period']) ? strtolower(trim((string)$_GET['period'])) : 'month';
-    $start = isset($_GET['start']) ? trim((string)$_GET['start']) : '';
-    $end = isset($_GET['end']) ? trim((string)$_GET['end']) : '';
-    if ($start !== '' && $end !== '') {
-        return [$start . ' 00:00:00', $end . ' 23:59:59', 'Custom'];
-    }
-
-    $today = new DateTime('today');
-    switch ($period) {
-        case 'today':
-            return [$today->format('Y-m-d') . ' 00:00:00', $today->format('Y-m-d') . ' 23:59:59', 'Today'];
-        case 'week':
-            $rangeStart = (clone $today)->modify('monday this week');
-            $rangeEnd = (clone $rangeStart)->modify('+6 days');
-            break;
-        case 'quarter':
-            $month = (int)$today->format('n');
-            $quarterStartMonth = [1 => 1, 2 => 4, 3 => 7, 4 => 10][intdiv($month - 1, 3) + 1];
-            $rangeStart = new DateTime($today->format('Y') . '-' . str_pad((string)$quarterStartMonth, 2, '0', STR_PAD_LEFT) . '-01');
-            $rangeEnd = (clone $rangeStart)->modify('+3 months -1 day');
-            break;
-        case 'year':
-            $rangeStart = new DateTime($today->format('Y-01-01'));
-            $rangeEnd = new DateTime($today->format('Y-12-31'));
-            break;
-        case 'month':
-        default:
-            $rangeStart = new DateTime($today->format('Y-m-01'));
-            $rangeEnd = (clone $rangeStart)->modify('+1 month -1 day');
-            break;
-    }
-
-    $label = 'This Month';
-    if ($period === 'week') {
-        $label = 'This Week';
-    } elseif ($period === 'quarter') {
-        $label = 'This Quarter';
-    } elseif ($period === 'year') {
-        $label = 'This Year';
-    }
-
-    return [$rangeStart->format('Y-m-d') . ' 00:00:00', $rangeEnd->format('Y-m-d') . ' 23:59:59', $label];
+function perf_h($value): string
+{
+    return htmlspecialchars((string)$value, ENT_QUOTES, 'UTF-8');
 }
 
-function normalized_type_values(string $typeFilter): array {
-    $typeFilter = strtolower(trim($typeFilter));
-    if ($typeFilter === '') {
-        return [];
-    }
-    if ($typeFilter === 'traffic' || $typeFilter === 'accident') {
-        return ['traffic', 'accident'];
-    }
-    if ($typeFilter === 'police' || $typeFilter === 'crime') {
-        return ['police', 'crime'];
-    }
-    return [$typeFilter];
+function perf_value($value, string $suffix = '', int $decimals = 1): string
+{
+    return $value === null ? '—' : number_format((float)$value, $decimals) . $suffix;
 }
 
-function append_type_filter(string &$sql, array &$params, string $column, array $typeValues, string $prefix): void {
-    if (!$typeValues) {
-        return;
+function perf_delta($current, $previous, bool $lowerIsBetter = false): array
+{
+    if ($current === null || $previous === null) {
+        return ['label' => 'No comparable baseline', 'tone' => 'neutral'];
     }
-    $placeholders = [];
-    foreach ($typeValues as $index => $value) {
-        $placeholder = ':' . $prefix . '_type_' . $index;
-        $placeholders[] = $placeholder;
-        $params[$placeholder] = $value;
+    $delta = (float)$current - (float)$previous;
+    if (abs($delta) < 0.05) {
+        return ['label' => 'No material change', 'tone' => 'neutral'];
     }
-    $sql .= ' AND LOWER(' . $column . ') IN (' . implode(', ', $placeholders) . ')';
+    $improved = $lowerIsBetter ? $delta < 0 : $delta > 0;
+    return [
+        'label' => ($delta > 0 ? '+' : '') . number_format($delta, 1) . ($lowerIsBetter ? ' min' : ' pp'),
+        'tone' => $improved ? 'good' : 'bad',
+    ];
 }
 
-[$startAt, $endAt, $periodLabel] = period_to_range();
-$typeFilter = isset($_GET['type']) ? trim((string)$_GET['type']) : '';
-$priorityFilter = isset($_GET['priority']) ? trim((string)$_GET['priority']) : '';
-$typeValues = normalized_type_values($typeFilter);
+try {
+    $pdo = get_db_connection();
+    if (!$pdo) {
+        throw new RuntimeException('Database connection unavailable.');
+    }
+    $scope = ers_report_scope($_GET);
+    $report = ers_report_fetch_metrics($pdo, $scope);
+    $metrics = $report['metrics'];
+    $currentDispatch = ers_report_fetch_dispatch_metrics($pdo, $scope, false);
+    $previousDispatch = ers_report_fetch_dispatch_metrics($pdo, $scope, true);
+    $responseDelta = perf_delta($currentDispatch['avg_on_scene_minutes'], $previousDispatch['avg_on_scene_minutes'], true);
+    $resolutionDelta = perf_delta($metrics['resolution_rate'], $metrics['previous_resolution_rate'], false);
+    $slaDelta = perf_delta($currentDispatch['response_sla_compliance_rate'], $previousDispatch['response_sla_compliance_rate'], false);
+    $ackDelta = perf_delta($currentDispatch['acknowledgement_rate'], $previousDispatch['acknowledgement_rate'], false);
+} catch (InvalidArgumentException $e) {
+    http_response_code(422);
+    echo perf_h($e->getMessage());
+    exit;
+} catch (Throwable $e) {
+    error_log('reports_performance.php failed: ' . $e->getMessage());
+    http_response_code(500);
+    echo 'Unable to generate the performance report.';
+    exit;
+}
 
-$avgResponse = 0.0;
-$resolutionRate = 0.0;
-$avgResolveTime = 0.0;
-
-$avgResponseSql = "
-    SELECT AVG(TIMESTAMPDIFF(MINUTE, d.assigned_at, COALESCE(d.on_scene_at, d.cleared_at))) AS avg_min
-    FROM dispatches d
-    INNER JOIN incidents i ON i.id = d.incident_id
-    WHERE d.assigned_at BETWEEN :start AND :end
-      AND COALESCE(d.on_scene_at, d.cleared_at) IS NOT NULL
-";
-$avgResponseParams = [
-    ':start' => $startAt,
-    ':end' => $endAt,
+$rows = [
+    [
+        'metric' => 'Dispatch-to-scene average',
+        'current' => perf_value($currentDispatch['avg_on_scene_minutes'], ' min'),
+        'previous' => perf_value($previousDispatch['avg_on_scene_minutes'], ' min'),
+        'samples' => $currentDispatch['on_scene_sample_count'] . ' / ' . $previousDispatch['on_scene_sample_count'],
+        'target' => '≤ ' . ERS_REPORT_RESPONSE_SLA_MINUTES . ' min',
+        'delta' => $responseDelta,
+    ],
+    [
+        'metric' => 'Arrival SLA compliance',
+        'current' => perf_value($currentDispatch['response_sla_compliance_rate'], '%'),
+        'previous' => perf_value($previousDispatch['response_sla_compliance_rate'], '%'),
+        'samples' => $currentDispatch['on_scene_sample_count'] . ' / ' . $previousDispatch['on_scene_sample_count'],
+        'target' => '≥ ' . number_format(ERS_REPORT_ARRIVAL_COMPLIANCE_TARGET_PERCENT, 0) . '%',
+        'delta' => $slaDelta,
+    ],
+    [
+        'metric' => 'Incident resolution rate',
+        'current' => perf_value($metrics['resolution_rate'], '%'),
+        'previous' => perf_value($metrics['previous_resolution_rate'], '%'),
+        'samples' => $metrics['total_incidents'] . ' / ' . $metrics['previous_total_incidents'],
+        'target' => '≥ ' . number_format(ERS_REPORT_RESOLUTION_TARGET_PERCENT, 0) . '%',
+        'delta' => $resolutionDelta,
+    ],
+    [
+        'metric' => 'Dispatch acknowledgement rate',
+        'current' => perf_value($currentDispatch['acknowledgement_rate'], '%'),
+        'previous' => perf_value($previousDispatch['acknowledgement_rate'], '%'),
+        'samples' => $currentDispatch['total_dispatches'] . ' / ' . $previousDispatch['total_dispatches'],
+        'target' => '≥ ' . number_format(ERS_REPORT_ACKNOWLEDGEMENT_TARGET_PERCENT, 0) . '%',
+        'delta' => $ackDelta,
+    ],
 ];
-append_type_filter($avgResponseSql, $avgResponseParams, 'i.type', $typeValues, 'avg');
-if ($priorityFilter !== '') {
-    $avgResponseSql .= ' AND i.priority = :priority';
-    $avgResponseParams[':priority'] = $priorityFilter;
-}
-$stmt = $pdo->prepare($avgResponseSql);
-$stmt->execute($avgResponseParams);
-$row = $stmt->fetch();
-if ($row && $row['avg_min'] !== null) {
-    $avgResponse = round((float)$row['avg_min'], 1);
-}
-
-$incidentActivityWhere = "
-    (
-        i.created_at BETWEEN :start AND :end
-        OR (i.updated_at IS NOT NULL AND i.updated_at BETWEEN :updated_start AND :updated_end)
-        OR EXISTS (
-            SELECT 1
-            FROM dispatches d_window
-            WHERE d_window.incident_id = i.id
-              AND d_window.assigned_at BETWEEN :dispatch_start AND :dispatch_end
-        )
-    )
-";
-$incidentStatsSql = "
-    SELECT COUNT(*) AS total,
-        SUM(CASE WHEN i.status = 'resolved' THEN 1 ELSE 0 END) AS resolved,
-        AVG(CASE WHEN i.status = 'resolved' AND i.resolved_at IS NOT NULL THEN TIMESTAMPDIFF(MINUTE, i.created_at, i.resolved_at) END) AS avg_resolve
-    FROM incidents i
-    WHERE {$incidentActivityWhere}
-";
-$incidentStatsParams = [
-    ':start' => $startAt,
-    ':end' => $endAt,
-    ':updated_start' => $startAt,
-    ':updated_end' => $endAt,
-    ':dispatch_start' => $startAt,
-    ':dispatch_end' => $endAt,
-];
-append_type_filter($incidentStatsSql, $incidentStatsParams, 'i.type', $typeValues, 'stats');
-if ($priorityFilter !== '') {
-    $incidentStatsSql .= ' AND i.priority = :priority';
-    $incidentStatsParams[':priority'] = $priorityFilter;
-}
-$stmt = $pdo->prepare($incidentStatsSql);
-$stmt->execute($incidentStatsParams);
-$stats = $stmt->fetch() ?: [];
-$total = (int)($stats['total'] ?? 0);
-$resolved = (int)($stats['resolved'] ?? 0);
-if ($total > 0) {
-    $resolutionRate = round(($resolved / $total) * 100, 1);
-}
-if (isset($stats['avg_resolve']) && $stats['avg_resolve'] !== null) {
-    $avgResolveTime = round((float)$stats['avg_resolve'], 1);
-}
-
-$pipes = [ 'assigned'=>0,'acknowledged'=>0,'enroute'=>0,'on_scene'=>0,'cleared'=>0,'cancelled'=>0 ];
-$pipelineSql = "
-    SELECT d.status, COUNT(*) c
-    FROM dispatches d
-    INNER JOIN incidents i ON i.id = d.incident_id
-    WHERE d.assigned_at BETWEEN :start AND :end
-";
-$pipelineParams = [
-    ':start' => $startAt,
-    ':end' => $endAt,
-];
-append_type_filter($pipelineSql, $pipelineParams, 'i.type', $typeValues, 'pipeline');
-if ($priorityFilter !== '') {
-    $pipelineSql .= ' AND i.priority = :priority';
-    $pipelineParams[':priority'] = $priorityFilter;
-}
-$pipelineSql .= ' GROUP BY d.status';
-$stmt = $pdo->prepare($pipelineSql);
-$stmt->execute($pipelineParams);
-foreach ($stmt->fetchAll() as $row) {
-    $statusKey = (string)($row['status'] ?? '');
-    if (isset($pipes[$statusKey])) {
-        $pipes[$statusKey] = (int)$row['c'];
-    }
-}
-
-?><!DOCTYPE html>
+?>
+<!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Performance Analytics - <?php echo htmlspecialchars($periodLabel); ?></title>
-    <link rel="icon" type="image/x-icon" href="../images/favicon.ico">
-    <style>
-        body { font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif; margin: 24px; color: #111827; }
-        h1 { margin: 0 0 4px; font-size: 22px; }
-        .sub { color: #6b7280; margin-bottom: 16px; }
-        .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px,1fr)); gap: 12px; margin: 16px 0 20px; }
-        .card { border: 1px solid #e5e7eb; border-radius: 10px; padding: 12px; background: #fff; }
-        .kpi { font-size: 24px; font-weight: 700; }
-        table { width: 100%; border-collapse: collapse; margin-top: 8px; }
-        th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid #eef2f7; font-size: 14px; }
-        th { background: #f9fafb; font-weight: 700; }
-        .muted { color: #6b7280; }
-        .bar { height: 10px; background:#e5e7eb; border-radius: 999px; overflow: hidden; }
-        .bar-inner { background:#3b82f6; height: 100%; }
-        .btn { padding: 8px 12px; border: 1px solid #e5e7eb; background:#fff; border-radius:8px; cursor:pointer; }
-        .toolbar { display:flex; gap:8px; margin: 8px 0 16px; }
-    </style>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Performance Review Report</title><link rel="icon" href="../images/favicon.ico">
+<style>
+*{box-sizing:border-box}body{margin:0;padding:28px;background:#f4f7f9;color:#172126;font-family:Inter,system-ui,-apple-system,Segoe UI,Arial,sans-serif}.report{max-width:1120px;margin:auto}.head,.card{background:#fff;border:1px solid #dbe3e7;border-radius:14px}.head{display:flex;justify-content:space-between;gap:20px;padding:20px}h1{margin:0;font-size:24px}h2{margin:0 0 12px;font-size:16px}.sub,.muted{color:#60717a;font-size:13px;line-height:1.5}button{padding:9px 13px;border:1px solid #cbd5db;border-radius:8px;background:#fff;font-weight:700;cursor:pointer}.grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;margin-top:12px}.card{padding:16px}.label{color:#60717a;font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.05em}.value{font-size:25px;font-weight:800;margin-top:6px}.definition{margin-top:12px;padding:13px 15px;border-left:4px solid #3f7f7d;background:#eef6f5;color:#3e555d;font-size:12px;line-height:1.6}.table-card{margin-top:12px}table{width:100%;border-collapse:collapse}th,td{padding:10px;border-bottom:1px solid #e7edef;text-align:left;font-size:12px}th{background:#f7f9fa;color:#54656e;text-transform:uppercase;font-size:10px;letter-spacing:.04em}.trend{display:inline-flex;padding:4px 8px;border-radius:999px;font-weight:800}.trend.good{background:#e8f5ee;color:#157347}.trend.bad{background:#fdecea;color:#b42318}.trend.neutral{background:#eef2f5;color:#5b6b73}.foot{margin-top:12px;color:#60717a;font-size:12px}.live{color:#946200;font-weight:800}@media(max-width:850px){.grid{grid-template-columns:repeat(2,1fr)}.head{flex-direction:column}}@media print{body{padding:0;background:#fff}button{display:none}.head,.card{break-inside:avoid}}
+</style>
 </head>
-<body>
-    <h1>Performance Analytics</h1>
-    <div class="sub">Period: <?php echo htmlspecialchars($periodLabel); ?> (<?php echo htmlspecialchars(substr($startAt,0,10)); ?> to <?php echo htmlspecialchars(substr($endAt,0,10)); ?>)</div>
-    <div class="toolbar"><button class="btn" onclick="window.print()">Print / Save as PDF</button></div>
-
-    <div class="grid">
-        <div class="card"><div class="muted">Avg Response Time</div><div class="kpi"><?php echo number_format($avgResponse,1); ?> min</div></div>
-        <div class="card"><div class="muted">Resolution Rate</div><div class="kpi"><?php echo number_format($resolutionRate,1); ?>%</div></div>
-        <div class="card"><div class="muted">Avg Time to Resolve</div><div class="kpi"><?php echo number_format($avgResolveTime,1); ?> min</div></div>
-    </div>
-
-    <div class="card">
-        <div class="muted" style="margin-bottom:6px;">Dispatch Pipeline (count per status)</div>
-        <table>
-            <thead><tr><th>Status</th><th>Count</th><th style="width:60%">Share</th></tr></thead>
-            <tbody>
-                <?php $sum = array_sum($pipes); foreach ($pipes as $st=>$c): $pct = $sum>0? round(($c/$sum)*100,1):0; ?>
-                <tr>
-                    <td><?php echo htmlspecialchars(ucwords(str_replace('_',' ',$st))); ?></td>
-                    <td><?php echo (int)$c; ?></td>
-                    <td>
-                        <div class="bar"><div class="bar-inner" style="width: <?php echo $pct; ?>%"></div></div>
-                        <div class="muted" style="font-size:12px; margin-top:4px;"><?php echo $pct; ?>%</div>
-                    </td>
-                </tr>
-                <?php endforeach; ?>
-            </tbody>
-        </table>
-    </div>
-</body>
-</html>
+<body><div class="report">
+<header class="head"><div><h1>Administrative Performance Review</h1><div class="sub"><?php echo perf_h($scope['period_label'] . ': ' . $scope['start_date'] . ' to ' . $scope['end_date']); ?> · Asia/Manila</div><div class="sub">Compared with <?php echo perf_h($scope['previous_start_date'] . ' to ' . $scope['previous_end_date']); ?></div></div><button onclick="window.print()">Print / Save as PDF</button></header>
+<section class="grid">
+<article class="card"><div class="label">Dispatch-to-scene</div><div class="value"><?php echo perf_value($currentDispatch['avg_on_scene_minutes'],' min'); ?></div><div class="muted"><?php echo number_format((int)$currentDispatch['on_scene_sample_count']); ?> valid arrival(s)</div></article>
+<article class="card"><div class="label">Arrival SLA compliance</div><div class="value"><?php echo perf_value($currentDispatch['response_sla_compliance_rate'],'%'); ?></div><div class="muted">Within <?php echo ERS_REPORT_RESPONSE_SLA_MINUTES; ?> minutes</div></article>
+<article class="card"><div class="label">Resolution rate</div><div class="value"><?php echo perf_value($metrics['resolution_rate'],'%'); ?></div><div class="muted"><?php echo number_format((int)$metrics['resolved_incidents']); ?> of <?php echo number_format((int)$metrics['total_incidents']); ?> incident(s)</div></article>
+<article class="card"><div class="label">Current unit utilization</div><div class="value"><?php echo perf_value($metrics['resource_utilization'],'%'); ?></div><div class="muted"><span class="live">Live snapshot</span>, not historical</div></article>
+</section>
+<div class="definition"><strong>Definitions:</strong> Response performance uses only dispatches with a valid <code>on_scene_at</code> at or after assignment. Resolution rate uses incidents created during the selected range and resolved by that range’s end. Missing timestamps are reported as unavailable rather than converted to zero. Percentage comparisons are percentage-point changes.</div>
+<section class="card table-card"><h2>Current versus previous equal-duration period</h2><table><thead><tr><th>Metric</th><th>Current</th><th>Previous</th><th>Samples current / previous</th><th>Target</th><th>Change</th></tr></thead><tbody><?php foreach($rows as $row): ?><tr><td><strong><?php echo perf_h($row['metric']); ?></strong></td><td><?php echo perf_h($row['current']); ?></td><td><?php echo perf_h($row['previous']); ?></td><td><?php echo perf_h($row['samples']); ?></td><td><?php echo perf_h($row['target']); ?></td><td><span class="trend <?php echo perf_h($row['delta']['tone']); ?>"><?php echo perf_h($row['delta']['label']); ?></span></td></tr><?php endforeach; ?></tbody></table></section>
+<div class="foot">Generated <?php echo perf_h($scope['generated_at']); ?>. Filters: type <?php echo perf_h($scope['type'] ?: 'all'); ?>; priority <?php echo perf_h($scope['priority'] ?: 'all'); ?>.</div>
+</div></body></html>

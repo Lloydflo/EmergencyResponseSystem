@@ -1,280 +1,125 @@
 <?php
 declare(strict_types=1);
+
 require_once __DIR__ . '/../includes/admin_api_auth.php';
 require_admin_api_access(false);
 require_once __DIR__ . '/../includes/db.php';
+require_once __DIR__ . '/../includes/report_analytics.php';
 
-$pdo = get_db_connection();
-if (!$pdo) {
+function report_html($value): string
+{
+    return htmlspecialchars((string)$value, ENT_QUOTES, 'UTF-8');
+}
+
+function report_number_or_dash($value, int $decimals = 1, string $suffix = ''): string
+{
+    return $value === null ? '—' : number_format((float)$value, $decimals) . $suffix;
+}
+
+try {
+    $pdo = get_db_connection();
+    if (!$pdo) {
+        throw new RuntimeException('Database connection unavailable.');
+    }
+    $scope = ers_report_scope($_GET);
+    $report = ers_report_fetch_metrics($pdo, $scope);
+    $metrics = $report['metrics'];
+    $items = ers_report_fetch_incidents($pdo, $scope, 500);
+    $statusCounts = array_merge(
+        ['resolved' => 0, 'cancelled' => 0, 'open' => 0],
+        (array)($metrics['incident_status_counts'] ?? [])
+    );
+} catch (InvalidArgumentException $e) {
+    http_response_code(422);
+    echo report_html($e->getMessage());
+    exit;
+} catch (Throwable $e) {
+    error_log('reports_incident_summary.php failed: ' . $e->getMessage());
     http_response_code(500);
-    echo 'Database connection unavailable';
+    echo 'Unable to generate the incident report.';
     exit;
 }
 
-function period_to_range(): array {
-    $period = isset($_GET['period']) ? strtolower(trim((string)$_GET['period'])) : 'month';
-    $start = isset($_GET['start']) ? $_GET['start'] : '';
-    $end = isset($_GET['end']) ? $_GET['end'] : '';
-
-    if ($start && $end) {
-        return [$start . ' 00:00:00', $end . ' 23:59:59', 'Custom'];
-    }
-    $today = new DateTime('today');
-    switch ($period) {
-        case 'today':
-            $s = $today->format('Y-m-d') . ' 00:00:00';
-            $e = $today->format('Y-m-d') . ' 23:59:59';
-            return [$s, $e, 'Today'];
-        case 'week':
-            $start = (clone $today)->modify('monday this week');
-            $end = (clone $start)->modify('+6 days');
-            return [$start->format('Y-m-d') . ' 00:00:00', $end->format('Y-m-d') . ' 23:59:59', 'This Week'];
-        case 'quarter':
-            $m = (int)$today->format('n');
-            $q = intdiv($m-1, 3) + 1;
-            $qm = [1=>1,2=>4,3=>7,4=>10][$q];
-            $start = new DateTime($today->format('Y') . '-' . str_pad((string)$qm,2,'0',STR_PAD_LEFT) . '-01');
-            $end = (clone $start)->modify('+3 months -1 day');
-            return [$start->format('Y-m-d') . ' 00:00:00', $end->format('Y-m-d') . ' 23:59:59', 'This Quarter'];
-        case 'year':
-            $start = new DateTime($today->format('Y-01-01'));
-            $end = new DateTime($today->format('Y-12-31'));
-            return [$start->format('Y-m-d') . ' 00:00:00', $end->format('Y-m-d') . ' 23:59:59', 'This Year'];
-        case 'month':
-        default:
-            $start = new DateTime($today->format('Y-m-01'));
-            $end = (clone $start)->modify('+1 month -1 day');
-            return [$start->format('Y-m-d') . ' 00:00:00', $end->format('Y-m-d') . ' 23:59:59', 'This Month'];
-    }
-}
-
-function normalized_type_values(string $typeFilter): array {
-    $typeFilter = strtolower(trim($typeFilter));
-    if ($typeFilter === '') {
-        return [];
-    }
-    if ($typeFilter === 'traffic' || $typeFilter === 'accident') {
-        return ['traffic', 'accident'];
-    }
-    if ($typeFilter === 'police' || $typeFilter === 'crime') {
-        return ['police', 'crime'];
-    }
-    return [$typeFilter];
-}
-
-function append_type_filter(string &$sql, array &$params, string $column, array $typeValues, string $prefix): void {
-    if (!$typeValues) {
-        return;
-    }
-    $placeholders = [];
-    foreach ($typeValues as $index => $value) {
-        $placeholder = ':' . $prefix . '_type_' . $index;
-        $placeholders[] = $placeholder;
-        $params[$placeholder] = $value;
-    }
-    $sql .= ' AND LOWER(' . $column . ') IN (' . implode(', ', $placeholders) . ')';
-}
-
-[$startAt, $endAt, $periodLabel] = period_to_range();
-$typeFilter = isset($_GET['type']) ? trim((string)$_GET['type']) : '';
-$priorityFilter = isset($_GET['priority']) ? trim((string)$_GET['priority']) : '';
-$typeValues = normalized_type_values($typeFilter);
-
-$incidentActivityWhere = "
-    (
-        i.created_at BETWEEN :s AND :e
-        OR (i.updated_at IS NOT NULL AND i.updated_at BETWEEN :us AND :ue)
-        OR EXISTS (
-            SELECT 1
-            FROM dispatches d_window
-            WHERE d_window.incident_id = i.id
-              AND d_window.assigned_at BETWEEN :ds AND :de
-        )
-    )
-";
-$incidentSql = "SELECT i.id, i.reference_no, i.type, i.priority, i.status, i.location_address, i.created_at, i.updated_at, i.resolved_at
-        FROM incidents i
-        WHERE {$incidentActivityWhere}";
-$incidentParams = [
-    ':s' => $startAt,
-    ':e' => $endAt,
-    ':us' => $startAt,
-    ':ue' => $endAt,
-    ':ds' => $startAt,
-    ':de' => $endAt,
-];
-append_type_filter($incidentSql, $incidentParams, 'i.type', $typeValues, 'incident');
-if ($priorityFilter !== '') {
-    $incidentSql .= ' AND i.priority = :priority';
-    $incidentParams[':priority'] = $priorityFilter;
-}
-$incidentSql .= ' ORDER BY COALESCE(i.resolved_at, i.updated_at, i.created_at) DESC LIMIT 500';
-
-$stmt = $pdo->prepare($incidentSql);
-$stmt->execute($incidentParams);
-$incidents = $stmt->fetchAll();
-
-$types = ['medical'=>0,'fire'=>0,'police'=>0,'traffic'=>0,'other'=>0];
-$priorities = ['critical'=>0,'high'=>0,'medium'=>0,'low'=>0];
-$statuses = ['pending'=>0,'dispatched'=>0,'active'=>0,'in_progress'=>0,'resolved'=>0,'cancelled'=>0];
-$total = 0;
-foreach ($incidents as $r) {
-    $total++;
-    $typeName = strtolower((string)($r['type'] ?? 'other'));
-    if ($typeName === 'crime') {
-        $typeName = 'police';
-    } elseif ($typeName === 'accident') {
-        $typeName = 'traffic';
-    }
-    if (!isset($types[$typeName])) {
-        $typeName = 'other';
-    }
-    $types[$typeName]++;
-
-    $priorityName = strtolower((string)($r['priority'] ?? 'low'));
-    if (!isset($priorities[$priorityName])) {
-        $priorityName = 'low';
-    }
-    $priorities[$priorityName]++;
-
-    $statusName = strtolower((string)($r['status'] ?? 'pending'));
-    if (!isset($statuses[$statusName])) {
-        $statuses[$statusName] = 0;
-    }
-    $statuses[$statusName]++;
-}
-
-$avgResponse = 0.0;
-$responseSql = "
-    SELECT AVG(TIMESTAMPDIFF(MINUTE, d.assigned_at, COALESCE(d.on_scene_at, d.cleared_at))) AS avg_min
-    FROM dispatches d
-    INNER JOIN incidents i ON i.id = d.incident_id
-    WHERE d.assigned_at BETWEEN :s AND :e
-      AND COALESCE(d.on_scene_at, d.cleared_at) IS NOT NULL
-";
-$responseParams = [':s' => $startAt, ':e' => $endAt];
-append_type_filter($responseSql, $responseParams, 'i.type', $typeValues, 'response');
-if ($priorityFilter !== '') {
-    $responseSql .= ' AND i.priority = :priority';
-    $responseParams[':priority'] = $priorityFilter;
-}
-$rt = $pdo->prepare($responseSql);
-$rt->execute($responseParams);
-$row = $rt->fetch();
-if ($row && $row['avg_min'] !== null) {
-    $avgResponse = round((float)$row['avg_min'], 1);
-}
-
-$resolved = (int)($statuses['resolved'] ?? 0);
-$resolutionRate = $total > 0 ? round(($resolved / $total) * 100, 1) : 0.0;
-
-?><!DOCTYPE html>
+$typeCounts = (array)($metrics['incidents_by_type'] ?? []);
+$priorityCounts = (array)($metrics['incidents_by_priority'] ?? []);
+$rangeLabel = $scope['period_label'] . ': ' . $scope['start_date'] . ' to ' . $scope['end_date'];
+?>
+<!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Incident Summary Report - <?php echo htmlspecialchars($periodLabel); ?></title>
+    <title>Incident Summary Report</title>
     <link rel="icon" type="image/x-icon" href="../images/favicon.ico">
     <style>
-        body { font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif; margin: 24px; color: #111827; }
-        h1 { margin: 0 0 4px; font-size: 22px; }
-        .sub { color: #6b7280; margin-bottom: 16px; }
-        .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px,1fr)); gap: 12px; margin: 16px 0 20px; }
-        .card { border: 1px solid #e5e7eb; border-radius: 10px; padding: 12px; background: #fff; }
-        .kpi { font-size: 24px; font-weight: 700; }
-        table { width: 100%; border-collapse: collapse; margin-top: 8px; }
-        th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid #eef2f7; font-size: 14px; }
-        th { background: #f9fafb; font-weight: 700; }
-        .muted { color: #6b7280; }
-        .badge { display: inline-block; padding: 2px 8px; border-radius: 999px; font-size: 12px; }
-        .prio-critical { background:#fee2e2; color:#991b1b; }
-        .prio-high { background:#ffedd5; color:#9a3412; }
-        .prio-medium { background:#fef3c7; color:#92400e; }
-        .prio-low { background:#dcfce7; color:#065f46; }
-        .status-pending { background:#fef3c7; color:#92400e; }
-        .status-dispatched { background:#e0e7ff; color:#3730a3; }
-        .status-resolved { background:#dcfce7; color:#166534; }
-        .status-cancelled { background:#f3f4f6; color:#374151; }
-        .toolbar { display:flex; gap:8px; margin: 8px 0 16px; }
-        .btn { padding: 8px 12px; border: 1px solid #e5e7eb; background:#fff; border-radius:8px; cursor:pointer; }
+        :root { color-scheme: light; }
+        * { box-sizing: border-box; }
+        body { margin: 0; padding: 28px; background: #f4f7f9; color: #172126; font-family: Inter, system-ui, -apple-system, Segoe UI, Arial, sans-serif; }
+        .report { max-width: 1180px; margin: auto; }
+        .head, .card { border: 1px solid #dbe3e7; border-radius: 14px; background: #fff; }
+        .head { display:flex; justify-content:space-between; gap:20px; padding:20px; }
+        h1 { margin:0; font-size:24px; } h2 { margin:0 0 12px; font-size:16px; }
+        .sub, .muted { color:#60717a; font-size:13px; line-height:1.5; }
+        .toolbar { display:flex; align-items:flex-start; gap:8px; }
+        button { padding:9px 13px; border:1px solid #cbd5db; border-radius:8px; background:#fff; cursor:pointer; font-weight:700; }
+        .grid { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:12px; margin-top:12px; }
+        .card { padding:16px; }
+        .metric-label { color:#60717a; font-size:11px; font-weight:800; letter-spacing:.05em; text-transform:uppercase; }
+        .metric { margin-top:6px; font-size:26px; font-weight:800; }
+        .two { display:grid; grid-template-columns:1fr 1fr; gap:12px; margin-top:12px; }
+        table { width:100%; border-collapse:collapse; } th,td { padding:9px 10px; border-bottom:1px solid #e7edef; text-align:left; font-size:12px; vertical-align:top; }
+        th { background:#f7f9fa; color:#54656e; font-size:10px; text-transform:uppercase; letter-spacing:.04em; }
+        .definition { margin-top:12px; padding:12px 14px; border-left:4px solid #3f7f7d; background:#eef6f5; color:#3e555d; font-size:12px; line-height:1.55; }
+        .badge { display:inline-flex; padding:3px 7px; border-radius:999px; background:#eef6f5; color:#326a68; font-size:10px; font-weight:800; }
+        .scroll { max-height:560px; overflow:auto; }
+        @media (max-width:850px){ .grid{grid-template-columns:repeat(2,1fr)} .two{grid-template-columns:1fr} .head{flex-direction:column} }
+        @media print { body{padding:0;background:#fff} .toolbar{display:none}.head,.card{box-shadow:none;break-inside:avoid}.scroll{max-height:none;overflow:visible} }
     </style>
 </head>
 <body>
-    <h1>Incident Summary Report</h1>
-    <div class="sub">Period: <?php echo htmlspecialchars($periodLabel); ?> (<?php echo htmlspecialchars(substr($startAt,0,10)); ?> to <?php echo htmlspecialchars(substr($endAt,0,10)); ?>)</div>
-
-    <div class="toolbar">
-        <button class="btn" onclick="window.print()">Print / Save as PDF</button>
-    </div>
-
-    <div class="grid">
-        <div class="card"><div class="muted">Total Incidents</div><div class="kpi"><?php echo (int)$total; ?></div></div>
-        <div class="card"><div class="muted">Resolved</div><div class="kpi"><?php echo (int)$resolved; ?></div></div>
-        <div class="card"><div class="muted">Resolution Rate</div><div class="kpi"><?php echo number_format($resolutionRate,1); ?>%</div></div>
-        <div class="card"><div class="muted">Avg Response Time</div><div class="kpi"><?php echo number_format($avgResponse,1); ?> min</div></div>
-    </div>
-
-    <div class="grid">
-        <div class="card">
-            <div class="muted">By Type</div>
-            <table>
-                <tbody>
-                <?php foreach ($types as $k=>$v): ?>
-                    <tr><td><?php echo htmlspecialchars(ucfirst($k)); ?></td><td><?php echo (int)$v; ?></td></tr>
-                <?php endforeach; ?>
-                </tbody>
-            </table>
+<div class="report">
+    <header class="head">
+        <div>
+            <h1>Incident Summary Report</h1>
+            <div class="sub"><?php echo report_html($rangeLabel); ?> · Asia/Manila</div>
+            <div class="sub">Generated <?php echo report_html($scope['generated_at']); ?></div>
         </div>
-        <div class="card">
-            <div class="muted">By Priority</div>
-            <table>
-                <tbody>
-                <?php foreach ($priorities as $k=>$v): ?>
-                    <tr><td><?php echo htmlspecialchars(ucfirst($k)); ?></td><td><?php echo (int)$v; ?></td></tr>
-                <?php endforeach; ?>
-                </tbody>
-            </table>
-        </div>
-        <div class="card">
-            <div class="muted">By Status</div>
-            <table>
-                <tbody>
-                <?php foreach ($statuses as $k=>$v): ?>
-                    <tr><td><?php echo htmlspecialchars(ucfirst($k)); ?></td><td><?php echo (int)$v; ?></td></tr>
-                <?php endforeach; ?>
-                </tbody>
-            </table>
-        </div>
-    </div>
+        <div class="toolbar"><button type="button" onclick="window.print()">Print / Save as PDF</button></div>
+    </header>
 
-    <div class="card" style="margin-top:16px;">
-        <div class="muted" style="margin-bottom:6px;">Incidents (latest first)</div>
-        <table>
-            <thead>
-                <tr>
-                    <th>Code</th>
-                    <th>Type</th>
-                    <th>Priority</th>
-                    <th>Status</th>
-                    <th>Location</th>
-                    <th>Created</th>
-                </tr>
-            </thead>
-            <tbody>
-            <?php if (!$incidents): ?>
-                <tr><td colspan="6" class="muted">No incidents in this period.</td></tr>
-            <?php else: foreach ($incidents as $r): ?>
-                <tr>
-                    <td><?php echo htmlspecialchars($r['reference_no']); ?></td>
-                    <td><?php echo htmlspecialchars(ucfirst($r['type'])); ?></td>
-                    <td><span class="badge prio-<?php echo htmlspecialchars($r['priority']); ?>"><?php echo htmlspecialchars(ucfirst($r['priority'])); ?></span></td>
-                    <td><span class="badge status-<?php echo htmlspecialchars($r['status']); ?>"><?php echo htmlspecialchars(ucfirst($r['status'])); ?></span></td>
-                    <td class="muted"><?php echo htmlspecialchars($r['location_address'] ?: ''); ?></td>
-                    <td class="muted"><?php echo htmlspecialchars($r['created_at']); ?></td>
-                </tr>
-            <?php endforeach; endif; ?>
-            </tbody>
-        </table>
-    </div>
+    <section class="grid">
+        <article class="card"><div class="metric-label">Incidents created</div><div class="metric"><?php echo number_format((int)$metrics['total_incidents']); ?></div><div class="muted">Created within selected range</div></article>
+        <article class="card"><div class="metric-label">Resolved by period end</div><div class="metric"><?php echo number_format((int)$metrics['resolved_incidents']); ?></div><div class="muted">From the selected incident cohort</div></article>
+        <article class="card"><div class="metric-label">Resolution rate</div><div class="metric"><?php echo report_number_or_dash($metrics['resolution_rate'], 1, '%'); ?></div><div class="muted">Resolved ÷ incidents created</div></article>
+        <article class="card"><div class="metric-label">Dispatch-to-scene average</div><div class="metric"><?php echo report_number_or_dash($metrics['avg_response_time_min'], 1, ' min'); ?></div><div class="muted"><?php echo number_format((int)$metrics['avg_response_sample_count']); ?> valid on-scene sample(s)</div></article>
+    </section>
+
+    <div class="definition"><strong>Measurement rules:</strong> Incident volume is based only on <code>incidents.created_at</code>. Response time is measured from dispatch assignment to a recorded on-scene arrival; completion time is not used as an arrival substitute. Days or records without a valid on-scene timestamp are excluded from the response-time average.</div>
+
+    <section class="two">
+        <article class="card"><h2>Incidents by type</h2><table><tbody><?php foreach (['medical','fire','police','traffic','other'] as $key): ?><tr><td><?php echo report_html(ucfirst($key)); ?></td><td><?php echo number_format((int)($typeCounts[$key] ?? 0)); ?></td></tr><?php endforeach; ?></tbody></table></article>
+        <article class="card"><h2>Incidents by priority</h2><table><tbody><?php foreach (['critical','high','medium','low','other'] as $key): ?><tr><td><?php echo report_html(ucfirst($key)); ?></td><td><?php echo number_format((int)($priorityCounts[$key] ?? 0)); ?></td></tr><?php endforeach; ?></tbody></table></article>
+        <article class="card"><h2>Current cohort status</h2><table><tbody><?php foreach ($statusCounts as $key => $value): ?><tr><td><?php echo report_html(ucfirst($key)); ?></td><td><?php echo number_format($value); ?></td></tr><?php endforeach; ?></tbody></table></article>
+        <article class="card"><h2>Applied filters</h2><table><tbody><tr><td>Type</td><td><?php echo report_html($scope['type'] ?: 'All'); ?></td></tr><tr><td>Priority</td><td><?php echo report_html($scope['priority'] ?: 'All'); ?></td></tr><tr><td>Previous comparison</td><td><?php echo report_html($scope['previous_start_date'] . ' to ' . $scope['previous_end_date']); ?></td></tr></tbody></table></article>
+    </section>
+
+    <section class="card" style="margin-top:12px">
+        <h2>Incidents created in selected range</h2>
+        <div class="muted" style="margin:-5px 0 10px">Showing up to 500 newest records; aggregate totals above include the full filtered cohort.</div>
+        <div class="scroll"><table><thead><tr><th>Reference</th><th>Created</th><th>Type</th><th>Priority</th><th>Status</th><th>Location</th><th>Unit</th><th>Response</th></tr></thead><tbody>
+        <?php if (!$items): ?><tr><td colspan="8" class="muted">No incidents found.</td></tr><?php endif; ?>
+        <?php foreach ($items as $item): ?><tr>
+            <td><strong><?php echo report_html($item['incident_code']); ?></strong></td>
+            <td><?php echo report_html($item['created_at']); ?></td>
+            <td><?php echo report_html(ucfirst((string)$item['type'])); ?></td>
+            <td><span class="badge"><?php echo report_html(strtoupper((string)$item['priority'])); ?></span></td>
+            <td><?php echo report_html(ucwords(str_replace('_',' ',(string)$item['status']))); ?></td>
+            <td><?php echo report_html($item['location']); ?></td>
+            <td><?php echo report_html($item['unit_identifier'] ?: '—'); ?></td>
+            <td><?php echo $item['response_time_min'] === null ? '—' : report_html(number_format((float)$item['response_time_min'],1) . ' min'); ?></td>
+        </tr><?php endforeach; ?>
+        </tbody></table></div>
+    </section>
+</div>
 </body>
 </html>
