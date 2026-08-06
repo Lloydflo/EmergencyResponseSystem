@@ -385,6 +385,96 @@ function audit_duration_label(?string $start, ?string $end): string
     return implode(' ', $parts);
 }
 
+function audit_personnel_role_label(string $role, string $source = ''): string
+{
+    $role = strtolower(trim($role));
+    $source = strtolower(trim($source));
+
+    if ($role === 'operator') {
+        return 'Dispatcher';
+    }
+    if ($role === '' && $source === 'dispatcher_web') {
+        return 'Dispatcher';
+    }
+    if ($role === '' && $source === 'responder_app') {
+        return 'Responder';
+    }
+    return audit_label($role !== '' ? $role : 'user');
+}
+
+function audit_role_bucket(string $role, string $source): string
+{
+    $role = strtolower(trim($role));
+    $source = strtolower(trim($source));
+
+    if ($role === 'responder' || $source === 'responder_app') {
+        return 'responders';
+    }
+    if (in_array($role, ['dispatcher', 'operator'], true) || $source === 'dispatcher_web') {
+        return 'dispatchers';
+    }
+    return 'others';
+}
+
+function audit_role_icon(string $role, string $source): string
+{
+    switch (audit_role_bucket($role, $source)) {
+        case 'responders':
+            return 'fa-helmet-safety';
+        case 'dispatchers':
+            return 'fa-headset';
+        default:
+            if (strtolower(trim($role)) === 'system' || strtolower(trim($source)) === 'system') {
+                return 'fa-gears';
+            }
+            if (strtolower(trim($role)) === 'admin' || strtolower(trim($source)) === 'admin_web') {
+                return 'fa-user-shield';
+            }
+            return 'fa-user';
+    }
+}
+
+function audit_role_tone(string $role, string $source): string
+{
+    switch (audit_role_bucket($role, $source)) {
+        case 'responders':
+            return 'responder';
+        case 'dispatchers':
+            return 'dispatcher';
+        default:
+            if (strtolower(trim($role)) === 'system' || strtolower(trim($source)) === 'system') {
+                return 'system';
+            }
+            return 'other';
+    }
+}
+
+function audit_date_only_label(?string $value): string
+{
+    $value = trim((string)$value);
+    if ($value === '') {
+        return 'Unknown date';
+    }
+    try {
+        return (new DateTimeImmutable($value, new DateTimeZone('Asia/Manila')))->format('M d, Y');
+    } catch (Throwable $e) {
+        return $value;
+    }
+}
+
+function audit_time_only_label(?string $value): string
+{
+    $value = trim((string)$value);
+    if ($value === '') {
+        return 'Unknown time';
+    }
+    try {
+        return (new DateTimeImmutable($value, new DateTimeZone('Asia/Manila')))->format('h:i:s A');
+    } catch (Throwable $e) {
+        return $value;
+    }
+}
+
 /** @param array<int,array<string,mixed>> $events */
 function audit_add_timeline_event(array &$events, array $event): void
 {
@@ -972,7 +1062,7 @@ try {
         }
         fwrite($output, "\xEF\xBB\xBF");
         fputcsv($output, [
-            'Log No.', 'Date and Time (Asia/Manila)', 'Actor', 'Actor Role', 'Source',
+            'Log No.', 'Date and Time (Asia/Manila)', 'Personnel', 'Personnel Role', 'Source',
             'Category', 'Process / Action', 'Incident Reference', 'Outcome', 'Details',
             'Metadata', 'Request ID', 'IP Address',
         ]);
@@ -1078,6 +1168,173 @@ $clearAdvancedUrl = audit_query_url([
     'date_to' => null,
     'page' => 1,
 ]);
+
+
+$groupedTabs = [
+    'responders' => [
+        'label' => 'Responders',
+        'description' => 'Responder App activities grouped by person and day.',
+        'groups' => [],
+        'entry_count' => 0,
+    ],
+    'dispatchers' => [
+        'label' => 'Dispatchers',
+        'description' => 'Dispatcher Website activities grouped by person and day.',
+        'groups' => [],
+        'entry_count' => 0,
+    ],
+    'others' => [
+        'label' => 'Other / System',
+        'description' => 'Admin, system, and other uncategorized activities.',
+        'groups' => [],
+        'entry_count' => 0,
+    ],
+];
+
+foreach ($auditRows as $index => $row) {
+    $logNo = $offset + $index + 1;
+    $actorName = trim((string)($row['actor_name'] ?? '')) ?: 'System';
+    $actorEmail = trim((string)($row['actor_email'] ?? ''));
+    $actorRole = strtolower(trim((string)($row['actor_role'] ?? 'system')));
+    $source = strtolower(trim((string)($row['source_channel'] ?? 'system')));
+    $category = strtolower(trim((string)($row['event_category'] ?? 'system')));
+    $outcome = strtolower(trim((string)($row['event_outcome'] ?? 'success')));
+    if (!in_array($outcome, $allowedOutcomes, true)) {
+        $outcome = 'info';
+    }
+    $reference = trim((string)($row['reference_no'] ?? ''));
+    $metadataPretty = audit_json_pretty($row['metadata_json'] ?? null);
+    $detailsSummary = audit_details_summary($row['details'] ?? '');
+    $rowIdentity = (int)($row['id'] ?? 0) > 0 ? (string)(int)$row['id'] : (string)$logNo;
+    $dialogId = 'audit-detail-' . $rowIdentity . '-' . $index;
+    $dialogTitleId = $dialogId . '-title';
+    $entityText = audit_label((string)($row['entity_type'] ?? 'system'));
+    if ((int)($row['entity_id'] ?? 0) > 0) {
+        $entityText .= ' · record ' . number_format((int)$row['entity_id']);
+    }
+
+    $groupDateKey = '';
+    try {
+        $groupDateKey = (new DateTimeImmutable((string)($row['created_at'] ?? 'now'), new DateTimeZone('Asia/Manila')))->format('Y-m-d');
+    } catch (Throwable $e) {
+        $groupDateKey = substr((string)($row['created_at'] ?? ''), 0, 10);
+    }
+    $tabKey = audit_role_bucket($actorRole, $source);
+    if (!isset($groupedTabs[$tabKey])) {
+        $tabKey = 'others';
+    }
+    $groupActorNameKey = function_exists('mb_strtolower') ? mb_strtolower($actorName) : strtolower($actorName);
+    $groupActorEmailKey = function_exists('mb_strtolower') ? mb_strtolower($actorEmail) : strtolower($actorEmail);
+    $groupKey = implode('|', [$groupDateKey, $groupActorNameKey, $groupActorEmailKey, $source, $actorRole]);
+
+    if (!isset($groupedTabs[$tabKey]['groups'][$groupKey])) {
+        $groupedTabs[$tabKey]['groups'][$groupKey] = [
+            'group_key' => $groupKey,
+            'date_key' => $groupDateKey,
+            'date_label' => audit_date_only_label((string)($row['created_at'] ?? '')),
+            'actor_name' => $actorName,
+            'actor_email' => $actorEmail,
+            'actor_role' => $actorRole,
+            'role_label' => audit_personnel_role_label($actorRole, $source),
+            'role_icon' => audit_role_icon($actorRole, $source),
+            'role_tone' => audit_role_tone($actorRole, $source),
+            'source' => $source,
+            'source_label' => audit_source_label($source),
+            'latest_time' => (string)($row['created_at'] ?? ''),
+            'latest_time_label' => audit_time_only_label((string)($row['created_at'] ?? '')),
+            'entries' => [],
+            'success_count' => 0,
+            'warning_count' => 0,
+            'failed_count' => 0,
+        ];
+    }
+
+    $entry = [
+        'log_no' => $logNo,
+        'created_at' => (string)($row['created_at'] ?? ''),
+        'created_at_iso' => audit_iso_datetime((string)($row['created_at'] ?? '')),
+        'created_time_label' => audit_time_only_label((string)($row['created_at'] ?? '')),
+        'created_full_label' => audit_format_date($row['created_at'] ?? null),
+        'actor_name' => $actorName,
+        'actor_email' => $actorEmail,
+        'actor_role' => $actorRole,
+        'role_label' => audit_personnel_role_label($actorRole, $source),
+        'role_icon' => audit_role_icon($actorRole, $source),
+        'role_tone' => audit_role_tone($actorRole, $source),
+        'source' => $source,
+        'source_label' => audit_source_label($source),
+        'category' => $category,
+        'category_label' => audit_category_label($category),
+        'outcome' => $outcome,
+        'reference' => $reference,
+        'details_summary' => $detailsSummary,
+        'metadata_pretty' => $metadataPretty,
+        'dialog_id' => $dialogId,
+        'dialog_title_id' => $dialogTitleId,
+        'action_label' => audit_label((string)($row['action'] ?? '')),
+        'entity_text' => $entityText,
+        'request_id' => trim((string)($row['request_id'] ?? '')),
+        'ip_address' => trim((string)($row['ip_address'] ?? '')),
+        'user_agent' => trim((string)($row['user_agent'] ?? '')),
+    ];
+
+    $groupedTabs[$tabKey]['groups'][$groupKey]['entries'][] = $entry;
+    $groupedTabs[$tabKey]['entry_count']++;
+
+    if ($outcome === 'success') {
+        $groupedTabs[$tabKey]['groups'][$groupKey]['success_count']++;
+    } elseif ($outcome === 'warning') {
+        $groupedTabs[$tabKey]['groups'][$groupKey]['warning_count']++;
+    } elseif ($outcome === 'failed') {
+        $groupedTabs[$tabKey]['groups'][$groupKey]['failed_count']++;
+    }
+
+    if (audit_datetime_key((string)($row['created_at'] ?? '')) > audit_datetime_key($groupedTabs[$tabKey]['groups'][$groupKey]['latest_time'])) {
+        $groupedTabs[$tabKey]['groups'][$groupKey]['latest_time'] = (string)($row['created_at'] ?? '');
+        $groupedTabs[$tabKey]['groups'][$groupKey]['latest_time_label'] = audit_time_only_label((string)($row['created_at'] ?? ''));
+    }
+}
+
+foreach ($groupedTabs as $tabKey => &$tabConfig) {
+    foreach ($tabConfig['groups'] as &$group) {
+        usort($group['entries'], static function (array $left, array $right): int {
+            return (audit_datetime_key((string)$right['created_at']) ?? 0) <=> (audit_datetime_key((string)$left['created_at']) ?? 0);
+        });
+        $group['entry_total'] = count($group['entries']);
+    }
+    unset($group);
+    $tabConfig['groups'] = array_values($tabConfig['groups']);
+    usort($tabConfig['groups'], static function (array $left, array $right): int {
+        $timeCompare = (audit_datetime_key((string)$right['latest_time']) ?? 0) <=> (audit_datetime_key((string)$left['latest_time']) ?? 0);
+        if ($timeCompare !== 0) {
+            return $timeCompare;
+        }
+        return strcmp((string)$left['actor_name'], (string)$right['actor_name']);
+    });
+}
+unset($tabConfig);
+
+$visibleTabKeys = [];
+foreach ($groupedTabs as $tabKey => $tabConfig) {
+    if ($tabConfig['entry_count'] > 0 || $tabKey !== 'others') {
+        $visibleTabKeys[] = $tabKey;
+    }
+}
+if ($visibleTabKeys === []) {
+    $visibleTabKeys = ['responders', 'dispatchers'];
+}
+
+$preferredTab = 'responders';
+if ($sourceFilter === 'dispatcher_web' || in_array($roleFilter, ['dispatcher', 'operator'], true)) {
+    $preferredTab = 'dispatchers';
+} elseif ($sourceFilter === 'responder_app' || $roleFilter === 'responder') {
+    $preferredTab = 'responders';
+} elseif (($roleFilter !== '' || $sourceFilter !== '') && !in_array($preferredTab, $visibleTabKeys, true)) {
+    $preferredTab = 'others';
+}
+if (!in_array($preferredTab, $visibleTabKeys, true)) {
+    $preferredTab = $visibleTabKeys[0];
+}
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -1106,7 +1363,7 @@ $clearAdvancedUrl = audit_query_url([
                 <div class="audit-title-block">
                     <span class="audit-eyebrow"><i class="fas fa-shield-halved" aria-hidden="true"></i> Operational audit trail</span>
                     <h1>Audit Logs</h1>
-                    <p>Review system activity, trace accountability, and inspect technical context without changing the underlying records.</p>
+                    <p>Review emergency-response activity, trace accountability, and inspect technical context without changing the underlying records.</p>
                 </div>
                 <div class="audit-header-meta" aria-label="Audit record status">
                     <span class="audit-record-state"><span class="audit-status-dot" aria-hidden="true"></span> Read-only record</span>
@@ -1208,7 +1465,7 @@ $clearAdvancedUrl = audit_query_url([
                     <div>
                         <span class="audit-section-kicker">System activity</span>
                         <h2 id="auditRecordsTitle">Log records</h2>
-                        <p>Search the most useful fields first, then open advanced filters only when needed.</p>
+                        <p>Search key fields first, then review grouped daily actions per responder or dispatcher.</p>
                     </div>
                     <div class="audit-panel-actions">
                         <?php if ($activeFilters): ?>
@@ -1226,7 +1483,7 @@ $clearAdvancedUrl = audit_query_url([
                             <label for="auditSearch">Search logs</label>
                             <div class="audit-input-with-icon">
                                 <i class="fas fa-magnifying-glass" aria-hidden="true"></i>
-                                <input id="auditSearch" class="audit-input" type="search" name="q" value="<?php echo audit_h($search); ?>" placeholder="Actor, action, details, request ID...">
+                                <input id="auditSearch" class="audit-input" type="search" name="q" value="<?php echo audit_h($search); ?>" placeholder="Responder name, dispatcher name, action, details...">
                             </div>
                         </div>
                         <div class="audit-field audit-field-reference">
@@ -1251,7 +1508,7 @@ $clearAdvancedUrl = audit_query_url([
                         <div class="audit-advanced-content">
                             <div class="audit-advanced-grid">
                                 <div class="audit-field">
-                                    <label for="auditRole">Actor role</label>
+                                    <label for="auditRole">Personnel role</label>
                                     <select id="auditRole" class="audit-select" name="role">
                                         <option value="">All roles</option>
                                         <?php foreach ($allowedRoles as $role): ?><option value="<?php echo audit_h($role); ?>" <?php echo $roleFilter === $role ? 'selected' : ''; ?>><?php echo audit_h(audit_label($role)); ?></option><?php endforeach; ?>
@@ -1320,8 +1577,8 @@ $clearAdvancedUrl = audit_query_url([
 
                 <div class="audit-results-bar">
                     <div>
-                        <strong><?php echo number_format($matchingCount); ?></strong> matching <?php echo $matchingCount === 1 ? 'log' : 'logs'; ?>
-                        <span>Showing <?php echo number_format($showStart); ?>–<?php echo number_format($showEnd); ?></span>
+                        <strong><?php echo number_format($matchingCount); ?></strong> matching <?php echo $matchingCount === 1 ? 'activity' : 'activities'; ?>
+                        <span>Showing <?php echo number_format($showStart); ?>–<?php echo number_format($showEnd); ?>, grouped by personnel and day</span>
                     </div>
                     <div class="audit-results-meta">
                         <span><i class="fas fa-arrow-down-wide-short" aria-hidden="true"></i> Newest first</span>
@@ -1342,141 +1599,162 @@ $clearAdvancedUrl = audit_query_url([
                         <?php if ($activeFilters): ?><a class="audit-btn audit-btn-secondary" href="admin/audit.php">Clear filters</a><?php endif; ?>
                     </div>
                 <?php else: ?>
-                    <div class="audit-table-shell">
-                        <table class="audit-log-table">
-                            <caption class="audit-visually-hidden">Operational audit log records</caption>
-                            <colgroup>
-                                <col class="audit-col-time">
-                                <col class="audit-col-actor">
-                                <col class="audit-col-activity">
-                                <col class="audit-col-reference">
-                                <col class="audit-col-outcome">
-                                <col class="audit-col-action">
-                            </colgroup>
-                            <thead>
-                                <tr>
-                                    <th scope="col">Date &amp; time</th>
-                                    <th scope="col">Actor &amp; source</th>
-                                    <th scope="col">Activity</th>
-                                    <th scope="col">Reference</th>
-                                    <th scope="col">Outcome</th>
-                                    <th scope="col"><span class="audit-visually-hidden">Actions</span></th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                <?php foreach ($auditRows as $index => $row): ?>
-                                    <?php
-                                    $logNo = $offset + $index + 1;
-                                    $actorName = trim((string)($row['actor_name'] ?? '')) ?: 'System';
-                                    $actorEmail = trim((string)($row['actor_email'] ?? ''));
-                                    $actorRole = strtolower(trim((string)($row['actor_role'] ?? 'system')));
-                                    $source = strtolower(trim((string)($row['source_channel'] ?? 'system')));
-                                    $category = strtolower(trim((string)($row['event_category'] ?? 'system')));
-                                    $outcome = strtolower(trim((string)($row['event_outcome'] ?? 'success')));
-                                    if (!in_array($outcome, $allowedOutcomes, true)) {
-                                        $outcome = 'info';
-                                    }
-                                    $reference = trim((string)($row['reference_no'] ?? ''));
-                                    $metadataPretty = audit_json_pretty($row['metadata_json'] ?? null);
-                                    $detailsSummary = audit_details_summary($row['details'] ?? '');
-                                    $sourceIcon = $source === 'responder_app' ? 'fa-mobile-screen-button' : ($source === 'dispatcher_web' ? 'fa-headset' : ($source === 'admin_web' ? 'fa-user-shield' : ($source === 'external_api' ? 'fa-plug' : 'fa-server')));
-                                    $rowIdentity = (int)($row['id'] ?? 0) > 0 ? (string)(int)$row['id'] : (string)$logNo;
-                                    $dialogId = 'audit-detail-' . $rowIdentity . '-' . $index;
-                                    $dialogTitleId = $dialogId . '-title';
-                                    $entityText = audit_label((string)($row['entity_type'] ?? 'system'));
-                                    if ((int)($row['entity_id'] ?? 0) > 0) {
-                                        $entityText .= ' · record ' . number_format((int)$row['entity_id']);
-                                    }
-                                    ?>
-                                    <tr>
-                                        <td class="audit-cell-time" data-label="Date &amp; time">
-                                            <div class="audit-time-block">
-                                                <span class="audit-sequence" title="Sequence in current filtered results">#<?php echo number_format($logNo); ?></span>
-                                                <time datetime="<?php echo audit_h(audit_iso_datetime((string)($row['created_at'] ?? ''))); ?>">
-                                                    <strong><?php echo audit_h(audit_format_date($row['created_at'] ?? null)); ?></strong>
-                                                    <span>Asia/Manila</span>
-                                                </time>
-                                            </div>
-                                        </td>
-                                        <td class="audit-cell-actor" data-label="Actor &amp; source">
-                                            <div class="audit-actor-block">
-                                                <span class="audit-avatar"><i class="fas <?php echo $actorRole === 'system' ? 'fa-gears' : 'fa-user'; ?>" aria-hidden="true"></i></span>
-                                                <div>
-                                                    <strong><?php echo audit_h($actorName); ?></strong>
-                                                    <span class="audit-actor-role"><?php echo audit_h(audit_label($actorRole)); ?><?php echo $actorEmail !== '' ? (' · ' . audit_h($actorEmail)) : ''; ?></span>
-                                                    <span class="audit-source-line"><i class="fas <?php echo audit_h($sourceIcon); ?>" aria-hidden="true"></i><?php echo audit_h(audit_source_label($source)); ?></span>
-                                                </div>
-                                            </div>
-                                        </td>
-                                        <td class="audit-cell-activity" data-label="Activity">
-                                            <div class="audit-activity-heading">
-                                                <strong><?php echo audit_h(audit_label((string)($row['action'] ?? ''))); ?></strong>
-                                                <span class="audit-chip"><?php echo audit_h(audit_category_label($category)); ?></span>
-                                            </div>
-                                            <p><?php echo audit_h($detailsSummary !== '' ? $detailsSummary : 'No description recorded.'); ?></p>
-                                        </td>
-                                        <td class="audit-cell-reference" data-label="Reference">
-                                            <?php if ($reference !== ''): ?>
-                                                <a class="audit-reference" href="<?php echo audit_h(audit_query_url(['reference' => $reference, 'page' => 1])); ?>" title="Open lifecycle for <?php echo audit_h($reference); ?>"><?php echo audit_h($reference); ?></a>
-                                            <?php else: ?>
-                                                <span class="audit-reference-empty">Not linked</span>
-                                            <?php endif; ?>
-                                        </td>
-                                        <td class="audit-cell-outcome" data-label="Outcome">
-                                            <span class="audit-outcome <?php echo audit_h($outcome); ?>"><span aria-hidden="true"></span><?php echo audit_h(ucfirst($outcome)); ?></span>
-                                        </td>
-                                        <td class="audit-cell-action">
-                                            <button class="audit-row-action" type="button" data-audit-dialog="<?php echo audit_h($dialogId); ?>" aria-haspopup="dialog">
-                                                <i class="far fa-eye" aria-hidden="true"></i><span>View</span>
-                                            </button>
+                    <div class="audit-role-tabs" role="tablist" aria-label="Audit log groups by personnel type">
+                        <?php foreach ($visibleTabKeys as $tabKey): ?>
+                            <?php $tabConfig = $groupedTabs[$tabKey]; $isActiveTab = $preferredTab === $tabKey; ?>
+                            <button
+                                class="audit-role-tab <?php echo $isActiveTab ? 'active' : ''; ?>"
+                                type="button"
+                                role="tab"
+                                id="<?php echo audit_h('audit-tab-btn-' . $tabKey); ?>"
+                                aria-controls="<?php echo audit_h('audit-tab-panel-' . $tabKey); ?>"
+                                aria-selected="<?php echo $isActiveTab ? 'true' : 'false'; ?>"
+                                data-audit-tab-target="<?php echo audit_h($tabKey); ?>"
+                            >
+                                <span><?php echo audit_h((string)$tabConfig['label']); ?></span>
+                                <strong><?php echo number_format((int)$tabConfig['entry_count']); ?></strong>
+                            </button>
+                        <?php endforeach; ?>
+                    </div>
 
-                                            <dialog class="audit-detail-dialog" id="<?php echo audit_h($dialogId); ?>" aria-labelledby="<?php echo audit_h($dialogTitleId); ?>">
-                                                <div class="audit-dialog-shell">
-                                                    <header class="audit-dialog-header">
-                                                        <div>
-                                                            <span>Log #<?php echo number_format($logNo); ?> · <?php echo audit_h(audit_format_date($row['created_at'] ?? null)); ?></span>
-                                                            <h2 id="<?php echo audit_h($dialogTitleId); ?>"><?php echo audit_h(audit_label((string)($row['action'] ?? ''))); ?></h2>
-                                                            <p><?php echo audit_h(audit_category_label($category)); ?> activity from <?php echo audit_h(audit_source_label($source)); ?></p>
-                                                        </div>
-                                                        <button class="audit-dialog-close" type="button" data-audit-dialog-close aria-label="Close details"><i class="fas fa-xmark" aria-hidden="true"></i></button>
-                                                    </header>
-                                                    <div class="audit-dialog-body">
-                                                        <section class="audit-dialog-summary" aria-label="Log summary">
-                                                            <div>
-                                                                <span class="audit-outcome <?php echo audit_h($outcome); ?>"><span aria-hidden="true"></span><?php echo audit_h(ucfirst($outcome)); ?></span>
-                                                                <?php if ($reference !== ''): ?><span class="audit-reference audit-reference-static"><?php echo audit_h($reference); ?></span><?php endif; ?>
+                    <div class="audit-tab-panels">
+                        <?php foreach ($visibleTabKeys as $tabKey): ?>
+                            <?php $tabConfig = $groupedTabs[$tabKey]; $isActiveTab = $preferredTab === $tabKey; ?>
+                            <section
+                                class="audit-tab-panel <?php echo $isActiveTab ? 'active' : ''; ?>"
+                                id="<?php echo audit_h('audit-tab-panel-' . $tabKey); ?>"
+                                role="tabpanel"
+                                aria-labelledby="<?php echo audit_h('audit-tab-btn-' . $tabKey); ?>"
+                                <?php echo $isActiveTab ? '' : 'hidden'; ?>
+                            >
+                                <div class="audit-tab-intro">
+                                    <div>
+                                        <h3><?php echo audit_h((string)$tabConfig['label']); ?></h3>
+                                        <p><?php echo audit_h((string)$tabConfig['description']); ?></p>
+                                    </div>
+                                    <span class="audit-tab-total"><?php echo number_format((int)$tabConfig['entry_count']); ?> <?php echo (int)$tabConfig['entry_count'] === 1 ? 'action' : 'actions'; ?></span>
+                                </div>
+
+                                <?php if (empty($tabConfig['groups'])): ?>
+                                    <div class="audit-empty-inline">No grouped entries are available for this tab.</div>
+                                <?php else: ?>
+                                    <div class="audit-group-list">
+                                        <?php foreach ($tabConfig['groups'] as $groupIndex => $group): ?>
+                                            <details class="audit-group-card" <?php echo ($isActiveTab && $groupIndex === 0) ? 'open' : ''; ?>>
+                                                <summary>
+                                                    <div class="audit-group-summary-main">
+                                                        <span class="audit-person-badge <?php echo audit_h((string)$group['role_tone']); ?>"><i class="fas <?php echo audit_h((string)$group['role_icon']); ?>" aria-hidden="true"></i></span>
+                                                        <div class="audit-group-summary-text">
+                                                            <strong><?php echo audit_h((string)$group['actor_name']); ?></strong>
+                                                            <div class="audit-group-summary-meta">
+                                                                <span class="audit-mini-chip"><?php echo audit_h((string)$group['role_label']); ?></span>
+                                                                <span class="audit-mini-chip"><?php echo audit_h((string)$group['source_label']); ?></span>
+                                                                <?php if (trim((string)$group['actor_email']) !== ''): ?><span class="audit-group-email"><?php echo audit_h((string)$group['actor_email']); ?></span><?php endif; ?>
                                                             </div>
-                                                            <p><?php echo audit_h($detailsSummary !== '' ? $detailsSummary : 'No description was recorded for this event.'); ?></p>
-                                                        </section>
-                                                        <dl class="audit-detail-grid">
-                                                            <div><dt>Actor</dt><dd><?php echo audit_h($actorName); ?></dd></div>
-                                                            <div><dt>Actor role</dt><dd><?php echo audit_h(audit_label($actorRole)); ?></dd></div>
-                                                            <div><dt>Source</dt><dd><?php echo audit_h(audit_source_label($source)); ?></dd></div>
-                                                            <div><dt>Category</dt><dd><?php echo audit_h(audit_category_label($category)); ?></dd></div>
-                                                            <div><dt>Date and time</dt><dd><?php echo audit_h(audit_format_date($row['created_at'] ?? null)); ?></dd></div>
-                                                            <div><dt>Entity</dt><dd><?php echo audit_h($entityText); ?></dd></div>
-                                                            <div><dt>Request ID</dt><dd class="audit-mono"><?php echo audit_h(trim((string)($row['request_id'] ?? '')) ?: 'Legacy log / not recorded'); ?></dd></div>
-                                                            <div><dt>IP address</dt><dd class="audit-mono"><?php echo audit_h(trim((string)($row['ip_address'] ?? '')) ?: 'Not recorded'); ?></dd></div>
-                                                            <div class="audit-detail-wide"><dt>Actor email</dt><dd><?php echo audit_h($actorEmail !== '' ? $actorEmail : 'Not recorded'); ?></dd></div>
-                                                            <div class="audit-detail-wide"><dt>User agent</dt><dd class="audit-breakable"><?php echo audit_h(trim((string)($row['user_agent'] ?? '')) ?: 'Not recorded'); ?></dd></div>
-                                                        </dl>
-                                                        <?php if ($metadataPretty !== ''): ?>
-                                                            <section class="audit-metadata">
-                                                                <div><h3>Structured metadata</h3><span>Raw context captured with this event</span></div>
-                                                                <pre><?php echo audit_h($metadataPretty); ?></pre>
-                                                            </section>
-                                                        <?php endif; ?>
+                                                        </div>
                                                     </div>
-                                                    <footer class="audit-dialog-footer">
-                                                        <button class="audit-btn audit-btn-secondary" type="button" data-audit-dialog-close>Close</button>
-                                                    </footer>
+                                                    <div class="audit-group-summary-side">
+                                                        <span class="audit-group-date"><i class="far fa-calendar" aria-hidden="true"></i><?php echo audit_h((string)$group['date_label']); ?></span>
+                                                        <span class="audit-group-count"><?php echo number_format((int)$group['entry_total']); ?> <?php echo (int)$group['entry_total'] === 1 ? 'action' : 'actions'; ?></span>
+                                                        <span class="audit-group-latest"><i class="far fa-clock" aria-hidden="true"></i>Latest <?php echo audit_h((string)$group['latest_time_label']); ?></span>
+                                                        <span class="audit-group-health">
+                                                            <?php if ((int)$group['success_count'] > 0): ?><span class="audit-mini-stat success"><?php echo number_format((int)$group['success_count']); ?> success</span><?php endif; ?>
+                                                            <?php if ((int)$group['warning_count'] > 0): ?><span class="audit-mini-stat warning"><?php echo number_format((int)$group['warning_count']); ?> warning</span><?php endif; ?>
+                                                            <?php if ((int)$group['failed_count'] > 0): ?><span class="audit-mini-stat failed"><?php echo number_format((int)$group['failed_count']); ?> failed</span><?php endif; ?>
+                                                        </span>
+                                                        <i class="fas fa-chevron-down audit-group-chevron" aria-hidden="true"></i>
+                                                    </div>
+                                                </summary>
+
+                                                <div class="audit-group-body">
+                                                    <ol class="audit-entry-list">
+                                                        <?php foreach ($group['entries'] as $entry): ?>
+                                                            <li class="audit-entry-card">
+                                                                <div class="audit-entry-top">
+                                                                    <div class="audit-entry-time">
+                                                                        <span class="audit-sequence" title="Sequence in current filtered results">#<?php echo number_format((int)$entry['log_no']); ?></span>
+                                                                        <time datetime="<?php echo audit_h((string)$entry['created_at_iso']); ?>">
+                                                                            <strong><?php echo audit_h((string)$entry['created_time_label']); ?></strong>
+                                                                            <span><?php echo audit_h((string)$entry['created_full_label']); ?></span>
+                                                                        </time>
+                                                                    </div>
+
+                                                                    <div class="audit-entry-main">
+                                                                        <div class="audit-entry-heading">
+                                                                            <strong><?php echo audit_h((string)$entry['action_label']); ?></strong>
+                                                                            <span class="audit-chip"><?php echo audit_h((string)$entry['category_label']); ?></span>
+                                                                            <span class="audit-outcome <?php echo audit_h((string)$entry['outcome']); ?>"><span aria-hidden="true"></span><?php echo audit_h(ucfirst((string)$entry['outcome'])); ?></span>
+                                                                        </div>
+                                                                        <p><?php echo audit_h((string)($entry['details_summary'] !== '' ? $entry['details_summary'] : 'No description recorded.')); ?></p>
+                                                                        <div class="audit-entry-meta">
+                                                                            <span><i class="fas fa-link" aria-hidden="true"></i><?php echo audit_h((string)$entry['source_label']); ?></span>
+                                                                            <?php if (trim((string)$entry['reference']) !== ''): ?>
+                                                                                <a class="audit-reference" href="<?php echo audit_h(audit_query_url(['reference' => (string)$entry['reference'], 'page' => 1])); ?>" title="Open lifecycle for <?php echo audit_h((string)$entry['reference']); ?>"><?php echo audit_h((string)$entry['reference']); ?></a>
+                                                                            <?php else: ?>
+                                                                                <span class="audit-reference-empty">No incident reference</span>
+                                                                            <?php endif; ?>
+                                                                        </div>
+                                                                    </div>
+
+                                                                    <div class="audit-entry-actions">
+                                                                        <button class="audit-row-action" type="button" data-audit-dialog="<?php echo audit_h((string)$entry['dialog_id']); ?>" aria-haspopup="dialog">
+                                                                            <i class="far fa-eye" aria-hidden="true"></i><span>View details</span>
+                                                                        </button>
+                                                                    </div>
+                                                                </div>
+
+                                                                <dialog class="audit-detail-dialog" id="<?php echo audit_h((string)$entry['dialog_id']); ?>" aria-labelledby="<?php echo audit_h((string)$entry['dialog_title_id']); ?>">
+                                                                    <div class="audit-dialog-shell">
+                                                                        <header class="audit-dialog-header">
+                                                                            <div>
+                                                                                <span>Log #<?php echo number_format((int)$entry['log_no']); ?> · <?php echo audit_h((string)$entry['created_full_label']); ?></span>
+                                                                                <h2 id="<?php echo audit_h((string)$entry['dialog_title_id']); ?>"><?php echo audit_h((string)$entry['action_label']); ?></h2>
+                                                                                <p><?php echo audit_h((string)$entry['category_label']); ?> activity from <?php echo audit_h((string)$entry['source_label']); ?></p>
+                                                                            </div>
+                                                                            <button class="audit-dialog-close" type="button" data-audit-dialog-close aria-label="Close details"><i class="fas fa-xmark" aria-hidden="true"></i></button>
+                                                                        </header>
+                                                                        <div class="audit-dialog-body">
+                                                                            <section class="audit-dialog-summary" aria-label="Log summary">
+                                                                                <div>
+                                                                                    <span class="audit-outcome <?php echo audit_h((string)$entry['outcome']); ?>"><span aria-hidden="true"></span><?php echo audit_h(ucfirst((string)$entry['outcome'])); ?></span>
+                                                                                    <?php if (trim((string)$entry['reference']) !== ''): ?><span class="audit-reference audit-reference-static"><?php echo audit_h((string)$entry['reference']); ?></span><?php endif; ?>
+                                                                                </div>
+                                                                                <p><?php echo audit_h((string)($entry['details_summary'] !== '' ? $entry['details_summary'] : 'No description was recorded for this event.')); ?></p>
+                                                                            </section>
+                                                                            <dl class="audit-detail-grid">
+                                                                                <div><dt>Personnel</dt><dd><?php echo audit_h((string)$entry['actor_name']); ?></dd></div>
+                                                                                <div><dt>Personnel role</dt><dd><?php echo audit_h((string)$entry['role_label']); ?></dd></div>
+                                                                                <div><dt>Source</dt><dd><?php echo audit_h((string)$entry['source_label']); ?></dd></div>
+                                                                                <div><dt>Category</dt><dd><?php echo audit_h((string)$entry['category_label']); ?></dd></div>
+                                                                                <div><dt>Date and time</dt><dd><?php echo audit_h((string)$entry['created_full_label']); ?></dd></div>
+                                                                                <div><dt>Entity</dt><dd><?php echo audit_h((string)$entry['entity_text']); ?></dd></div>
+                                                                                <div><dt>Request ID</dt><dd class="audit-mono"><?php echo audit_h((string)($entry['request_id'] !== '' ? $entry['request_id'] : 'Legacy log / not recorded')); ?></dd></div>
+                                                                                <div><dt>IP address</dt><dd class="audit-mono"><?php echo audit_h((string)($entry['ip_address'] !== '' ? $entry['ip_address'] : 'Not recorded')); ?></dd></div>
+                                                                                <div class="audit-detail-wide"><dt>Personnel email</dt><dd><?php echo audit_h((string)($entry['actor_email'] !== '' ? $entry['actor_email'] : 'Not recorded')); ?></dd></div>
+                                                                                <div class="audit-detail-wide"><dt>User agent</dt><dd class="audit-breakable"><?php echo audit_h((string)($entry['user_agent'] !== '' ? $entry['user_agent'] : 'Not recorded')); ?></dd></div>
+                                                                            </dl>
+                                                                            <?php if (trim((string)$entry['metadata_pretty']) !== ''): ?>
+                                                                                <section class="audit-metadata">
+                                                                                    <div><h3>Structured metadata</h3><span>Raw context captured with this event</span></div>
+                                                                                    <pre><?php echo audit_h((string)$entry['metadata_pretty']); ?></pre>
+                                                                                </section>
+                                                                            <?php endif; ?>
+                                                                        </div>
+                                                                        <footer class="audit-dialog-footer">
+                                                                            <button class="audit-btn audit-btn-secondary" type="button" data-audit-dialog-close>Close</button>
+                                                                        </footer>
+                                                                    </div>
+                                                                </dialog>
+                                                            </li>
+                                                        <?php endforeach; ?>
+                                                    </ol>
                                                 </div>
-                                            </dialog>
-                                        </td>
-                                    </tr>
-                                <?php endforeach; ?>
-                            </tbody>
-                        </table>
+                                            </details>
+                                        <?php endforeach; ?>
+                                    </div>
+                                <?php endif; ?>
+                            </section>
+                        <?php endforeach; ?>
                     </div>
                 <?php endif; ?>
 
