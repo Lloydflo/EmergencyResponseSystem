@@ -1221,8 +1221,11 @@ html[data-theme="dark"] .audit-page {
 
 /* Log details dialog */
 .audit-detail-dialog {
+    position: fixed;
+    inset: 0;
     width: min(740px, calc(100vw - 2rem));
     max-height: min(86vh, 820px);
+    margin: auto !important;
     padding: 0;
     overflow: hidden;
     border: 1px solid var(--audit-border-strong);
@@ -1817,6 +1820,12 @@ html.audit-dialog-is-open body {
 .audit-tab-panel {
     display: grid;
     gap: 0.8rem;
+}
+
+/* Author styles can override the browser's default [hidden] rule. Keep
+   inactive personnel panels fully removed from layout. */
+.audit-tab-panel[hidden] {
+    display: none !important;
 }
 
 .audit-tab-intro {

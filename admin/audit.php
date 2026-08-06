@@ -16,7 +16,7 @@ if (!headers_sent()) {
     header('Expires: 0');
 }
 
-$auditUiBuild = '20260806-grouped-v3';
+$auditUiBuild = '20260806-tabs-modal-v4';
 if (!headers_sent()) {
     header('X-Audit-UI-Build: ' . $auditUiBuild);
 }
@@ -1331,26 +1331,18 @@ foreach ($groupedTabs as $tabKey => &$tabConfig) {
 }
 unset($tabConfig);
 
-$visibleTabKeys = [];
-foreach ($groupedTabs as $tabKey => $tabConfig) {
-    if ($tabConfig['entry_count'] > 0 || $tabKey !== 'others') {
-        $visibleTabKeys[] = $tabKey;
-    }
-}
-if ($visibleTabKeys === []) {
-    $visibleTabKeys = ['responders', 'dispatchers'];
-}
+// Keep all personnel tabs visible, including zero-count categories. The All tab
+// is the default overview unless an explicit role/source filter points to one group.
+$visibleTabKeys = ['responders', 'dispatchers', 'others'];
+$allTabEntryCount = count($auditRows);
 
-$preferredTab = 'responders';
+$preferredTab = 'all';
 if ($sourceFilter === 'dispatcher_web' || in_array($roleFilter, ['dispatcher', 'operator'], true)) {
     $preferredTab = 'dispatchers';
 } elseif ($sourceFilter === 'responder_app' || $roleFilter === 'responder') {
     $preferredTab = 'responders';
-} elseif (($roleFilter !== '' || $sourceFilter !== '') && !in_array($preferredTab, $visibleTabKeys, true)) {
+} elseif ($roleFilter !== '' || $sourceFilter !== '') {
     $preferredTab = 'others';
-}
-if (!in_array($preferredTab, $visibleTabKeys, true)) {
-    $preferredTab = $visibleTabKeys[0];
 }
 ?>
 <!DOCTYPE html>
@@ -1616,7 +1608,19 @@ if (!in_array($preferredTab, $visibleTabKeys, true)) {
                         <?php if ($activeFilters): ?><a class="audit-btn audit-btn-secondary" href="admin/audit.php">Clear filters</a><?php endif; ?>
                     </div>
                 <?php else: ?>
-                    <div class="audit-role-tabs" role="tablist" aria-label="Audit log groups by personnel type">
+                    <div class="audit-role-tabs" role="tablist" aria-label="Filter audit logs by personnel type">
+                        <button
+                            class="audit-role-tab <?php echo $preferredTab === 'all' ? 'active' : ''; ?>"
+                            type="button"
+                            role="tab"
+                            id="audit-tab-btn-all"
+                            aria-controls="audit-tab-panels"
+                            aria-selected="<?php echo $preferredTab === 'all' ? 'true' : 'false'; ?>"
+                            data-audit-tab-target="all"
+                        >
+                            <span>All</span>
+                            <strong><?php echo number_format($allTabEntryCount); ?></strong>
+                        </button>
                         <?php foreach ($visibleTabKeys as $tabKey): ?>
                             <?php $tabConfig = $groupedTabs[$tabKey]; $isActiveTab = $preferredTab === $tabKey; ?>
                             <button
@@ -1634,15 +1638,21 @@ if (!in_array($preferredTab, $visibleTabKeys, true)) {
                         <?php endforeach; ?>
                     </div>
 
-                    <div class="audit-tab-panels">
+                    <div class="audit-tab-panels" id="audit-tab-panels">
                         <?php foreach ($visibleTabKeys as $tabKey): ?>
-                            <?php $tabConfig = $groupedTabs[$tabKey]; $isActiveTab = $preferredTab === $tabKey; ?>
+                            <?php
+                            $tabConfig = $groupedTabs[$tabKey];
+                            $isSelectedTab = $preferredTab === $tabKey;
+                            $isVisiblePanel = $preferredTab === 'all' || $isSelectedTab;
+                            ?>
                             <section
-                                class="audit-tab-panel <?php echo $isActiveTab ? 'active' : ''; ?>"
+                                class="audit-tab-panel <?php echo $isVisiblePanel ? 'active' : ''; ?>"
                                 id="<?php echo audit_h('audit-tab-panel-' . $tabKey); ?>"
                                 role="tabpanel"
                                 aria-labelledby="<?php echo audit_h('audit-tab-btn-' . $tabKey); ?>"
-                                <?php echo $isActiveTab ? '' : 'hidden'; ?>
+                                data-audit-tab-panel="<?php echo audit_h($tabKey); ?>"
+                                aria-hidden="<?php echo $isVisiblePanel ? 'false' : 'true'; ?>"
+                                <?php echo $isVisiblePanel ? '' : 'hidden'; ?>
                             >
                                 <div class="audit-tab-intro">
                                     <div>
@@ -1657,7 +1667,7 @@ if (!in_array($preferredTab, $visibleTabKeys, true)) {
                                 <?php else: ?>
                                     <div class="audit-group-list">
                                         <?php foreach ($tabConfig['groups'] as $groupIndex => $group): ?>
-                                            <details class="audit-group-card" <?php echo ($isActiveTab && $groupIndex === 0) ? 'open' : ''; ?>>
+                                            <details class="audit-group-card" <?php echo ($isSelectedTab && $groupIndex === 0) ? 'open' : ''; ?>>
                                                 <summary>
                                                     <div class="audit-group-summary-main">
                                                         <span class="audit-person-badge <?php echo audit_h((string)$group['role_tone']); ?>"><i class="fas <?php echo audit_h((string)$group['role_icon']); ?>" aria-hidden="true"></i></span>

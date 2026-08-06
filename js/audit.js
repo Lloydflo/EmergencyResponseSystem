@@ -51,10 +51,16 @@
             }
         });
 
+        const showAll = tabKey === 'all';
+
         tabPanels.forEach((panel) => {
-            const isActive = panel.id === `audit-tab-panel-${tabKey}`;
-            panel.classList.toggle('active', isActive);
-            panel.hidden = !isActive;
+            const panelKey = panel.getAttribute('data-audit-tab-panel')
+                || panel.id.replace('audit-tab-panel-', '');
+            const isVisible = showAll || panelKey === tabKey;
+
+            panel.classList.toggle('active', isVisible);
+            panel.hidden = !isVisible;
+            panel.setAttribute('aria-hidden', isVisible ? 'false' : 'true');
         });
     };
 

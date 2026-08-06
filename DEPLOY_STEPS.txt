@@ -1,0 +1,46 @@
+AUDIT LOGS TABS + CENTERED DETAILS MODAL (v4)
+================================================
+
+Changed files:
+  admin/audit.php
+  css/audit.css
+  js/audit.js
+
+WHAT CHANGED
+------------
+1. Added four working filter tabs:
+   - All
+   - Responders
+   - Dispatchers
+   - Other / System
+2. All is the default tab and displays every personnel section.
+3. Selecting a specific tab hides the other personnel sections.
+4. Fixed the CSS [hidden] conflict that caused every section to stay visible.
+5. Centered the View Details dialog horizontally and vertically.
+6. Updated the asset build marker to 20260806-tabs-modal-v4.
+
+LOCAL DEPLOYMENT (VS CODE / POWERSHELL)
+--------------------------------------
+Extract this ZIP directly inside D:\EmergencyResponseSystem and replace the
+three existing files. Then run:
+
+  cd D:\EmergencyResponseSystem
+  git status --short
+  git add admin/audit.php css/audit.css js/audit.js
+  git commit -m "Fix audit tabs and center details modal"
+  git push origin main
+
+PRODUCTION SERVER
+-----------------
+  cd /var/www/emergency_response_alertaraqc
+  git pull --ff-only origin main
+  sudo systemctl restart php8.3-fpm
+  sudo systemctl reload nginx
+
+Then hard-refresh the Audit Logs page with Ctrl+Shift+R.
+
+VERIFICATION
+------------
+  grep -n "20260806-tabs-modal-v4" admin/audit.php
+  grep -n "audit-tab-btn-all" admin/audit.php
+  grep -n "audit-tab-panel\[hidden\]" css/audit.css
