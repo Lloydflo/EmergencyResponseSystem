@@ -8,7 +8,7 @@ $requestorName = $currentUser
     : 'Admin Resource Desk';
 
 $pageTitle = 'Resources Status';
-$resourceUiBuild = '20260807-resource-readiness-cards-v1';
+$resourceUiBuild = '20260807-admin-resource-cleanup-v2';
 if (!headers_sent()) {
     header('Cache-Control: no-store, no-cache, must-revalidate, max-age=0');
     header('Pragma: no-cache');
@@ -1190,15 +1190,6 @@ if (!headers_sent()) {
                     </div>
                     <button
                         type="button"
-                        class="btn-secondary"
-                        id="requestBackupBtn"
-                        aria-haspopup="dialog"
-                        aria-controls="requestBackupModal"
-                    >
-                        <i class="fas fa-truck-medical"></i> Request Backup
-                    </button>
-                    <button
-                        type="button"
                         class="btn-primary"
                         id="addResourceBtn"
                         data-open-resource-modal
@@ -1278,7 +1269,7 @@ if (!headers_sent()) {
 
                 <div class="resource-filter-actions">
                     <select id="statusFilter" class="control-select" aria-label="Filter resources by status">
-                        <option value="">All Statuses</option>
+                        <option value="">All Status</option>
                         <option value="available">Available</option>
                         <option value="in_use">In Use</option>
                         <option value="maintenance">Maintenance</option>
@@ -2967,13 +2958,17 @@ if (!headers_sent()) {
                 showToast((err && err.message) ? String(err.message) : 'Unable to load archive.');
             }
         });
-        requestBackupBtn.addEventListener('click', async () => {
-            try {
-                await openRequestBackupModal();
-            } catch (err) {
-                showToast((err && err.message) ? String(err.message) : 'Unable to load request data.');
-            }
-        });
+        // The admin resource roster does not expose backup requests.
+        // That operational workflow belongs to the dispatcher interface.
+        if (requestBackupBtn) {
+            requestBackupBtn.addEventListener('click', async () => {
+                try {
+                    await openRequestBackupModal();
+                } catch (err) {
+                    showToast((err && err.message) ? String(err.message) : 'Unable to load request data.');
+                }
+            });
+        }
         document.querySelectorAll('[data-open-resource-modal]').forEach((trigger) => {
             if (trigger === addResourceBtn) return;
             trigger.addEventListener('click', openAddResourceModal);
