@@ -1,0 +1,31 @@
+ADMIN DASHBOARD ACCURACY UPDATE v2 — VALIDATION
+
+Completed checks:
+- PHP syntax: passed for all five PHP files.
+- JavaScript syntax: passed (node --check).
+- CSS brace balance: passed.
+- Rendered HTML structure: exactly one closing body and html tag.
+- Rendered HTML contains five metric cards and three centered modals.
+- Static JavaScript element-reference check: all declared byId references matched.
+- No hardcoded OpenWeather API key remains in admin/index.php.
+- No Math.random metric simulation remains in the dashboard JavaScript.
+- Weather normalization test: passed for current, next-hour, daily range,
+  visibility, wind direction, and WMO weather-code mapping.
+- Weather fresh-cache fallback test: passed.
+- Month-to-date chart SQL and monthly metric use the same created_at range.
+- Critical priority is not remapped to Low.
+
+Not performed:
+- Live provider request from this build environment (external web access was
+  unavailable).
+- Authenticated end-to-end test against the production MySQL database.
+- Visual test inside the production server's exact Nginx/PHP-FPM environment.
+
+Production acceptance checks:
+1. The sum of Incidents by Type equals Incidents this month.
+2. The sum of Priority Distribution equals Incidents this month.
+3. Weather label shows the configured command-center name, not a provider's
+   nearby barangay/geocoding label.
+4. Observation time is recent and source/coordinates are visible.
+5. Refresh data performs real API requests; values do not change randomly.
+6. Active Accounts matches active rows in users, not online presence.
