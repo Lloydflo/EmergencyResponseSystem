@@ -3,7 +3,7 @@ $rootDir = dirname(__DIR__);
 require_once $rootDir . '/includes/auth.php';
 require_role('admin', 'admin/review.php');
 
-$reviewUiBuild = '20260806-after-action-approval-v1';
+$reviewUiBuild = '20260807-after-action-landscape-v2';
 if (!headers_sent()) {
     header('Cache-Control: no-store, no-cache, must-revalidate, max-age=0');
     header('Pragma: no-cache');
@@ -21,6 +21,10 @@ $reviewScriptModified = is_file($rootDir . '/js/admin-review-after-action.js')
     ? (string)filemtime($rootDir . '/js/admin-review-after-action.js')
     : '0';
 $reviewScriptVersion = rawurlencode($reviewUiBuild . '-' . $reviewScriptModified);
+$reviewLandscapeCssModified = is_file($rootDir . '/css/admin-after-action-landscape.css')
+    ? (string)filemtime($rootDir . '/css/admin-after-action-landscape.css')
+    : '0';
+$reviewLandscapeCssVersion = rawurlencode($reviewUiBuild . '-' . $reviewLandscapeCssModified);
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -219,6 +223,7 @@ $reviewScriptVersion = rawurlencode($reviewUiBuild . '-' . $reviewScriptModified
         @media (max-width: 1180px) { .ar-stats, .ar-grid { grid-template-columns: repeat(2, minmax(0,1fr)); } .ar-toolbar, .ar-spotlight { grid-template-columns: 1fr; } .ar-report-grid { grid-template-columns: repeat(2, minmax(0,1fr)); } .ar-actions { justify-content: flex-end; } }
         @media (max-width: 767px) { .main-content { padding: calc(var(--app-header-height-mobile-1) + 1rem) .75rem 1.5rem; } .ar-stats, .ar-toolbar, .ar-grid, .ar-report-grid { grid-template-columns: 1fr; } .ar-report-field-wide { grid-column: auto; } .ar-actions, .ar-row-actions, .ar-review-actions { display: grid; grid-template-columns: 1fr; } .ar-review-btn { width: 100%; } .ar-feedback-head, .ar-card-head, .ar-panel-head, .ar-report-head { flex-direction: column; align-items: flex-start; } .ar-toast { top: calc(var(--app-header-height-mobile-1) + .5rem); } }
     </style>
+    <link rel="stylesheet" href="css/admin-after-action-landscape.css?v=<?php echo htmlspecialchars($reviewLandscapeCssVersion, ENT_QUOTES, 'UTF-8'); ?>">
 </head>
 <body>
     <?php include $rootDir . '/includes/sidebar.php'; ?>
@@ -306,46 +311,83 @@ $reviewScriptVersion = rawurlencode($reviewUiBuild . '-' . $reviewScriptModified
                     <p>After-Action Review</p>
                     <h3 id="adminFeedbackTitle">After-Action Review Details</h3>
                 </div>
-                <button type="button" class="ar-close" id="adminFeedbackClose" aria-label="Close"><i class="fas fa-times"></i></button>
+                <div class="ar-modal-head-actions">
+                    <button type="button" class="ar-close ar-expand" id="adminFeedbackExpand" aria-label="Maximize review workspace" aria-pressed="false" title="Maximize review workspace"><i class="fas fa-expand"></i></button>
+                    <button type="button" class="ar-close" id="adminFeedbackClose" aria-label="Close"><i class="fas fa-times"></i></button>
+                </div>
             </div>
             <div class="ar-modal-body">
-                <section class="ar-spotlight">
-                    <div>
-                        <div id="adminModalBadges" class="ar-badges"></div>
-                        <h4 id="adminModalCode">--</h4>
-                        <p id="adminModalType" class="type">--</p>
-                        <p id="adminModalDescription" class="desc">--</p>
-                    </div>
-                    <div class="ar-side">
-                        <span>Location</span>
-                        <strong id="adminModalLocation">--</strong>
-                        <strong id="adminModalClosed">Closed: --</strong>
-                    </div>
-                </section>
-                <section class="ar-grid">
-                    <article><h4><i class="fas fa-stopwatch"></i> Timeline</h4><div class="ar-list"><div class="ar-detail"><span>Dispatched</span><strong id="adminModalDispatch">--</strong></div><div class="ar-detail"><span>On Scene</span><strong id="adminModalOnScene">--</strong></div><div class="ar-detail"><span>Response Time</span><strong id="adminModalResponse">--</strong></div><div class="ar-detail"><span>Resolution Time</span><strong id="adminModalResolution">--</strong></div></div></article>
-                    <article><h4><i class="fas fa-truck-medical"></i> Unit & Vehicle</h4><div class="ar-list"><div class="ar-detail"><span>Assigned Unit</span><strong id="adminModalUnit">--</strong></div><div class="ar-detail"><span>Driver</span><strong id="adminModalDriver">--</strong></div><div class="ar-detail"><span>Vehicle</span><strong id="adminModalVehicle">--</strong></div><div class="ar-detail"><span>Plate Number</span><strong id="adminModalPlate">--</strong></div></div></article>
-                    <article><h4><i class="fas fa-file-circle-check"></i> After-Action Review</h4><div class="ar-list"><div class="ar-detail"><span>Total Reports</span><strong id="adminModalReportCount">0</strong></div><div class="ar-detail"><span>Awaiting Review</span><strong id="adminModalPendingCount">0</strong></div><div class="ar-detail"><span>Approved</span><strong id="adminModalApprovedCount">0</strong></div><div class="ar-detail"><span>Last Activity</span><strong id="adminModalLastUpdated">--</strong></div></div></article>
-                </section>
-                <section class="ar-feedback-panel">
-                    <div class="ar-panel-head">
-                        <div>
-                            <h4><i class="fas fa-file-signature"></i> Responder After-Action Reports</h4>
-                            <p>Approve a complete submission or reject and return it with a required correction note.</p>
+                <div class="ar-review-workspace">
+                    <aside class="ar-review-context ar-review-scroll-region" aria-label="Incident context">
+                        <section class="ar-spotlight">
+                            <div>
+                                <div id="adminModalBadges" class="ar-badges"></div>
+                                <h4 id="adminModalCode">--</h4>
+                                <p id="adminModalType" class="type">--</p>
+                                <p id="adminModalDescription" class="desc">--</p>
+                            </div>
+                            <div class="ar-side">
+                                <span>Location</span>
+                                <strong id="adminModalLocation">--</strong>
+                                <strong id="adminModalClosed">Closed: --</strong>
+                            </div>
+                        </section>
+
+                        <section class="ar-grid ar-context-grid">
+                            <article>
+                                <h4><i class="fas fa-stopwatch"></i> Timeline</h4>
+                                <div class="ar-list">
+                                    <div class="ar-detail"><span>Dispatched</span><strong id="adminModalDispatch">--</strong></div>
+                                    <div class="ar-detail"><span>On Scene</span><strong id="adminModalOnScene">--</strong></div>
+                                    <div class="ar-detail"><span>Response Time</span><strong id="adminModalResponse">--</strong></div>
+                                    <div class="ar-detail"><span>Resolution Time</span><strong id="adminModalResolution">--</strong></div>
+                                </div>
+                            </article>
+                            <article>
+                                <h4><i class="fas fa-truck-medical"></i> Unit &amp; Vehicle</h4>
+                                <div class="ar-list">
+                                    <div class="ar-detail"><span>Assigned Unit</span><strong id="adminModalUnit">--</strong></div>
+                                    <div class="ar-detail"><span>Driver</span><strong id="adminModalDriver">--</strong></div>
+                                    <div class="ar-detail"><span>Vehicle</span><strong id="adminModalVehicle">--</strong></div>
+                                    <div class="ar-detail"><span>Plate Number</span><strong id="adminModalPlate">--</strong></div>
+                                </div>
+                            </article>
+                            <article>
+                                <h4><i class="fas fa-file-circle-check"></i> Review Status</h4>
+                                <div class="ar-list">
+                                    <div class="ar-detail"><span>Total Reports</span><strong id="adminModalReportCount">0</strong></div>
+                                    <div class="ar-detail"><span>Awaiting Review</span><strong id="adminModalPendingCount">0</strong></div>
+                                    <div class="ar-detail"><span>Approved</span><strong id="adminModalApprovedCount">0</strong></div>
+                                    <div class="ar-detail"><span>Last Activity</span><strong id="adminModalLastUpdated">--</strong></div>
+                                </div>
+                            </article>
+                        </section>
+                    </aside>
+
+                    <section class="ar-feedback-panel ar-after-action-panel" aria-labelledby="afterActionPanelTitle">
+                        <div class="ar-panel-head">
+                            <div>
+                                <h4 id="afterActionPanelTitle"><i class="fas fa-file-signature"></i> Responder After-Action Report</h4>
+                                <p>Review the full submission and record the admin decision.</p>
+                            </div>
+                            <span class="ar-workspace-hint"><i class="fas fa-table-columns"></i> Review document</span>
                         </div>
-                    </div>
-                    <div id="adminAfterActionList" class="ar-after-action-list"></div>
-                </section>
-                <section class="ar-feedback-panel">
-                    <h4><i class="fas fa-clipboard-list"></i> Operational Notes</h4>
-                    <p>Separate dispatcher and responder notes are shown without rating scores.</p>
-                    <div id="adminFeedbackList" class="ar-feedback-list"></div>
-                </section>
-                <section class="ar-feedback-panel">
-                    <h4><i class="fas fa-camera"></i> Responder Resolution Proof</h4>
-                    <p>Photos uploaded by responders when completing the incident are shown here for admin review.</p>
-                    <div id="adminProofGallery" class="ar-proof-gallery"></div>
-                </section>
+                        <div id="adminAfterActionList" class="ar-after-action-list"></div>
+                    </section>
+
+                    <aside class="ar-review-support ar-review-scroll-region" aria-label="Supporting evidence and notes">
+                        <section class="ar-feedback-panel ar-operational-notes-panel">
+                            <h4><i class="fas fa-clipboard-list"></i> Operational Notes</h4>
+                            <p>Dispatcher and responder notes, without rating scores.</p>
+                            <div id="adminFeedbackList" class="ar-feedback-list"></div>
+                        </section>
+                        <section class="ar-feedback-panel ar-proof-panel">
+                            <h4><i class="fas fa-camera"></i> Resolution Proof</h4>
+                            <p>Responder-uploaded completion photos for verification.</p>
+                            <div id="adminProofGallery" class="ar-proof-gallery"></div>
+                        </section>
+                    </aside>
+                </div>
             </div>
         </div>
     </div>

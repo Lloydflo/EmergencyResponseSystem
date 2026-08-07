@@ -18,6 +18,8 @@
     const modal = qs('#adminFeedbackModal');
     const modalOverlay = qs('#adminFeedbackOverlay');
     const modalClose = qs('#adminFeedbackClose');
+    const modalDialog = qs('.ar-modal-dialog', modal);
+    const modalExpand = qs('#adminFeedbackExpand');
     const afterActionList = qs('#adminAfterActionList');
 
     if (
@@ -712,10 +714,10 @@
                     ${reportField('Follow-up', followUp)}
                     ${reportField('Incident summary', report.incident_summary, { wide: true })}
                     ${reportField('Actions taken', report.actions_taken, { wide: true })}
-                    ${reportField('Resources used', report.resources_used, { wide: true })}
-                    ${reportField('Agencies involved', report.agencies_involved, { wide: true })}
-                    ${reportField('Handoff details', report.handoff_details, { wide: true })}
-                    ${reportField('Safety issues', report.safety_issues, { wide: true })}
+                    ${reportField('Resources used', report.resources_used)}
+                    ${reportField('Agencies involved', report.agencies_involved)}
+                    ${reportField('Handoff details', report.handoff_details)}
+                    ${reportField('Safety issues', report.safety_issues)}
                     ${reportField('Lessons learned', report.lessons_learned, { wide: true })}
                 </div>
                 ${reportReviewControls(report)}
@@ -767,12 +769,33 @@
         renderProofs(proofPayload);
     }
 
+    function setModalExpanded(expanded) {
+        const isExpanded = Boolean(expanded);
+        modalDialog?.classList.toggle('is-expanded', isExpanded);
+        if (!modalExpand) return;
+        modalExpand.setAttribute('aria-pressed', isExpanded ? 'true' : 'false');
+        modalExpand.setAttribute('aria-label', isExpanded ? 'Restore review workspace' : 'Maximize review workspace');
+        modalExpand.setAttribute('title', isExpanded ? 'Restore review workspace' : 'Maximize review workspace');
+        const icon = qs('i', modalExpand);
+        if (icon) icon.className = isExpanded ? 'fas fa-compress' : 'fas fa-expand';
+    }
+
+    function resetWorkspaceScroll() {
+        qsa('.ar-review-scroll-region, .ar-after-action-list', modal).forEach((region) => {
+            region.scrollTop = 0;
+            region.scrollLeft = 0;
+        });
+    }
+
     async function openModal(incidentId) {
         currentIncidentId = Number(incidentId);
         setModalLoading();
+        setModalExpanded(false);
         modalOverlay.hidden = false;
         modal.hidden = false;
+        resetWorkspaceScroll();
         document.documentElement.classList.add('ar-modal-open');
+        window.requestAnimationFrame(() => modalClose.focus());
 
         try {
             const [detailsResponse, feedbackResponse, proofsResponse] = await Promise.all([
@@ -909,6 +932,7 @@
         modalOverlay.hidden = true;
         modal.hidden = true;
         currentIncidentId = null;
+        setModalExpanded(false);
         document.documentElement.classList.remove('ar-modal-open');
     }
 
@@ -942,6 +966,9 @@
     statusFilterSelect.addEventListener('change', renderTable);
     modalOverlay.addEventListener('click', closeModal);
     modalClose.addEventListener('click', closeModal);
+    modalExpand?.addEventListener('click', () => {
+        setModalExpanded(!modalDialog?.classList.contains('is-expanded'));
+    });
     document.addEventListener('keydown', (event) => {
         if (event.key === 'Escape' && !modal.hidden) closeModal();
     });
