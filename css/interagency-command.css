@@ -1212,3 +1212,403 @@
         font-size: 0.75rem !important;
     }
 }
+
+/* Active incident monitor — replaces duplicate Workflow Lanes (2026-08-07) */
+.ia-incident-monitor {
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+}
+
+.ia-incident-monitor-head {
+    align-items: flex-start;
+}
+
+.ia-incident-monitor-count {
+    display: inline-flex;
+    flex: 0 0 auto;
+    align-items: center;
+    justify-content: center;
+    min-height: 28px;
+    padding: 0.25rem 0.58rem;
+    border: 1px solid #bfdbfe;
+    border-radius: 999px;
+    background: #eff6ff;
+    color: #1d4ed8;
+    font-size: 0.7rem;
+    font-weight: 900;
+    line-height: 1;
+    white-space: nowrap;
+}
+
+.ia-incident-monitor-tabs {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0.45rem;
+    padding: 0.65rem 0.75rem;
+    border-bottom: 1px solid var(--ia-border, #dfe6ee);
+    background: #ffffff;
+}
+
+.ia-incident-monitor-tab {
+    display: inline-flex;
+    min-width: 0;
+    min-height: 36px;
+    align-items: center;
+    justify-content: center;
+    gap: 0.38rem;
+    padding: 0.5rem 0.55rem;
+    border: 1px solid #d7e2ee;
+    border-radius: 9px;
+    background: #f8fafc;
+    color: #475569;
+    font: inherit;
+    font-size: 0.74rem;
+    font-weight: 800;
+    line-height: 1.2;
+    cursor: pointer;
+    transition: border-color 0.16s ease, background-color 0.16s ease, color 0.16s ease;
+}
+
+.ia-incident-monitor-tab span {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.ia-incident-monitor-tab i {
+    flex: 0 0 auto;
+}
+
+.ia-incident-monitor-tab:hover {
+    border-color: #99d5cf;
+    background: #f0fdfa;
+    color: #0f766e;
+}
+
+.ia-incident-monitor-tab.active {
+    border-color: #0f766e;
+    background: #0f766e;
+    color: #ffffff;
+}
+
+.ia-incident-monitor-tab:focus-visible {
+    outline: 3px solid rgba(20, 184, 166, 0.2);
+    outline-offset: 2px;
+}
+
+.ia-incident-monitor-panel {
+    min-width: 0;
+    padding: 0.72rem;
+    background: linear-gradient(180deg, #ffffff 0%, #f8fbff 100%);
+}
+
+.ia-incident-monitor-panel[hidden] {
+    display: none !important;
+}
+
+.ia-incident-monitor-queue {
+    display: grid;
+    max-height: 232px;
+    gap: 0.55rem;
+    overflow-y: auto;
+    padding-right: 0.18rem;
+    scrollbar-gutter: stable;
+}
+
+.ia-incident-monitor-item {
+    display: grid;
+    width: 100%;
+    min-width: 0;
+    grid-template-columns: 34px minmax(0, 1fr) auto;
+    align-items: center;
+    gap: 0.62rem;
+    padding: 0.68rem;
+    border: 1px solid #dbe5ef;
+    border-radius: 10px;
+    background: #ffffff;
+    color: #122031;
+    font: inherit;
+    text-align: left;
+    cursor: pointer;
+    transition: border-color 0.16s ease, background-color 0.16s ease, transform 0.16s ease;
+}
+
+.ia-incident-monitor-item:hover {
+    border-color: #8ccfc7;
+    background: #f0fdfa;
+    transform: translateY(-1px);
+}
+
+.ia-incident-monitor-item:focus-visible {
+    outline: 3px solid rgba(20, 184, 166, 0.2);
+    outline-offset: 2px;
+}
+
+.ia-incident-monitor-icon {
+    display: inline-flex;
+    width: 34px;
+    height: 34px;
+    align-items: center;
+    justify-content: center;
+    border-radius: 9px;
+    background: #fff7ed;
+    color: #c2410c;
+    font-size: 0.82rem;
+}
+
+.ia-incident-monitor-main {
+    display: grid;
+    min-width: 0;
+    gap: 0.12rem;
+}
+
+.ia-incident-monitor-reference,
+.ia-incident-monitor-title,
+.ia-incident-monitor-meta {
+    min-width: 0;
+    max-width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.ia-incident-monitor-reference {
+    color: #0f172a;
+    font-size: 0.78rem;
+    font-weight: 900;
+}
+
+.ia-incident-monitor-title {
+    color: #334155;
+    font-size: 0.74rem;
+    font-weight: 700;
+}
+
+.ia-incident-monitor-meta {
+    color: #64748b;
+    font-size: 0.66rem;
+    line-height: 1.35;
+}
+
+.ia-incident-monitor-side {
+    display: grid;
+    flex: 0 0 auto;
+    justify-items: end;
+    gap: 0.24rem;
+}
+
+.ia-incident-monitor-priority,
+.ia-incident-monitor-status {
+    display: inline-flex;
+    align-items: center;
+    min-height: 19px;
+    max-width: 105px;
+    padding: 0.16rem 0.4rem;
+    overflow: hidden;
+    border-radius: 999px;
+    font-size: 0.61rem;
+    font-weight: 900;
+    line-height: 1;
+    text-overflow: ellipsis;
+    text-transform: uppercase;
+    white-space: nowrap;
+}
+
+.ia-incident-monitor-priority.critical {
+    background: #fee2e2;
+    color: #991b1b;
+}
+
+.ia-incident-monitor-priority.high {
+    background: #ffedd5;
+    color: #9a3412;
+}
+
+.ia-incident-monitor-priority.medium {
+    background: #fef3c7;
+    color: #92400e;
+}
+
+.ia-incident-monitor-priority.routine {
+    background: #e0f2fe;
+    color: #075985;
+}
+
+.ia-incident-monitor-status.pending {
+    background: #f1f5f9;
+    color: #475569;
+}
+
+.ia-incident-monitor-status.dispatched {
+    background: #dbeafe;
+    color: #1d4ed8;
+}
+
+.ia-incident-monitor-status.responding {
+    background: #dcfce7;
+    color: #166534;
+}
+
+.ia-incident-monitor-chevron {
+    margin-top: 0.05rem;
+    color: #94a3b8;
+    font-size: 0.6rem;
+}
+
+.ia-incident-monitor-empty {
+    display: grid;
+    min-height: 118px;
+    place-content: center;
+    justify-items: center;
+    gap: 0.28rem;
+    padding: 1rem;
+    border: 1px dashed #cbd5e1;
+    border-radius: 10px;
+    background: #f8fafc;
+    color: #64748b;
+    font-size: 0.75rem;
+    line-height: 1.4;
+    text-align: center;
+}
+
+.ia-incident-monitor-empty[hidden] {
+    display: none !important;
+}
+
+.ia-incident-monitor-empty i {
+    color: #16a34a;
+    font-size: 1.1rem;
+}
+
+.ia-incident-monitor-empty strong {
+    color: #334155;
+    font-size: 0.78rem;
+}
+
+.ia-incident-monitor-selected {
+    min-width: 0;
+}
+
+/* The same live incident element is moved here by interagency-operations.js. */
+.ia-incident-monitor .ia-active-incident-wrap {
+    min-width: 0;
+    padding: 0;
+    background: transparent;
+}
+
+.ia-incident-monitor .ia-active-incident-card {
+    min-height: 0;
+    padding: 0.82rem 2.8rem 0.82rem 0.85rem;
+    border-radius: 10px;
+    box-shadow: none;
+}
+
+.ia-incident-monitor .ia-active-incident-kicker {
+    margin-bottom: 0.6rem;
+}
+
+.ia-incident-monitor .ia-active-incident-title {
+    font-size: 0.86rem;
+}
+
+.ia-incident-monitor .ia-active-incident-grid {
+    font-size: 0.72rem;
+}
+
+.ia-incident-monitor .ia-active-incident-status {
+    margin-top: 0.4rem;
+}
+
+/* Failsafe: never let the old incident banner occupy the chat column. */
+.ia-chat-panel > .ia-active-incident-wrap {
+    display: none !important;
+}
+
+[data-theme="dark"] .ia-incident-monitor-count {
+    border-color: rgba(96, 165, 250, 0.38);
+    background: rgba(37, 99, 235, 0.16);
+    color: #bfdbfe;
+}
+
+[data-theme="dark"] .ia-incident-monitor-tabs,
+[data-theme="dark"] .ia-incident-monitor-panel {
+    border-color: #334155;
+    background: #111827;
+}
+
+[data-theme="dark"] .ia-incident-monitor-tab {
+    border-color: #475569;
+    background: #0f172a;
+    color: #cbd5e1;
+}
+
+[data-theme="dark"] .ia-incident-monitor-tab:hover {
+    border-color: #2dd4bf;
+    background: rgba(15, 118, 110, 0.18);
+    color: #99f6e4;
+}
+
+[data-theme="dark"] .ia-incident-monitor-tab.active {
+    border-color: #14b8a6;
+    background: #0f766e;
+    color: #ffffff;
+}
+
+[data-theme="dark"] .ia-incident-monitor-item {
+    border-color: #334155;
+    background: #0f172a;
+    color: #e2e8f0;
+}
+
+[data-theme="dark"] .ia-incident-monitor-item:hover {
+    border-color: #2dd4bf;
+    background: rgba(15, 118, 110, 0.16);
+}
+
+[data-theme="dark"] .ia-incident-monitor-reference,
+[data-theme="dark"] .ia-incident-monitor-empty strong {
+    color: #f8fafc;
+}
+
+[data-theme="dark"] .ia-incident-monitor-title {
+    color: #cbd5e1;
+}
+
+[data-theme="dark"] .ia-incident-monitor-meta,
+[data-theme="dark"] .ia-incident-monitor-empty {
+    color: #94a3b8;
+}
+
+[data-theme="dark"] .ia-incident-monitor-empty {
+    border-color: #475569;
+    background: #0f172a;
+}
+
+@media (max-width: 1280px) {
+    .ia-incident-monitor-queue {
+        max-height: 300px;
+    }
+}
+
+@media (max-width: 720px) {
+    .ia-incident-monitor-tabs {
+        grid-template-columns: 1fr;
+    }
+
+    .ia-incident-monitor-tab span {
+        white-space: normal;
+    }
+
+    .ia-incident-monitor-item {
+        grid-template-columns: 34px minmax(0, 1fr);
+    }
+
+    .ia-incident-monitor-side {
+        grid-column: 2;
+        justify-items: start;
+        grid-auto-flow: column;
+        align-items: center;
+    }
+}
