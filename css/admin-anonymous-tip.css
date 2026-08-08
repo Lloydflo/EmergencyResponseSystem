@@ -1,6 +1,6 @@
 /* =====================================================================
    Admin Anonymous Tip Inbox — metadata visibility + read-only incident
-   Build: 20260808-admin-tip-details-v1
+   Build: 20260808-admin-tip-details-v2
    ===================================================================== */
 
 /*
@@ -558,4 +558,231 @@ html[data-theme="dark"] .admin-tip-incident-close {
 
 @media (prefers-reduced-motion: reduce) {
     .admin-tip-spinner { animation-duration: 1.5s; }
+}
+
+/* =====================================================================
+   Admin Anonymous Tip Inbox — single incident action + detail polish
+   Build: 20260808-admin-tip-details-v2
+   ===================================================================== */
+
+/* Keep the row footer readable even when the report description is long. */
+.ia-tip-description {
+    display: -webkit-box;
+    min-height: calc(1.45em * 2);
+    max-height: calc(1.45em * 2);
+    overflow: hidden;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
+}
+
+.ia-tip-meta,
+.ia-tip-flow {
+    margin-top: 0.48rem;
+    padding-top: 0.44rem;
+    border-top: 1px dashed #dbe5ee;
+}
+
+.ia-tip-meta {
+    align-items: center;
+    align-self: stretch;
+}
+
+.ia-tip-flow {
+    align-items: center;
+    align-self: stretch;
+}
+
+/*
+ * The linked reference and the former “Open Incident” button opened the same
+ * read-only viewer. Keep one explicit, full-width incident control in the
+ * Linked Incident card and remove the duplicate quick-action control.
+ */
+.admin-tip-linked-incident-card {
+    gap: 0.52rem !important;
+    padding: 0.72rem !important;
+    border-color: #cbdde8 !important;
+    background:
+        radial-gradient(circle at 100% 0%, rgba(45, 212, 191, 0.12), transparent 8rem),
+        linear-gradient(135deg, #f8fbff, #eef8f6) !important;
+}
+
+.admin-tip-linked-incident-trigger {
+    display: flex !important;
+    width: 100% !important;
+    min-height: 52px !important;
+    align-items: center !important;
+    justify-content: space-between !important;
+    gap: 0.7rem !important;
+    padding: 0.58rem 0.65rem !important;
+    border: 1px solid #b8d7d2 !important;
+    border-radius: 11px !important;
+    background: #ffffff !important;
+    color: #0f4f4a !important;
+    text-align: left !important;
+    text-decoration: none !important;
+    cursor: pointer !important;
+    box-shadow: 0 3px 10px rgba(15, 118, 110, 0.06);
+    transition:
+        border-color 0.15s ease,
+        background-color 0.15s ease,
+        box-shadow 0.15s ease,
+        transform 0.15s ease;
+}
+
+.admin-tip-linked-incident-trigger:hover,
+.admin-tip-linked-incident-trigger:focus-visible {
+    border-color: #0f766e !important;
+    background: #f3fcfa !important;
+    color: #0f766e !important;
+    box-shadow: 0 8px 18px rgba(15, 118, 110, 0.12);
+    outline: none;
+    transform: translateY(-1px);
+}
+
+.admin-tip-linked-incident-main {
+    display: flex;
+    min-width: 0;
+    align-items: center;
+    gap: 0.6rem;
+}
+
+.admin-tip-linked-incident-icon {
+    display: inline-flex;
+    width: 34px;
+    height: 34px;
+    flex: 0 0 34px;
+    align-items: center;
+    justify-content: center;
+    border-radius: 10px;
+    background: #e7f5f3;
+    color: #0f766e;
+}
+
+.admin-tip-linked-incident-copy {
+    display: grid;
+    min-width: 0;
+    gap: 0.12rem;
+}
+
+.admin-tip-linked-incident-copy strong {
+    overflow: hidden;
+    color: #0f3f3b;
+    font-size: 0.79rem;
+    font-weight: 850;
+    line-height: 1.25;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.admin-tip-linked-incident-copy span {
+    color: #64748b;
+    font-size: 0.66rem;
+    font-weight: 700;
+    line-height: 1.25;
+}
+
+.admin-tip-linked-incident-arrow {
+    display: inline-flex;
+    width: 30px;
+    height: 30px;
+    flex: 0 0 30px;
+    align-items: center;
+    justify-content: center;
+    border-radius: 9px;
+    background: #eef7f6;
+    color: #0f766e;
+    font-size: 0.7rem;
+}
+
+/* All remaining buttons are locked after conversion, so do not show a dead
+   action grid below the one incident-details control. */
+.admin-tip-has-linked-incident .ia-tip-quick-actions {
+    display: none !important;
+}
+
+.admin-tip-has-linked-incident .ia-tip-lock-note {
+    margin-top: 0.72rem;
+}
+
+/* Give the details rail clearer vertical rhythm. */
+.ia-tip-detail > .ia-tip-detail-grid:not(.ia-tip-detail-form-grid) {
+    padding-top: 0.85rem;
+}
+
+.ia-tip-detail form {
+    margin-top: 0.72rem;
+}
+
+/* In the common laptop-size modal, stack the metadata and workflow rather
+   than squeezing them into one line. This guarantees that the date remains
+   visible below the two-line description preview. */
+@media (max-width: 1280px) {
+    .ia-tip-main {
+        grid-template-columns: minmax(0, 1fr);
+        grid-template-areas:
+            "kicker"
+            "location"
+            "description"
+            "meta"
+            "flow";
+    }
+
+    .ia-tip-meta {
+        margin-top: 0.5rem;
+    }
+
+    .ia-tip-flow {
+        justify-content: flex-start;
+        margin-top: 0.18rem;
+        padding-top: 0;
+        border-top: 0;
+    }
+}
+
+@media (max-width: 680px) {
+    .admin-tip-linked-incident-trigger {
+        min-height: 48px !important;
+    }
+
+    .admin-tip-linked-incident-copy strong {
+        white-space: normal;
+        overflow-wrap: anywhere;
+    }
+}
+
+html[data-theme="dark"] .admin-tip-linked-incident-card {
+    border-color: #334155 !important;
+    background: linear-gradient(135deg, #0f172a, #102522) !important;
+}
+
+html[data-theme="dark"] .admin-tip-linked-incident-trigger {
+    border-color: #3c645f !important;
+    background: #0b1220 !important;
+    color: #99f6e4 !important;
+}
+
+html[data-theme="dark"] .admin-tip-linked-incident-trigger:hover,
+html[data-theme="dark"] .admin-tip-linked-incident-trigger:focus-visible {
+    border-color: #2dd4bf !important;
+    background: #102522 !important;
+    color: #ccfbf1 !important;
+}
+
+html[data-theme="dark"] .admin-tip-linked-incident-icon,
+html[data-theme="dark"] .admin-tip-linked-incident-arrow {
+    background: rgba(45, 212, 191, 0.13);
+    color: #5eead4;
+}
+
+html[data-theme="dark"] .admin-tip-linked-incident-copy strong {
+    color: #f0fdfa;
+}
+
+html[data-theme="dark"] .admin-tip-linked-incident-copy span {
+    color: #94a3b8;
+}
+
+html[data-theme="dark"] .ia-tip-meta,
+html[data-theme="dark"] .ia-tip-flow {
+    border-top-color: #334155;
 }

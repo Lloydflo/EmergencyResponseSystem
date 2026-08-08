@@ -1,7 +1,7 @@
 (() => {
     'use strict';
 
-    const BUILD = '20260808-admin-tip-details-v1';
+    const BUILD = '20260808-admin-tip-details-v2';
     const rootSelector = '#iaAnonymousTipInbox';
     const incidentLinkSelector = [
         'a[href*="dispatcher/incident.php?code="]',
@@ -285,6 +285,65 @@
         }
     };
 
+    const setIncidentTriggerAttributes = (anchor, reference) => {
+        anchor.dataset.adminTipIncidentDetails = 'true';
+        anchor.dataset.incidentReference = reference;
+        anchor.removeAttribute('href');
+        anchor.setAttribute('role', 'button');
+        anchor.setAttribute('tabindex', '0');
+        anchor.setAttribute('aria-haspopup', 'dialog');
+        anchor.setAttribute('title', 'View read-only incident details');
+    };
+
+    const deduplicateIncidentActions = (scope = document) => {
+        const details = [];
+        if (scope instanceof Element) {
+            const ownDetail = scope.closest('.ia-tip-detail');
+            if (ownDetail) details.push(ownDetail);
+        }
+        scope.querySelectorAll?.('.ia-tip-detail').forEach((detail) => details.push(detail));
+
+        [...new Set(details)].forEach((detail) => {
+            const triggers = Array.from(detail.querySelectorAll('[data-admin-tip-incident-details="true"]'));
+            if (!triggers.length) return;
+
+            const linkedTrigger = triggers.find((trigger) => (
+                trigger.closest('.ia-tip-detail-item')
+                && !trigger.closest('.ia-tip-quick-actions')
+            )) || triggers[0];
+            const reference = firstText(linkedTrigger.dataset.incidentReference, parseReference(linkedTrigger));
+
+            detail.classList.add('admin-tip-has-linked-incident');
+            linkedTrigger.classList.add('admin-tip-linked-incident-trigger');
+            linkedTrigger.setAttribute('aria-label', `View read-only details for ${reference}`);
+            if (linkedTrigger.dataset.adminTipSingleAction !== 'true') {
+                linkedTrigger.dataset.adminTipSingleAction = 'true';
+                linkedTrigger.innerHTML = `
+                    <span class="admin-tip-linked-incident-main">
+                        <span class="admin-tip-linked-incident-icon" aria-hidden="true"><i class="fas fa-link"></i></span>
+                        <span class="admin-tip-linked-incident-copy">
+                            <strong>${escapeHtml(reference)}</strong>
+                            <span>View linked incident details</span>
+                        </span>
+                    </span>
+                    <span class="admin-tip-linked-incident-arrow" aria-hidden="true"><i class="fas fa-chevron-right"></i></span>
+                `;
+            }
+
+            const linkedCard = linkedTrigger.closest('.ia-tip-detail-item');
+            linkedCard?.classList.add('admin-tip-linked-incident-card');
+
+            triggers.forEach((trigger) => {
+                if (trigger === linkedTrigger) return;
+                const quickActions = trigger.closest('.ia-tip-quick-actions');
+                trigger.remove();
+                if (quickActions) {
+                    quickActions.classList.add('admin-tip-duplicate-action-removed');
+                }
+            });
+        });
+    };
+
     const polishIncidentLinks = (scope = document) => {
         const candidates = [];
         if (scope instanceof Element && scope.matches(incidentLinkSelector)) {
@@ -295,18 +354,11 @@
         candidates.forEach((anchor) => {
             if (!anchor.closest(rootSelector)) return;
             const reference = parseReference(anchor);
-            anchor.dataset.adminTipIncidentDetails = 'true';
-            anchor.dataset.incidentReference = reference;
-            anchor.removeAttribute('href');
-            anchor.setAttribute('role', 'button');
-            anchor.setAttribute('tabindex', '0');
-            anchor.setAttribute('aria-haspopup', 'dialog');
-            anchor.setAttribute('title', 'View read-only incident details');
-            const text = String(anchor.textContent || '').trim().replace(/\s+/g, ' ');
-            if (/^open incident$/i.test(text)) {
-                anchor.innerHTML = '<i class="fas fa-eye" aria-hidden="true"></i> View Incident Details';
-            }
+            setIncidentTriggerAttributes(anchor, reference);
         });
+
+        const inboxRoot = document.querySelector(rootSelector);
+        deduplicateIncidentActions(inboxRoot || scope);
     };
 
     document.addEventListener('click', (event) => {

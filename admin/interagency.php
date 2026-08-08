@@ -22,7 +22,7 @@ $pageTitle = 'Inter-Agency Conversations';
     <link rel="stylesheet" href="css/interagency-command.css">
     <link rel="stylesheet" href="css/interagency-events.css">
     <link rel="stylesheet" href="css/interagency-tips.css">
-    <link rel="stylesheet" href="css/admin-anonymous-tip.css?v=20260808-admin-tip-details-v1">
+    <link rel="stylesheet" href="css/admin-anonymous-tip.css?v=20260808-admin-tip-details-v2">
     <style>
         :root {
             --ia-bg: #f4f7fb;
@@ -42,14 +42,11 @@ $pageTitle = 'Inter-Agency Conversations';
                 radial-gradient(circle at 85% 5%, rgba(14, 165, 233, 0.1), transparent 32%),
                 radial-gradient(circle at 10% 5%, rgba(16, 185, 129, 0.12), transparent 35%),
                 var(--ia-bg);
-            padding:
-                calc(var(--app-header-height-1) + 1.25rem)
-                1.5rem
-                3rem;
+            padding: 3rem 1.5rem;
         }
 
         .ia-shell {
-            padding-top: 0;
+            padding-top: 0.75rem;
         }
 
         .ia-head {
@@ -1922,10 +1919,7 @@ $pageTitle = 'Inter-Agency Conversations';
 
         @media (max-width: 720px) {
             .main-content {
-                padding:
-                    calc(var(--app-header-height-mobile-1) + 1rem)
-                    0.8rem
-                    1.5rem;
+                padding: 1rem 0.8rem;
             }
 
             .ia-head {
@@ -5500,7 +5494,7 @@ $pageTitle = 'Inter-Agency Conversations';
     <script src="js/interagency-command.js"></script>
     <script src="js/interagency-events.js"></script>
     <script src="js/interagency-tips.js"></script>
-    <script src="js/admin-anonymous-tip-details.js?v=20260808-admin-tip-details-v1"></script>
+    <script src="js/admin-anonymous-tip-details.js?v=20260808-admin-tip-details-v2"></script>
     <script src="js/interagency-external-inbox.js"></script>
     <script src="js/interagency-module-launcher.js"></script>
 </body>
