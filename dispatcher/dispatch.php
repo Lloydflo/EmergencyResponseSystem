@@ -608,6 +608,9 @@ function formatIncidentTypeLabel(value) {
         .map((part) => part.trim().toLowerCase())
         .filter(Boolean);
     if (!parts.length) return '';
+    if (parts.includes('medical') && parts.includes('police') && parts.includes('fire')) {
+        return 'Emergency, Police, Fire';
+    }
     return parts.map((part) => labels[part] || part.replace(/\b\w/g, (c) => c.toUpperCase())).join(', ');
 }
 function cleanAnonymousTipDispatchDescription(value) {

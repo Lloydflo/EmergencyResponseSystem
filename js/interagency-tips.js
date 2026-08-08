@@ -344,7 +344,7 @@
                 body: JSON.stringify({
                     action: 'convert_to_incident',
                     id: item.id,
-                    incident_type: 'police',
+                    incident_type: 'medical, police, fire',
                     priority: form?.elements.priority?.value || 'medium',
                     outcome: form?.elements.outcome?.value.trim() || '',
                 }),
@@ -528,8 +528,8 @@
                         </div>
                         <div class="ia-tip-detail-item">
                             <div class="ia-tip-detail-label">Incident Type</div>
-                            <div class="ia-tip-detail-value">Police</div>
-                            <input type="hidden" name="incident_type" value="police">
+                            <div class="ia-tip-detail-value">Emergency, Police, Fire</div>
+                            <input type="hidden" name="incident_type" value="medical, police, fire">
                         </div>
                         <div class="ia-tip-detail-item">
                             <label class="ia-tip-detail-label" for="iaTipPriority">Priority</label>

@@ -154,7 +154,7 @@ try {
                 $sourceStmt->execute([$incidentId]);
                 $isAnonymousTipIncident = (bool)$sourceStmt->fetchColumn();
                 if ($isAnonymousTipIncident) {
-                    $incident['type'] = 'police';
+                    $incident['type'] = 'medical, police, fire';
                 }
             }
             $hasIncidentNotes = ers_table_exists($pdo, 'incident_notes');
@@ -312,7 +312,7 @@ try {
 
     $desiredTypes = [];
     if ($isAnonymousTipIncident) {
-        $desiredTypes = ['police'];
+        $desiredTypes = [];
     } elseif (!empty($out['incident']) && !empty($out['incident']['type'])) {
         $typeValue = strtolower(trim((string)$out['incident']['type']));
         $typeParts = preg_split('/[,|]+/', $typeValue) ?: [$typeValue];

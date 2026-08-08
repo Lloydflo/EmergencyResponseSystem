@@ -334,7 +334,7 @@ function ers_tip_convert_to_incident(PDO $pdo, array $input): array
     }
 
     $payload = ers_tip_decode_payload((string)($item['raw_payload'] ?? ''));
-    $type = 'police';
+    $type = 'medical, police, fire';
 
     $priority = ers_external_normalize_priority($input['priority'] ?? $payload['priority'] ?? 'medium');
     $location = ers_external_clean($item['location'] ?? '', 255);
