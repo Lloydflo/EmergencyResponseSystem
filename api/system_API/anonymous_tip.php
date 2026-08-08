@@ -4,6 +4,7 @@ declare(strict_types=1);
 require_once __DIR__ . '/../_bootstrap.php';
 require_once __DIR__ . '/../../includes/auth.php';
 require_once __DIR__ . '/../../includes/activity_log.php';
+require_once __DIR__ . '/../../includes/geocode_helper.php';
 
 $pdo = ers_external_db();
 $sessionAllowed = is_logged_in() && in_array(current_session_role(), ['admin', 'dispatcher'], true);
@@ -645,6 +646,8 @@ function ers_tip_convert_to_incident(PDO $pdo, array $input): array
                 'id' => (int)$created['id'],
                 'reference_no' => (string)$created['reference_no'],
                 'status' => (string)$created['status'],
+                'latitude' => $coordinates['latitude'],
+                'longitude' => $coordinates['longitude'],
             ],
         ];
     } catch (Throwable $e) {
@@ -1056,6 +1059,10 @@ function ers_tip_decode_payload(string $raw): array
 
 function ers_tip_location_coordinates(PDO $pdo, string $location): array
 {
+    if (trim($location) === '' || strcasecmp(trim($location), 'Location not provided') === 0) {
+        return ['latitude' => null, 'longitude' => null];
+    }
+
     $direct = ers_tip_parse_coordinates($location);
     if ($direct !== null) {
         return $direct;
@@ -1069,6 +1076,11 @@ function ers_tip_location_coordinates(PDO $pdo, string $location): array
     $cached = ers_tip_cached_location_coordinates($location);
     if ($cached !== null) {
         return $cached;
+    }
+
+    $geocoded = ers_geocode_location_to_coordinates($location);
+    if ($geocoded !== null) {
+        return ['latitude' => (float)$geocoded[0], 'longitude' => (float)$geocoded[1]];
     }
 
     return ['latitude' => null, 'longitude' => null];

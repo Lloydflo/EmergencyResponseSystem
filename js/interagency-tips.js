@@ -442,8 +442,15 @@
                 throw new Error(data.error || 'Unable to convert anonymous tip');
             }
             const reference = data.incident && data.incident.reference_no ? data.incident.reference_no : 'incident';
+            const hasCoordinates = data.incident
+                && data.incident.latitude !== null
+                && data.incident.latitude !== undefined
+                && data.incident.latitude !== ''
+                && data.incident.longitude !== null
+                && data.incident.longitude !== undefined
+                && data.incident.longitude !== '';
             await loadTips();
-            state.notice = `${item.tip_id || 'Tip'} converted to ${reference}.`;
+            state.notice = `${item.tip_id || 'Tip'} converted to ${reference}${hasCoordinates ? ' with coordinates.' : '. Location needs manual pin.'}`;
             render();
             notifyCountsChanged();
             notifyIncidentQueueChanged(data.incident || null);
