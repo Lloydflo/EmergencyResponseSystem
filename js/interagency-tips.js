@@ -5,7 +5,7 @@
     }
 
     const apiUrl = 'api/system_API/?action=anonymous_tip';
-    const statuses = ['all', 'pending', 'new', 'reviewing', 'verified', 'dismissed', 'converted_to_incident', 'dispatched'];
+    const statuses = ['all', 'pending', 'new', 'reviewing', 'verified', 'dismissed', 'converted_to_incident', 'dispatched', 'resolved'];
     const editableStatuses = ['new', 'reviewing', 'verified', 'dismissed', 'converted_to_incident'];
     const state = {
         items: [],
@@ -521,7 +521,7 @@
                             <span class="${['reviewing', 'verified'].includes(itemStatus) || isConverted ? 'is-done' : ''}">Review</span>
                             <span class="${itemStatus === 'verified' || isConverted ? 'is-done' : ''}">Verify</span>
                             <span class="${isConverted ? 'is-done' : ''}">Convert</span>
-                            <span class="${itemStatus === 'dispatched' ? 'is-done' : ''}">Dispatch</span>
+                            <span class="${['dispatched', 'resolved'].includes(itemStatus) ? 'is-done' : ''}">Dispatch</span>
                         </span>
                     </span>
                     <span>${evidenceButton}</span>

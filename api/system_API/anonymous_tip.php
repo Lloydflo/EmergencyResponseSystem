@@ -641,12 +641,14 @@ function ers_tip_prepare_response(array $row, ?PDO $pdo = null): array
     $dispatchedStatuses = [
         'assigned', 'acknowledged', 'dispatching', 'dispatched',
         'enroute', 'en_route', 'on_scene', 'ongoing', 'ongoing_dispatch',
-        'in_progress', 'resolved', 'complete', 'completed', 'closed',
+        'in_progress',
     ];
+    $completedStatuses = ['resolved', 'complete', 'completed', 'closed'];
+    $isCompleted = in_array($incidentStatus, $completedStatuses, true);
     $isDispatched = (int)($dispatch['unit_count'] ?? 0) > 0
         || in_array($incidentStatus, $dispatchedStatuses, true);
     $row['raw_status'] = (string)($row['status'] ?? '');
-    $row['display_status'] = $isDispatched ? 'dispatched' : (string)($row['status'] ?? '');
+    $row['display_status'] = $isCompleted ? 'resolved' : ($isDispatched ? 'dispatched' : (string)($row['status'] ?? ''));
     $row['dispatched'] = $isDispatched;
     $row['dispatched_at'] = $dispatch['dispatched_at'] ?? null;
     $row['dispatch_status'] = $dispatch['latest_status'] ?? null;

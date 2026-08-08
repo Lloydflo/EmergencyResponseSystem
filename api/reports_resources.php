@@ -1,8 +1,18 @@
 <?php
 declare(strict_types=1);
 
-require_once __DIR__ . '/../includes/admin_api_auth.php';
-require_admin_api_access(false);
+require_once __DIR__ . '/../includes/auth.php';
+if (!is_logged_in()) {
+    header('Location: ../login.php?redirect=' . urlencode('dispatcher/resources.php'));
+    exit;
+}
+
+$currentRole = current_session_role();
+if ($currentRole !== 'admin' && $currentRole !== 'dispatcher') {
+    http_response_code(403);
+    echo 'Access denied';
+    exit;
+}
 require_once __DIR__ . '/../includes/db.php';
 require_once __DIR__ . '/../includes/report_analytics.php';
 
