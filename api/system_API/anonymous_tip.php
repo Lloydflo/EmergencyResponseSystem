@@ -18,6 +18,11 @@ try {
 
     $method = $_SERVER['REQUEST_METHOD'] ?? 'GET';
     if ($method === 'GET') {
+        $requestedTipId = ers_external_clean($_GET['tip_id'] ?? $_GET['tipId'] ?? $_GET['tipID'] ?? '', 120);
+        if ($requestedTipId !== '') {
+            ers_external_json(200, ers_tip_status_lookup($pdo, $requestedTipId));
+        }
+
         ers_external_json(200, [
             'success' => true,
             'items' => ers_tip_list($pdo),
@@ -445,6 +450,124 @@ function ers_tip_find(PDO $pdo, int $id): array
     return is_array($row) ? ers_tip_prepare_response($row) : [];
 }
 
+function ers_tip_status_lookup(PDO $pdo, string $tipId): array
+{
+    ers_external_ensure_link_table($pdo);
+
+    $incidentUpdatedExpr = ers_external_column_exists($pdo, 'incidents', 'updated_at') ? 'i.updated_at' : 'NULL';
+    if (ers_external_column_exists($pdo, 'incidents', 'resolved_at')) {
+        $incidentCompletedExpr = 'i.resolved_at';
+    } elseif (ers_external_column_exists($pdo, 'incidents', 'cleared_at')) {
+        $incidentCompletedExpr = 'i.cleared_at';
+    } elseif (ers_external_column_exists($pdo, 'incidents', 'completed_at')) {
+        $incidentCompletedExpr = 'i.completed_at';
+    } else {
+        $incidentCompletedExpr = 'NULL';
+    }
+
+    $stmt = $pdo->prepare(
+        "SELECT at.id, at.tip_id, at.status AS tip_status, at.outcome, at.source_system,
+                at.received_at, at.updated_at AS tip_updated_at,
+                i.id AS incident_id, i.reference_no AS incident_reference, i.status AS incident_status,
+                {$incidentUpdatedExpr} AS incident_updated_at,
+                {$incidentCompletedExpr} AS incident_completed_at
+         FROM anonymous_tips at
+         LEFT JOIN external_incident_links eil
+            ON eil.source_system = ?
+           AND eil.external_incident_id = CASE WHEN at.tip_id IS NULL OR at.tip_id = '' THEN CONCAT('anonymous-tip-', at.id) ELSE at.tip_id END
+         LEFT JOIN incidents i ON i.id = eil.incident_id
+         WHERE at.tip_id = ?
+         LIMIT 1"
+    );
+    $stmt->execute([ers_tip_link_source(), $tipId]);
+    $row = $stmt->fetch(PDO::FETCH_ASSOC);
+    if (!is_array($row)) {
+        ers_external_json(404, [
+            'success' => false,
+            'error' => 'Anonymous tip not found',
+        ]);
+    }
+
+    $incidentId = (int)($row['incident_id'] ?? 0);
+    $dispatch = ers_tip_dispatch_summary($pdo, $incidentId, (string)($row['incident_reference'] ?? ''));
+    $incidentStatus = strtolower(trim((string)($row['incident_status'] ?? '')));
+    $dispatchedStatuses = [
+        'assigned', 'acknowledged', 'dispatching', 'dispatched',
+        'enroute', 'en_route', 'on_scene', 'ongoing', 'ongoing_dispatch',
+        'in_progress', 'resolved', 'complete', 'completed', 'closed',
+    ];
+    $completedStatuses = ['resolved', 'complete', 'completed', 'closed'];
+    $dispatched = $dispatch['unit_count'] > 0 || in_array($incidentStatus, $dispatchedStatuses, true);
+    $completed = in_array($incidentStatus, $completedStatuses, true) || trim((string)($row['incident_completed_at'] ?? '')) !== '';
+
+    return [
+        'success' => true,
+        'tip_id' => (string)($row['tip_id'] ?? ''),
+        'tip_status' => (string)($row['tip_status'] ?? ''),
+        'outcome' => (string)($row['outcome'] ?? ''),
+        'source_system' => (string)($row['source_system'] ?? ''),
+        'incident_id' => $incidentId > 0 ? $incidentId : null,
+        'incident_reference' => (string)($row['incident_reference'] ?? ''),
+        'incident_status' => $incidentStatus !== '' ? $incidentStatus : null,
+        'dispatched' => $dispatched,
+        'dispatched_at' => $dispatch['dispatched_at'],
+        'dispatch_status' => $dispatch['latest_status'],
+        'unit_count' => $dispatch['unit_count'],
+        'completed' => $completed,
+        'completed_at' => trim((string)($row['incident_completed_at'] ?? '')) !== ''
+            ? (string)$row['incident_completed_at']
+            : null,
+        'last_updated_at' => (string)($row['incident_updated_at'] ?? $row['tip_updated_at'] ?? ''),
+    ];
+}
+
+function ers_tip_dispatch_summary(PDO $pdo, int $incidentId, string $referenceNo): array
+{
+    $summary = [
+        'unit_count' => 0,
+        'dispatched_at' => null,
+        'latest_status' => null,
+    ];
+    if (!ers_external_table_exists($pdo, 'dispatches')) {
+        return $summary;
+    }
+
+    $where = [];
+    $params = [];
+    if ($incidentId > 0 && ers_external_column_exists($pdo, 'dispatches', 'incident_id')) {
+        $where[] = 'incident_id = ?';
+        $params[] = $incidentId;
+    }
+    if ($referenceNo !== '' && ers_external_column_exists($pdo, 'dispatches', 'reference_no')) {
+        $where[] = 'reference_no = ?';
+        $params[] = $referenceNo;
+    }
+    if ($where === []) {
+        return $summary;
+    }
+
+    $statusExpr = ers_external_column_exists($pdo, 'dispatches', 'status') ? 'status' : 'NULL';
+    $assignedAtExpr = ers_external_column_exists($pdo, 'dispatches', 'assigned_at') ? 'assigned_at' : 'NULL';
+    $sql = "SELECT COUNT(*) AS unit_count,
+                   MAX({$assignedAtExpr}) AS dispatched_at,
+                   SUBSTRING_INDEX(GROUP_CONCAT({$statusExpr} ORDER BY id DESC SEPARATOR ','), ',', 1) AS latest_status
+            FROM dispatches
+            WHERE " . implode(' OR ', array_map(static fn (string $clause): string => '(' . $clause . ')', $where));
+
+    $stmt = $pdo->prepare($sql);
+    $stmt->execute($params);
+    $row = $stmt->fetch(PDO::FETCH_ASSOC);
+    if (!is_array($row)) {
+        return $summary;
+    }
+
+    return [
+        'unit_count' => max(0, (int)($row['unit_count'] ?? 0)),
+        'dispatched_at' => trim((string)($row['dispatched_at'] ?? '')) !== '' ? (string)$row['dispatched_at'] : null,
+        'latest_status' => trim((string)($row['latest_status'] ?? '')) !== '' ? (string)$row['latest_status'] : null,
+    ];
+}
+
 function ers_tip_list(PDO $pdo): array
 {
     $limit = max(1, min(100, (int)($_GET['limit'] ?? 60)));
@@ -706,8 +829,36 @@ function ers_tip_incident_reference(array $item): string
 
 function ers_tip_incident_description(array $item): string
 {
-    $description = trim((string)($item['tip_description'] ?? ''));
+    $description = ers_tip_clean_incident_description((string)($item['tip_description'] ?? ''));
     return $description !== '' ? $description : 'No description';
+}
+
+function ers_tip_clean_incident_description(string $value): string
+{
+    $raw = trim($value);
+    if ($raw === '') {
+        return '';
+    }
+    if (!preg_match('/anonymous tip converted to (?:an )?incident|tip id\s*:|date and time\s*:|evidence\s*:/i', $raw)) {
+        return $raw;
+    }
+
+    $compact = trim((string)preg_replace('/\s+/', ' ', $raw));
+    if (preg_match('/\bDescription\s*:\s*(.*?)(?:\s+\bEvidence\s*:|$)/is', $compact, $matches)) {
+        $description = trim((string)$matches[1]);
+        if ($description !== '') {
+            return $description;
+        }
+    }
+
+    $cleaned = preg_replace('/anonymous tip converted to (?:an )?incident\.?/i', '', $compact);
+    $cleaned = preg_replace('/\bTip ID\s*:\s*.*?(?=\s+\b(?:Date and time|Location|Description|Evidence)\s*:|$)/i', '', (string)$cleaned);
+    $cleaned = preg_replace('/\bDate and time\s*:\s*.*?(?=\s+\b(?:Location|Description|Evidence)\s*:|$)/i', '', (string)$cleaned);
+    $cleaned = preg_replace('/\bLocation\s*:\s*.*?(?=\s+\b(?:Description|Evidence)\s*:|$)/i', '', (string)$cleaned);
+    $cleaned = preg_replace('/\bEvidence\s*:\s*.*$/is', '', (string)$cleaned);
+    $cleaned = preg_replace('/\bDescription\s*:\s*/i', '', (string)$cleaned);
+
+    return trim((string)$cleaned);
 }
 
 function ers_tip_conversion_outcome(array $input, string $referenceNo, bool $duplicate): string

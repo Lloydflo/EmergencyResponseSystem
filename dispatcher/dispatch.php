@@ -610,6 +610,28 @@ function formatIncidentTypeLabel(value) {
     if (!parts.length) return '';
     return parts.map((part) => labels[part] || part.replace(/\b\w/g, (c) => c.toUpperCase())).join(', ');
 }
+function cleanAnonymousTipDispatchDescription(value) {
+    const raw = String(value || '').trim();
+    if (!raw) return '';
+    if (!/(anonymous tip converted to (?:an )?incident|tip id\s*:|date and time\s*:|evidence\s*:)/i.test(raw)) {
+        return raw;
+    }
+
+    const compact = raw.replace(/\s+/g, ' ').trim();
+    const descriptionMatch = compact.match(/\bDescription\s*:\s*([\s\S]*?)(?:\s+\bEvidence\s*:|$)/i);
+    if (descriptionMatch && descriptionMatch[1]) {
+        return descriptionMatch[1].trim();
+    }
+
+    return compact
+        .replace(/anonymous tip converted to (?:an )?incident\.?/ig, '')
+        .replace(/\bTip ID\s*:\s*.*?(?=\s+\b(?:Date and time|Location|Description|Evidence)\s*:|$)/ig, '')
+        .replace(/\bDate and time\s*:\s*.*?(?=\s+\b(?:Location|Description|Evidence)\s*:|$)/ig, '')
+        .replace(/\bLocation\s*:\s*.*?(?=\s+\b(?:Description|Evidence)\s*:|$)/ig, '')
+        .replace(/\bEvidence\s*:\s*[\s\S]*$/ig, '')
+        .replace(/\bDescription\s*:\s*/ig, '')
+        .trim();
+}
 function parseLatLngFromText(text) {
     const raw = String(text || '');
     const match = raw.match(/(?:lat(?:itude)?\s*[:=]?\s*)?(-?\d{1,3}(?:\.\d+)?)\s*[, ]\s*(?:lon(?:gitude)?|lng)?\s*[:=]?\s*(-?\d{1,3}(?:\.\d+)?)/i);
@@ -620,7 +642,7 @@ function renderIncidentDetails(inc) {
     const hasPoint = currentIncidentLat !== null && currentIncidentLng !== null;
     const callerName = inc.caller_name || 'N/A';
     const callerPhone = inc.caller_phone || 'N/A';
-    const description = inc.description || 'No description provided.';
+    const description = cleanAnonymousTipDispatchDescription(inc.description) || 'No description provided.';
     document.getElementById('modal-incident-details').innerHTML =
         `<strong>Type:</strong> ${escapeHtml(formatIncidentTypeLabel(inc.type) || inc.type || '')}<br>` +
         `<strong>Title:</strong> ${escapeHtml(inc.title || '')}<br>` +

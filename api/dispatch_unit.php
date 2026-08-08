@@ -321,6 +321,35 @@ function insert_dispatch_assignment(PDO $pdo, int $incidentId, string $reference
     return (int)$pdo->lastInsertId();
 }
 
+function dispatch_clean_anonymous_tip_description($value): ?string
+{
+    $raw = trim((string)($value ?? ''));
+    if ($raw === '') {
+        return null;
+    }
+    if (!preg_match('/anonymous tip converted to (?:an )?incident|tip id\s*:|date and time\s*:|evidence\s*:/i', $raw)) {
+        return $raw;
+    }
+
+    $compact = trim((string)preg_replace('/\s+/', ' ', $raw));
+    if (preg_match('/\bDescription\s*:\s*(.*?)(?:\s+\bEvidence\s*:|$)/is', $compact, $matches)) {
+        $description = trim((string)$matches[1]);
+        if ($description !== '') {
+            return $description;
+        }
+    }
+
+    $cleaned = preg_replace('/anonymous tip converted to (?:an )?incident\.?/i', '', $compact);
+    $cleaned = preg_replace('/\bTip ID\s*:\s*.*?(?=\s+\b(?:Date and time|Location|Description|Evidence)\s*:|$)/i', '', (string)$cleaned);
+    $cleaned = preg_replace('/\bDate and time\s*:\s*.*?(?=\s+\b(?:Location|Description|Evidence)\s*:|$)/i', '', (string)$cleaned);
+    $cleaned = preg_replace('/\bLocation\s*:\s*.*?(?=\s+\b(?:Description|Evidence)\s*:|$)/i', '', (string)$cleaned);
+    $cleaned = preg_replace('/\bEvidence\s*:\s*.*$/is', '', (string)$cleaned);
+    $cleaned = preg_replace('/\bDescription\s*:\s*/i', '', (string)$cleaned);
+    $cleaned = trim((string)$cleaned);
+
+    return $cleaned !== '' ? $cleaned : null;
+}
+
 try {
     $dispatchIds = [];
     $dispatchedUnits = [];
@@ -438,6 +467,7 @@ try {
 
     $dispatchTime = dispatch_philippine_timestamp();
     $incidentReferenceNo = trim((string)($incidentRow['reference_no'] ?? ''));
+    $dispatchDescription = dispatch_clean_anonymous_tip_description($incidentRow['description'] ?? null);
     if ($incidentReferenceNo === '') {
         dispatch_fail_response($pdo, $incident_id, $unit_ids, 'Incident reference number is missing', [
             'incident_id' => $incident_id,
@@ -476,7 +506,7 @@ try {
             $incidentRow['latitude'] ?? null,
             $incidentRow['longitude'] ?? null,
             $incidentRow['priority'] ?? null,
-            $incidentRow['description'] ?? null,
+            $dispatchDescription,
             $dispatchTime,
             $assignedResponderId,
             $responderName,
