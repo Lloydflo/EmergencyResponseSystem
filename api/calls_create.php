@@ -221,13 +221,28 @@ try {
     }
 
     $pdo->commit();
-    log_incident_created_audit($incident ? (int)$incident['id'] : null, $incident ? (string)$incident['reference_no'] : $reference_no, $type, $priority, $location);
+
+    $incidentId = $incident ? (int)$incident['id'] : null;
+    $incidentReferenceNo = $incident ? (string)$incident['reference_no'] : $reference_no;
+    log_incident_created_audit(
+        $pdo,
+        $call_id,
+        $incidentId,
+        $incidentReferenceNo,
+        $type,
+        $priority,
+        $location,
+        false,
+        $accepted_at,
+        $audit_session_id
+    );
+    $group1Sync = calls_create_try_group1_sync($pdo, $call_id, $incidentId ?? 0);
 
     echo json_encode([
         'ok' => true,
         'call_id' => $call_id,
         'reference_no' => $reference_no,
-        'incident_id' => $incident ? (int)$incident['id'] : null,
+        'incident_id' => $incidentId,
         'incident_reference_no' => $incident ? $incident['reference_no'] : null,
         'incident_status' => $incident ? $incident['status'] : null,
         'priority' => $priority,

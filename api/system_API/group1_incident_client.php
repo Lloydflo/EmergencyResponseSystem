@@ -343,4 +343,47 @@ function ers_group1_update_sync_log_safe(PDO $pdo, int $logId, string $status, s
     );
     $stmt->execute([$status, $responsePayload, $errorMessage, $logId]);
 }
+
+if (realpath((string)($_SERVER['SCRIPT_FILENAME'] ?? '')) === __FILE__) {
+    ers_external_authenticate();
+
+    if (($_SERVER['REQUEST_METHOD'] ?? '') === 'GET') {
+        ers_external_json(200, [
+            'success' => true,
+            'message' => 'Group 1 incident client is connected. Use POST with call_id or incident_id to send incident details.',
+            'target_endpoint' => ers_env('GROUP1_INCIDENT_ENDPOINT', ''),
+            'method' => 'POST',
+            'data_sent' => [
+                'call_id',
+                'timestamp',
+                'caller_location',
+                'emergency_level',
+                'incident_description',
+            ],
+            'example' => [
+                'url' => '/ERS/api/system_API/group1_incident_client.php?api_key=YOUR_API_KEY',
+                'body' => [
+                    'call_id' => 1,
+                    'dry_run' => true,
+                ],
+            ],
+        ]);
+    }
+
+    if (($_SERVER['REQUEST_METHOD'] ?? '') !== 'POST') {
+        ers_external_json(405, [
+            'success' => false,
+            'error' => 'POST method required',
+        ]);
+    }
+
+    $input = ers_external_input();
+    $callId = (int)($input['call_id'] ?? $input['callId'] ?? 0);
+    $incidentId = (int)($input['incident_id'] ?? $input['incidentId'] ?? 0);
+    $result = ers_group1_send_logged_incident(ers_external_db(), $callId, $incidentId, $input);
+    $status = (string)($result['status'] ?? 'failed');
+    $httpStatus = (bool)($result['success'] ?? false) ? 200 : (in_array($status, ['invalid_request', 'not_found', 'missing_endpoint', 'invalid_endpoint'], true) ? 422 : 502);
+
+    ers_external_json($httpStatus, $result);
+}
 ?>

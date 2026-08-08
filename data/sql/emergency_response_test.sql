@@ -923,6 +923,8 @@ CREATE TABLE `users` (
   `unit_status` varchar(50) DEFAULT NULL,
   `role` enum('admin','operator','viewer','dispatcher','responder') NOT NULL DEFAULT 'viewer',
   `status` enum('active','inactive') NOT NULL DEFAULT 'active',
+  `failed_login_attempts` tinyint(3) UNSIGNED NOT NULL DEFAULT 0,
+  `locked_until` datetime DEFAULT NULL,
   `inactive_at` timestamp NULL DEFAULT NULL,
   `created_at` timestamp NOT NULL DEFAULT current_timestamp(),
   `updated_at` timestamp NULL DEFAULT NULL ON UPDATE current_timestamp(),
@@ -1100,6 +1102,7 @@ ALTER TABLE `users`
   ADD UNIQUE KEY `uk_users_email` (`email`),
   ADD KEY `idx_users_role` (`role`),
   ADD KEY `idx_users_status` (`status`),
+  ADD KEY `idx_users_locked_until` (`locked_until`),
   ADD KEY `idx_users_inactive_at` (`inactive_at`);
 
 --

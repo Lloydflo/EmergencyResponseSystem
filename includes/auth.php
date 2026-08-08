@@ -153,6 +153,87 @@ function require_role(string $requiredRole, string $redirect_url = ''): void {
 }
 
 /**
+ * Ensure login lockout fields exist on older deployments.
+ * @param PDO $pdo
+ */
+function ensure_login_lockout_columns(PDO $pdo): void {
+    $columns = [
+        'failed_login_attempts' => "ALTER TABLE users ADD COLUMN failed_login_attempts TINYINT UNSIGNED NOT NULL DEFAULT 0 AFTER status",
+        'locked_until' => "ALTER TABLE users ADD COLUMN locked_until DATETIME NULL DEFAULT NULL AFTER failed_login_attempts",
+    ];
+
+    foreach ($columns as $column => $sql) {
+        $stmt = $pdo->prepare("
+            SELECT COUNT(*)
+            FROM INFORMATION_SCHEMA.COLUMNS
+            WHERE TABLE_SCHEMA = DATABASE()
+              AND TABLE_NAME = 'users'
+              AND COLUMN_NAME = ?
+        ");
+        $stmt->execute([$column]);
+        if ((int)$stmt->fetchColumn() === 0) {
+            $pdo->exec($sql);
+        }
+    }
+
+    $indexStmt = $pdo->prepare("
+        SELECT COUNT(*)
+        FROM INFORMATION_SCHEMA.STATISTICS
+        WHERE TABLE_SCHEMA = DATABASE()
+          AND TABLE_NAME = 'users'
+          AND INDEX_NAME = 'idx_users_locked_until'
+    ");
+    $indexStmt->execute();
+    if ((int)$indexStmt->fetchColumn() === 0) {
+        $pdo->exec("ALTER TABLE users ADD KEY idx_users_locked_until (locked_until)");
+    }
+}
+
+/**
+ * Clear failed login counters after a valid password or expired lock.
+ * @param PDO $pdo
+ * @param int $userId
+ */
+function reset_login_lockout(PDO $pdo, int $userId): void {
+    $stmt = $pdo->prepare("UPDATE users SET failed_login_attempts = 0, locked_until = NULL WHERE id = ?");
+    $stmt->execute([$userId]);
+}
+
+/**
+ * Record a bad password attempt and lock the account when the limit is reached.
+ * @param PDO $pdo
+ * @param int $userId
+ * @param int $currentAttempts
+ * @return array ['message' => string]
+ */
+function record_failed_login_attempt(PDO $pdo, int $userId, int $currentAttempts): array {
+    $maxAttempts = 3;
+    $lockMinutes = 5;
+    $attempts = min($currentAttempts + 1, $maxAttempts);
+
+    if ($attempts >= $maxAttempts) {
+        $stmt = $pdo->prepare("
+            UPDATE users
+            SET failed_login_attempts = ?, locked_until = DATE_ADD(NOW(), INTERVAL ? MINUTE)
+            WHERE id = ?
+        ");
+        $stmt->execute([$attempts, $lockMinutes, $userId]);
+
+        return [
+            'message' => 'Too many incorrect password attempts. Your account is locked for 5 minutes.'
+        ];
+    }
+
+    $stmt = $pdo->prepare("UPDATE users SET failed_login_attempts = ?, locked_until = NULL WHERE id = ?");
+    $stmt->execute([$attempts, $userId]);
+
+    $remaining = $maxAttempts - $attempts;
+    return [
+        'message' => 'Invalid email or password. ' . $remaining . ' attempt' . ($remaining === 1 ? '' : 's') . ' remaining before account lock.'
+    ];
+}
+
+/**
  * Login user
  * @param string $email
  * @param string $password
@@ -179,8 +260,24 @@ function login_user(string $email, string $password, ?string $requiredRole = nul
             error_log('Inactive user cleanup error: ' . $cleanupError->getMessage());
         }
 
+        ensure_login_lockout_columns($pdo);
+
         // Get user by email
-        $stmt = $pdo->prepare("SELECT id, email, password, name, role, status FROM users WHERE email = ?");
+        $stmt = $pdo->prepare("
+            SELECT
+                id,
+                email,
+                password,
+                name,
+                role,
+                status,
+                failed_login_attempts,
+                locked_until,
+                (locked_until IS NOT NULL AND locked_until > NOW()) AS is_locked,
+                GREATEST(TIMESTAMPDIFF(SECOND, NOW(), locked_until), 0) AS lock_seconds_remaining
+            FROM users
+            WHERE email = ?
+        ");
         $stmt->execute([$email]);
         $user = $stmt->fetch();
         
@@ -190,6 +287,23 @@ function login_user(string $email, string $password, ?string $requiredRole = nul
                 'message' => 'Invalid email or password',
                 'user' => null
             ];
+        }
+
+        if ((int)($user['is_locked'] ?? 0) === 1) {
+            $secondsRemaining = max(1, (int)($user['lock_seconds_remaining'] ?? 0));
+            $minutesRemaining = max(1, (int)ceil($secondsRemaining / 60));
+
+            return [
+                'success' => false,
+                'message' => 'Your account is locked. Please try again in ' . $minutesRemaining . ' minute' . ($minutesRemaining === 1 ? '' : 's') . '.',
+                'user' => null
+            ];
+        }
+
+        if (!empty($user['locked_until'])) {
+            reset_login_lockout($pdo, (int)$user['id']);
+            $user['failed_login_attempts'] = 0;
+            $user['locked_until'] = null;
         }
         
         // Check if user is active
@@ -203,12 +317,15 @@ function login_user(string $email, string $password, ?string $requiredRole = nul
         
         // Verify password
         if (!password_verify($password, $user['password'])) {
+            $failedAttempt = record_failed_login_attempt($pdo, (int)$user['id'], (int)($user['failed_login_attempts'] ?? 0));
             return [
                 'success' => false,
-                'message' => 'Invalid email or password',
+                'message' => $failedAttempt['message'],
                 'user' => null
             ];
         }
+
+        reset_login_lockout($pdo, (int)$user['id']);
         
         // Ensure selected role is compatible with account role before creating session
         if ($requiredRole !== null) {
@@ -242,7 +359,7 @@ function login_user(string $email, string $password, ?string $requiredRole = nul
         $_SESSION['logged_in'] = true;
         
         // Update last login
-        $updateStmt = $pdo->prepare("UPDATE users SET last_login = NOW() WHERE id = ?");
+        $updateStmt = $pdo->prepare("UPDATE users SET last_login = NOW(), failed_login_attempts = 0, locked_until = NULL WHERE id = ?");
         $updateStmt->execute([$user['id']]);
         
         return [
