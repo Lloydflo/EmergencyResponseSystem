@@ -307,6 +307,14 @@ if (!function_exists('ers_geocode_location_to_coordinates')) {
             return null;
         }
 
+        if (preg_match('/^\s*(?:lat(?:itude)?\s*[:=]?\s*)?(-?\d{1,3}(?:\.\d+)?)\s*[, ]\s*(?:lon(?:gitude)?|lng)?\s*[:=]?\s*(-?\d{1,3}(?:\.\d+)?)\s*$/i', $input, $matches)) {
+            $lat = (float)$matches[1];
+            $lng = (float)$matches[2];
+            if ($lat >= -90 && $lat <= 90 && $lng >= -180 && $lng <= 180) {
+                return [$lat, $lng];
+            }
+        }
+
         $plusCodeCoordinates = ers_geocode_plus_code_to_coordinates($input);
         if ($plusCodeCoordinates !== null) {
             return $plusCodeCoordinates;

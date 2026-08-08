@@ -341,6 +341,7 @@ function ers_tip_convert_to_incident(PDO $pdo, array $input): array
     if ($location === '') {
         $location = 'Location not provided';
     }
+    $coordinates = ers_tip_payload_coordinates($payload) ?? ers_tip_location_coordinates($pdo, $location);
 
     $description = ers_tip_incident_description($item);
     $referenceNo = ers_tip_incident_reference($item);
@@ -369,8 +370,8 @@ function ers_tip_convert_to_incident(PDO $pdo, array $input): array
             ':caller_phone' => 'N/A',
             ':caller_email' => null,
             ':location_address' => $location,
-            ':latitude' => null,
-            ':longitude' => null,
+            ':latitude' => $coordinates['latitude'],
+            ':longitude' => $coordinates['longitude'],
             ':incident_type' => $type,
             ':priority' => $priority,
             ':description' => $description,
@@ -380,8 +381,13 @@ function ers_tip_convert_to_incident(PDO $pdo, array $input): array
         $lookup->execute([$callId]);
         $created = $lookup->fetch(PDO::FETCH_ASSOC);
         if ($created) {
-            $update = $pdo->prepare('UPDATE incidents SET title = ?, updated_at = NOW() WHERE id = ?');
-            $update->execute([$title, (int)$created['id']]);
+            if ($coordinates['latitude'] !== null && $coordinates['longitude'] !== null) {
+                $update = $pdo->prepare('UPDATE incidents SET title = ?, latitude = ?, longitude = ?, updated_at = NOW() WHERE id = ?');
+                $update->execute([$title, $coordinates['latitude'], $coordinates['longitude'], (int)$created['id']]);
+            } else {
+                $update = $pdo->prepare('UPDATE incidents SET title = ?, updated_at = NOW() WHERE id = ?');
+                $update->execute([$title, (int)$created['id']]);
+            }
         } else {
             $incidentId = ers_external_insert_incident($pdo, [
                 ':reference_no' => $referenceNo,
@@ -390,8 +396,8 @@ function ers_tip_convert_to_incident(PDO $pdo, array $input): array
                 ':title' => $title,
                 ':description' => $description,
                 ':location_address' => $location,
-                ':latitude' => null,
-                ':longitude' => null,
+                ':latitude' => $coordinates['latitude'],
+                ':longitude' => $coordinates['longitude'],
                 ':reported_by_call_id' => $callId,
             ]);
             $created = ['id' => $incidentId, 'reference_no' => $referenceNo, 'status' => 'pending'];
@@ -809,6 +815,237 @@ function ers_tip_decode_payload(string $raw): array
 {
     $decoded = json_decode($raw, true);
     return is_array($decoded) ? $decoded : [];
+}
+
+function ers_tip_location_coordinates(PDO $pdo, string $location): array
+{
+    $direct = ers_tip_parse_coordinates($location);
+    if ($direct !== null) {
+        return $direct;
+    }
+
+    $existing = ers_tip_existing_location_coordinates($pdo, $location);
+    if ($existing !== null) {
+        return $existing;
+    }
+
+    $cached = ers_tip_cached_location_coordinates($location);
+    if ($cached !== null) {
+        return $cached;
+    }
+
+    return ['latitude' => null, 'longitude' => null];
+}
+
+function ers_tip_payload_coordinates(array $payload): ?array
+{
+    $pairs = [
+        [$payload['latitude'] ?? null, $payload['longitude'] ?? null],
+        [$payload['lat'] ?? null, $payload['lng'] ?? null],
+        [$payload['lat'] ?? null, $payload['lon'] ?? null],
+    ];
+
+    foreach (['location', 'coordinates', 'coords', 'geo', 'position'] as $key) {
+        if (!is_array($payload[$key] ?? null)) {
+            continue;
+        }
+        $source = $payload[$key];
+        $pairs[] = [$source['latitude'] ?? null, $source['longitude'] ?? null];
+        $pairs[] = [$source['lat'] ?? null, $source['lng'] ?? null];
+        $pairs[] = [$source['lat'] ?? null, $source['lon'] ?? null];
+    }
+
+    foreach ($pairs as $pair) {
+        [$rawLat, $rawLng] = $pair;
+        if ($rawLat === null || $rawLng === null || $rawLat === '' || $rawLng === '') {
+            continue;
+        }
+        if (!is_numeric((string)$rawLat) || !is_numeric((string)$rawLng)) {
+            continue;
+        }
+        $lat = (float)$rawLat;
+        $lng = (float)$rawLng;
+        if (!ers_tip_valid_coordinates($lat, $lng) && ers_tip_valid_coordinates($lng, $lat)) {
+            [$lat, $lng] = [$lng, $lat];
+        }
+        if (ers_tip_valid_coordinates($lat, $lng)) {
+            return ['latitude' => $lat, 'longitude' => $lng];
+        }
+    }
+
+    return null;
+}
+
+function ers_tip_existing_location_coordinates(PDO $pdo, string $location): ?array
+{
+    $location = trim($location);
+    if ($location === '') {
+        return null;
+    }
+
+    foreach (['incidents', 'calls'] as $table) {
+        if (!ers_external_table_exists($pdo, $table)) {
+            continue;
+        }
+        if (
+            !ers_external_column_exists($pdo, $table, 'location_address')
+            || !ers_external_column_exists($pdo, $table, 'latitude')
+            || !ers_external_column_exists($pdo, $table, 'longitude')
+        ) {
+            continue;
+        }
+
+        try {
+            $stmt = $pdo->prepare(
+                "SELECT latitude, longitude
+                 FROM {$table}
+                 WHERE location_address = ?
+                   AND latitude IS NOT NULL
+                   AND longitude IS NOT NULL
+                 ORDER BY id DESC
+                 LIMIT 1"
+            );
+            $stmt->execute([$location]);
+            $row = $stmt->fetch(PDO::FETCH_ASSOC);
+            if (is_array($row)) {
+                $lat = (float)$row['latitude'];
+                $lng = (float)$row['longitude'];
+                if (ers_tip_valid_coordinates($lat, $lng)) {
+                    return ['latitude' => $lat, 'longitude' => $lng];
+                }
+            }
+        } catch (Throwable $e) {
+            continue;
+        }
+    }
+
+    return null;
+}
+
+function ers_tip_parse_coordinates(string $location): ?array
+{
+    $text = trim((string)preg_replace('/\s+/', ' ', $location));
+    if ($text === '') {
+        return null;
+    }
+
+    if (!preg_match('/(?:lat(?:itude)?\s*[:=]?\s*)?(-?\d{1,3}(?:\.\d+)?)\s*[, ]\s*(?:lon(?:gitude)?|lng)?\s*[:=]?\s*(-?\d{1,3}(?:\.\d+)?)/i', $text, $matches)) {
+        return null;
+    }
+
+    $lat = (float)$matches[1];
+    $lng = (float)$matches[2];
+    if (!ers_tip_valid_coordinates($lat, $lng) && ers_tip_valid_coordinates($lng, $lat)) {
+        [$lat, $lng] = [$lng, $lat];
+    }
+    if (!ers_tip_valid_coordinates($lat, $lng)) {
+        return null;
+    }
+
+    return ['latitude' => $lat, 'longitude' => $lng];
+}
+
+function ers_tip_valid_coordinates(float $lat, float $lng): bool
+{
+    return $lat >= -90 && $lat <= 90 && $lng >= -180 && $lng <= 180;
+}
+
+function ers_tip_cached_location_coordinates(string $location): ?array
+{
+    $path = __DIR__ . '/../../data/geocode_cache.json';
+    if (!is_file($path)) {
+        return null;
+    }
+
+    $raw = @file_get_contents($path);
+    if (!is_string($raw) || $raw === '') {
+        return null;
+    }
+
+    $cache = json_decode($raw, true);
+    if (!is_array($cache)) {
+        return null;
+    }
+
+    $queryTokens = ers_tip_location_tokens($location);
+    if ($queryTokens === []) {
+        return null;
+    }
+
+    $best = null;
+    $bestScore = 0;
+    foreach ($cache as $entry) {
+        $items = is_array($entry) && is_array($entry['items'] ?? null) ? $entry['items'] : [];
+        foreach ($items as $item) {
+            if (!is_array($item)) {
+                continue;
+            }
+            $lat = isset($item['lat']) ? (float)$item['lat'] : null;
+            $lng = isset($item['lon']) ? (float)$item['lon'] : null;
+            $display = (string)($item['display_name'] ?? '');
+            if ($lat === null || $lng === null || !ers_tip_valid_coordinates($lat, $lng) || trim($display) === '') {
+                continue;
+            }
+
+            $displayTokens = ers_tip_location_tokens($display);
+            $matches = array_intersect($queryTokens, $displayTokens);
+            if ($matches === []) {
+                continue;
+            }
+
+            $score = count($matches) * 10;
+            if (stripos($display, 'Quezon City') !== false) {
+                $score += 3;
+            }
+            if (stripos($display, 'Metro Manila') !== false) {
+                $score += 2;
+            }
+            if (count($matches) === count($queryTokens)) {
+                $score += 8;
+            }
+
+            if ($score > $bestScore) {
+                $bestScore = $score;
+                $best = ['latitude' => $lat, 'longitude' => $lng];
+            }
+        }
+    }
+
+    return $bestScore >= 10 ? $best : null;
+}
+
+function ers_tip_location_tokens(string $value): array
+{
+    $normalized = strtolower((string)preg_replace('/[^a-z0-9]+/i', ' ', $value));
+    $parts = preg_split('/\s+/', trim($normalized)) ?: [];
+    $stopWords = [
+        'street' => true,
+        'st' => true,
+        'road' => true,
+        'rd' => true,
+        'drive' => true,
+        'dr' => true,
+        'avenue' => true,
+        'ave' => true,
+        'barangay' => true,
+        'brgy' => true,
+        'quezon' => true,
+        'city' => true,
+        'metro' => true,
+        'manila' => true,
+        'philippines' => true,
+    ];
+
+    $tokens = [];
+    foreach ($parts as $part) {
+        $part = trim($part);
+        if (strlen($part) < 3 || isset($stopWords[$part])) {
+            continue;
+        }
+        $tokens[] = $part;
+    }
+
+    return array_values(array_unique($tokens));
 }
 
 function ers_tip_infer_incident_type(string $description): string
