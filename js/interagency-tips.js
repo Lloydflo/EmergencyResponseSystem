@@ -48,21 +48,56 @@
 
     const priorities = ['medium', 'low', 'high', 'critical'];
 
-    const formatDate = (value) => {
-        if (!value) {
-            return 'No date';
+    const PH_TIME_ZONE = 'Asia/Manila';
+    const PH_DATE_FORMATTER = new Intl.DateTimeFormat('en-PH', {
+        timeZone: PH_TIME_ZONE,
+        month: 'short',
+        day: 'numeric',
+        hour: 'numeric',
+        minute: '2-digit',
+        hour12: true,
+    });
+
+    const parsePhilippineDate = (value) => {
+        const raw = String(value || '').trim();
+        if (!raw) return new Date(NaN);
+
+        const localDateTime = raw.match(
+            /^(\d{4})-(\d{2})-(\d{2})[ T](\d{2}):(\d{2})(?::(\d{2})(?:\.(\d+))?)?$/
+        );
+        if (localDateTime) {
+            const [, year, month, day, hour, minute, second = '00', fraction = ''] = localDateTime;
+            const milliseconds = (fraction + '000').slice(0, 3);
+            return new Date(`${year}-${month}-${day}T${hour}:${minute}:${second}.${milliseconds}+08:00`);
         }
-        const date = new Date(String(value).replace(' ', 'T'));
-        if (Number.isNaN(date.getTime())) {
-            return value;
+        if (/^\d{4}-\d{2}-\d{2}$/.test(raw)) {
+            return new Date(`${raw}T00:00:00.000+08:00`);
         }
-        return date.toLocaleString([], {
-            month: 'short',
-            day: 'numeric',
-            hour: 'numeric',
-            minute: '2-digit',
-        });
+        return new Date(raw);
     };
+
+    const formatDate = (value, millisecondValue = 0) => {
+        const milliseconds = Number(millisecondValue || 0);
+        const date = milliseconds > 0 ? new Date(milliseconds) : parsePhilippineDate(value);
+        if (Number.isNaN(date.getTime())) {
+            return String(value || 'No date');
+        }
+        return `${PH_DATE_FORMATTER.format(date)} PHT`;
+    };
+
+    // The inbox timestamp means "received by this emergency-response system".
+    // Use the server-authored receipt time first; source-provided event time can
+    // be inaccurate when the sending system uses a different local timezone.
+    const tipDisplayDate = (item) => ({
+        value: item?.display_datetime || item?.received_at || item?.tip_datetime || item?.updated_at || '',
+        milliseconds: Number(
+            item?.display_datetime_ms
+            || item?.received_at_ms
+            || item?.tip_datetime_ms
+            || item?.updated_at_ms
+            || 0
+        ),
+    });
 
     const appBasePath = () => {
         const path = String(window.location.pathname || '');
@@ -502,6 +537,7 @@
         }
 
         return items.map((item) => {
+            const displayDate = tipDisplayDate(item);
             const evidencePhoto = evidenceInfo(item.photo_of_evidence);
             const itemStatus = statusOf(item);
             const isConverted = isConvertedStatus(item);
@@ -521,7 +557,7 @@
                         <span class="ia-tip-location">${escapeHtml(item.location || 'No location')}</span>
                         <span class="ia-tip-description">${escapeHtml(item.tip_description || 'No description')}</span>
                         <span class="ia-tip-meta">
-                            <span><i class="fas fa-clock"></i> ${escapeHtml(formatDate(item.tip_datetime))}</span>
+                            <span><i class="fas fa-clock"></i> ${escapeHtml(formatDate(displayDate.value, displayDate.milliseconds))}</span>
                             <span><i class="fas fa-network-wired"></i> ${escapeHtml(item.source_system || 'Group 6')}</span>
                         </span>
                         <span class="ia-tip-flow">
@@ -548,6 +584,7 @@
             `;
         }
 
+        const displayDate = tipDisplayDate(item);
         const evidencePhoto = evidenceInfo(item.photo_of_evidence);
         const itemStatus = statusOf(item);
         const rawItemStatus = rawStatusOf(item);
@@ -583,8 +620,8 @@
                         <div class="ia-tip-detail-value">${escapeHtml(item.tip_id)}</div>
                     </div>
                     <div class="ia-tip-detail-item">
-                        <div class="ia-tip-detail-label">Date & Time</div>
-                        <div class="ia-tip-detail-value">${escapeHtml(formatDate(item.tip_datetime))}</div>
+                        <div class="ia-tip-detail-label">Received (PHT)</div>
+                        <div class="ia-tip-detail-value">${escapeHtml(formatDate(displayDate.value, displayDate.milliseconds))}</div>
                     </div>
                     <div class="ia-tip-detail-item">
                         <div class="ia-tip-detail-label">Location</div>

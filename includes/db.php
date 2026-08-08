@@ -1,4 +1,5 @@
 <?php
+date_default_timezone_set('Asia/Manila');
 require_once __DIR__ . '/config.php';
 
 function get_db_connection(): ?PDO {
@@ -23,6 +24,13 @@ function get_db_connection(): ?PDO {
 
     try {
         $pdo = new PDO($dsn, $config['DB_USER'], $config['DB_PASS'] ?? '', $options);
+        try {
+            // Keep NOW(), CURRENT_TIMESTAMP, TIMESTAMP conversion, and API epoch
+            // values aligned with the system's authoritative Philippine timezone.
+            $pdo->exec("SET time_zone = '+08:00'");
+        } catch (Throwable $timezoneError) {
+            error_log('Database session timezone setup skipped: ' . $timezoneError->getMessage());
+        }
         return $pdo;
     } catch (PDOException $e) {
         error_log('Database connection failed: ' . $e->getMessage());

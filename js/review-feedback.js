@@ -670,12 +670,24 @@
   function parseDateValue(value) {
     const raw = String(value || '').trim();
     if (!raw) return new Date(NaN);
-    if (/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/.test(raw)) {
-      return new Date(raw.replace(' ', 'T') + 'Z');
+
+    // MySQL DATETIME values in this system are Philippine wall-clock values.
+    // Treating a zone-less value as UTC (the previous trailing `Z`) adds eight
+    // hours and can move a record to the following day.
+    const localDateTime = raw.match(
+      /^(\d{4})-(\d{2})-(\d{2})[ T](\d{2}):(\d{2})(?::(\d{2})(?:\.(\d+))?)?$/
+    );
+    if (localDateTime) {
+      const [, year, month, day, hour, minute, second = '00', fraction = ''] = localDateTime;
+      const milliseconds = (fraction + '000').slice(0, 3);
+      return new Date(`${year}-${month}-${day}T${hour}:${minute}:${second}.${milliseconds}+08:00`);
     }
-    if (/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}$/.test(raw)) {
-      return new Date(raw + 'Z');
+    if (/^\d{4}-\d{2}-\d{2}$/.test(raw)) {
+      return new Date(`${raw}T00:00:00.000+08:00`);
     }
+
+    // Explicit Z/offset values keep their source timezone and are converted by
+    // PH_DATE_FORMATTER to Asia/Manila.
     return new Date(raw);
   }
 

@@ -5493,7 +5493,7 @@ $pageTitle = 'Inter-Agency Conversations';
     <script src="js/interagency-operations.js"></script>
     <script src="js/interagency-command.js"></script>
     <script src="js/interagency-events.js"></script>
-    <script src="js/interagency-tips.js"></script>
+    <script src="js/interagency-tips.js?v=20260809-ph-time-v1"></script>
     <script src="js/admin-anonymous-tip-details.js?v=20260808-admin-tip-details-v2"></script>
     <script src="js/interagency-external-inbox.js"></script>
     <script src="js/interagency-module-launcher.js"></script>

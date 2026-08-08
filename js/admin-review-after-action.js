@@ -80,12 +80,21 @@
         if (!raw) {
             return new Date(NaN);
         }
-        if (/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/.test(raw)) {
-            return new Date(raw.replace(' ', 'T') + 'Z');
+
+        // Database DATETIME fields are stored as Philippine local wall time.
+        // A zone-less value must therefore use +08:00, not UTC (`Z`).
+        const localDateTime = raw.match(
+            /^(\d{4})-(\d{2})-(\d{2})[ T](\d{2}):(\d{2})(?::(\d{2})(?:\.(\d+))?)?$/
+        );
+        if (localDateTime) {
+            const [, year, month, day, hour, minute, second = '00', fraction = ''] = localDateTime;
+            const milliseconds = (fraction + '000').slice(0, 3);
+            return new Date(`${year}-${month}-${day}T${hour}:${minute}:${second}.${milliseconds}+08:00`);
         }
-        if (/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}$/.test(raw)) {
-            return new Date(raw + 'Z');
+        if (/^\d{4}-\d{2}-\d{2}$/.test(raw)) {
+            return new Date(`${raw}T00:00:00.000+08:00`);
         }
+
         return new Date(raw);
     }
 
