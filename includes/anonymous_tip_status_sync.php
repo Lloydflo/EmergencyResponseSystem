@@ -4,10 +4,15 @@ declare(strict_types=1);
 function ers_anonymous_tip_sync_env(string $key, string $default = ''): string
 {
     if (function_exists('ers_env')) {
-        return trim((string)ers_env($key, $default));
+        $value = trim((string)ers_env($key, ''));
+        return $value !== '' ? $value : $default;
     }
     $value = $_ENV[$key] ?? $_SERVER[$key] ?? getenv($key);
-    return $value === false || $value === null ? $default : trim((string)$value);
+    if ($value === false || $value === null) {
+        return $default;
+    }
+    $value = trim((string)$value);
+    return $value !== '' ? $value : $default;
 }
 
 function ers_anonymous_tip_status_payload(PDO $pdo, int $incidentId, string $status, string $note = ''): ?array
