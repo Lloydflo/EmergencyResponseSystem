@@ -22,6 +22,7 @@ $pageTitle = 'Inter-Agency Conversations';
     <link rel="stylesheet" href="css/interagency-command.css">
     <link rel="stylesheet" href="css/interagency-events.css">
     <link rel="stylesheet" href="css/interagency-tips.css">
+    <link rel="stylesheet" href="css/admin-anonymous-tip.css?v=20260808-admin-tip-details-v1">
     <style>
         :root {
             --ia-bg: #f4f7fb;
@@ -5499,6 +5500,7 @@ $pageTitle = 'Inter-Agency Conversations';
     <script src="js/interagency-command.js"></script>
     <script src="js/interagency-events.js"></script>
     <script src="js/interagency-tips.js"></script>
+    <script src="js/admin-anonymous-tip-details.js?v=20260808-admin-tip-details-v1"></script>
     <script src="js/interagency-external-inbox.js"></script>
     <script src="js/interagency-module-launcher.js"></script>
 </body>
