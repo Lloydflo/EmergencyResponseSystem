@@ -84,7 +84,7 @@
             const next = Number(nextCounts[id] || 0);
             const previous = Number(state.counts[id] || 0);
             setBadge(id, next);
-            if (state.initialized && next > previous) {
+            if (state.initialized && next > previous && id !== 'iaAnonymousTipInbox') {
                 const added = next - previous;
                 const label = moduleLabels[id] || 'inter-agency item';
                 showToast(`${added} new ${label}${added > 1 ? 's' : ''} received.`);

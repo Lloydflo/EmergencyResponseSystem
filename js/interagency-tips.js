@@ -18,6 +18,8 @@
         status: 'all',
         expanded: true,
         evidenceViewer: null,
+        knownTipKeys: new Set(),
+        hasLoadedOnce: false,
     };
 
     const escapeHtml = (value) => String(value ?? '')
@@ -35,6 +37,8 @@
     const statusOf = (item) => String(item?.display_status || item?.status || 'new').trim().toLowerCase();
     const isConvertedStatus = (item) => ['converted_to_incident', 'dispatched'].includes(statusOf(item))
         || rawStatusOf(item) === 'converted_to_incident';
+    const tipKey = (item) => String(item?.tip_id || item?.id || '').trim();
+    const isOpenTip = (item) => ['pending', 'new'].includes(rawStatusOf(item));
 
     const actionLabel = {
         reviewing: 'Marked for review.',
@@ -160,14 +164,8 @@
 
     const incidentUrl = (referenceNo) => {
         const ref = encodeURIComponent(String(referenceNo || '').trim());
-        const path = String(window.location.pathname || '').toLowerCase();
-        if (path.includes('/admin/')) {
-            return `../dispatcher/incident.php?code=${ref}`;
-        }
-        if (path.includes('/dispatcher/')) {
-            return `incident.php?code=${ref}`;
-        }
-        return `dispatcher/incident.php?code=${ref}`;
+        const base = appBasePath();
+        return `${base}/dispatcher/incident.php?code=${ref}`;
     };
 
     const notifyCountsChanged = () => {
@@ -185,6 +183,72 @@
         try {
             window.localStorage.setItem('ers_incidents_changed', JSON.stringify(detail));
         } catch (_) {}
+    };
+
+    const playNewTipCue = () => {
+        try {
+            const AudioContextApi = window.AudioContext || window.webkitAudioContext;
+            if (!AudioContextApi) return;
+            const ctx = new AudioContextApi();
+            const now = ctx.currentTime;
+            [780, 980].forEach((frequency, index) => {
+                const oscillator = ctx.createOscillator();
+                const gain = ctx.createGain();
+                oscillator.type = 'sine';
+                oscillator.frequency.setValueAtTime(frequency, now + (index * 0.12));
+                gain.gain.setValueAtTime(0.0001, now + (index * 0.12));
+                gain.gain.exponentialRampToValueAtTime(0.08, now + 0.02 + (index * 0.12));
+                gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.16 + (index * 0.12));
+                oscillator.connect(gain);
+                gain.connect(ctx.destination);
+                oscillator.start(now + (index * 0.12));
+                oscillator.stop(now + 0.18 + (index * 0.12));
+            });
+            window.setTimeout(() => ctx.close().catch(() => {}), 650);
+        } catch (_) {}
+    };
+
+    const showNewTipNotification = (items) => {
+        const count = items.length;
+        if (count < 1) return;
+        const first = items[0] || {};
+        const location = String(first.location || '').trim();
+        const message = count === 1
+            ? `New anonymous tip received${location ? `: ${location}` : '.'}`
+            : `${count} new anonymous tips received.`;
+
+        const toastRoot = document.getElementById('iaModuleToast') || (() => {
+            let fallback = document.getElementById('iaTipToastRoot');
+            if (!fallback) {
+                fallback = document.createElement('div');
+                fallback.id = 'iaTipToastRoot';
+                fallback.className = 'ia-tip-toast-root';
+                fallback.setAttribute('aria-live', 'polite');
+                document.body.appendChild(fallback);
+            }
+            return fallback;
+        })();
+
+        const toast = document.createElement('button');
+        toast.type = 'button';
+        toast.className = toastRoot.id === 'iaModuleToast' ? 'ia-module-toast-item ia-tip-new-toast' : 'ia-tip-toast';
+        toast.textContent = message;
+        toast.addEventListener('click', () => {
+            state.expanded = true;
+            state.selectedId = Number(first.id || state.selectedId || 0) || state.selectedId;
+            render();
+            root.scrollIntoView({ behavior: 'smooth', block: 'start' });
+            toast.remove();
+        });
+        toastRoot.prepend(toast);
+        window.setTimeout(() => toast.remove(), 7000);
+
+        if ('Notification' in window && window.Notification.permission === 'granted') {
+            try {
+                new window.Notification('Anonymous Tip Inbox', { body: message });
+            } catch (_) {}
+        }
+        playNewTipCue();
     };
 
     const filteredItems = () => state.items.filter((item) => {
@@ -207,10 +271,16 @@
         return state.items.find((item) => Number(item.id) === Number(state.selectedId)) || null;
     };
 
-    const loadTips = async () => {
-        state.loading = true;
+    const loadTips = async (options = {}) => {
+        const notifyNew = Boolean(options.notifyNew);
+        const silent = Boolean(options.silent);
+        if (!silent) {
+            state.loading = true;
+        }
         state.error = '';
-        render();
+        if (!silent) {
+            render();
+        }
 
         try {
             const response = await fetch(`${apiUrl}&limit=80`, {
@@ -221,14 +291,32 @@
             if (!response.ok || !data.success) {
                 throw new Error(data.error || 'Unable to load anonymous tips');
             }
-            state.items = Array.isArray(data.items) ? data.items : [];
+            const nextItems = Array.isArray(data.items) ? data.items : [];
+            const newOpenItems = notifyNew && state.hasLoadedOnce
+                ? nextItems.filter((item) => {
+                    const key = tipKey(item);
+                    return key !== '' && !state.knownTipKeys.has(key) && isOpenTip(item);
+                })
+                : [];
+            state.items = nextItems;
+            state.knownTipKeys = new Set(nextItems.map(tipKey).filter(Boolean));
+            state.hasLoadedOnce = true;
             if (!state.items.some((item) => Number(item.id) === Number(state.selectedId))) {
                 state.selectedId = state.items.length > 0 ? Number(state.items[0].id) : null;
+            }
+            if (newOpenItems.length > 0) {
+                state.notice = newOpenItems.length === 1
+                    ? `New anonymous tip received: ${newOpenItems[0].location || newOpenItems[0].tip_id || 'Open inbox'}.`
+                    : `${newOpenItems.length} new anonymous tips received.`;
+                notifyCountsChanged();
+                showNewTipNotification(newOpenItems);
             }
         } catch (error) {
             state.error = error.message || 'Unable to load anonymous tips';
         } finally {
-            state.loading = false;
+            if (!silent) {
+                state.loading = false;
+            }
             render();
         }
     };
@@ -719,9 +807,14 @@
     });
 
     window.addEventListener('ers:anonymous-tips-updated', () => {
-        loadTips();
+        loadTips({ notifyNew: true, silent: true });
     });
 
     render();
     loadTips();
+    window.setInterval(() => {
+        if (document.visibilityState === 'visible') {
+            loadTips({ notifyNew: true, silent: true });
+        }
+    }, 10000);
 })();
