@@ -11,6 +11,7 @@ if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
 require_once __DIR__ . '/../includes/db.php';
 require_once __DIR__ . '/../includes/activity_log.php';
 require_once __DIR__ . '/../includes/incident_priority.php';
+require_once __DIR__ . '/system_API/group1_incident_client.php';
 $pdo = get_db_connection();
 if (!$pdo) {
     http_response_code(500);
@@ -90,6 +91,11 @@ if ($transfer_incident_id > 0) {
                 $priority,
                 $location
             );
+            $group1Sync = calls_create_try_group1_sync(
+                $pdo,
+                isset($updatedIncident['call_id']) ? (int)$updatedIncident['call_id'] : 0,
+                (int)$updatedIncident['id']
+            );
             echo json_encode([
                 'ok' => true,
                 'updated_transfer' => true,
@@ -99,6 +105,7 @@ if ($transfer_incident_id > 0) {
                 'incident_reference_no' => $updatedIncident['reference_no'],
                 'incident_status' => $updatedIncident['status'],
                 'priority' => $priority,
+                'group1_sync' => $group1Sync,
             ]);
             exit;
         }
@@ -185,6 +192,11 @@ try {
 
     $pdo->commit();
     log_incident_created_audit($incident ? (int)$incident['id'] : null, $incident ? (string)$incident['reference_no'] : $reference_no, $type, $priority, $location);
+    $group1Sync = calls_create_try_group1_sync(
+        $pdo,
+        $call_id,
+        $incident ? (int)$incident['id'] : 0
+    );
 
     echo json_encode([
         'ok' => true,
@@ -194,6 +206,7 @@ try {
         'incident_reference_no' => $incident ? $incident['reference_no'] : null,
         'incident_status' => $incident ? $incident['status'] : null,
         'priority' => $priority,
+        'group1_sync' => $group1Sync,
     ]);
 } catch (Throwable $e) {
     if ($pdo->inTransaction()) {
@@ -213,6 +226,18 @@ function log_incident_created_audit(?int $incidentId, string $referenceNo, strin
         . ' | Priority: ' . $priority
         . ' | Location: ' . $location;
     log_activity_event(null, 'incident_created', 'incident', $incidentId, $details);
+}
+
+function calls_create_try_group1_sync(PDO $pdo, int $callId, int $incidentId): array {
+    $result = ers_group1_send_logged_incident($pdo, $callId, $incidentId);
+    return [
+        'success' => (bool)($result['success'] ?? false),
+        'status' => (string)($result['status'] ?? 'failed'),
+        'message' => (string)($result['message'] ?? 'Unable to send incident data.'),
+        'sync_log_id' => $result['sync_log_id'] ?? null,
+        'http_code' => $result['http_code'] ?? null,
+        'error' => $result['error'] ?? null,
+    ];
 }
 
 function transfer_incident_id_from_input(array $input): int {

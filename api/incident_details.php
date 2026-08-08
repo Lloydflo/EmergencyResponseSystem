@@ -49,6 +49,7 @@ if (!$pdo) {
     echo json_encode($out);
     exit;
 }
+$isAnonymousTipIncident = false;
 
 $resourceRecordsTable = ers_vehicle_resource_units_table($pdo);
 if ($resourceRecordsTable !== null) {
@@ -138,6 +139,24 @@ try {
             );
 
             $incidentId = (int)$incident['id'];
+            if (
+                ers_table_exists($pdo, 'external_incident_links')
+                && ers_column_exists($pdo, 'external_incident_links', 'incident_id')
+                && ers_column_exists($pdo, 'external_incident_links', 'source_system')
+            ) {
+                $sourceStmt = $pdo->prepare(
+                    "SELECT 1
+                     FROM external_incident_links
+                     WHERE incident_id = ?
+                       AND source_system = 'Anonymous Tip Inbox'
+                     LIMIT 1"
+                );
+                $sourceStmt->execute([$incidentId]);
+                $isAnonymousTipIncident = (bool)$sourceStmt->fetchColumn();
+                if ($isAnonymousTipIncident) {
+                    $incident['type'] = 'police';
+                }
+            }
             $hasIncidentNotes = ers_table_exists($pdo, 'incident_notes');
             $hasRatingColumn = $hasIncidentNotes && ers_column_exists($pdo, 'incident_notes', 'rating');
             $hasIncidentSurveys = ers_table_exists($pdo, 'incident_surveys')
@@ -292,7 +311,9 @@ try {
     }
 
     $desiredTypes = [];
-    if (!empty($out['incident']) && !empty($out['incident']['type'])) {
+    if ($isAnonymousTipIncident) {
+        $desiredTypes = ['police'];
+    } elseif (!empty($out['incident']) && !empty($out['incident']['type'])) {
         $typeValue = strtolower(trim((string)$out['incident']['type']));
         $typeParts = preg_split('/[,|]+/', $typeValue) ?: [$typeValue];
         foreach ($typeParts as $typePart) {
@@ -413,7 +434,7 @@ try {
     $assignedDriverWhere = " AND TRIM(COALESCE(" . $driverNameExpr . ", '')) <> ''";
 
     if (!empty($desiredTypes)) {
-        if (!in_array('other', $desiredTypes, true)) {
+        if (!$isAnonymousTipIncident && !in_array('other', $desiredTypes, true)) {
             $desiredTypes[] = 'other';
         }
         $placeholders = implode(',', array_fill(0, count($desiredTypes), '?'));

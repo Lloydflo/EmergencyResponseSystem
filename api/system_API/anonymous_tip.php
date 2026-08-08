@@ -329,17 +329,7 @@ function ers_tip_convert_to_incident(PDO $pdo, array $input): array
     }
 
     $payload = ers_tip_decode_payload((string)($item['raw_payload'] ?? ''));
-    $type = ers_external_normalize_type(
-        $input['incident_type']
-        ?? $input['type']
-        ?? $payload['incident_type']
-        ?? $payload['type']
-        ?? $payload['requested_department']
-        ?? ''
-    );
-    if ($type === '') {
-        $type = ers_tip_infer_incident_type((string)($item['tip_description'] ?? ''));
-    }
+    $type = 'police';
 
     $priority = ers_external_normalize_priority($input['priority'] ?? $payload['priority'] ?? 'medium');
     $location = ers_external_clean($item['location'] ?? '', 255);
@@ -716,23 +706,8 @@ function ers_tip_incident_reference(array $item): string
 
 function ers_tip_incident_description(array $item): string
 {
-    $lines = [
-        'Anonymous tip converted to incident.',
-        'Tip ID: ' . (string)($item['tip_id'] ?? ''),
-        'Date and time: ' . (string)($item['tip_datetime'] ?? ''),
-        'Location: ' . (string)($item['location'] ?? 'Location not provided'),
-        '',
-        'Description:',
-        (string)($item['tip_description'] ?? 'No description'),
-    ];
-
-    $photo = trim((string)($item['photo_of_evidence'] ?? ''));
-    if ($photo !== '') {
-        $lines[] = '';
-        $lines[] = 'Evidence: ' . $photo;
-    }
-
-    return trim(implode("\n", $lines));
+    $description = trim((string)($item['tip_description'] ?? ''));
+    return $description !== '' ? $description : 'No description';
 }
 
 function ers_tip_conversion_outcome(array $input, string $referenceNo, bool $duplicate): string

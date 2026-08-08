@@ -94,7 +94,7 @@ try {
         'error' => $result['error'] !== '' ? $result['error'] : null,
     ]);
 } catch (Throwable $e) {
-    error_log('send_incident.api.php failed: ' . $e->getMessage());
+    error_log('send_incident.php failed: ' . $e->getMessage());
     ers_external_json(500, [
         'success' => false,
         'error' => 'Unable to send incident data',
@@ -156,11 +156,6 @@ function ers_group1_build_payload(array $record): array
         'caller_location' => (string)($record['caller_location'] ?? ''),
         'emergency_level' => (string)($record['emergency_level'] ?? ''),
         'incident_description' => (string)($record['incident_description'] ?? ''),
-        'latitude' => isset($record['latitude']) && $record['latitude'] !== null ? (float)$record['latitude'] : null,
-        'longitude' => isset($record['longitude']) && $record['longitude'] !== null ? (float)$record['longitude'] : null,
-        'incident_id' => isset($record['incident_id']) && $record['incident_id'] !== null ? (int)$record['incident_id'] : null,
-        'reference_no' => (string)($record['incident_reference_no'] ?? $record['call_reference_no'] ?? ''),
-        'source_system' => 'ERS',
     ];
 }
 
@@ -295,7 +290,7 @@ function ers_group1_insert_sync_log(PDO $pdo, string $status, string $endpoint, 
         "INSERT INTO api_sync_logs
             (direction, target_group, endpoint_name, entity_type, entity_id, status, request_payload, created_at, updated_at)
          VALUES
-            ('outgoing', 'Group 1', 'send_incident.api', 'call', ?, ?, ?, NOW(), NOW())"
+            ('outgoing', 'Group 1', 'send_incident', 'call', ?, ?, ?, NOW(), NOW())"
     );
     $stmt->execute([
         (int)($record['call_id'] ?? 0),

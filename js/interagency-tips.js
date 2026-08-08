@@ -39,7 +39,6 @@
         dismissed: 'Dismissed after review.',
     };
 
-    const incidentTypes = ['other', 'medical', 'fire', 'police', 'traffic', 'rescue'];
     const priorities = ['medium', 'low', 'high', 'critical'];
 
     const formatDate = (value) => {
@@ -342,7 +341,7 @@
                 body: JSON.stringify({
                     action: 'convert_to_incident',
                     id: item.id,
-                    incident_type: form?.elements.incident_type?.value || 'other',
+                    incident_type: 'police',
                     priority: form?.elements.priority?.value || 'medium',
                     outcome: form?.elements.outcome?.value.trim() || '',
                 }),
@@ -522,10 +521,9 @@
                             </select>
                         </div>
                         <div class="ia-tip-detail-item">
-                            <label class="ia-tip-detail-label" for="iaTipIncidentType">Incident Type</label>
-                            <select id="iaTipIncidentType" name="incident_type" ${isConverted ? 'disabled' : ''}>
-                                ${incidentTypes.map((type) => `<option value="${type}">${statusLabel(type)}</option>`).join('')}
-                            </select>
+                            <div class="ia-tip-detail-label">Incident Type</div>
+                            <div class="ia-tip-detail-value">Police</div>
+                            <input type="hidden" name="incident_type" value="police">
                         </div>
                         <div class="ia-tip-detail-item">
                             <label class="ia-tip-detail-label" for="iaTipPriority">Priority</label>
