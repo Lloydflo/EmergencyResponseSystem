@@ -946,7 +946,7 @@ html[data-theme="dark"] .ia-tip-notice {
 .ia-module-modal-dialog:has(.ia-tip-section) .ia-module-modal-body {
     flex: 1 1 auto;
     min-height: 0;
-    overflow: hidden;
+    overflow: auto;
     padding: 0;
     background: var(--tip-ux-bg);
 }
@@ -955,6 +955,7 @@ html[data-theme="dark"] .ia-tip-notice {
     height: 100%;
     min-height: 0;
     margin: 0;
+    overflow: hidden;
 }
 
 .ia-module-modal-body .ia-tip-shell {
@@ -1209,18 +1210,20 @@ html[data-theme="dark"] .ia-tip-notice {
     align-content: start;
     gap: 0.58rem;
     padding: 0.65rem;
-    overflow: auto;
+    overflow-x: hidden;
+    overflow-y: auto;
     background: #f7fafc;
     scrollbar-gutter: stable;
 }
 
 .ia-tip-row {
     position: relative;
+    align-items: start;
     grid-template-columns: minmax(0, 1fr) auto;
     gap: 0.75rem;
     margin: 0;
     padding: 0.82rem 0.86rem;
-    overflow: hidden;
+    overflow: visible;
     border: 1px solid var(--tip-ux-border);
     border-left: 4px solid #94a3b8;
     border-radius: 13px;
@@ -1309,6 +1312,11 @@ html[data-theme="dark"] .ia-tip-notice {
     color: #53687b;
     font-size: 0.76rem;
     line-height: 1.45;
+    display: block;
+    overflow: visible;
+    overflow-wrap: anywhere;
+    -webkit-line-clamp: unset;
+    -webkit-box-orient: initial;
 }
 
 .ia-tip-meta {
