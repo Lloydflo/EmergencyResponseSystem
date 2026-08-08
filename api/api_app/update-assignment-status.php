@@ -100,8 +100,9 @@ try {
     }
 
     $pdo->commit();
+    $anonymousTipStatusSync = null;
     if ($isTransition && $requestedStatus === 'completed' && $incidentId > 0) {
-        ers_notify_anonymous_tip_status(
+        $anonymousTipStatusSync = ers_notify_anonymous_tip_status_result(
             $pdo,
             $incidentId,
             'completed',
@@ -116,6 +117,7 @@ try {
         'incident_resolved' => false,
         'incident_id' => $incidentId > 0 ? $incidentId : null,
         'idempotent' => !$isTransition,
+        'anonymous_tip_status_sync' => $anonymousTipStatusSync,
     ]);
 } catch (AppAssignmentException $error) {
     if (isset($pdo) && $pdo instanceof PDO && $pdo->inTransaction()) {

@@ -443,7 +443,7 @@ try {
 
     $pdo->commit();
     ers_notify_emergency_com_status($pdo, $incidentId, 'Additional response resources are being dispatched.');
-    ers_notify_anonymous_tip_status($pdo, $incidentId, 'dispatched', 'Additional response resources are being dispatched.');
+    $anonymousTipStatusSync = ers_notify_anonymous_tip_status_result($pdo, $incidentId, 'dispatched', 'Additional response resources are being dispatched.');
 
     echo json_encode([
         'success' => true,
@@ -452,6 +452,7 @@ try {
         'incident_id' => $incidentId,
         'dispatched_count' => count($dispatchedUnits),
         'dispatched_units' => $dispatchedUnits,
+        'anonymous_tip_status_sync' => $anonymousTipStatusSync,
     ]);
 } catch (Throwable $e) {
     if ($pdo->inTransaction()) {

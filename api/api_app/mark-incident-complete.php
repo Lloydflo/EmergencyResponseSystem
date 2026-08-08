@@ -79,7 +79,7 @@ try {
         $relative = (string)($result['completion_image_path'] ?? '');
     }
     $pdo->commit();
-    ers_notify_anonymous_tip_status(
+    $anonymousTipStatusSync = ers_notify_anonymous_tip_status_result(
         $pdo,
         (int)$result['incident_id'],
         'completed',
@@ -90,6 +90,7 @@ try {
         'incident_id' => (int)$result['incident_id'],
         'completion_image_path' => $relative,
         'already_completed' => (bool)($result['already_completed'] ?? false),
+        'anonymous_tip_status_sync' => $anonymousTipStatusSync,
     ]);
 } catch (AppAssignmentException $error) {
     if (is_file($target)) {

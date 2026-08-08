@@ -514,6 +514,7 @@ try {
     $pdo->commit();
 
     $notifiedIncidentIds = [];
+    $anonymousTipStatusSync = [];
     foreach ($allocations as $allocation) {
         $incidentId = (int)($allocation['incident_id'] ?? 0);
         if ($incidentId <= 0 || isset($notifiedIncidentIds[$incidentId])) {
@@ -525,7 +526,7 @@ try {
             $incidentId,
             'Response units are being dispatched.'
         );
-        ers_notify_anonymous_tip_status(
+        $anonymousTipStatusSync[] = ers_notify_anonymous_tip_status_result(
             $pdo,
             $incidentId,
             'dispatched',
@@ -559,6 +560,7 @@ try {
         'available_units_before' => $initialAvailableUnits,
         'available_units_after' => count($availableUnits),
         'allocations' => $allocations,
+        'anonymous_tip_status_sync' => $anonymousTipStatusSync,
         'summary' => [
             'units_allocated' => count($allocations),
             'active_incidents' => count($incidents),

@@ -532,7 +532,7 @@ try {
 
     $pdo->commit();
     ers_notify_emergency_com_status($pdo, $incident_id, 'Response units are being dispatched.');
-    ers_notify_anonymous_tip_status($pdo, $incident_id, 'dispatched', 'Response units are being dispatched.');
+    $anonymousTipStatusSync = ers_notify_anonymous_tip_status_result($pdo, $incident_id, 'dispatched', 'Response units are being dispatched.');
 
     // Build payload for app notification feed (best-effort; does not block dispatch success).
     try {
@@ -630,6 +630,7 @@ try {
         'dispatch_ids' => $dispatchIds,
         'dispatched_count' => count($dispatchIds),
         'dispatched_units' => $dispatchedUnits,
+        'anonymous_tip_status_sync' => $anonymousTipStatusSync,
         'notification_logged' => $notificationLogged,
         'notification' => $notificationPayload
     ]);

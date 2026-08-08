@@ -330,18 +330,30 @@ function ers_anonymous_tip_status_log_update(PDO $pdo, int $logId, string $statu
     }
 }
 
-function ers_notify_anonymous_tip_status(PDO $pdo, int $incidentId, string $status, string $note = ''): bool
+/**
+ * @return array<string,mixed>
+ */
+function ers_notify_anonymous_tip_status_result(PDO $pdo, int $incidentId, string $status, string $note = ''): array
 {
     $payload = ers_anonymous_tip_status_payload($pdo, $incidentId, $status, $note);
     if (!$payload) {
-        ers_anonymous_tip_status_log_insert($pdo, $incidentId, null, 'failed', 'No anonymous tip link found for incident.');
-        return false;
+        $logId = ers_anonymous_tip_status_log_insert($pdo, $incidentId, null, 'failed', 'No anonymous tip link found for incident.');
+        return [
+            'ok' => false,
+            'log_id' => $logId,
+            'error' => 'No anonymous tip link found for incident.',
+        ];
     }
     $logId = ers_anonymous_tip_status_log_insert($pdo, $incidentId, $payload);
 
     if (!function_exists('curl_init')) {
         ers_anonymous_tip_status_log_update($pdo, $logId, 'failed', '', 'PHP cURL extension is not available.');
-        return false;
+        return [
+            'ok' => false,
+            'log_id' => $logId,
+            'error' => 'PHP cURL extension is not available.',
+            'payload' => $payload,
+        ];
     }
 
     $callbackUrl = ers_anonymous_tip_sync_env(
@@ -350,7 +362,12 @@ function ers_notify_anonymous_tip_status(PDO $pdo, int $incidentId, string $stat
     );
     if ($callbackUrl === '') {
         ers_anonymous_tip_status_log_update($pdo, $logId, 'failed', '', 'Anonymous tip callback URL is empty.');
-        return false;
+        return [
+            'ok' => false,
+            'log_id' => $logId,
+            'error' => 'Anonymous tip callback URL is empty.',
+            'payload' => $payload,
+        ];
     }
 
     $apiKey = ers_anonymous_tip_sync_env(
@@ -374,7 +391,14 @@ function ers_notify_anonymous_tip_status(PDO $pdo, int $incidentId, string $stat
     );
     if ($formResult['ok']) {
         ers_anonymous_tip_status_log_update($pdo, $logId, 'sent', $formResult['response']);
-        return true;
+        return [
+            'ok' => true,
+            'log_id' => $logId,
+            'transport' => 'form',
+            'http_status' => $formResult['status'],
+            'response' => $formResult['response'],
+            'payload' => $payload,
+        ];
     }
 
     $jsonResult = ers_post_anonymous_tip_status_callback(
@@ -385,7 +409,14 @@ function ers_notify_anonymous_tip_status(PDO $pdo, int $incidentId, string $stat
     );
     if ($jsonResult['ok']) {
         ers_anonymous_tip_status_log_update($pdo, $logId, 'sent', $jsonResult['response']);
-        return true;
+        return [
+            'ok' => true,
+            'log_id' => $logId,
+            'transport' => 'json',
+            'http_status' => $jsonResult['status'],
+            'response' => $jsonResult['response'],
+            'payload' => $payload,
+        ];
     }
 
     $failure = 'form HTTP ' . $formResult['status']
@@ -396,7 +427,20 @@ function ers_notify_anonymous_tip_status(PDO $pdo, int $incidentId, string $stat
         . ' ' . substr($jsonResult['response'], 0, 300);
     ers_anonymous_tip_status_log_update($pdo, $logId, 'failed', $jsonResult['response'] !== '' ? $jsonResult['response'] : $formResult['response'], $failure);
     error_log('Anonymous tip status callback failed: ' . $failure);
-    return false;
+    return [
+        'ok' => false,
+        'log_id' => $logId,
+        'error' => $failure,
+        'form' => $formResult,
+        'json' => $jsonResult,
+        'payload' => $payload,
+    ];
+}
+
+function ers_notify_anonymous_tip_status(PDO $pdo, int $incidentId, string $status, string $note = ''): bool
+{
+    $result = ers_notify_anonymous_tip_status_result($pdo, $incidentId, $status, $note);
+    return !empty($result['ok']);
 }
 
 /**

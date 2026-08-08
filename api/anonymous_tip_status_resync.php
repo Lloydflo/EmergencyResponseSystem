@@ -75,7 +75,7 @@ try {
             : 'dispatched';
     }
 
-    $sent = ers_notify_anonymous_tip_status(
+    $syncResult = ers_notify_anonymous_tip_status_result(
         $pdo,
         $incidentId,
         $requestedStatus,
@@ -101,9 +101,10 @@ try {
     }
 
     echo json_encode([
-        'ok' => $sent,
+        'ok' => !empty($syncResult['ok']),
         'incident_id' => $incidentId,
         'status_sent' => $requestedStatus,
+        'callback' => $syncResult,
         'logs' => $logs,
     ], JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
 } catch (Throwable $e) {
