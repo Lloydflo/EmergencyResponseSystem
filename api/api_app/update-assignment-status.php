@@ -2,6 +2,7 @@
 declare(strict_types=1);
 
 require_once __DIR__ . '/_assignment.php';
+require_once __DIR__ . '/../../includes/anonymous_tip_status_sync.php';
 
 op_require_method('POST');
 $assignmentId = op_post_int('assignment_id');
@@ -99,6 +100,15 @@ try {
     }
 
     $pdo->commit();
+    if ($isTransition && $requestedStatus === 'completed' && $incidentId > 0) {
+        ers_notify_anonymous_tip_status(
+            $pdo,
+            $incidentId,
+            'completed',
+            'Responder completed the assignment.'
+        );
+    }
+
     op_success([
         'message' => $isTransition ? 'Assignment status updated.' : 'Assignment status already current.',
         'assignment_status' => (string)$result['assignment_status'],

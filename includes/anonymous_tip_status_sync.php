@@ -49,7 +49,7 @@ function ers_anonymous_tip_status_payload(PDO $pdo, int $incidentId, string $sta
         $syncStatus = match ($rawStatus) {
             'assigned', 'acknowledged', 'dispatching', 'dispatched' => 'dispatched',
             'enroute', 'en_route', 'on_scene', 'ongoing', 'ongoing_dispatch', 'in_progress' => 'ongoing_dispatch',
-            'resolved', 'complete', 'completed', 'closed' => 'resolved',
+            'resolved', 'complete', 'completed', 'closed' => 'completed',
             default => $rawStatus !== '' ? $rawStatus : 'new',
         };
 
@@ -70,10 +70,12 @@ function ers_anonymous_tip_status_payload(PDO $pdo, int $incidentId, string $sta
             'incident_id' => (int)($row['incident_id'] ?? $incidentId),
             'incident_reference' => (string)($row['reference_no'] ?? ''),
             'incident_status' => (string)($row['incident_status'] ?? $syncStatus),
-            'dispatched' => in_array($syncStatus, ['dispatched', 'ongoing_dispatch', 'resolved'], true),
-            'is_dispatched' => in_array($syncStatus, ['dispatched', 'ongoing_dispatch', 'resolved'], true),
-            'completed' => $syncStatus === 'resolved',
-            'is_completed' => $syncStatus === 'resolved',
+            'dispatched' => in_array($syncStatus, ['dispatched', 'ongoing_dispatch', 'completed'], true),
+            'is_dispatched' => in_array($syncStatus, ['dispatched', 'ongoing_dispatch', 'completed'], true),
+            'completed' => $syncStatus === 'completed',
+            'is_completed' => $syncStatus === 'completed',
+            'resolved' => $syncStatus === 'completed',
+            'is_resolved' => $syncStatus === 'completed',
             'updated_at' => (string)($row['updated_at'] ?? ''),
             'resolved_at' => (string)($row['resolved_at'] ?? ''),
             'source_system' => 'ERS',
@@ -111,7 +113,6 @@ function ers_notify_anonymous_tip_status(PDO $pdo, int $incidentId, string $stat
     );
 
     $headers = [
-        'Content-Type: application/json',
         'Accept: application/json',
     ];
     if ($apiKey !== '') {
@@ -119,11 +120,53 @@ function ers_notify_anonymous_tip_status(PDO $pdo, int $incidentId, string $stat
         $headers[] = 'X-ERS-API-Key: ' . $apiKey;
     }
 
+    $formResult = ers_post_anonymous_tip_status_callback(
+        $callbackUrl,
+        $headers,
+        'application/x-www-form-urlencoded',
+        http_build_query($payload)
+    );
+    if ($formResult['ok']) {
+        return true;
+    }
+
+    $jsonResult = ers_post_anonymous_tip_status_callback(
+        $callbackUrl,
+        $headers,
+        'application/json',
+        (string)json_encode($payload, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE)
+    );
+    if ($jsonResult['ok']) {
+        return true;
+    }
+
+    error_log(
+        'Anonymous tip status callback failed: form HTTP ' . $formResult['status']
+        . ' ' . $formResult['error']
+        . ' ' . substr($formResult['response'], 0, 300)
+        . '; json HTTP ' . $jsonResult['status']
+        . ' ' . $jsonResult['error']
+        . ' ' . substr($jsonResult['response'], 0, 300)
+    );
+    return false;
+}
+
+/**
+ * @param list<string> $headers
+ * @return array{ok:bool,status:int,error:string,response:string}
+ */
+function ers_post_anonymous_tip_status_callback(
+    string $callbackUrl,
+    array $headers,
+    string $contentType,
+    string $body
+): array {
+    $requestHeaders = array_merge(['Content-Type: ' . $contentType], $headers);
     $ch = curl_init($callbackUrl);
     curl_setopt_array($ch, [
         CURLOPT_POST => true,
-        CURLOPT_HTTPHEADER => $headers,
-        CURLOPT_POSTFIELDS => json_encode($payload, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE),
+        CURLOPT_HTTPHEADER => $requestHeaders,
+        CURLOPT_POSTFIELDS => $body,
         CURLOPT_RETURNTRANSFER => true,
         CURLOPT_CONNECTTIMEOUT => 3,
         CURLOPT_TIMEOUT => 6,
@@ -133,9 +176,32 @@ function ers_notify_anonymous_tip_status(PDO $pdo, int $incidentId, string $stat
     $error = curl_error($ch);
     curl_close($ch);
 
-    if ($error !== '' || $httpStatus < 200 || $httpStatus >= 300) {
-        error_log('Anonymous tip status callback failed: HTTP ' . $httpStatus . ' ' . $error . ' ' . substr((string)$response, 0, 300));
-        return false;
+    $bodyText = is_string($response) ? $response : '';
+    return [
+        'ok' => $error === '' && $httpStatus >= 200 && $httpStatus < 300
+            && ers_anonymous_tip_callback_response_accepted($bodyText),
+        'status' => $httpStatus,
+        'error' => $error,
+        'response' => $bodyText,
+    ];
+}
+
+function ers_anonymous_tip_callback_response_accepted(string $body): bool
+{
+    $trimmed = trim($body);
+    if ($trimmed === '') {
+        return true;
+    }
+
+    $decoded = json_decode($trimmed, true);
+    if (!is_array($decoded)) {
+        return stripos($trimmed, 'error') === false && stripos($trimmed, 'failed') === false;
+    }
+
+    foreach (['success', 'ok'] as $key) {
+        if (array_key_exists($key, $decoded) && !$decoded[$key]) {
+            return false;
+        }
     }
 
     return true;

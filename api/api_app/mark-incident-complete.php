@@ -2,6 +2,7 @@
 declare(strict_types=1);
 
 require_once __DIR__ . '/_assignment.php';
+require_once __DIR__ . '/../../includes/anonymous_tip_status_sync.php';
 
 op_require_method('POST');
 $assignmentId = op_post_int('assignment_id');
@@ -78,6 +79,12 @@ try {
         $relative = (string)($result['completion_image_path'] ?? '');
     }
     $pdo->commit();
+    ers_notify_anonymous_tip_status(
+        $pdo,
+        (int)$result['incident_id'],
+        'completed',
+        'Responder completed the incident.'
+    );
 
     op_success([
         'incident_id' => (int)$result['incident_id'],

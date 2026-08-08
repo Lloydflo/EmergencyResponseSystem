@@ -724,7 +724,7 @@ function ers_tip_status_lookup(PDO $pdo, string $tipId): array
     $dispatched = $dispatch['unit_count'] > 0 || in_array($incidentStatus, $dispatchedStatuses, true);
     $completed = in_array($incidentStatus, $completedStatuses, true) || trim((string)($row['incident_completed_at'] ?? '')) !== '';
     $displayStatus = $completed
-        ? 'resolved'
+        ? 'completed'
         : ($dispatched ? 'dispatched' : ((string)($row['tip_status'] ?? '') ?: 'new'));
 
     return [
