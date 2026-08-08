@@ -447,7 +447,7 @@ function ers_tip_find(PDO $pdo, int $id): array
     );
     $stmt->execute([ers_tip_link_source(), $id]);
     $row = $stmt->fetch(PDO::FETCH_ASSOC);
-    return is_array($row) ? ers_tip_prepare_response($row) : [];
+    return is_array($row) ? ers_tip_prepare_response($row, $pdo) : [];
 }
 
 function ers_tip_status_lookup(PDO $pdo, string $tipId): array
@@ -607,7 +607,7 @@ function ers_tip_list(PDO $pdo): array
     $stmt = $pdo->prepare($sql);
     $stmt->execute($params);
     $rows = $stmt->fetchAll(PDO::FETCH_ASSOC) ?: [];
-    return array_map('ers_tip_prepare_response', $rows);
+    return array_map(static fn (array $row): array => ers_tip_prepare_response($row, $pdo), $rows);
 }
 
 function ers_tip_find_for_action(PDO $pdo, int $id, string $tipId): array
@@ -623,9 +623,28 @@ function ers_tip_find_for_action(PDO $pdo, int $id, string $tipId): array
     return is_array($row) ? ers_tip_hydrate_evidence($row) : [];
 }
 
-function ers_tip_prepare_response(array $row): array
+function ers_tip_prepare_response(array $row, ?PDO $pdo = null): array
 {
     $row = ers_tip_hydrate_evidence($row);
+    $incidentId = (int)($row['converted_incident_id'] ?? 0);
+    $incidentReference = trim((string)($row['converted_reference_no'] ?? ''));
+    $dispatch = $pdo !== null
+        ? ers_tip_dispatch_summary($pdo, $incidentId, $incidentReference)
+        : ['unit_count' => 0, 'dispatched_at' => null, 'latest_status' => null];
+    $incidentStatus = strtolower(trim((string)($row['converted_incident_status'] ?? '')));
+    $dispatchedStatuses = [
+        'assigned', 'acknowledged', 'dispatching', 'dispatched',
+        'enroute', 'en_route', 'on_scene', 'ongoing', 'ongoing_dispatch',
+        'in_progress', 'resolved', 'complete', 'completed', 'closed',
+    ];
+    $isDispatched = (int)($dispatch['unit_count'] ?? 0) > 0
+        || in_array($incidentStatus, $dispatchedStatuses, true);
+    $row['raw_status'] = (string)($row['status'] ?? '');
+    $row['display_status'] = $isDispatched ? 'dispatched' : (string)($row['status'] ?? '');
+    $row['dispatched'] = $isDispatched;
+    $row['dispatched_at'] = $dispatch['dispatched_at'] ?? null;
+    $row['dispatch_status'] = $dispatch['latest_status'] ?? null;
+    $row['dispatched_unit_count'] = (int)($dispatch['unit_count'] ?? 0);
     unset($row['raw_payload']);
     return $row;
 }

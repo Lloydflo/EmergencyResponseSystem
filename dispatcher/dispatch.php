@@ -863,6 +863,12 @@ document.addEventListener('DOMContentLoaded', function() {
                             });
                         }
                         closeDispatchModal();
+                        window.dispatchEvent(new CustomEvent('ers:anonymous-tips-updated', {
+                            detail: {
+                                incidentId: currentIncidentId,
+                                changedAt: Date.now()
+                            }
+                        }));
                         const firstRouteUnit = routeUnits[0] || {};
                         const routeContext = {
                             dispatchId: data.dispatch_id || '',
@@ -1978,6 +1984,12 @@ function deployUnitToIncident(unitId) {
         .then(res => {
             if (res && res.ok) {
                 showNotification('Unit dispatched to incident', 'success');
+                window.dispatchEvent(new CustomEvent('ers:anonymous-tips-updated', {
+                    detail: {
+                        incidentId,
+                        changedAt: Date.now()
+                    }
+                }));
                 refreshActiveCalls();
                 refreshAvailableUnits();
             } else {

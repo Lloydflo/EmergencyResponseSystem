@@ -5,8 +5,8 @@
     }
 
     const apiUrl = 'api/system_API/?action=anonymous_tip';
-    const statuses = ['all', 'pending', 'new', 'reviewing', 'verified', 'dismissed', 'converted_to_incident'];
-    const editableStatuses = statuses.filter((status) => !['all', 'pending'].includes(status));
+    const statuses = ['all', 'pending', 'new', 'reviewing', 'verified', 'dismissed', 'converted_to_incident', 'dispatched'];
+    const editableStatuses = ['new', 'reviewing', 'verified', 'dismissed', 'converted_to_incident'];
     const state = {
         items: [],
         loading: true,
@@ -31,7 +31,10 @@
         .replace(/_/g, ' ')
         .replace(/\b\w/g, (letter) => letter.toUpperCase());
 
-    const statusOf = (item) => String(item?.status || 'new').trim().toLowerCase();
+    const rawStatusOf = (item) => String(item?.raw_status || item?.status || 'new').trim().toLowerCase();
+    const statusOf = (item) => String(item?.display_status || item?.status || 'new').trim().toLowerCase();
+    const isConvertedStatus = (item) => ['converted_to_incident', 'dispatched'].includes(statusOf(item))
+        || rawStatusOf(item) === 'converted_to_incident';
 
     const actionLabel = {
         reviewing: 'Marked for review.',
@@ -275,7 +278,7 @@
         if (!item) {
             return;
         }
-        if (statusOf(item) === 'converted_to_incident') {
+        if (isConvertedStatus(item)) {
             state.error = 'Converted tips are locked to their linked incident.';
             render();
             return;
@@ -320,7 +323,7 @@
 
     const convertTip = async () => {
         const item = selectedItem();
-        if (!item || statusOf(item) === 'converted_to_incident') {
+        if (!item || isConvertedStatus(item)) {
             return;
         }
 
@@ -406,6 +409,7 @@
         return items.map((item) => {
             const evidencePhoto = evidenceInfo(item.photo_of_evidence);
             const itemStatus = statusOf(item);
+            const isConverted = isConvertedStatus(item);
             const evidenceButton = evidencePhoto.hasEvidence
                 ? (evidencePhoto.url
                     ? `<a class="ia-tip-evidence ia-tip-evidence-thumb" href="${escapeHtml(evidencePhoto.url)}" data-tip-evidence-url="${escapeHtml(evidencePhoto.url)}" data-tip-evidence-title="${escapeHtml(item.tip_id || 'Evidence')}" title="View evidence" aria-label="View evidence"><img src="${escapeHtml(evidencePhoto.url)}" alt="Evidence for ${escapeHtml(item.tip_id || 'anonymous tip')}" loading="lazy"></a>`
@@ -426,9 +430,10 @@
                             <span><i class="fas fa-network-wired"></i> ${escapeHtml(item.source_system || 'Group 6')}</span>
                         </span>
                         <span class="ia-tip-flow">
-                            <span class="${['reviewing', 'verified', 'converted_to_incident'].includes(itemStatus) ? 'is-done' : ''}">Review</span>
-                            <span class="${['verified', 'converted_to_incident'].includes(itemStatus) ? 'is-done' : ''}">Verify</span>
-                            <span class="${itemStatus === 'converted_to_incident' ? 'is-done' : ''}">Convert</span>
+                            <span class="${['reviewing', 'verified'].includes(itemStatus) || isConverted ? 'is-done' : ''}">Review</span>
+                            <span class="${itemStatus === 'verified' || isConverted ? 'is-done' : ''}">Verify</span>
+                            <span class="${isConverted ? 'is-done' : ''}">Convert</span>
+                            <span class="${itemStatus === 'dispatched' ? 'is-done' : ''}">Dispatch</span>
                         </span>
                     </span>
                     <span>${evidenceButton}</span>
@@ -450,9 +455,10 @@
 
         const evidencePhoto = evidenceInfo(item.photo_of_evidence);
         const itemStatus = statusOf(item);
+        const rawItemStatus = rawStatusOf(item);
         const convertedReference = String(item.converted_reference_no || '').trim();
         const convertedId = Number(item.converted_incident_id || 0);
-        const isConverted = itemStatus === 'converted_to_incident';
+        const isConverted = isConvertedStatus(item);
         const evidence = evidencePhoto.hasEvidence
             ? (evidencePhoto.url
                 ? `<a class="ia-tip-evidence ia-tip-evidence-preview" href="${escapeHtml(evidencePhoto.url)}" data-tip-evidence-url="${escapeHtml(evidencePhoto.url)}" data-tip-evidence-title="${escapeHtml(item.tip_id || 'Evidence')}">
@@ -469,8 +475,8 @@
             ? '<i class="fas fa-spinner fa-spin"></i> Working'
             : label;
         const statusOptions = editableStatuses
-            .filter((status) => status !== 'converted_to_incident' || itemStatus === 'converted_to_incident')
-            .map((status) => `<option value="${status}" ${itemStatus === status ? 'selected' : ''}>${statusLabel(status)}</option>`)
+            .filter((status) => status !== 'converted_to_incident' || rawItemStatus === 'converted_to_incident')
+            .map((status) => `<option value="${status}" ${rawItemStatus === status ? 'selected' : ''}>${statusLabel(status)}</option>`)
             .join('');
 
         return `
@@ -500,7 +506,7 @@
                     <div class="ia-tip-detail-item">
                         <div class="ia-tip-detail-label">Linked Incident</div>
                         ${incidentLink}
-                        ${convertedId > 0 ? `<div class="ia-tip-detail-note">Incident #${convertedId}${item.converted_incident_status ? `, ${escapeHtml(statusLabel(item.converted_incident_status))}` : ''}</div>` : ''}
+                        ${convertedId > 0 ? `<div class="ia-tip-detail-note">Incident #${convertedId}${itemStatus === 'dispatched' ? ', Dispatched' : (item.converted_incident_status ? `, ${escapeHtml(statusLabel(item.converted_incident_status))}` : '')}</div>` : ''}
                     </div>
                 </div>
                 <div class="ia-tip-quick-actions" aria-label="Tip quick actions">
@@ -511,7 +517,7 @@
                         : `<button type="button" class="ia-tip-secondary" data-tip-convert ${state.action !== '' ? 'disabled' : ''}>${actionButtonText('converted_to_incident', '<i class="fas fa-file-circle-plus"></i> Convert')}</button>`}
                     <button type="button" class="ia-tip-secondary" data-tip-quick-status="dismissed" ${actionDisabled('dismissed') ? 'disabled' : ''}>${actionButtonText('dismissed', '<i class="fas fa-ban"></i> Dismiss')}</button>
                 </div>
-                ${isConverted ? '<div class="ia-tip-lock-note">This tip is already converted, so review buttons are locked.</div>' : ''}
+                ${isConverted ? '<div class="ia-tip-lock-note">This tip is already linked to an incident, so review buttons are locked.</div>' : ''}
                 <form data-tip-status-form>
                     <div class="ia-tip-detail-grid ia-tip-detail-form-grid">
                         <div class="ia-tip-detail-item">
@@ -710,6 +716,10 @@
             }
             saveStatus(event.target);
         }
+    });
+
+    window.addEventListener('ers:anonymous-tips-updated', () => {
+        loadTips();
     });
 
     render();

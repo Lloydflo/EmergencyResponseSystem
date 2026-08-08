@@ -363,6 +363,12 @@
     background: #f5f3ff;
 }
 
+.ia-tip-chip.status-dispatched {
+    border-color: #bae6fd;
+    color: #0369a1;
+    background: #f0f9ff;
+}
+
 .ia-tip-evidence {
     align-self: start;
     text-decoration: none;
@@ -748,6 +754,12 @@ html[data-theme="dark"] .ia-tip-chip.status-converted_to_incident {
     background: #2e1065;
     border-color: #7c3aed;
     color: #ddd6fe;
+}
+
+html[data-theme="dark"] .ia-tip-chip.status-dispatched {
+    background: #082f49;
+    border-color: #0284c7;
+    color: #bae6fd;
 }
 
 html[data-theme="dark"] .ia-tip-lock-note {
