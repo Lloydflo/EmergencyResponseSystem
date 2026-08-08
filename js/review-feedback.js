@@ -178,7 +178,6 @@
           <td class="review-table-incident">
             <strong>${escapeHtml(code)}</strong>
             <span>${escapeHtml(item.type || 'Incident')}</span>
-            <small>${escapeHtml(item.description || 'No incident description provided.')}</small>
           </td>
           <td>
             <div class="review-table-chips">
