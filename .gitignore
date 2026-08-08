@@ -26,6 +26,7 @@ MAIL_DEBUG=
 /cache/
 data/cache/
 data/geocode_cache.json
+data/anonymous_tip_evidence/
 
 # IDE files
 .vscode/

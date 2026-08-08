@@ -18,7 +18,7 @@ try {
 
     $method = $_SERVER['REQUEST_METHOD'] ?? 'GET';
     if ($method === 'GET') {
-        $requestedTipId = ers_external_clean($_GET['tip_id'] ?? $_GET['tipId'] ?? $_GET['tipID'] ?? '', 120);
+        $requestedTipId = ers_external_clean($_GET['tip_id'] ?? $_GET['tipId'] ?? $_GET['tipID'] ?? $_GET['id'] ?? '', 120);
         if ($requestedTipId !== '') {
             ers_external_json(200, ers_tip_status_lookup($pdo, $requestedTipId));
         }
@@ -36,7 +36,7 @@ try {
         ]);
     }
 
-    $input = ers_external_input();
+    $input = ers_tip_input_with_files();
     $action = strtolower(ers_external_clean($input['action'] ?? '', 40));
 
     if ($action === 'update_status') {
@@ -85,8 +85,208 @@ try {
     ]);
 }
 
+function ers_tip_input_with_files(): array
+{
+    $input = ers_external_input();
+    if (empty($_FILES) || trim((string)ers_tip_extract_evidence($input)) !== '') {
+        return $input;
+    }
+
+    foreach ($_FILES as $field => $file) {
+        foreach (ers_tip_uploaded_file_entries((string)$field, $file) as $entry) {
+            $stored = ers_tip_store_uploaded_file($entry, (string)($input['tip_id'] ?? $input['tipId'] ?? $input['id'] ?? ''));
+            if ($stored !== '') {
+                $input['photo_of_evidence'] = $stored;
+                return $input;
+            }
+        }
+    }
+
+    return $input;
+}
+
+function ers_tip_uploaded_file_entries(string $field, array $file): array
+{
+    $names = $file['name'] ?? null;
+    if (!is_array($names)) {
+        return [[
+            'field' => $field,
+            'name' => (string)($file['name'] ?? ''),
+            'type' => (string)($file['type'] ?? ''),
+            'tmp_name' => (string)($file['tmp_name'] ?? ''),
+            'error' => (int)($file['error'] ?? UPLOAD_ERR_NO_FILE),
+            'size' => (int)($file['size'] ?? 0),
+        ]];
+    }
+
+    $entries = [];
+    foreach ($names as $index => $_) {
+        $entries = array_merge($entries, ers_tip_uploaded_file_entries($field, [
+            'name' => $file['name'][$index] ?? '',
+            'type' => $file['type'][$index] ?? '',
+            'tmp_name' => $file['tmp_name'][$index] ?? '',
+            'error' => $file['error'][$index] ?? UPLOAD_ERR_NO_FILE,
+            'size' => $file['size'][$index] ?? 0,
+        ]));
+    }
+    return $entries;
+}
+
+function ers_tip_store_uploaded_file(array $file, string $tipId = ''): string
+{
+    $error = (int)($file['error'] ?? UPLOAD_ERR_NO_FILE);
+    if ($error === UPLOAD_ERR_NO_FILE) {
+        return '';
+    }
+    if ($error !== UPLOAD_ERR_OK) {
+        ers_external_json(422, [
+            'success' => false,
+            'error' => 'Tip photo upload failed.',
+            'upload_error' => $error,
+        ]);
+    }
+
+    $tmp = (string)($file['tmp_name'] ?? '');
+    if ($tmp === '' || !is_file($tmp)) {
+        return '';
+    }
+
+    $maxBytes = 12 * 1024 * 1024;
+    $size = (int)($file['size'] ?? 0);
+    if ($size > $maxBytes) {
+        ers_external_json(413, [
+            'success' => false,
+            'error' => 'Tip photo is too large. Maximum size is 12 MB.',
+        ]);
+    }
+
+    $bytes = file_get_contents($tmp);
+    if (!is_string($bytes) || $bytes === '') {
+        return '';
+    }
+
+    $extension = ers_tip_evidence_extension($bytes, (string)($file['name'] ?? ''));
+    if ($extension === '') {
+        ers_external_json(422, [
+            'success' => false,
+            'error' => 'Unsupported tip photo type. Send JPG, PNG, GIF, WEBP, BMP, or HEIC.',
+        ]);
+    }
+
+    return ers_tip_write_evidence_file($bytes, $tipId, $extension);
+}
+
+function ers_tip_store_inline_evidence(string $value, string $tipId = ''): string
+{
+    $text = trim($value);
+    if ($text === '') {
+        return '';
+    }
+
+    if (preg_match('/^data:image\/([a-z0-9.+-]+);base64,(.+)$/is', $text, $matches)) {
+        $bytes = base64_decode(preg_replace('/\s+/', '', $matches[2]) ?? '', true);
+        if (is_string($bytes) && $bytes !== '') {
+            $extension = ers_tip_mime_extension('image/' . strtolower($matches[1])) ?: ers_tip_evidence_extension($bytes, '');
+            return $extension !== '' ? ers_tip_write_evidence_file($bytes, $tipId, $extension) : $text;
+        }
+    }
+
+    $compact = preg_replace('/\s+/', '', $text) ?? '';
+    if (strlen($compact) > 500 && preg_match('/^[A-Za-z0-9+\/=]+$/', $compact)) {
+        $bytes = base64_decode($compact, true);
+        if (is_string($bytes) && $bytes !== '') {
+            $extension = ers_tip_evidence_extension($bytes, '');
+            if ($extension !== '') {
+                return ers_tip_write_evidence_file($bytes, $tipId, $extension);
+            }
+        }
+    }
+
+    return $text;
+}
+
+function ers_tip_evidence_extension(string $bytes, string $filename): string
+{
+    $mime = '';
+    if (function_exists('finfo_open')) {
+        $finfo = finfo_open(FILEINFO_MIME_TYPE);
+        if ($finfo) {
+            $detected = finfo_buffer($finfo, $bytes);
+            finfo_close($finfo);
+            $mime = is_string($detected) ? strtolower($detected) : '';
+        }
+    }
+
+    $extension = ers_tip_mime_extension($mime);
+    if ($extension !== '') {
+        return $extension;
+    }
+
+    $original = strtolower(pathinfo($filename, PATHINFO_EXTENSION));
+    return in_array($original, ['jpg', 'jpeg', 'png', 'gif', 'webp', 'bmp', 'heic', 'heif'], true)
+        ? ($original === 'jpeg' ? 'jpg' : $original)
+        : '';
+}
+
+function ers_tip_mime_extension(string $mime): string
+{
+    return match (strtolower($mime)) {
+        'image/jpeg', 'image/pjpeg' => 'jpg',
+        'image/png' => 'png',
+        'image/gif' => 'gif',
+        'image/webp' => 'webp',
+        'image/bmp', 'image/x-ms-bmp' => 'bmp',
+        'image/heic' => 'heic',
+        'image/heif' => 'heif',
+        default => '',
+    };
+}
+
+function ers_tip_write_evidence_file(string $bytes, string $tipId, string $extension): string
+{
+    $maxBytes = 12 * 1024 * 1024;
+    if (strlen($bytes) > $maxBytes) {
+        ers_external_json(413, [
+            'success' => false,
+            'error' => 'Tip photo is too large. Maximum size is 12 MB.',
+        ]);
+    }
+
+    $dir = dirname(__DIR__, 2) . '/data/anonymous_tip_evidence';
+    if (!is_dir($dir) && !mkdir($dir, 0775, true) && !is_dir($dir)) {
+        ers_external_json(500, [
+            'success' => false,
+            'error' => 'Unable to prepare tip photo storage.',
+        ]);
+    }
+
+    $safeTip = trim((string)preg_replace('/[^A-Za-z0-9_-]+/', '-', $tipId), '-');
+    if ($safeTip === '') {
+        $safeTip = 'tip';
+    }
+    $name = $safeTip . '-' . date('YmdHis') . '-' . bin2hex(random_bytes(4)) . '.' . $extension;
+    $path = $dir . '/' . $name;
+
+    if (file_put_contents($path, $bytes, LOCK_EX) === false) {
+        ers_external_json(500, [
+            'success' => false,
+            'error' => 'Unable to save tip photo.',
+        ]);
+    }
+
+    return 'data/anonymous_tip_evidence/' . $name;
+}
+
 function ers_tip_normalize(array $input, ?string $externalClient = null): array
 {
+    $tipId = ers_external_clean(
+        $input['tip_id']
+            ?? $input['tipId']
+            ?? $input['tipID']
+            ?? $input['id']
+            ?? '',
+        120
+    );
     $photo = $input['photo_of_evidence']
         ?? $input['photoOfEvidence']
         ?? $input['photo']
@@ -109,6 +309,7 @@ function ers_tip_normalize(array $input, ?string $externalClient = null): array
     if (trim((string)$photo) === '') {
         $photo = ers_tip_extract_evidence($input);
     }
+    $photo = ers_tip_store_inline_evidence((string)$photo, $tipId);
 
     $status = strtolower(ers_external_clean($input['status'] ?? 'new', 40));
     if (!in_array($status, ['new', 'reviewing', 'verified', 'dismissed', 'converted_to_incident'], true)) {
@@ -122,14 +323,7 @@ function ers_tip_normalize(array $input, ?string $externalClient = null): array
 
     return [
         'id' => max(0, (int)($input['id'] ?? 0)),
-        'tip_id' => ers_external_clean(
-            $input['tip_id']
-                ?? $input['tipId']
-                ?? $input['tipID']
-                ?? $input['id']
-                ?? '',
-            120
-        ),
+        'tip_id' => $tipId,
         'tip_datetime' => ers_tip_normalize_datetime(
             $input['tip_datetime']
                 ?? $input['tipDateTime']
@@ -482,10 +676,10 @@ function ers_tip_status_lookup(PDO $pdo, string $tipId): array
             ON eil.source_system = ?
            AND eil.external_incident_id = CASE WHEN at.tip_id IS NULL OR at.tip_id = '' THEN CONCAT('anonymous-tip-', at.id) ELSE at.tip_id END
          LEFT JOIN incidents i ON i.id = eil.incident_id
-         WHERE at.tip_id = ?
+         WHERE at.tip_id = ? OR at.id = ?
          LIMIT 1"
     );
-    $stmt->execute([ers_tip_link_source(), $tipId]);
+    $stmt->execute([ers_tip_link_source(), $tipId, ctype_digit($tipId) ? (int)$tipId : 0]);
     $row = $stmt->fetch(PDO::FETCH_ASSOC);
     if (!is_array($row)) {
         ers_external_json(404, [
@@ -505,10 +699,15 @@ function ers_tip_status_lookup(PDO $pdo, string $tipId): array
     $completedStatuses = ['resolved', 'complete', 'completed', 'closed'];
     $dispatched = $dispatch['unit_count'] > 0 || in_array($incidentStatus, $dispatchedStatuses, true);
     $completed = in_array($incidentStatus, $completedStatuses, true) || trim((string)($row['incident_completed_at'] ?? '')) !== '';
+    $displayStatus = $completed
+        ? 'resolved'
+        : ($dispatched ? 'dispatched' : ((string)($row['tip_status'] ?? '') ?: 'new'));
 
     return [
         'success' => true,
         'tip_id' => (string)($row['tip_id'] ?? ''),
+        'status' => $displayStatus,
+        'display_status' => $displayStatus,
         'tip_status' => (string)($row['tip_status'] ?? ''),
         'outcome' => (string)($row['outcome'] ?? ''),
         'source_system' => (string)($row['source_system'] ?? ''),
@@ -516,10 +715,12 @@ function ers_tip_status_lookup(PDO $pdo, string $tipId): array
         'incident_reference' => (string)($row['incident_reference'] ?? ''),
         'incident_status' => $incidentStatus !== '' ? $incidentStatus : null,
         'dispatched' => $dispatched,
+        'is_dispatched' => $dispatched,
         'dispatched_at' => $dispatch['dispatched_at'],
         'dispatch_status' => $dispatch['latest_status'],
         'unit_count' => $dispatch['unit_count'],
         'completed' => $completed,
+        'is_completed' => $completed,
         'completed_at' => trim((string)($row['incident_completed_at'] ?? '')) !== ''
             ? (string)$row['incident_completed_at']
             : null,
@@ -582,7 +783,8 @@ function ers_tip_list(PDO $pdo): array
 
     $where = [];
     $params = [];
-    if ($status !== '' && $status !== 'all') {
+    $displayStatusFilter = in_array($status, ['dispatched', 'resolved'], true) ? $status : '';
+    if ($status !== '' && $status !== 'all' && $displayStatusFilter === '') {
         $where[] = 'at.status = ?';
         $params[] = $status;
     }
@@ -613,7 +815,13 @@ function ers_tip_list(PDO $pdo): array
     $stmt = $pdo->prepare($sql);
     $stmt->execute($params);
     $rows = $stmt->fetchAll(PDO::FETCH_ASSOC) ?: [];
-    return array_map(static fn (array $row): array => ers_tip_prepare_response($row, $pdo), $rows);
+    $items = array_map(static fn (array $row): array => ers_tip_prepare_response($row, $pdo), $rows);
+    if ($displayStatusFilter !== '') {
+        $items = array_values(array_filter($items, static function (array $item) use ($displayStatusFilter): bool {
+            return strtolower((string)($item['display_status'] ?? '')) === $displayStatusFilter;
+        }));
+    }
+    return $items;
 }
 
 function ers_tip_find_for_action(PDO $pdo, int $id, string $tipId): array
@@ -649,7 +857,9 @@ function ers_tip_prepare_response(array $row, ?PDO $pdo = null): array
         || in_array($incidentStatus, $dispatchedStatuses, true);
     $row['raw_status'] = (string)($row['status'] ?? '');
     $row['display_status'] = $isCompleted ? 'resolved' : ($isDispatched ? 'dispatched' : (string)($row['status'] ?? ''));
+    $row['interagency_status'] = $row['display_status'];
     $row['dispatched'] = $isDispatched;
+    $row['is_dispatched'] = $isDispatched;
     $row['dispatched_at'] = $dispatch['dispatched_at'] ?? null;
     $row['dispatch_status'] = $dispatch['latest_status'] ?? null;
     $row['dispatched_unit_count'] = (int)($dispatch['unit_count'] ?? 0);
@@ -1138,7 +1348,7 @@ function ers_tip_ensure_tables(PDO $pdo): void
             `tip_datetime` DATETIME DEFAULT NULL,
             `location` VARCHAR(255) DEFAULT NULL,
             `tip_description` TEXT DEFAULT NULL,
-            `photo_of_evidence` TEXT DEFAULT NULL,
+            `photo_of_evidence` LONGTEXT DEFAULT NULL,
             `status` ENUM('new','reviewing','verified','dismissed','converted_to_incident') NOT NULL DEFAULT 'new',
             `outcome` TEXT DEFAULT NULL,
             `source_system` VARCHAR(120) DEFAULT 'Group 6',
@@ -1158,7 +1368,7 @@ function ers_tip_ensure_tables(PDO $pdo): void
         'tip_datetime' => "ALTER TABLE `anonymous_tips` ADD COLUMN `tip_datetime` DATETIME DEFAULT NULL AFTER `tip_id`",
         'location' => "ALTER TABLE `anonymous_tips` ADD COLUMN `location` VARCHAR(255) DEFAULT NULL AFTER `tip_datetime`",
         'tip_description' => "ALTER TABLE `anonymous_tips` ADD COLUMN `tip_description` TEXT DEFAULT NULL AFTER `location`",
-        'photo_of_evidence' => "ALTER TABLE `anonymous_tips` ADD COLUMN `photo_of_evidence` TEXT DEFAULT NULL AFTER `tip_description`",
+        'photo_of_evidence' => "ALTER TABLE `anonymous_tips` ADD COLUMN `photo_of_evidence` LONGTEXT DEFAULT NULL AFTER `tip_description`",
         'status' => "ALTER TABLE `anonymous_tips` ADD COLUMN `status` ENUM('new','reviewing','verified','dismissed','converted_to_incident') NOT NULL DEFAULT 'new' AFTER `photo_of_evidence`",
         'outcome' => "ALTER TABLE `anonymous_tips` ADD COLUMN `outcome` TEXT DEFAULT NULL AFTER `status`",
         'source_system' => "ALTER TABLE `anonymous_tips` ADD COLUMN `source_system` VARCHAR(120) DEFAULT 'Group 6' AFTER `outcome`",
@@ -1172,6 +1382,7 @@ function ers_tip_ensure_tables(PDO $pdo): void
             $pdo->exec($sql);
         }
     }
+    $pdo->exec("ALTER TABLE `anonymous_tips` MODIFY COLUMN `photo_of_evidence` LONGTEXT DEFAULT NULL");
 
     $pdo->exec(
         "CREATE TABLE IF NOT EXISTS `api_sync_logs` (
