@@ -167,6 +167,9 @@ function ers_tip_store_uploaded_file(array $file, string $tipId = ''): string
 
     $extension = ers_tip_evidence_extension($bytes, (string)($file['name'] ?? ''));
     if ($extension === '') {
+        $extension = ers_tip_mime_extension((string)($file['type'] ?? ''));
+    }
+    if ($extension === '') {
         ers_external_json(422, [
             'success' => false,
             'error' => 'Unsupported tip photo type. Send JPG, PNG, GIF, WEBP, BMP, or HEIC.',
@@ -254,10 +257,8 @@ function ers_tip_write_evidence_file(string $bytes, string $tipId, string $exten
 
     $dir = dirname(__DIR__, 2) . '/data/anonymous_tip_evidence';
     if (!is_dir($dir) && !mkdir($dir, 0775, true) && !is_dir($dir)) {
-        ers_external_json(500, [
-            'success' => false,
-            'error' => 'Unable to prepare tip photo storage.',
-        ]);
+        error_log('Anonymous tip evidence folder unavailable; storing image inline.');
+        return ers_tip_evidence_data_url($bytes, $extension);
     }
 
     $safeTip = trim((string)preg_replace('/[^A-Za-z0-9_-]+/', '-', $tipId), '-');
@@ -268,13 +269,27 @@ function ers_tip_write_evidence_file(string $bytes, string $tipId, string $exten
     $path = $dir . '/' . $name;
 
     if (file_put_contents($path, $bytes, LOCK_EX) === false) {
-        ers_external_json(500, [
-            'success' => false,
-            'error' => 'Unable to save tip photo.',
-        ]);
+        error_log('Anonymous tip evidence file write failed; storing image inline.');
+        return ers_tip_evidence_data_url($bytes, $extension);
     }
 
     return 'data/anonymous_tip_evidence/' . $name;
+}
+
+function ers_tip_evidence_data_url(string $bytes, string $extension): string
+{
+    $mime = match (strtolower($extension)) {
+        'jpg', 'jpeg' => 'image/jpeg',
+        'png' => 'image/png',
+        'gif' => 'image/gif',
+        'webp' => 'image/webp',
+        'bmp' => 'image/bmp',
+        'heic' => 'image/heic',
+        'heif' => 'image/heif',
+        default => 'application/octet-stream',
+    };
+
+    return 'data:' . $mime . ';base64,' . base64_encode($bytes);
 }
 
 function ers_tip_normalize(array $input, ?string $externalClient = null): array
@@ -289,7 +304,16 @@ function ers_tip_normalize(array $input, ?string $externalClient = null): array
     );
     $photo = $input['photo_of_evidence']
         ?? $input['photoOfEvidence']
+        ?? $input['tip_photo']
+        ?? $input['tipPhoto']
+        ?? $input['tip_photo_url']
+        ?? $input['tipPhotoUrl']
+        ?? $input['photo_evidence']
+        ?? $input['photoEvidence']
+        ?? $input['photo_url']
+        ?? $input['photoUrl']
         ?? $input['photo']
+        ?? $input['image']
         ?? $input['evidence_photo']
         ?? $input['evidencePhoto']
         ?? $input['evidence_url']
@@ -929,9 +953,10 @@ function ers_tip_extract_evidence($value, int $depth = 0): string
 
     $directKeys = [
         'photo_of_evidence', 'photoOfEvidence', 'evidence_photo', 'evidencePhoto',
-        'evidence_url', 'evidenceUrl', 'image_url', 'imageUrl', 'photo_url',
-        'photoUrl', 'url', 'path', 'src', 'href', 'image', 'photo', 'file_url',
-        'fileUrl', 'filePath', 'base64', 'data',
+        'tip_photo', 'tipPhoto', 'tip_photo_url', 'tipPhotoUrl', 'photo_evidence',
+        'photoEvidence', 'evidence_url', 'evidenceUrl', 'image_url', 'imageUrl',
+        'photo_url', 'photoUrl', 'url', 'path', 'src', 'href', 'image', 'photo',
+        'file_url', 'fileUrl', 'filePath', 'base64', 'data',
     ];
     foreach ($directKeys as $key) {
         if (array_key_exists($key, $value)) {
