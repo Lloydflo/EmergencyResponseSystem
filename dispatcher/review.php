@@ -163,43 +163,10 @@ if ($reviewerName === '') {
                     </article>
                 </section>
 
+                <input type="hidden" id="feedbackIncidentId" value="">
+
                 <section class="review-modal-columns">
                     <article id="feedbackReviewPanel" class="review-panel">
-                        <div class="panel-head">
-                            <div>
-                                <h4><i class="fas fa-pen-to-square"></i> Add Dispatcher Feedback</h4>
-                                <p>Rate the completed response and add notes for future improvement.</p>
-                            </div>
-                        </div>
-
-                        <input type="hidden" id="feedbackIncidentId" value="">
-
-                        <div class="rating-field">
-                            <span class="field-label">Response Rating</span>
-                            <div id="ratingInput" class="rating-input" role="radiogroup" aria-label="Incident rating">
-                                <button type="button" class="rating-star" data-rating="1" aria-label="1 star"><i class="fas fa-star"></i></button>
-                                <button type="button" class="rating-star" data-rating="2" aria-label="2 stars"><i class="fas fa-star"></i></button>
-                                <button type="button" class="rating-star" data-rating="3" aria-label="3 stars"><i class="fas fa-star"></i></button>
-                                <button type="button" class="rating-star" data-rating="4" aria-label="4 stars"><i class="fas fa-star"></i></button>
-                                <button type="button" class="rating-star" data-rating="5" aria-label="5 stars"><i class="fas fa-star"></i></button>
-                            </div>
-                            <span id="ratingHelper" class="rating-helper">Select a rating from 1 to 5.</span>
-                        </div>
-
-                        <div class="feedback-form">
-                            <label class="field-label" for="feedbackNoteInput">Feedback Note</label>
-                            <textarea id="feedbackNoteInput" rows="5" placeholder="Share what went well, what was delayed, or what needs follow-up..."></textarea>
-                        </div>
-
-                        <div id="adminSubmissionStatus" class="admin-submission-status" aria-live="polite"></div>
-
-                        <div class="modal-actions">
-                            <button id="closeFeedbackBtn" type="button" class="btn btn-secondary">Close</button>
-                            <button id="saveFeedbackBtn" type="button" class="btn btn-success"><i class="fas fa-paper-plane"></i> Send to Admin</button>
-                        </div>
-                    </article>
-
-                    <article class="review-panel">
                         <div class="panel-head">
                             <div>
                                 <h4><i class="fas fa-comments"></i> Submitted Feedback</h4>
@@ -209,17 +176,22 @@ if ($reviewerName === '') {
                         </div>
                         <div id="feedbackList" class="feedback-feed" aria-live="polite"></div>
                     </article>
+
+                    <article class="review-panel proof-panel">
+                        <div class="panel-head">
+                            <div>
+                                <h4><i class="fas fa-camera"></i> Resolution Proof</h4>
+                                <p>Uploaded responder images and proof records for this incident.</p>
+                            </div>
+                        </div>
+                        <div id="proofGallery" class="proof-gallery" aria-live="polite"></div>
+                    </article>
                 </section>
 
-                <section class="review-panel proof-panel">
-                    <div class="panel-head">
-                        <div>
-                            <h4><i class="fas fa-camera"></i> Resolution Proof</h4>
-                            <p>Uploaded responder images and proof records for this incident.</p>
-                        </div>
-                    </div>
-                    <div id="proofGallery" class="proof-gallery" aria-live="polite"></div>
-                </section>
+                <div class="modal-actions">
+                    <button id="closeFeedbackBtn" type="button" class="btn btn-secondary">Close</button>
+                    <button id="saveFeedbackBtn" type="button" class="btn btn-success"><i class="fas fa-paper-plane"></i> Send to Admin</button>
+                </div>
             </div>
         </div>
     </div>

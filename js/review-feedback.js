@@ -1,6 +1,6 @@
 (function () {
-  const qs = (selector, ctx = document) => ctx.querySelector(selector);
-  const qsa = (selector, ctx = document) => Array.from(ctx.querySelectorAll(selector));
+  const qs = (selector, ctx = document) => ctx ? ctx.querySelector(selector) : null;
+  const qsa = (selector, ctx = document) => ctx ? Array.from(ctx.querySelectorAll(selector)) : [];
 
   const dashboard = qs('.review-dashboard');
   const reviewerName = dashboard?.dataset?.reviewerName || 'Dispatcher';
@@ -210,11 +210,8 @@
             </div>
           </td>
           <td class="review-table-actions">
-            <button type="button" class="btn-card-action" data-open-review="${incidentId}" data-review-mode="details">
+            <button type="button" class="btn-card-action primary" data-open-review="${incidentId}" data-review-mode="details">
               <i class="fas fa-eye"></i> View
-            </button>
-            <button type="button" class="btn-card-action primary" data-open-review="${incidentId}" data-review-mode="feedback">
-              <i class="fas fa-star"></i> Feedback
             </button>
           </td>
         </tr>
@@ -241,22 +238,13 @@
       </div>
     `;
 
-    qsa('[data-open-review]', container).forEach(button => {
-      button.addEventListener('click', event => {
-        event.preventDefault();
-        event.stopPropagation();
-        const incidentId = parseInt(button.getAttribute('data-open-review') || '', 10);
-        const mode = button.getAttribute('data-review-mode') || 'details';
-        if (Number.isInteger(incidentId)) {
-          openReviewModal(incidentId, mode);
-        }
-      });
-    });
   }
 
   async function openReviewModal(incidentId, mode = 'details') {
     resetModalState();
-    feedbackIncidentId.value = String(incidentId);
+    if (feedbackIncidentId) {
+      feedbackIncidentId.value = String(incidentId);
+    }
     showModal();
 
     try {
@@ -444,7 +432,9 @@
           throw new Error(data.error || 'Unable to save feedback');
         }
 
-        feedbackNoteInput.value = '';
+        if (feedbackNoteInput) {
+          feedbackNoteInput.value = '';
+        }
         setSelectedRating(0);
       }
 
@@ -515,7 +505,9 @@
     currentIncident = null;
     currentAdminSubmission = null;
     setSelectedRating(0);
-    feedbackNoteInput.value = '';
+    if (feedbackNoteInput) {
+      feedbackNoteInput.value = '';
+    }
     modalTitle.textContent = 'Closed Incident Details';
     summaryCode.textContent = '--';
     summaryType.textContent = '--';
@@ -579,9 +571,11 @@
       button.classList.toggle('is-active', starValue !== null && starValue <= selectedRating);
     });
 
-    ratingHelper.textContent = selectedRating > 0
-      ? `${selectedRating} out of 5 selected.`
-      : 'Select a rating from 1 to 5.';
+    if (ratingHelper) {
+      ratingHelper.textContent = selectedRating > 0
+        ? `${selectedRating} out of 5 selected.`
+        : 'Select a rating from 1 to 5.';
+    }
   }
 
   function sortItems(items) {
@@ -813,6 +807,20 @@
     }
   });
   searchInput?.addEventListener('input', () => scheduleSearchLoad());
+
+  container?.addEventListener('click', event => {
+    const button = event.target.closest('[data-open-review]');
+    if (!button || !container.contains(button)) return;
+
+    event.preventDefault();
+    event.stopPropagation();
+
+    const incidentId = parseInt(button.getAttribute('data-open-review') || '', 10);
+    const mode = button.getAttribute('data-review-mode') || 'details';
+    if (Number.isInteger(incidentId) && incidentId > 0) {
+      openReviewModal(incidentId, mode);
+    }
+  });
 
   modalOverlay?.addEventListener('click', hideModal);
   modalClose?.addEventListener('click', hideModal);

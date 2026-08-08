@@ -706,7 +706,7 @@
 }
 
 .review-modal-columns {
-    grid-template-columns: minmax(320px, 0.9fr) minmax(0, 1.1fr);
+    grid-template-columns: repeat(2, minmax(0, 1fr));
 }
 
 .review-panel {
