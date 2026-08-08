@@ -2,6 +2,7 @@
 require_once '../includes/db.php';
 require_once '../includes/vehicle_resource_units.php';
 require_once '../includes/emergency_com_status_sync.php';
+require_once '../includes/anonymous_tip_status_sync.php';
 require_once '../includes/dispatch_attempt_log.php';
 header('Content-Type: application/json');
 
@@ -442,6 +443,7 @@ try {
 
     $pdo->commit();
     ers_notify_emergency_com_status($pdo, $incidentId, 'Additional response resources are being dispatched.');
+    ers_notify_anonymous_tip_status($pdo, $incidentId, 'dispatched', 'Additional response resources are being dispatched.');
 
     echo json_encode([
         'success' => true,

@@ -28,6 +28,7 @@ require_once __DIR__ . '/../includes/auth.php';
 require_once __DIR__ . '/../includes/activity_log.php';
 require_once __DIR__ . '/../includes/vehicle_resource_units.php';
 require_once __DIR__ . '/../includes/emergency_com_status_sync.php';
+require_once __DIR__ . '/../includes/anonymous_tip_status_sync.php';
 require_once __DIR__ . '/../includes/dispatch_attempt_log.php';
 $pdo = get_db_connection();
 if (!$pdo) {
@@ -531,6 +532,7 @@ try {
 
     $pdo->commit();
     ers_notify_emergency_com_status($pdo, $incident_id, 'Response units are being dispatched.');
+    ers_notify_anonymous_tip_status($pdo, $incident_id, 'dispatched', 'Response units are being dispatched.');
 
     // Build payload for app notification feed (best-effort; does not block dispatch success).
     try {

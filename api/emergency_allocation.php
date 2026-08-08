@@ -8,6 +8,7 @@ require_once __DIR__ . '/../includes/auth.php';
 require_once __DIR__ . '/../includes/activity_log.php';
 require_once __DIR__ . '/../includes/vehicle_resource_units.php';
 require_once __DIR__ . '/../includes/emergency_com_status_sync.php';
+require_once __DIR__ . '/../includes/anonymous_tip_status_sync.php';
 
 if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
     http_response_code(405);
@@ -522,6 +523,12 @@ try {
         ers_notify_emergency_com_status(
             $pdo,
             $incidentId,
+            'Response units are being dispatched.'
+        );
+        ers_notify_anonymous_tip_status(
+            $pdo,
+            $incidentId,
+            'dispatched',
             'Response units are being dispatched.'
         );
     }

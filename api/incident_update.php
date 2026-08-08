@@ -6,6 +6,7 @@ require_once __DIR__ . '/../includes/auth.php';
 require_once __DIR__ . '/../includes/activity_log.php';
 require_once __DIR__ . '/../includes/incident_priority.php';
 require_once __DIR__ . '/../includes/emergency_com_status_sync.php';
+require_once __DIR__ . '/../includes/anonymous_tip_status_sync.php';
 
 if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
     http_response_code(405);
@@ -114,6 +115,7 @@ try {
     $stmt->execute($params);
     if ($status !== null) {
         ers_notify_emergency_com_status($pdo, $id);
+        ers_notify_anonymous_tip_status($pdo, $id, strtolower($status));
     }
 
     $updatedStmt = $pdo->prepare('SELECT reference_no, type, priority, status, location_address, description, updated_at FROM incidents WHERE id = ? LIMIT 1');

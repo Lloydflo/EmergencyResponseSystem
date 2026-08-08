@@ -4,6 +4,7 @@ declare(strict_types=1);
 require_once __DIR__ . '/_bootstrap.php';
 require_once __DIR__ . '/../includes/activity_log.php';
 require_once __DIR__ . '/../includes/emergency_com_status_sync.php';
+require_once __DIR__ . '/../includes/anonymous_tip_status_sync.php';
 
 $auth = ers_external_authenticate();
 $pdo = ers_external_db();
@@ -1006,6 +1007,7 @@ function ers_api_update_incident_status(PDO $pdo): array
     $update = $pdo->prepare("UPDATE incidents SET status = ?, updated_at = NOW() {$resolvedSql} WHERE id = ?");
     $update->execute([$status, (int)$incident['id']]);
     ers_notify_emergency_com_status($pdo, (int)$incident['id'], trim((string)($input['note'] ?? '')));
+    ers_notify_anonymous_tip_status($pdo, (int)$incident['id'], $status, trim((string)($input['note'] ?? '')));
 
     return [
         'success' => true,
