@@ -3,6 +3,7 @@
 header('Content-Type: application/json');
 require_once __DIR__ . '/../includes/db.php';
 require_once __DIR__ . '/../includes/auth.php';
+require_once __DIR__ . '/../includes/activity_log.php';
 require_once __DIR__ . '/../includes/media_storage.php';
 require_once __DIR__ . '/../includes/interagency_time.php';
 
@@ -148,25 +149,6 @@ function prepare_interagency_attachment_storage(PDO $pdo, string $details): void
     }
 }
 
-function ensure_activity_log_auto_increment(PDO $pdo): void {
-    static $checked = false;
-    if ($checked) {
-        return;
-    }
-    $checked = true;
-
-    try {
-        $stmt = $pdo->query("SHOW COLUMNS FROM activity_log LIKE 'id'");
-        $row = $stmt ? $stmt->fetch(PDO::FETCH_ASSOC) : null;
-        $extra = strtolower((string)($row['Extra'] ?? $row['extra'] ?? ''));
-        if (strpos($extra, 'auto_increment') === false) {
-            $pdo->exec("ALTER TABLE activity_log MODIFY id INT(11) NOT NULL AUTO_INCREMENT");
-        }
-    } catch (Throwable $e) {
-        // Ignore; insert fallback still handles legacy/broken schemas.
-    }
-}
-
 function ensure_interagency_solo_chat_table(PDO $pdo): void {
     static $checked = false;
     if ($checked) {
@@ -284,12 +266,6 @@ function persist_interagency_group_chat(PDO $pdo, int $activityLogId, string $se
     $stmt->execute([$activityLogId, $groupId, $senderName, $details, interagency_now()]);
 }
 
-function activity_log_needs_manual_id_fallback(string $message): bool {
-    return strpos($message, "Duplicate entry '0' for key 'PRIMARY'") !== false
-        || strpos($message, "Field 'id' doesn't have a default value") !== false
-        || strpos($message, "Field 'id' doesn't have a default") !== false;
-}
-
 try {
     ensure_activity_log_auto_increment($pdo);
     if ($isInteragencyChat) {
@@ -300,32 +276,32 @@ try {
     }
     $pdo->beginTransaction();
 
-    $insertedMessageId = 0;
-    if ($isInteragencyChat) {
-        $stmt = $pdo->prepare("INSERT INTO activity_log (user_id, action, entity_type, entity_id, details, created_at) VALUES (?, ?, ?, ?, ?, ?)");
-        $insertParams = [$user_id, $action, $entity_type, $entity_id, $details, interagency_now()];
-    } else {
-        $stmt = $pdo->prepare("INSERT INTO activity_log (user_id, action, entity_type, entity_id, details) VALUES (?, ?, ?, ?, ?)");
-        $insertParams = [$user_id, $action, $entity_type, $entity_id, $details];
-    }
-    try {
-        $stmt->execute($insertParams);
-        $insertedMessageId = (int)$pdo->lastInsertId();
-    } catch (Throwable $e) {
-        $msg = (string)$e->getMessage();
-        if (!activity_log_needs_manual_id_fallback($msg)) {
-            throw $e;
-        }
+    $sourceChannel = current_session_role() === 'dispatcher' ? 'dispatcher_web' : (current_session_role() === 'admin' ? 'admin_web' : 'server_api');
+    $category = $isInteragencyChat ? 'coordination' : null;
+    $occurredAt = $isInteragencyChat ? interagency_now() : null;
+    $metadata = [
+        'message_type' => $entity_type,
+        'recipient_or_group_id' => $entity_id,
+    ];
 
-        $nextId = (int)$pdo->query("SELECT COALESCE(MAX(id), 0) + 1 FROM activity_log")->fetchColumn();
-        if ($isInteragencyChat) {
-            $stmtManual = $pdo->prepare("INSERT INTO activity_log (id, user_id, action, entity_type, entity_id, details, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)");
-            $stmtManual->execute([$nextId, $user_id, $action, $entity_type, $entity_id, $details, interagency_now()]);
-        } else {
-            $stmtManual = $pdo->prepare("INSERT INTO activity_log (id, user_id, action, entity_type, entity_id, details) VALUES (?, ?, ?, ?, ?, ?)");
-            $stmtManual->execute([$nextId, $user_id, $action, $entity_type, $entity_id, $details]);
-        }
-        $insertedMessageId = $nextId;
+    $insertedMessageId = (int)(record_operational_audit_event(
+        $pdo,
+        $user_id,
+        $action,
+        $entity_type,
+        $entity_id,
+        $details,
+        [
+            'source_channel' => $sourceChannel,
+            'event_category' => $category,
+            'event_outcome' => 'success',
+            'occurred_at' => $occurredAt,
+            'metadata' => $metadata,
+        ]
+    ) ?? 0);
+
+    if ($insertedMessageId <= 0) {
+        throw new RuntimeException('Unable to create the activity or message record.');
     }
 
     if ($isInteragencyChat && $details !== '') {

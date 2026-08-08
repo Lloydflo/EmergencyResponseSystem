@@ -9,6 +9,7 @@ if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
 }
 
 require_once __DIR__ . '/../includes/db.php';
+require_once __DIR__ . '/../includes/auth.php';
 require_once __DIR__ . '/../includes/activity_log.php';
 require_once __DIR__ . '/../includes/incident_priority.php';
 require_once __DIR__ . '/system_API/group1_incident_client.php';
@@ -36,6 +37,21 @@ $status = trim((string)($input['status'] ?? 'pending'));
 $latitude = array_key_exists('latitude', $input) && $input['latitude'] !== '' ? (float)$input['latitude'] : null;
 $longitude = array_key_exists('longitude', $input) && $input['longitude'] !== '' ? (float)$input['longitude'] : null;
 $transfer_incident_id = transfer_incident_id_from_input($input);
+$received_at = ers_audit_normalize_operational_datetime($input['received_at'] ?? null, true);
+$accepted_at = ers_audit_normalize_operational_datetime($input['accepted_at'] ?? null, false);
+$audit_session_id = calls_create_normalize_audit_session_id($input['audit_session_id'] ?? null);
+if ($accepted_at !== null && $received_at !== null) {
+    try {
+        $auditTimezone = new DateTimeZone('Asia/Manila');
+        $receivedEpoch = (new DateTimeImmutable($received_at, $auditTimezone))->getTimestamp();
+        $acceptedEpoch = (new DateTimeImmutable($accepted_at, $auditTimezone))->getTimestamp();
+        if ($acceptedEpoch < $receivedEpoch) {
+            $accepted_at = $received_at;
+        }
+    } catch (Throwable $e) {
+        $accepted_at = null;
+    }
+}
 
 if ($latitude !== null && ($latitude < -90 || $latitude > 90)) {
     $latitude = null;
@@ -84,12 +100,25 @@ if ($transfer_incident_id > 0) {
             $longitude
         );
         if ($updatedIncident !== null) {
+            $updatedCallId = isset($updatedIncident['call_id']) ? (int)$updatedIncident['call_id'] : null;
+            calls_create_link_audit_session(
+                $pdo,
+                $audit_session_id,
+                $updatedCallId,
+                (int)$updatedIncident['id'],
+                (string)$updatedIncident['reference_no']
+            );
             log_incident_created_audit(
+                $pdo,
+                $updatedCallId,
                 (int)$updatedIncident['id'],
                 (string)$updatedIncident['reference_no'],
                 $type,
                 $priority,
-                $location
+                $location,
+                true,
+                $accepted_at,
+                $audit_session_id
             );
             $group1Sync = calls_create_try_group1_sync(
                 $pdo,
@@ -161,6 +190,7 @@ try {
         ':priority' => $priority,
         ':status' => $callStatus,
         ':description' => $description,
+        ':received_at' => $received_at,
     ]);
 
     $stmt2 = $pdo->prepare('SELECT id, reference_no, status FROM incidents WHERE reported_by_call_id = :cid LIMIT 1');
@@ -191,11 +221,31 @@ try {
     }
 
     $pdo->commit();
-    log_incident_created_audit($incident ? (int)$incident['id'] : null, $incident ? (string)$incident['reference_no'] : $reference_no, $type, $priority, $location);
+    $loggedIncidentId = $incident ? (int)$incident['id'] : null;
+    $loggedReferenceNo = $incident ? (string)$incident['reference_no'] : $reference_no;
+    calls_create_link_audit_session(
+        $pdo,
+        $audit_session_id,
+        $call_id,
+        $loggedIncidentId,
+        $loggedReferenceNo
+    );
+    log_incident_created_audit(
+        $pdo,
+        $call_id,
+        $loggedIncidentId,
+        $loggedReferenceNo,
+        $type,
+        $priority,
+        $location,
+        false,
+        $accepted_at,
+        $audit_session_id
+    );
     $group1Sync = calls_create_try_group1_sync(
         $pdo,
         $call_id,
-        $incident ? (int)$incident['id'] : 0
+        $loggedIncidentId ?? 0
     );
 
     echo json_encode([
@@ -217,15 +267,200 @@ try {
     echo json_encode(['ok' => false, 'error' => build_user_facing_db_error($e)]);
 }
 
-function log_incident_created_audit(?int $incidentId, string $referenceNo, string $type, string $priority, string $location): void {
+function log_incident_created_audit(
+    PDO $pdo,
+    ?int $callId,
+    ?int $incidentId,
+    string $referenceNo,
+    string $type,
+    string $priority,
+    string $location,
+    bool $updatedTransfer = false,
+    ?string $acceptedAt = null,
+    ?string $auditSessionId = null
+): void {
     if ($incidentId === null || $incidentId < 1) {
         return;
     }
-    $details = 'Incoming incident ' . ($referenceNo !== '' ? $referenceNo : ('#' . $incidentId))
-        . ' was logged. Type: ' . $type
-        . ' | Priority: ' . $priority
-        . ' | Location: ' . $location;
-    log_activity_event(null, 'incident_created', 'incident', $incidentId, $details);
+
+    $userId = isset($_SESSION['user_id']) && (int)$_SESSION['user_id'] > 0
+        ? (int)$_SESSION['user_id']
+        : null;
+    $rawRole = strtolower(trim((string)($_SESSION['login_role'] ?? $_SESSION['user_role'] ?? '')));
+    $actorRole = in_array($rawRole, ['admin', 'dispatcher'], true) ? $rawRole : 'system';
+    $source = $actorRole === 'dispatcher'
+        ? 'dispatcher_web'
+        : ($actorRole === 'admin' ? 'admin_web' : 'external_api');
+
+    $callReceivedAt = null;
+    $incidentCreatedAt = null;
+    try {
+        if ($callId !== null && $callId > 0) {
+            $callStmt = $pdo->prepare('SELECT received_at FROM calls WHERE id = ? LIMIT 1');
+            $callStmt->execute([$callId]);
+            $callReceivedAt = $callStmt->fetchColumn() ?: null;
+        }
+        $incidentStmt = $pdo->prepare('SELECT created_at FROM incidents WHERE id = ? LIMIT 1');
+        $incidentStmt->execute([$incidentId]);
+        $incidentCreatedAt = $incidentStmt->fetchColumn() ?: null;
+    } catch (Throwable $e) {
+        // The operational write remains best effort if a legacy schema differs.
+    }
+
+    $safeReference = $referenceNo !== '' ? $referenceNo : ('Incident #' . $incidentId);
+    $baseMetadata = [
+        'incident_type' => $type,
+        'priority' => $priority,
+        'location_address' => $location,
+        'transfer_intake_updated' => $updatedTransfer,
+    ];
+
+    if ($callId !== null && $callId > 0) {
+        $callEventPrefix = $auditSessionId !== null
+            ? ('call_session:' . $auditSessionId)
+            : ('call:' . $callId);
+        record_operational_audit_event(
+            $pdo,
+            $userId,
+            'call_received',
+            'call',
+            $callId,
+            ($updatedTransfer ? 'Transferred call intake was confirmed for ' : 'Emergency call was received for ') . $safeReference . '.',
+            [
+                'actor_role' => $actorRole,
+                'source_channel' => $source,
+                'event_category' => 'call_intake',
+                'event_outcome' => 'success',
+                'reference_no' => $referenceNo,
+                'incident_id' => $incidentId,
+                'call_id' => $callId,
+                'occurred_at' => $callReceivedAt,
+                'event_key' => $callEventPrefix . ':received',
+                'metadata' => $baseMetadata,
+            ]
+        );
+
+        if ($acceptedAt !== null) {
+            $acceptanceDelaySeconds = null;
+            try {
+                $auditTimezone = new DateTimeZone('Asia/Manila');
+                $receivedEpoch = $callReceivedAt !== null
+                    ? (new DateTimeImmutable((string)$callReceivedAt, $auditTimezone))->getTimestamp()
+                    : null;
+                $acceptedEpoch = (new DateTimeImmutable($acceptedAt, $auditTimezone))->getTimestamp();
+                if ($receivedEpoch !== null) {
+                    $acceptanceDelaySeconds = max(0, $acceptedEpoch - $receivedEpoch);
+                }
+            } catch (Throwable $e) {
+                $acceptanceDelaySeconds = null;
+            }
+
+            record_operational_audit_event(
+                $pdo,
+                $userId,
+                'call_accepted',
+                'call',
+                $callId,
+                'Emergency call was accepted for ' . $safeReference . '.',
+                [
+                    'actor_role' => $actorRole,
+                    'source_channel' => $source,
+                    'event_category' => 'call_intake',
+                    'event_outcome' => 'success',
+                    'reference_no' => $referenceNo,
+                    'incident_id' => $incidentId,
+                    'call_id' => $callId,
+                    'occurred_at' => $acceptedAt,
+                    'event_key' => $callEventPrefix . ':accepted',
+                    'metadata' => array_merge($baseMetadata, [
+                        'call_received_at' => $callReceivedAt,
+                        'call_accepted_at' => $acceptedAt,
+                        'acceptance_delay_seconds' => $acceptanceDelaySeconds,
+                    ]),
+                ]
+            );
+        }
+    }
+
+    record_operational_audit_event(
+        $pdo,
+        $userId,
+        'incident_created',
+        'incident',
+        $incidentId,
+        'Incident record ' . $safeReference . ' was created and queued for validation and dispatch.',
+        [
+            'actor_role' => $actorRole,
+            'source_channel' => $source,
+            'event_category' => 'incident',
+            'event_outcome' => 'success',
+            'reference_no' => $referenceNo,
+            'incident_id' => $incidentId,
+            'call_id' => $callId,
+            'occurred_at' => $incidentCreatedAt,
+            'event_key' => 'incident:' . $incidentId . ':created',
+            'metadata' => $baseMetadata,
+        ]
+    );
+}
+
+function calls_create_normalize_audit_session_id($value): ?string {
+    $value = trim((string)$value);
+    return preg_match('/^[A-Za-z0-9.:-]{8,96}$/', $value) ? $value : null;
+}
+
+function calls_create_link_audit_session(
+    PDO $pdo,
+    ?string $auditSessionId,
+    ?int $callId,
+    ?int $incidentId,
+    string $referenceNo
+): void {
+    if ($auditSessionId === null || !calls_create_table_exists($pdo, 'activity_log')) {
+        return;
+    }
+    if (!calls_create_column_exists($pdo, 'activity_log', 'event_key')) {
+        return;
+    }
+
+    $entityType = ($callId !== null && $callId > 0) ? 'call' : 'incident';
+    $entityId = ($callId !== null && $callId > 0) ? $callId : $incidentId;
+    if ($entityId === null || $entityId < 1) {
+        return;
+    }
+
+    $set = [];
+    $params = [];
+    if (calls_create_column_exists($pdo, 'activity_log', 'entity_type')) {
+        $set[] = 'entity_type = ?';
+        $params[] = $entityType;
+    }
+    if (calls_create_column_exists($pdo, 'activity_log', 'entity_id')) {
+        $set[] = 'entity_id = ?';
+        $params[] = $entityId;
+    }
+    if (calls_create_column_exists($pdo, 'activity_log', 'reference_no')) {
+        $set[] = "reference_no = CASE WHEN COALESCE(NULLIF(reference_no, ''), '') = '' THEN ? ELSE reference_no END";
+        $params[] = substr(trim($referenceNo), 0, 64);
+    }
+    if ($set === []) {
+        return;
+    }
+
+    $eventKeys = [];
+    foreach (['received', 'accepted', 'rejected', 'ended'] as $milestone) {
+        $eventKeys[] = 'call_session:' . $auditSessionId . ':' . $milestone;
+    }
+    $params = array_merge($params, $eventKeys);
+    try {
+        $statement = $pdo->prepare(
+            'UPDATE activity_log SET ' . implode(', ', $set)
+            . ' WHERE event_key IN (' . implode(',', array_fill(0, count($eventKeys), '?')) . ')'
+        );
+        $statement->execute($params);
+    } catch (Throwable $e) {
+        error_log('calls_create audit-session link warning: ' . $e->getMessage());
+    }
 }
 
 function calls_create_try_group1_sync(PDO $pdo, int $callId, int $incidentId): array {
@@ -512,7 +747,7 @@ function insert_call_row(PDO $pdo, array $params): int {
             )
             VALUES (
                 :reference_no, :caller_name, :caller_phone, NULL, :location_address, :latitude, :longitude,
-                :incident_type, :priority, :status, :description, NOW()
+                :incident_type, :priority, :status, :description, :received_at
             )';
     $stmt = $pdo->prepare($sql);
     try {
@@ -572,7 +807,7 @@ function insert_call_row_with_id(PDO $pdo, array $params): int {
             )
             VALUES (
                 :id, :reference_no, :caller_name, :caller_phone, NULL, :location_address, :latitude, :longitude,
-                :incident_type, :priority, :status, :description, NOW()
+                :incident_type, :priority, :status, :description, :received_at
             )';
     $stmt = $pdo->prepare($sql);
 

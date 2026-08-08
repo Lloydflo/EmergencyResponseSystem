@@ -54,12 +54,21 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $rawRole = trim((string)($_SESSION['login_role'] ?? $_SESSION['user_role'] ?? 'user'));
             $roleLabel = ucwords(str_replace(['_', '-'], ' ', $rawRole !== '' ? $rawRole : 'user'));
             if ($userId !== null && $userId > 0) {
-                log_activity_event(
+                $normalizedRole = canonical_role($rawRole);
+                $source = $normalizedRole === 'dispatcher' ? 'dispatcher_web' : ($normalizedRole === 'admin' ? 'admin_web' : 'server_api');
+                log_operational_event(
                     $userId,
                     'login',
                     'auth',
                     $userId,
-                    trim($roleLabel . ' ' . $userName . ' signed in')
+                    trim($roleLabel . ' ' . $userName . ' signed in after OTP verification'),
+                    [
+                        'actor_role' => $normalizedRole !== 'unknown' ? $normalizedRole : 'user',
+                        'source_channel' => $source,
+                        'event_category' => 'authentication',
+                        'event_outcome' => 'success',
+                        'metadata' => ['session_event' => 'login', 'otp_verified' => true],
+                    ]
                 );
                 $pdo = get_db_connection();
                 if ($pdo instanceof PDO) {

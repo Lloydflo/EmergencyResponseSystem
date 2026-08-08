@@ -2,6 +2,7 @@
 declare(strict_types=1);
 
 require_once __DIR__ . '/_operational_api.php';
+require_once __DIR__ . '/../../includes/activity_log.php';
 
 final class AppAssignmentException extends RuntimeException
 {
@@ -390,7 +391,17 @@ function app_assignment_change_status(
     }
     $current = app_assignment_normalize_status($currentRaw);
     $rank = ['pending' => 0, 'assigned' => 0, 'received' => 1, 'en_route' => 2, 'on_scene' => 3, 'completed' => 4];
-    if (isset($rank[$current]) && $rank[$current] > $rank[$requestedStatus]) {
+
+    // The Android navigation screen intentionally returns an en-route
+    // assignment to Received when a responder cancels navigation. Keep this
+    // one controlled rollback valid while still rejecting all other backward
+    // workflow transitions.
+    $isNavigationCancellation = $current === 'en_route' && $requestedStatus === 'received';
+    if (
+        !$isNavigationCancellation
+        && isset($rank[$current])
+        && $rank[$current] > $rank[$requestedStatus]
+    ) {
         throw new AppAssignmentException('Assignment status cannot move backward.', 409);
     }
 
@@ -505,7 +516,7 @@ function app_assignment_complete_incident(
     }
 
     $select = ['id', 'status'];
-    foreach (['completion_image_path', 'review_status', 'completed_by_responder_id', 'completed_at'] as $column) {
+    foreach (['completion_image_path', 'completed_by_responder_id', 'completed_at'] as $column) {
         $select[] = op_column_exists($pdo, 'incidents', $column)
             ? '`' . $column . '`'
             : 'NULL AS `' . $column . '`';
@@ -538,7 +549,6 @@ function app_assignment_complete_incident(
             'incident_id' => $incidentId,
             'already_completed' => true,
             'completion_image_path' => (string)($incident['completion_image_path'] ?? ''),
-            'review_status' => (string)($incident['review_status'] ?? 'pending_review'),
         ];
     }
 
@@ -618,7 +628,6 @@ function app_assignment_complete_incident(
     foreach ([
         'completion_notes' => $notes,
         'completion_image_path' => $imagePath,
-        'review_status' => 'pending_review',
         'completed_by_responder_id' => $responderId,
     ] as $column => $value) {
         if (op_column_exists($pdo, 'incidents', $column)) {
@@ -637,38 +646,42 @@ function app_assignment_complete_incident(
 
     app_assignment_set_unit_status($pdo, $responderId, $unitCode, 'available');
 
-    if (
-        op_table_exists($pdo, 'activity_log')
-        && op_column_exists($pdo, 'activity_log', 'user_id')
-        && op_column_exists($pdo, 'activity_log', 'action')
-        && op_column_exists($pdo, 'activity_log', 'entity_type')
-        && op_column_exists($pdo, 'activity_log', 'entity_id')
-        && op_column_exists($pdo, 'activity_log', 'details')
-        && op_column_exists($pdo, 'activity_log', 'created_at')
-    ) {
-        try {
-            $exists = $pdo->prepare(
-                "SELECT 1 FROM activity_log WHERE action = 'incident_resolved' "
-                . "AND entity_type = 'incident' AND entity_id = ? LIMIT 1"
-            );
-            $exists->execute([$incidentId]);
-            if (!$exists->fetchColumn()) {
-                $referenceExpr = op_column_exists($pdo, 'incidents', 'reference_no')
-                    ? "COALESCE(NULLIF(reference_no, ''), CONCAT('#', id))"
-                    : "CONCAT('#', id)";
-                $log = $pdo->prepare(
-                    'INSERT INTO activity_log '
-                    . '(user_id, action, entity_type, entity_id, details, created_at) '
-                    . "SELECT ?, 'incident_resolved', 'incident', id, "
-                    . "CONCAT('Incident ', {$referenceExpr}, ' has been resolved.'), NOW() "
-                    . 'FROM incidents WHERE id = ? LIMIT 1'
-                );
-                $log->execute([$responderId, $incidentId]);
-            }
-        } catch (Throwable $error) {
-            error_log('[api_app] incident completion audit log skipped: ' . $error->getMessage());
-        }
+    $incidentReference = '';
+    if (op_column_exists($pdo, 'incidents', 'reference_no')) {
+        $referenceStatement = $pdo->prepare('SELECT reference_no FROM incidents WHERE id = ? LIMIT 1');
+        $referenceStatement->execute([$incidentId]);
+        $incidentReference = trim((string)$referenceStatement->fetchColumn());
     }
+
+    // Keep the legacy action name because the existing dispatcher/mobile
+    // notification feed consumes it, but store full structured audit context.
+    record_operational_audit_event(
+        $pdo,
+        $responderId,
+        'incident_resolved',
+        'incident',
+        $incidentId,
+        'Responder completed incident '
+            . ($incidentReference !== '' ? $incidentReference : ('#' . $incidentId))
+            . ' and uploaded completion evidence.',
+        [
+            'actor_role' => 'responder',
+            'source_channel' => 'responder_app',
+            'event_category' => 'completion',
+            'event_outcome' => 'success',
+            'reference_no' => $incidentReference,
+            'incident_id' => $incidentId,
+            'assignment_id' => $assignmentId,
+            'event_key' => 'incident:' . $incidentId . ':resolved',
+            'metadata' => [
+                'assignment_id' => $assignmentId,
+                'completion_notes_recorded' => trim($notes) !== '',
+                'completion_evidence_recorded' => $imagePath !== '',
+                'unit_code' => $unitCode,
+            ],
+        ]
+    );
+
 
     return [
         'assignment_status' => 'completed',
@@ -677,6 +690,5 @@ function app_assignment_complete_incident(
         'incident_id' => $incidentId,
         'already_completed' => false,
         'completion_image_path' => $imagePath,
-        'review_status' => 'pending_review',
     ];
 }

@@ -400,7 +400,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET') {
             }
 
             $statusWhere = feedback_column_exists($pdo, 'responder_after_action_reports', 'status')
-                ? "AND LOWER(COALESCE(aar.status, '')) IN ('submitted', 'verified')"
+                ? "AND LOWER(COALESCE(aar.status, '')) IN ('submitted', 'verified', 'approved')"
                 : '';
             $incidentSummaryExpr = feedback_column_exists($pdo, 'responder_after_action_reports', 'incident_summary')
                 ? "NULLIF(TRIM(aar.incident_summary), '')"

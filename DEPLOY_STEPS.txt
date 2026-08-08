@@ -1,0 +1,25 @@
+AUDIT LOGS — ACTIVITY NUMBER LABEL UPDATE v5
+
+Changed display:
+  #16  ->  Activity no. 16
+
+Files to replace:
+  admin/audit.php
+  css/audit.css
+
+Local / VS Code:
+  1. Extract this ZIP into the project root.
+  2. Replace existing files.
+  3. Commit and push to main.
+
+Production server:
+  git pull --ff-only origin main
+  sudo systemctl restart php8.3-fpm
+  sudo systemctl reload nginx
+
+Browser:
+  Ctrl + Shift + R
+
+Verification:
+  grep -n "20260806-activity-number-v5" admin/audit.php
+  grep -n "Activity no." admin/audit.php

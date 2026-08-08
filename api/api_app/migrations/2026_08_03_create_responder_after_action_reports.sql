@@ -37,6 +37,7 @@ CREATE TABLE IF NOT EXISTS `responder_after_action_reports` (
     UNIQUE KEY `uq_aar_incident_responder` (`incident_id`, `responder_id`),
     KEY `idx_aar_responder_updated` (`responder_id`, `updated_at`),
     KEY `idx_aar_status_updated` (`status`, `updated_at`),
+    KEY `idx_aar_status_reviewed` (`status`, `reviewed_at`),
     KEY `idx_aar_incident` (`incident_id`),
     KEY `idx_aar_reviewer` (`reviewer_user_id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;

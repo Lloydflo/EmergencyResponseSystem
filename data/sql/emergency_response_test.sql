@@ -30,10 +30,22 @@ SET time_zone = "+08:00";
 CREATE TABLE `activity_log` (
   `id` int(11) NOT NULL,
   `user_id` int(11) DEFAULT NULL,
-  `action` varchar(32) NOT NULL,
-  `entity_type` varchar(32) NOT NULL,
+  `action` varchar(64) NOT NULL,
+  `entity_type` varchar(64) NOT NULL,
   `entity_id` int(11) DEFAULT NULL,
   `details` text DEFAULT NULL,
+  `actor_name` varchar(150) DEFAULT NULL,
+  `actor_email` varchar(150) DEFAULT NULL,
+  `actor_role` varchar(32) DEFAULT NULL,
+  `source_channel` varchar(32) DEFAULT NULL,
+  `event_category` varchar(32) DEFAULT NULL,
+  `event_outcome` varchar(16) NOT NULL DEFAULT 'success',
+  `reference_no` varchar(64) DEFAULT NULL,
+  `metadata_json` longtext DEFAULT NULL,
+  `ip_address` varchar(45) DEFAULT NULL,
+  `user_agent` varchar(255) DEFAULT NULL,
+  `request_id` varchar(64) DEFAULT NULL,
+  `event_key` varchar(160) DEFAULT NULL,
   `created_at` datetime NOT NULL DEFAULT current_timestamp()
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
@@ -61,8 +73,8 @@ INSERT INTO `activity_log` (`id`, `user_id`, `action`, `entity_type`, `entity_id
 -- Interagency chat migration additions
 --
 
-ALTER TABLE `activity_log`
-  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT;
+-- activity_log AUTO_INCREMENT is applied after its primary key in the
+-- AUTO_INCREMENT section near the end of this dump.
 
 CREATE TABLE IF NOT EXISTS `interagency_user_thread_pairs` (
   `id` BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
@@ -936,7 +948,15 @@ INSERT INTO `users` (`id`, `email`, `password`, `name`, `department`, `role`, `s
 -- Indexes for table `activity_log`
 --
 ALTER TABLE `activity_log`
-  ADD PRIMARY KEY (`id`);
+  ADD PRIMARY KEY (`id`),
+  ADD UNIQUE KEY `uk_activity_log_event_key` (`event_key`),
+  ADD KEY `idx_activity_log_created` (`created_at`,`id`),
+  ADD KEY `idx_activity_log_user_created` (`user_id`,`created_at`),
+  ADD KEY `idx_activity_log_actor_created` (`actor_role`,`created_at`),
+  ADD KEY `idx_activity_log_source_created` (`source_channel`,`created_at`),
+  ADD KEY `idx_activity_log_category_created` (`event_category`,`created_at`),
+  ADD KEY `idx_activity_log_outcome_created` (`event_outcome`,`created_at`),
+  ADD KEY `idx_activity_log_reference_created` (`reference_no`,`created_at`);
 
 --
 -- Indexes for table `admin_resources`
@@ -1097,6 +1117,12 @@ ALTER TABLE `units`
 --
 -- AUTO_INCREMENT for dumped tables
 --
+
+--
+-- AUTO_INCREMENT for table `activity_log`
+--
+ALTER TABLE `activity_log`
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=13;
 
 --
 -- AUTO_INCREMENT for table `calls`

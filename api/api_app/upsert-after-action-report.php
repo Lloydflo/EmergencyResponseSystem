@@ -2,6 +2,7 @@
 declare(strict_types=1);
 require_once __DIR__ . '/_operational_api.php';
 require_once __DIR__ . '/_after_action_schema.php';
+require_once __DIR__ . '/../../includes/activity_log.php';
 
 op_require_method('POST');
 $pdo = db();
@@ -24,13 +25,18 @@ $safetyIssues = op_post_string('safety_issues', '', 10000);
 $followUpRequired = op_post_bool('follow_up_required');
 $followUpDetails = op_post_string('follow_up_details', '', 10000);
 $lessonsLearned = op_post_string('lessons_learned', '', 10000);
-$status = strtolower(op_post_string('status', 'draft', 16));
+$requestedStatus = strtolower(op_post_string('status', 'pending', 24));
+$status = match ($requestedStatus) {
+    'pending', 'draft' => 'draft',
+    'submitted' => 'submitted',
+    default => '',
+};
 
 op_require_positive($incidentId, 'incident_id');
 op_require_positive($responderId, 'responder_id');
 op_require_text($operationalOutcome, 'operational_outcome');
-if (!in_array($status, ['draft', 'submitted'], true)) {
-    op_error('Responders may save only draft or submitted reports.', 422);
+if ($status === '') {
+    op_error('Responders may save only pending or submitted reports.', 422);
 }
 if ($status === 'submitted') {
     op_require_text($incidentSummary, 'incident_summary');
@@ -75,12 +81,13 @@ try {
     );
     $existingStatement->execute([$incidentId, $responderId]);
     $existing = op_fetch_one($existingStatement);
+    $previousReportStatus = strtolower((string)($existing['status'] ?? 'none'));
 
     if ($existing !== null) {
         $existingStatus = strtolower((string)($existing['status'] ?? 'draft'));
-        if ($existingStatus === 'verified') {
+        if (in_array($existingStatus, ['verified', 'approved'], true)) {
             $pdo->rollBack();
-            op_error('The verified after-action report is read-only.', 409);
+            op_error('The approved after-action report is read-only.', 409);
         }
         if ($existingStatus === 'submitted') {
             if ($status === 'submitted') {
@@ -91,6 +98,36 @@ try {
                 );
                 $reload->execute([(int)$existing['id']]);
                 $row = op_fetch_one($reload);
+                $referenceNo = ers_audit_reference_no($pdo, 'after_action_report', (int)$existing['id'], [
+                    'incident_id' => $incidentId,
+                    'report_id' => (int)$existing['id'],
+                ]);
+                record_operational_audit_event(
+                    $pdo,
+                    $responderId,
+                    'after_action_report_submitted',
+                    'after_action_report',
+                    (int)$existing['id'],
+                    'Responder submitted the after-action report for incident '
+                        . ($referenceNo !== '' ? $referenceNo : ('#' . $incidentId))
+                        . ' for admin review.',
+                    [
+                        'actor_name' => $responderName,
+                        'actor_email' => (string)($responder['email'] ?? ''),
+                        'actor_role' => 'responder',
+                        'source_channel' => 'responder_app',
+                        'event_category' => 'report_review',
+                        'event_outcome' => 'success',
+                        'reference_no' => $referenceNo,
+                        'incident_id' => $incidentId,
+                        'report_id' => (int)$existing['id'],
+                        'event_key' => 'after_action_report:' . (int)$existing['id'] . ':submitted',
+                        'metadata' => [
+                            'report_status' => 'submitted',
+                            'idempotent_retry' => true,
+                        ],
+                    ]
+                );
                 $pdo->commit();
                 op_success([
                     'message' => 'The after-action report is already submitted.',
@@ -154,11 +191,54 @@ try {
         throw new RuntimeException('The after-action report could not be reloaded.');
     }
 
+    $referenceNo = ers_audit_reference_no($pdo, 'after_action_report', $reportId, [
+        'incident_id' => $incidentId,
+        'report_id' => $reportId,
+    ]);
+    $auditAction = $status === 'submitted'
+        ? 'after_action_report_submitted'
+        : 'after_action_report_saved';
+    $auditDetails = $status === 'submitted'
+        ? 'Responder submitted the after-action report for incident '
+            . ($referenceNo !== '' ? $referenceNo : ('#' . $incidentId))
+            . ' for admin review.'
+        : 'Responder saved a Pending after-action report for incident '
+            . ($referenceNo !== '' ? $referenceNo : ('#' . $incidentId)) . '.';
+    $auditContext = [
+        'actor_name' => $responderName,
+        'actor_email' => (string)($responder['email'] ?? ''),
+        'actor_role' => 'responder',
+        'source_channel' => 'responder_app',
+        'event_category' => 'report_review',
+        'event_outcome' => 'success',
+        'reference_no' => $referenceNo,
+        'incident_id' => $incidentId,
+        'report_id' => $reportId,
+        'metadata' => [
+            'previous_status' => $previousReportStatus,
+            'report_status' => $status,
+            'created' => $created,
+            'follow_up_required' => $followUpRequired,
+        ],
+    ];
+    if ($status === 'submitted') {
+        $auditContext['event_key'] = 'after_action_report:' . $reportId . ':submitted';
+    }
+    record_operational_audit_event(
+        $pdo,
+        $responderId,
+        $auditAction,
+        'after_action_report',
+        $reportId,
+        $auditDetails,
+        $auditContext
+    );
+
     $pdo->commit();
     op_success([
         'message' => $status === 'submitted'
-            ? 'After-action report submitted for verification.'
-            : 'After-action report draft saved.',
+            ? 'After-action report submitted for admin review.'
+            : 'After-action report saved as Pending.',
         'report' => op_after_action_response($report),
         'created' => $created,
         'idempotent' => false,

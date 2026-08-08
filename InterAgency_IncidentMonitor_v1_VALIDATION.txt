@@ -1,0 +1,36 @@
+INTER-AGENCY INCIDENT MONITOR v1 — VALIDATION
+
+Build marker
+- 20260807-incident-monitor-v1
+
+Validated source baseline
+- js/interagency-operations.js Git blob before update: 9c9e077f13176c3b1832cdbbc493da11fffe09f5
+- css/interagency-command.css Git blob before update: 1d16b8ac12bf46ddfdbdaa6e9dbc2971fda924aa
+
+Static validation
+- JavaScript syntax (node --check): PASSED
+- CSS opening/closing brace count: 232 / 232 — PASSED
+- Existing required DOM IDs verified in current admin/interagency.php:
+  - iaOperationsDesk
+  - iaOpsActiveIncidents
+  - activeIncidentBanner
+- Existing active-incident click delegation remains in place; the same DOM node is moved rather than cloned.
+- No duplicate element IDs introduced.
+- No PHP files changed.
+- No database or API schema changes.
+
+Behavior implemented
+- Duplicate Workflow Lanes markup is replaced after page load.
+- Active Incidents tab is default.
+- Focused Incident tab is keyboard-accessible.
+- Arrow Left/Right/Home/End keyboard navigation is supported between tabs.
+- Active incident list refreshes with the existing 15-second operations refresh.
+- Existing active-incident banner is physically moved out of .ia-chat-panel.
+- A CSS failsafe prevents the old banner position from occupying chat space.
+- Incident cards reuse the current incident-details modal event path.
+- Light and dark theme styles included.
+- Desktop, tablet, and mobile containment rules included.
+
+Production limitation
+- The update was not executed against the production authenticated session or production database.
+- Final acceptance should verify the active incident endpoint returns the expected fields and clicking a queue item opens its incident-details dialog.

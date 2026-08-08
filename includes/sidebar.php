@@ -104,9 +104,9 @@ $isDispatcherSidebar = $sidebarRole === 'dispatcher';
                             </a>
                         </li>
                         <li class="sidebar-menu-item">
-                            <a href="admin/audit.php" class="sidebar-link <?php echo basename($_SERVER['PHP_SELF']) == 'audit.php' ? 'active' : ''; ?>" aria-current="<?php echo basename($_SERVER['PHP_SELF']) == 'audit.php' ? 'page' : 'false'; ?>">
-                                <i class="fa-solid fa-sliders"></i>
-                                <span>Audit Log</span>
+                            <a href="admin/audit.php?ui=20260806-grouped-v3" class="sidebar-link <?php echo basename($_SERVER['PHP_SELF']) == 'audit.php' ? 'active' : ''; ?>" aria-current="<?php echo basename($_SERVER['PHP_SELF']) == 'audit.php' ? 'page' : 'false'; ?>">
+                                <i class="fa-solid fa-clock-rotate-left"></i>
+                                <span>Operational Audit</span>
                             </a>
                         </li>
                     </ul>
@@ -404,11 +404,14 @@ document.addEventListener('DOMContentLoaded', function() {
             return null;
         }
         const start = Number(session.start);
+        const acceptedAt = Number(session.acceptedAt);
         return {
             active: true,
             name: String(session.name || 'Unknown Caller'),
             phone: String(session.phone || ''),
             start: Number.isFinite(start) && start > 0 ? start : Date.now(),
+            acceptedAt: Number.isFinite(acceptedAt) && acceptedAt > 0 ? acceptedAt : null,
+            auditSessionId: String(session.auditSessionId || ''),
             muted: session.muted === true,
             speaker: session.speaker === true,
             incidentId: session.incidentId !== null && session.incidentId !== undefined && session.incidentId !== ''
@@ -447,6 +450,34 @@ document.addEventListener('DOMContentLoaded', function() {
             return String(hours).padStart(2, '0') + ':' + String(minutes).padStart(2, '0') + ':' + String(seconds).padStart(2, '0');
         }
         return String(minutes).padStart(2, '0') + ':' + String(seconds).padStart(2, '0');
+    }
+
+    function recordCallSessionEnded(session) {
+        if (!session || typeof session !== 'object') {
+            return;
+        }
+        const auditSessionId = String(session.auditSessionId || '').trim();
+        if (!/^[A-Za-z0-9.:-]{8,96}$/.test(auditSessionId)) {
+            return;
+        }
+        const payload = {
+            audit_session_id: auditSessionId,
+            event: 'ended',
+            occurred_at: new Date().toISOString(),
+            reference_no: String(session.incidentReferenceNo || '').trim(),
+            is_transfer: session.isTransfer === true,
+            source_system: String(session.sourceSystem || '').trim(),
+            reason: 'dispatcher-session-ended'
+        };
+        fetch('api/call_audit_event.php', {
+            method: 'POST',
+            credentials: 'same-origin',
+            keepalive: true,
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+        }).catch(function(error) {
+            console.warn('Call end audit failed:', error);
+        });
     }
 
     function emitChange(session) {
@@ -596,6 +627,8 @@ document.addEventListener('DOMContentLoaded', function() {
                 name: payload && payload.name ? payload.name : current.name,
                 phone: payload && payload.phone ? payload.phone : current.phone,
                 start: payload && payload.start ? payload.start : (current.start || Date.now()),
+                acceptedAt: payload && Object.prototype.hasOwnProperty.call(payload, 'acceptedAt') ? payload.acceptedAt : current.acceptedAt,
+                auditSessionId: payload && Object.prototype.hasOwnProperty.call(payload, 'auditSessionId') ? payload.auditSessionId : current.auditSessionId,
                 muted: payload && Object.prototype.hasOwnProperty.call(payload, 'muted') ? payload.muted === true : (current.muted === true),
                 speaker: payload && Object.prototype.hasOwnProperty.call(payload, 'speaker') ? payload.speaker === true : (current.speaker === true),
                 incidentId: payload && Object.prototype.hasOwnProperty.call(payload, 'incidentId') ? payload.incidentId : current.incidentId,
@@ -626,6 +659,8 @@ document.addEventListener('DOMContentLoaded', function() {
             return setState(Object.assign({}, current, payload || {}, { active: true }));
         },
         end: function() {
+            const current = getState();
+            recordCallSessionEnded(current);
             return setState(null);
         },
         toggleMute: function() {

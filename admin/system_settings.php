@@ -59,7 +59,10 @@ $pageTitle = 'System Settings';
         }
 
         .main-content {
-            padding: 4rem 1.2rem 3rem;
+            padding:
+                calc(var(--app-header-height-1) + 1.25rem)
+                1.2rem
+                3rem;
             background: linear-gradient(180deg, #f8fbff 0%, var(--settings-bg) 100%);
         }
 
@@ -262,7 +265,10 @@ $pageTitle = 'System Settings';
 
         @media (max-width: 768px) {
             .main-content {
-                padding: 1rem .75rem 1.5rem;
+                padding:
+                    calc(var(--app-header-height-mobile-1) + 1rem)
+                    .75rem
+                    1.5rem;
             }
 
             .settings-grid {

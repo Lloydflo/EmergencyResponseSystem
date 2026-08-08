@@ -3,7 +3,7 @@ declare(strict_types=1);
 
 require_once __DIR__ . '/_operational_api.php';
 
-header('X-ERS-Endpoint-Version: 2026-07-31-v4');
+header('X-ERS-Endpoint-Version: 2026-08-05-v5');
 op_require_method('GET');
 
 $groupId = op_query_int('group_id');
@@ -220,8 +220,12 @@ try {
     );
 
     $attachmentSelect = $hasAttachments
-        ? 'att.file_name, att.file_url, att.mime_type, att.is_image'
-        : 'NULL AS file_name, NULL AS file_url, NULL AS mime_type, 0 AS is_image';
+        ? 'att.file_name, att.file_url, att.mime_type, att.is_image, '
+            . (isset($schema['interagency_message_attachments']['file_size'])
+                ? 'att.file_size'
+                : '0 AS file_size')
+        : 'NULL AS file_name, NULL AS file_url, NULL AS mime_type, '
+            . '0 AS is_image, 0 AS file_size';
     $attachmentJoin = $hasAttachments
         ? 'LEFT JOIN interagency_message_attachments att
              ON att.id = (
@@ -352,36 +356,81 @@ try {
         $fileUrl = trim((string)($row['file_url'] ?? ''));
         $fileName = trim((string)($row['file_name'] ?? ''));
         $mimeType = trim((string)($row['mime_type'] ?? ''));
+        $fileSize = max(0, (int)($row['file_size'] ?? 0));
         $isImage = (int)($row['is_image'] ?? 0) === 1;
+        $isAudio = false;
+        $audioDurationMs = 0;
 
         $firstAttachment = isset($details['attachments'][0])
             && is_array($details['attachments'][0])
             ? $details['attachments'][0]
             : [];
 
-        if ($fileUrl === '' && $firstAttachment !== []) {
-            $fileUrl = trim((string)(
-                $firstAttachment['file_url']
-                ?? $firstAttachment['fileUrl']
-                ?? $firstAttachment['url']
-                ?? ''
-            ));
-            $fileName = trim((string)(
-                $firstAttachment['file_name']
-                ?? $firstAttachment['fileName']
-                ?? $firstAttachment['name']
-                ?? $fileName
-            ));
-            $mimeType = trim((string)(
-                $firstAttachment['mime_type']
-                ?? $firstAttachment['mimeType']
-                ?? $mimeType
-            ));
-            $isImage = (int)($firstAttachment['is_image'] ?? 0) === 1
+        // The attachment table stores the URL and MIME type, while voice-note
+        // metadata (including duration) lives in message_details for backward
+        // compatibility. Merge both sources instead of reading the JSON only
+        // when the attachment-table URL is absent.
+        if ($firstAttachment !== []) {
+            if ($fileUrl === '') {
+                $fileUrl = trim((string)(
+                    $firstAttachment['file_url']
+                    ?? $firstAttachment['fileUrl']
+                    ?? $firstAttachment['url']
+                    ?? ''
+                ));
+            }
+            if ($fileName === '') {
+                $fileName = trim((string)(
+                    $firstAttachment['file_name']
+                    ?? $firstAttachment['fileName']
+                    ?? $firstAttachment['name']
+                    ?? ''
+                ));
+            }
+            if ($mimeType === '') {
+                $mimeType = trim((string)(
+                    $firstAttachment['mime_type']
+                    ?? $firstAttachment['mimeType']
+                    ?? ''
+                ));
+            }
+            if ($fileSize <= 0) {
+                $fileSize = max(0, (int)(
+                    $firstAttachment['size']
+                    ?? $firstAttachment['file_size']
+                    ?? $firstAttachment['fileSize']
+                    ?? 0
+                ));
+            }
+
+            $isImage = $isImage
+                || (int)($firstAttachment['is_image'] ?? 0) === 1
                 || str_starts_with(strtolower($mimeType), 'image/');
+            $isAudio = (int)(
+                $firstAttachment['is_audio']
+                ?? $firstAttachment['isAudio']
+                ?? 0
+            ) === 1;
+            $audioDurationMs = max(0, (int)(
+                $firstAttachment['duration_ms']
+                ?? $firstAttachment['audio_duration_ms']
+                ?? $firstAttachment['durationMs']
+                ?? $firstAttachment['audioDurationMs']
+                ?? 0
+            ));
         }
 
-        if ($fileUrl !== '' && !$isImage && $fileName !== '') {
+        $normalizedMime = strtolower($mimeType);
+        $fileExtension = strtolower((string)pathinfo($fileName, PATHINFO_EXTENSION));
+        $isAudio = $fileUrl !== '' && (
+            $isAudio
+            || str_starts_with($normalizedMime, 'audio/')
+            || in_array($fileExtension, ['m4a', 'aac', '3gp', 'ogg', 'opus', 'wav', 'mp3'], true)
+        );
+        if ($isAudio) {
+            $isImage = false;
+            $text = 'Voice message';
+        } elseif ($fileUrl !== '' && !$isImage && $fileName !== '') {
             $text = $fileName;
         }
 
@@ -421,9 +470,14 @@ try {
             'senderName' => $senderName !== '' ? $senderName : 'Unknown',
             'role' => $department,
             'text' => $text,
-            'type' => $fileUrl !== '' ? ($isImage ? 'IMAGE' : 'FILE') : 'TEXT',
+            'type' => $fileUrl !== ''
+                ? ($isAudio ? 'AUDIO' : ($isImage ? 'IMAGE' : 'FILE'))
+                : 'TEXT',
             'attachmentUri' => $fileUrl !== '' ? $fileUrl : null,
             'attachmentName' => $fileName !== '' ? $fileName : null,
+            'attachmentMimeType' => $mimeType !== '' ? $mimeType : null,
+            'attachmentSize' => $fileSize,
+            'audioDurationMs' => $isAudio ? min(120000, $audioDurationMs) : 0,
             'createdAt' => $timestamp !== false ? $timestamp * 1000 : 0,
             'status' => $isOwn && $othersReadUpTo >= $messageId
                 ? 'read'
