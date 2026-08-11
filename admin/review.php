@@ -3,7 +3,7 @@ $rootDir = dirname(__DIR__);
 require_once $rootDir . '/includes/auth.php';
 require_role('admin', 'admin/review.php');
 
-$reviewUiBuild = '20260811-admin-review-compact-queues-v3';
+$reviewUiBuild = '20260811-admin-review-compact-queues-v4';
 if (!headers_sent()) {
     header('Cache-Control: no-store, no-cache, must-revalidate, max-age=0');
     header('Pragma: no-cache');
@@ -222,7 +222,7 @@ $reviewLandscapeCssVersion = rawurlencode($reviewUiBuild . '-' . $reviewLandscap
                 <div class="ar-hero-copy">
                     <span class="ar-eyebrow">Operations quality desk</span>
                     <h1>Reviews &amp; Feedback</h1>
-                    <p>Hi <?php echo htmlspecialchars($adminName); ?>. Start with reports awaiting a decision, then follow up on revisions and completed reviews.</p>
+                    <p>Hi <?php echo htmlspecialchars($adminName); ?>. Start with incidents missing a report, then review new submissions, revisions, and completed decisions.</p>
                 </div>
                 <div class="ar-hero-guide" aria-label="Review workflow">
                     <span><i class="fas fa-1"></i> Open a case</span>
@@ -232,7 +232,11 @@ $reviewLandscapeCssVersion = rawurlencode($reviewUiBuild . '-' . $reviewLandscap
             </section>
 
             <section class="ar-stats" aria-label="Review workload" aria-live="polite">
-                <button type="button" class="ar-stat pending is-active" data-queue-shortcut="submitted" aria-pressed="true">
+                <button type="button" class="ar-stat no-report is-active" data-queue-shortcut="no_report" aria-pressed="true">
+                    <span class="ar-stat-icon"><i class="fas fa-file-lines"></i></span>
+                    <span class="ar-stat-copy"><small>No after-action report</small><strong id="statNoReport">0</strong><em>Needs responder follow-up</em></span>
+                </button>
+                <button type="button" class="ar-stat pending" data-queue-shortcut="submitted" aria-pressed="false">
                     <span class="ar-stat-icon"><i class="fas fa-inbox"></i></span>
                     <span class="ar-stat-copy"><small>Needs approval</small><strong id="statPending">0</strong><em>Open review queue</em></span>
                 </button>
@@ -243,10 +247,6 @@ $reviewLandscapeCssVersion = rawurlencode($reviewUiBuild . '-' . $reviewLandscap
                 <button type="button" class="ar-stat approved" data-queue-shortcut="approved" aria-pressed="false">
                     <span class="ar-stat-icon"><i class="fas fa-circle-check"></i></span>
                     <span class="ar-stat-copy"><small>Approved</small><strong id="statApproved">0</strong><em>Completed decisions</em></span>
-                </button>
-                <button type="button" class="ar-stat no-report" data-queue-shortcut="no_report" aria-pressed="false">
-                    <span class="ar-stat-icon"><i class="fas fa-file-circle-question"></i></span>
-                    <span class="ar-stat-copy"><small>No after-action report</small><strong id="statNoReport">0</strong><em>Needs responder follow-up</em></span>
                 </button>
             </section>
 
@@ -275,10 +275,10 @@ $reviewLandscapeCssVersion = rawurlencode($reviewUiBuild . '-' . $reviewLandscap
                 <div class="ar-field">
                     <label for="statusFilterSelect">Work queue</label>
                     <select id="statusFilterSelect">
-                        <option value="submitted" selected>Needs approval</option>
+                        <option value="no_report" selected>No after-action report</option>
+                        <option value="submitted">Needs approval</option>
                         <option value="revision_required">Waiting on revision</option>
                         <option value="approved">Approved reports</option>
-                        <option value="no_report">No after-action report</option>
                         <option value="">All review cases</option>
                     </select>
                 </div>
@@ -292,7 +292,7 @@ $reviewLandscapeCssVersion = rawurlencode($reviewUiBuild . '-' . $reviewLandscap
                 <div class="ar-card-head">
                     <div>
                         <span class="ar-section-kicker"><i class="fas fa-list-check"></i> Review workload</span>
-                        <h2 id="queueTitle">Needs approval</h2>
+                        <h2 id="queueTitle">No after-action report</h2>
                         <p id="tableSubtitle">Loading responder after-action reports...</p>
                     </div>
                     <div class="ar-card-head-actions">
@@ -354,7 +354,7 @@ $reviewLandscapeCssVersion = rawurlencode($reviewUiBuild . '-' . $reviewLandscap
                                 </div>
                             </article>
                             <article>
-                                <h4><i class="fas fa-file-circle-check"></i> Review Status</h4>
+                                <h4><i class="fas fa-clipboard-check"></i> Review Status</h4>
                                 <div class="ar-list">
                                     <div class="ar-detail"><span>Total Reports</span><strong id="adminModalReportCount">0</strong></div>
                                     <div class="ar-detail"><span>Awaiting Review</span><strong id="adminModalPendingCount">0</strong></div>

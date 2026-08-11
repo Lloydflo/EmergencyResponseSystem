@@ -49,10 +49,10 @@
     let queueRequestSerial = 0;
     let modalRequestSerial = 0;
     let modalReturnTarget = null;
-    let visibleCaseLimit = 9;
+    let visibleCaseLimit = 6;
     let lastQueueFilterSignature = '';
     const modalBackgroundState = new Map();
-    const CASE_PAGE_SIZE = 9;
+    const CASE_PAGE_SIZE = 6;
 
     const PH_TIME_ZONE = 'Asia/Manila';
     const PH_DATE_FORMATTER = new Intl.DateTimeFormat('en-PH', {
@@ -202,7 +202,7 @@
                 ? 'fa-circle-check'
                 : status === 'revision_required'
                     ? 'fa-rotate-left'
-                    : 'fa-file-pen';
+                    : 'fa-file-lines';
         return '<span class="ar-report-status ' + reportStatusClass(status) + '">'
             + (icon ? '<i class="fas ' + iconClass + '" aria-hidden="true"></i>' : '')
             + escapeHtml(reportStatusLabel(status))
@@ -541,7 +541,7 @@
         return {
             key: 'no_report',
             label: 'No report submitted',
-            icon: 'fa-file-circle-question',
+            icon: 'fa-file-lines',
             description: 'This closed incident has feedback or notes but no after-action report.',
         };
     }
@@ -633,14 +633,14 @@
             description: 'Completed admin decisions, kept separate from active review work.',
             emptyTitle: 'No approved reviews found',
             emptyDescription: 'Approved after-action reports will appear here.',
-            icon: 'fa-file-circle-check',
+            icon: 'fa-circle-check',
         },
         no_report: {
             title: 'No after-action report',
             description: 'Closed incidents that still need a responder after-action submission.',
             emptyTitle: 'No missing reports',
             emptyDescription: 'Every visible closed incident currently has an after-action report.',
-            icon: 'fa-file-circle-question',
+            icon: 'fa-file-lines',
         },
         all: {
             title: 'All review cases',
@@ -1247,7 +1247,7 @@
     function clearFilters() {
         searchFilterInput.value = '';
         categoryFilterSelect.value = '';
-        statusFilterSelect.value = 'submitted';
+        statusFilterSelect.value = 'no_report';
         renderTable();
     }
 

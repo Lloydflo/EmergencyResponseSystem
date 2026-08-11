@@ -1171,7 +1171,7 @@ if (!headers_sent()) {
         <div class="main-container resource-shell">
             <section class="resource-head" aria-labelledby="resourcePageTitle">
                 <div class="resource-head-copy">
-                    <span class="resource-eyebrow"><i class="fas fa-shield-halved" aria-hidden="true"></i> Operational readiness</span>
+                    <span class="resource-eyebrow"><i class="fas fa-clipboard-check" aria-hidden="true"></i> Operational readiness</span>
                     <h1 id="resourcePageTitle">Resources Status</h1>
                     <p>Monitor vehicle readiness, personnel availability, and equipment condition in an operations-focused roster.</p>
                 </div>
@@ -1944,12 +1944,18 @@ if (!headers_sent()) {
 
         function resourceCategoryIcon(item) {
             const category = item && item.category ? item.category : 'equipment';
-            const name = String(item && item.name ? item.name : '').toLowerCase();
+            const name = String(item && item.name ? item.name : '')
+                .trim()
+                .toLowerCase()
+                .replace(/[_-]+/g, ' ')
+                .replace(/\s+/g, ' ');
             if (category === 'personnel') return 'fa-user-shield';
             if (category === 'equipment') return 'fa-toolbox';
             if (name.includes('ambulance')) return 'fa-truck-medical';
             if (name.includes('fire')) return 'fa-fire-extinguisher';
-            if (name.includes('police') || name.includes('patrol')) return 'fa-shield-halved';
+            // Reuse the vehicle icon already loaded for card facts, so
+            // police/patrol aliases always render instead of showing a blank tile.
+            if (/\b(police|patrol|cruiser|squad car|law enforcement)\b/.test(name)) return 'fa-car-side';
             return 'fa-truck';
         }
 
