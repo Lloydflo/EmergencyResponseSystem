@@ -3,7 +3,7 @@ $rootDir = dirname(__DIR__);
 require_once $rootDir . '/includes/auth.php';
 require_role('admin', 'admin/review.php');
 
-$reviewUiBuild = '20260811-admin-review-workspace-v2';
+$reviewUiBuild = '20260811-admin-review-compact-queues-v3';
 if (!headers_sent()) {
     header('Cache-Control: no-store, no-cache, must-revalidate, max-age=0');
     header('Pragma: no-cache');
@@ -48,17 +48,17 @@ $reviewLandscapeCssVersion = rawurlencode($reviewUiBuild . '-' . $reviewLandscap
                 4rem;
             background: radial-gradient(circle at top right, rgba(56,189,248,.08), transparent 28%), #f3f7fb;
         }
-        .ar-shell { 
-            width: min(100%, 1360px); 
-            margin: 0 auto; 
-            display: grid; 
-            gap: 1rem; 
+        .ar-shell {
+            width: min(100%, 1360px);
+            margin: 0 auto;
+            display: grid;
+            gap: 1rem;
         }
-        .ar-hero { 
-            background: linear-gradient(135deg, #0f172a, #1e3a8a); 
-            color: #f8fafc; border-radius: 22px; 
-            padding: 1.3rem 1.4rem; 
-            box-shadow: 0 20px 40px rgba(15,23,42,.18); 
+        .ar-hero {
+            background: linear-gradient(135deg, #0f172a, #1e3a8a);
+            color: #f8fafc; border-radius: 22px;
+            padding: 1.3rem 1.4rem;
+            box-shadow: 0 20px 40px rgba(15,23,42,.18);
         }
         .ar-hero h1 { margin: 0; font-size: 1.6rem; }
         .ar-hero p { margin: .55rem 0 0; color: rgba(248,250,252,.88); line-height: 1.6; }
@@ -232,21 +232,21 @@ $reviewLandscapeCssVersion = rawurlencode($reviewUiBuild . '-' . $reviewLandscap
             </section>
 
             <section class="ar-stats" aria-label="Review workload" aria-live="polite">
-                <button type="button" class="ar-stat all" data-queue-shortcut="" aria-pressed="true">
-                    <span class="ar-stat-icon"><i class="fas fa-layer-group"></i></span>
-                    <span class="ar-stat-copy"><small>All reports</small><strong id="statReports">0</strong><em>Complete review history</em></span>
-                </button>
-                <button type="button" class="ar-stat pending" data-queue-shortcut="submitted" aria-pressed="false">
+                <button type="button" class="ar-stat pending is-active" data-queue-shortcut="submitted" aria-pressed="true">
                     <span class="ar-stat-icon"><i class="fas fa-inbox"></i></span>
-                    <span class="ar-stat-copy"><small>Needs your decision</small><strong id="statPending">0</strong><em>Open review queue</em></span>
+                    <span class="ar-stat-copy"><small>Needs approval</small><strong id="statPending">0</strong><em>Open review queue</em></span>
+                </button>
+                <button type="button" class="ar-stat revision" data-queue-shortcut="revision_required" aria-pressed="false">
+                    <span class="ar-stat-icon"><i class="fas fa-rotate-left"></i></span>
+                    <span class="ar-stat-copy"><small>Waiting on revision</small><strong id="statRevision">0</strong><em>Returned to responders</em></span>
                 </button>
                 <button type="button" class="ar-stat approved" data-queue-shortcut="approved" aria-pressed="false">
                     <span class="ar-stat-icon"><i class="fas fa-circle-check"></i></span>
                     <span class="ar-stat-copy"><small>Approved</small><strong id="statApproved">0</strong><em>Completed decisions</em></span>
                 </button>
-                <button type="button" class="ar-stat revision" data-queue-shortcut="revision_required" aria-pressed="false">
-                    <span class="ar-stat-icon"><i class="fas fa-rotate-left"></i></span>
-                    <span class="ar-stat-copy"><small>Waiting on revision</small><strong id="statRevision">0</strong><em>Returned to responders</em></span>
+                <button type="button" class="ar-stat no-report" data-queue-shortcut="no_report" aria-pressed="false">
+                    <span class="ar-stat-icon"><i class="fas fa-file-circle-question"></i></span>
+                    <span class="ar-stat-copy"><small>No after-action report</small><strong id="statNoReport">0</strong><em>Needs responder follow-up</em></span>
                 </button>
             </section>
 
@@ -275,11 +275,11 @@ $reviewLandscapeCssVersion = rawurlencode($reviewUiBuild . '-' . $reviewLandscap
                 <div class="ar-field">
                     <label for="statusFilterSelect">Work queue</label>
                     <select id="statusFilterSelect">
-                        <option value="">All review cases</option>
-                        <option value="submitted">Needs my decision</option>
+                        <option value="submitted" selected>Needs approval</option>
                         <option value="revision_required">Waiting on revision</option>
                         <option value="approved">Approved reports</option>
                         <option value="no_report">No after-action report</option>
+                        <option value="">All review cases</option>
                     </select>
                 </div>
                 <div class="ar-actions">
@@ -292,10 +292,13 @@ $reviewLandscapeCssVersion = rawurlencode($reviewUiBuild . '-' . $reviewLandscap
                 <div class="ar-card-head">
                     <div>
                         <span class="ar-section-kicker"><i class="fas fa-list-check"></i> Review workload</span>
-                        <h2>After-action cases</h2>
+                        <h2 id="queueTitle">Needs approval</h2>
                         <p id="tableSubtitle">Loading responder after-action reports...</p>
                     </div>
-                    <span class="ar-count" id="incidentCountBadge">0 cases</span>
+                    <div class="ar-card-head-actions">
+                        <button type="button" class="ar-view-all" data-queue-shortcut="" aria-pressed="false"><i class="fas fa-layer-group" aria-hidden="true"></i> All cases</button>
+                        <span class="ar-count" id="incidentCountBadge">0 cases</span>
+                    </div>
                 </div>
                 <div class="ar-queue" id="incidentTableBody" aria-live="polite" aria-busy="true"></div>
             </section>

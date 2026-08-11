@@ -9,6 +9,7 @@
 
     const tableBody = qs('#incidentTableBody');
     const countBadge = qs('#incidentCountBadge');
+    const queueTitle = qs('#queueTitle');
     const tableSubtitle = qs('#tableSubtitle');
     const searchFilterInput = qs('#searchFilterInput');
     const categoryFilterSelect = qs('#categoryFilterSelect');
@@ -26,6 +27,7 @@
     if (
         !tableBody
         || !countBadge
+        || !queueTitle
         || !tableSubtitle
         || !searchFilterInput
         || !categoryFilterSelect
@@ -47,7 +49,10 @@
     let queueRequestSerial = 0;
     let modalRequestSerial = 0;
     let modalReturnTarget = null;
+    let visibleCaseLimit = 9;
+    let lastQueueFilterSignature = '';
     const modalBackgroundState = new Map();
+    const CASE_PAGE_SIZE = 9;
 
     const PH_TIME_ZONE = 'Asia/Manila';
     const PH_DATE_FORMATTER = new Intl.DateTimeFormat('en-PH', {
@@ -376,12 +381,10 @@
             });
         });
 
-        const rows = Array.from(incidentMap.values()).filter((row) => {
-            const reportsForIncident = row.after_action_reports || [];
-            return reportsForIncident.length > 0
-                || Boolean(row.submitted_to_admin)
-                || Number(row.feedback_count || 0) > 0;
-        });
+        // The endpoint already limits this list to closed incidents. Keep every
+        // returned incident so the No after-action report queue is complete,
+        // including cases that do not yet have separate feedback notes.
+        const rows = Array.from(incidentMap.values());
 
         rows.sort((left, right) => {
             const leftPending = (left.after_action_reports || []).some((report) => workflowStatus(report) === 'submitted');
@@ -452,13 +455,22 @@
     }
 
     function renderStats() {
-        const submitted = allReports.filter((report) => workflowStatus(report) === 'submitted').length;
-        const approved = allReports.filter((report) => workflowStatus(report) === 'approved').length;
-        const revision = allReports.filter((report) => workflowStatus(report) === 'revision_required').length;
-        qs('#statReports').textContent = String(allReports.length);
-        qs('#statPending').textContent = String(submitted);
-        qs('#statApproved').textContent = String(approved);
-        qs('#statRevision').textContent = String(revision);
+        const counts = {
+            submitted: 0,
+            revision_required: 0,
+            approved: 0,
+            no_report: 0,
+        };
+        incidentRows.forEach((row) => {
+            const state = rowReviewState(row).key;
+            if (Object.prototype.hasOwnProperty.call(counts, state)) {
+                counts[state] += 1;
+            }
+        });
+        qs('#statPending').textContent = String(counts.submitted);
+        qs('#statRevision').textContent = String(counts.revision_required);
+        qs('#statApproved').textContent = String(counts.approved);
+        qs('#statNoReport').textContent = String(counts.no_report);
     }
 
     function getFilteredRows() {
@@ -470,10 +482,9 @@
             const reports = Array.isArray(row.after_action_reports) ? row.after_action_reports : [];
             if (categoryNeedle && !incidentTypeTokens(row.type).includes(categoryNeedle)) return false;
 
-            if (queueNeedle === 'submitted' && !reports.some((report) => workflowStatus(report) === 'submitted')) return false;
-            if (queueNeedle === 'approved' && !reports.some((report) => workflowStatus(report) === 'approved')) return false;
-            if (queueNeedle === 'revision_required' && !reports.some((report) => workflowStatus(report) === 'revision_required')) return false;
-            if (queueNeedle === 'no_report' && reports.length > 0) return false;
+            // Each case belongs to one queue only. A newer submitted report takes
+            // priority over older approved/returned reports for the same incident.
+            if (queueNeedle && rowReviewState(row).key !== queueNeedle) return false;
 
             if (searchNeedle) {
                 const reportText = reports.map((report) => [
@@ -506,7 +517,7 @@
         if (reports.some((report) => workflowStatus(report) === 'submitted')) {
             return {
                 key: 'submitted',
-                label: 'Needs decision',
+                label: 'Needs approval',
                 icon: 'fa-inbox',
                 description: 'Open the report, verify the evidence, then approve or return it.',
             };
@@ -584,17 +595,15 @@
                         <div class="ar-badges">${priorityChip(row.priority)} ${statusChip(row.status)}</div>
                         <h4>${escapeHtml(reportTitle)}</h4>
                         <p>${escapeHtml(reportPreview)}</p>
-                        <span class="ar-case-location"><i class="fas fa-location-dot" aria-hidden="true"></i>${escapeHtml(location)}</span>
+                        <div class="ar-case-meta">
+                            <span title="${escapeHtml(location)}"><i class="fas fa-location-dot" aria-hidden="true"></i>${escapeHtml(location)}</span>
+                            <span title="${escapeHtml(responderText)}"><i class="fas fa-user-shield" aria-hidden="true"></i>${escapeHtml(responderText)}</span>
+                            <span><i class="fas fa-clock" aria-hidden="true"></i>${escapeHtml(activity.label)}: ${escapeHtml(activity.value)}</span>
+                            <span><i class="fas fa-file-lines" aria-hidden="true"></i>${escapeHtml(reports.length + (reports.length === 1 ? ' report' : ' reports'))}</span>
+                        </div>
                     </div>
-                    <dl class="ar-case-facts">
-                        <div><dt><i class="fas fa-user-shield" aria-hidden="true"></i> Responder</dt><dd>${escapeHtml(responderText)}</dd></div>
-                        <div><dt><i class="fas fa-file-lines" aria-hidden="true"></i> After-action</dt><dd>${escapeHtml(reports.length + (reports.length === 1 ? ' report' : ' reports'))}</dd></div>
-                        <div><dt><i class="fas fa-stopwatch" aria-hidden="true"></i> Response time</dt><dd>${escapeHtml(formatMinutes(row.response_time_min))}</dd></div>
-                        <div><dt><i class="fas fa-clock" aria-hidden="true"></i> ${escapeHtml(activity.label)}</dt><dd>${escapeHtml(activity.value)}</dd></div>
-                    </dl>
                 </div>
                 <footer class="ar-case-footer">
-                    <p><i class="fas ${escapeHtml(state.icon)}" aria-hidden="true"></i>${escapeHtml(state.description)}</p>
                     <div class="ar-row-actions">
                         <button type="button" class="ar-action primary" data-action="view-feedback" data-id="${escapeHtml(row.id)}"><i class="fas fa-arrow-right" aria-hidden="true"></i> ${escapeHtml(primaryLabel)}</button>
                         ${crimeAnalyticsAction(row)}
@@ -604,22 +613,43 @@
         `;
     }
 
-    function renderQueueSection(config, rows) {
-        if (!rows.length) return '';
-        return `
-            <section class="ar-queue-section queue-${escapeHtml(config.key)}" aria-labelledby="queue-${escapeHtml(config.key)}-title">
-                <div class="ar-queue-section-head">
-                    <div>
-                        <span class="ar-section-kicker"><i class="fas ${escapeHtml(config.icon)}" aria-hidden="true"></i>${escapeHtml(config.kicker)}</span>
-                        <h3 id="queue-${escapeHtml(config.key)}-title">${escapeHtml(config.title)}</h3>
-                        <p>${escapeHtml(config.description)}</p>
-                    </div>
-                    <span class="ar-queue-section-count">${escapeHtml(rows.length)}</span>
-                </div>
-                <div class="ar-case-grid">${rows.map(renderCaseCard).join('')}</div>
-            </section>
-        `;
-    }
+    const QUEUE_CONFIGS = {
+        submitted: {
+            title: 'Needs approval',
+            description: 'New responder submissions ready for approval or return.',
+            emptyTitle: 'No reports need approval',
+            emptyDescription: 'You are caught up. New responder submissions will appear here.',
+            icon: 'fa-circle-check',
+        },
+        revision_required: {
+            title: 'Waiting on responder revision',
+            description: 'Returned reports that are waiting for a corrected resubmission.',
+            emptyTitle: 'No revision follow-ups',
+            emptyDescription: 'There are no reports currently waiting on responder revision.',
+            icon: 'fa-rotate-left',
+        },
+        approved: {
+            title: 'Approved reviews',
+            description: 'Completed admin decisions, kept separate from active review work.',
+            emptyTitle: 'No approved reviews found',
+            emptyDescription: 'Approved after-action reports will appear here.',
+            icon: 'fa-file-circle-check',
+        },
+        no_report: {
+            title: 'No after-action report',
+            description: 'Closed incidents that still need a responder after-action submission.',
+            emptyTitle: 'No missing reports',
+            emptyDescription: 'Every visible closed incident currently has an after-action report.',
+            icon: 'fa-file-circle-question',
+        },
+        all: {
+            title: 'All review cases',
+            description: 'A combined history view. Use a workload button above to focus on one queue.',
+            emptyTitle: 'No review cases found',
+            emptyDescription: 'There are no review cases available for the current filters.',
+            icon: 'fa-layer-group',
+        },
+    };
 
     function updateQueueShortcuts() {
         const activeQueue = String(statusFilterSelect.value || '');
@@ -632,55 +662,40 @@
 
     function renderTable() {
         const rows = getFilteredRows();
+        const activeQueue = String(statusFilterSelect.value || '');
+        const queueConfig = QUEUE_CONFIGS[activeQueue || 'all'];
+        const filterSignature = [
+            activeQueue,
+            String(searchFilterInput.value || '').trim().toLowerCase(),
+            String(categoryFilterSelect.value || '').trim().toLowerCase(),
+        ].join('|');
+        if (filterSignature !== lastQueueFilterSignature) {
+            visibleCaseLimit = CASE_PAGE_SIZE;
+            lastQueueFilterSignature = filterSignature;
+        }
+        const hasTextFilter = String(searchFilterInput.value || '').trim() !== ''
+            || String(categoryFilterSelect.value || '').trim() !== '';
         tableBody.setAttribute('aria-busy', 'false');
+        queueTitle.textContent = queueConfig.title;
         countBadge.textContent = rows.length + (rows.length === 1 ? ' case' : ' cases');
-        tableSubtitle.textContent = rows.length
-            ? 'Cases are grouped by the next action. Open a card to review the full report, notes, and proof.'
-            : 'No after-action review case matched the current filter.';
+        tableSubtitle.textContent = queueConfig.description;
         updateQueueShortcuts();
 
         if (!rows.length) {
-            tableBody.innerHTML = '<div class="ar-empty ar-queue-message"><i class="fas fa-magnifying-glass" aria-hidden="true"></i><strong>No matching review cases</strong><span>Try a different search, category, or work queue.</span><button type="button" class="ar-action" data-action="clear-filters"><i class="fas fa-filter-circle-xmark"></i> Clear filters</button></div>';
+            const emptyTitle = hasTextFilter ? 'No matching review cases' : queueConfig.emptyTitle;
+            const emptyDescription = hasTextFilter
+                ? 'Try a different search or category, or clear the filters.'
+                : queueConfig.emptyDescription;
+            tableBody.innerHTML = '<div class="ar-empty ar-queue-message"><i class="fas ' + escapeHtml(hasTextFilter ? 'fa-magnifying-glass' : queueConfig.icon) + '" aria-hidden="true"></i><strong>' + escapeHtml(emptyTitle) + '</strong><span>' + escapeHtml(emptyDescription) + '</span>' + (hasTextFilter ? '<button type="button" class="ar-action" data-action="clear-filters"><i class="fas fa-filter-circle-xmark"></i> Clear filters</button>' : '') + '</div>';
             return;
         }
 
-        const queueGroups = [
-            {
-                key: 'submitted',
-                kicker: 'Action required',
-                title: 'Needs your decision',
-                description: 'Verify these new responder submissions and record an admin decision.',
-                icon: 'fa-inbox',
-            },
-            {
-                key: 'revision_required',
-                kicker: 'Follow-up',
-                title: 'Waiting on responder revision',
-                description: 'These reports were returned with guidance and are waiting for resubmission.',
-                icon: 'fa-rotate-left',
-            },
-            {
-                key: 'approved',
-                kicker: 'Completed',
-                title: 'Approved reviews',
-                description: 'Review decisions completed by the admin team.',
-                icon: 'fa-circle-check',
-            },
-            {
-                key: 'no_report',
-                kicker: 'For visibility',
-                title: 'Feedback without a report',
-                description: 'Closed incidents with notes or feedback but no submitted after-action report.',
-                icon: 'fa-file-circle-question',
-            },
-        ];
-
-        tableBody.innerHTML = queueGroups
-            .map((group) => renderQueueSection(
-                group,
-                rows.filter((row) => rowReviewState(row).key === group.key),
-            ))
-            .join('');
+        const visibleRows = rows.slice(0, visibleCaseLimit);
+        const remaining = Math.max(0, rows.length - visibleRows.length);
+        const moreMarkup = remaining > 0
+            ? '<div class="ar-queue-more" role="status"><span>Showing ' + escapeHtml(visibleRows.length) + ' of ' + escapeHtml(rows.length) + ' cases</span><button type="button" class="ar-action" data-action="show-more-cases"><i class="fas fa-chevron-down" aria-hidden="true"></i> Show next ' + escapeHtml(Math.min(CASE_PAGE_SIZE, remaining)) + '</button></div>'
+            : '';
+        tableBody.innerHTML = '<div class="ar-case-grid" data-active-queue="' + escapeHtml(activeQueue || 'all') + '">' + visibleRows.map(renderCaseCard).join('') + '</div>' + moreMarkup;
     }
 
     function setModalLoading() {
@@ -1206,6 +1221,15 @@
             clearFilters();
             return;
         }
+        if (action === 'show-more-cases') {
+            const previousLimit = visibleCaseLimit;
+            visibleCaseLimit += CASE_PAGE_SIZE;
+            renderTable();
+            const moreButton = qs('[data-action="show-more-cases"]', tableBody);
+            const firstNewAction = qsa('.ar-case-card .ar-action.primary', tableBody)[previousLimit];
+            (moreButton || firstNewAction)?.focus();
+            return;
+        }
         const incidentId = Number(button.getAttribute('data-id') || 0);
         if (!Number.isInteger(incidentId) || incidentId < 1) return;
         if (action === 'send-crime-analytics') {
@@ -1223,7 +1247,7 @@
     function clearFilters() {
         searchFilterInput.value = '';
         categoryFilterSelect.value = '';
-        statusFilterSelect.value = '';
+        statusFilterSelect.value = 'submitted';
         renderTable();
     }
 
