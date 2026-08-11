@@ -49,27 +49,6 @@ $adminName = $_SESSION['user_name'] ?? 'Admin';
             margin-top: 0;
         }
 
-        .um-head {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            gap: 1rem;
-            margin-bottom: 1rem;
-        }
-
-        .um-head h1 {
-            margin: 0;
-            color: var(--um-text);
-            font-size: 1.65rem;
-            line-height: 1.2;
-        }
-
-        .um-head p {
-            margin: 0.35rem 0 0;
-            color: var(--um-muted);
-            font-size: 0.94rem;
-        }
-
         .um-add-btn {
             border: none;
             border-radius: 10px;
@@ -127,47 +106,6 @@ $adminName = $_SESSION['user_name'] ?? 'Admin';
             background: #e2e8f0;
             border-radius: 999px;
             padding: 0.28rem 0.62rem;
-        }
-
-        .um-table-wrap {
-            max-height: 560px;
-            overflow: auto;
-            border-top: 1px solid #edf2f7;
-        }
-
-        .um-table {
-            width: 100%;
-            min-width: 1580px;
-            border-collapse: collapse;
-        }
-
-        .um-table th,
-        .um-table td {
-            padding: 0.72rem 0.64rem;
-            border-bottom: 1px solid #eef2f7;
-            text-align: left;
-            vertical-align: middle;
-            font-size: 0.84rem;
-        }
-
-        .um-table th {
-            position: sticky;
-            top: 0;
-            z-index: 1;
-            background: #f8fafc;
-            color: #334155;
-            text-transform: uppercase;
-            letter-spacing: 0.04em;
-            font-size: 0.74rem;
-        }
-
-        .um-table tr:hover td {
-            background: #f8fbff;
-        }
-
-        .um-code {
-            font-weight: 700;
-            color: #0f172a;
         }
 
         .um-chip {
@@ -342,11 +280,10 @@ $adminName = $_SESSION['user_name'] ?? 'Admin';
             line-height: 1.35;
         }
 
-        .um-empty {
-            text-align: center;
-            color: var(--um-muted);
-            padding: 1.6rem;
-            font-size: 0.9rem;
+        .um-btn.um-unit-retry {
+            min-height: 44px;
+            justify-self: start;
+            margin-top: 0.2rem;
         }
 
         .um-modal {
@@ -394,8 +331,8 @@ $adminName = $_SESSION['user_name'] ?? 'Admin';
             background: #fff;
             color: #334155;
             border-radius: 8px;
-            width: 30px;
-            height: 30px;
+            width: 44px;
+            height: 44px;
             cursor: pointer;
         }
 
@@ -484,14 +421,6 @@ $adminName = $_SESSION['user_name'] ?? 'Admin';
             transform: translateY(0);
         }
 
-        html[data-theme="dark"] .um-head h1 {
-            color: #f8fafc;
-        }
-
-        html[data-theme="dark"] .um-head p {
-            color: #cbd5e1;
-        }
-
         html[data-theme="dark"] .um-toolbar {
             background: #0f172a;
             border-bottom-color: #334155;
@@ -511,29 +440,6 @@ $adminName = $_SESSION['user_name'] ?? 'Admin';
             background: #1e293b;
             color: #e2e8f0;
             border: 1px solid #334155;
-        }
-
-        html[data-theme="dark"] .um-table-wrap {
-            border-top-color: #334155;
-        }
-
-        html[data-theme="dark"] .um-table th {
-            background: #111827;
-            color: #cbd5e1;
-            border-bottom-color: #334155;
-        }
-
-        html[data-theme="dark"] .um-table td {
-            color: #e5e7eb;
-            border-bottom-color: #1f2937;
-        }
-
-        html[data-theme="dark"] .um-table tr:hover td {
-            background: #172033;
-        }
-
-        html[data-theme="dark"] .um-code {
-            color: #f8fafc;
         }
 
         html[data-theme="dark"] .um-action {
@@ -635,21 +541,918 @@ $adminName = $_SESSION['user_name'] ?? 'Admin';
             border-color: #1d4ed8;
         }
 
-        html[data-theme="dark"] .um-empty {
+        /* User Management directory — page-scoped people-first layout. */
+        *,
+        *::before,
+        *::after {
+            box-sizing: border-box;
+        }
+
+        .main-content {
+            padding:
+                calc(var(--app-header-height-1) + 1.25rem)
+                clamp(1rem, 3vw, 3rem)
+                4rem;
+            background:
+                radial-gradient(circle at 92% 2%, rgba(37, 99, 235, 0.12), transparent 30%),
+                radial-gradient(circle at 10% 32%, rgba(13, 148, 136, 0.08), transparent 28%),
+                #f3f7fb;
+        }
+
+        .um-shell {
+            width: min(100%, 1440px);
+            margin: 0 auto;
+            display: grid;
+            gap: 1.1rem;
+        }
+
+        .um-sr-only {
+            position: absolute !important;
+            width: 1px !important;
+            height: 1px !important;
+            padding: 0 !important;
+            margin: -1px !important;
+            overflow: hidden !important;
+            clip: rect(0, 0, 0, 0) !important;
+            white-space: nowrap !important;
+            border: 0 !important;
+        }
+
+        .um-hero {
+            position: relative;
+            isolation: isolate;
+            overflow: hidden;
+            min-height: 178px;
+            border-radius: 24px;
+            padding: clamp(1.35rem, 3vw, 2rem);
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 1.5rem;
+            color: #f8fafc;
+            background: linear-gradient(125deg, #0f172a 0%, #164e63 52%, #0f766e 100%);
+            box-shadow: 0 20px 44px rgba(15, 23, 42, 0.18);
+        }
+
+        .um-hero::after {
+            content: '';
+            position: absolute;
+            z-index: -1;
+            width: 320px;
+            height: 320px;
+            right: -90px;
+            top: -150px;
+            border-radius: 50%;
+            border: 52px solid rgba(255, 255, 255, 0.07);
+        }
+
+        .um-hero-copy {
+            max-width: 790px;
+        }
+
+        .um-eyebrow,
+        .um-section-kicker {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.45rem;
+            font-size: 0.74rem;
+            line-height: 1.2;
+            font-weight: 800;
+            letter-spacing: 0.1em;
+            text-transform: uppercase;
+        }
+
+        .um-eyebrow {
+            color: #99f6e4;
+        }
+
+        .um-section-kicker {
+            color: #0f766e;
+        }
+
+        .um-hero h1 {
+            margin: 0.55rem 0 0;
+            font-size: clamp(1.65rem, 3vw, 2.35rem);
+            line-height: 1.12;
+            letter-spacing: -0.035em;
+            color: #ffffff;
+        }
+
+        .um-hero p {
+            margin: 0.72rem 0 0;
+            color: rgba(248, 250, 252, 0.84);
+            font-size: 0.98rem;
+            line-height: 1.62;
+        }
+
+        .um-add-btn {
+            position: relative;
+            z-index: 1;
+            min-height: 48px;
+            border: 1px solid rgba(255, 255, 255, 0.34);
+            border-radius: 14px;
+            padding: 0.75rem 1rem;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 0.55rem;
+            background: #ffffff;
+            color: #0f172a;
+            box-shadow: 0 10px 25px rgba(2, 6, 23, 0.18);
+            font-size: 0.9rem;
+            font-weight: 800;
+        }
+
+        .um-add-btn:hover {
+            background: #ecfeff;
+            color: #115e59;
+            transform: translateY(-1px);
+        }
+
+        .um-add-btn:focus-visible,
+        .um-clear-btn:focus-visible,
+        .um-action:focus-visible,
+        .um-btn:focus-visible,
+        .um-close:focus-visible {
+            outline: 3px solid rgba(45, 212, 191, 0.45);
+            outline-offset: 2px;
+        }
+
+        .um-stats {
+            display: grid;
+            grid-template-columns: repeat(4, minmax(0, 1fr));
+            gap: 0.9rem;
+        }
+
+        .um-stat {
+            min-width: 0;
+            border: 1px solid #dbe5f0;
+            border-radius: 18px;
+            padding: 1rem;
+            display: flex;
+            align-items: flex-start;
+            gap: 0.85rem;
+            background: rgba(255, 255, 255, 0.96);
+            box-shadow: 0 10px 26px rgba(15, 23, 42, 0.07);
+        }
+
+        .um-stat-icon {
+            flex: 0 0 auto;
+            width: 42px;
+            height: 42px;
+            border-radius: 13px;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            color: #1d4ed8;
+            background: #dbeafe;
+        }
+
+        .um-stat-active .um-stat-icon {
+            color: #047857;
+            background: #d1fae5;
+        }
+
+        .um-stat-responder .um-stat-icon {
+            color: #b45309;
+            background: #fef3c7;
+        }
+
+        .um-stat-dispatcher .um-stat-icon {
+            color: #6d28d9;
+            background: #ede9fe;
+        }
+
+        .um-stat > div {
+            min-width: 0;
+        }
+
+        .um-stat > div > span {
+            display: block;
+            color: #64748b;
+            font-size: 0.74rem;
+            line-height: 1.3;
+            font-weight: 800;
+            letter-spacing: 0.06em;
+            text-transform: uppercase;
+        }
+
+        .um-stat strong {
+            display: block;
+            margin-top: 0.3rem;
+            color: #0f172a;
+            font-size: 1.75rem;
+            line-height: 1;
+        }
+
+        .um-stat small {
+            display: block;
+            margin-top: 0.42rem;
+            color: #64748b;
+            font-size: 0.77rem;
+            line-height: 1.35;
+        }
+
+        .um-directory.um-card {
+            border-radius: 22px;
+            border-color: #dbe5f0;
+            background: rgba(255, 255, 255, 0.98);
+            box-shadow: 0 16px 38px rgba(15, 23, 42, 0.08);
+        }
+
+        .um-directory-head {
+            padding: 1.2rem 1.25rem 1rem;
+            display: flex;
+            align-items: flex-start;
+            justify-content: space-between;
+            gap: 1rem;
+            border-bottom: 1px solid #e2e8f0;
+        }
+
+        .um-directory-head h2 {
+            margin: 0.34rem 0 0;
+            color: #0f172a;
+            font-size: 1.18rem;
+            line-height: 1.35;
+        }
+
+        .um-directory-head p {
+            margin: 0.35rem 0 0;
+            color: #64748b;
+            font-size: 0.88rem;
+            line-height: 1.55;
+        }
+
+        .um-summary {
+            flex: 0 0 auto;
+            padding: 0.42rem 0.75rem;
+            color: #334155;
+            background: #e2e8f0;
+            border: 1px solid #cbd5e1;
+        }
+
+        .um-toolbar {
+            padding: 0.95rem 1.1rem;
+            grid-template-columns: minmax(220px, 1.5fr) repeat(4, minmax(125px, 0.55fr)) auto;
+            align-items: end;
+            gap: 0.7rem;
+            background: #f8fafc;
+        }
+
+        .um-search-wrap {
+            position: relative;
+            min-width: 0;
+        }
+
+        .um-search-wrap > i {
+            position: absolute;
+            left: 0.88rem;
+            top: 50%;
+            transform: translateY(-50%);
+            color: #64748b;
+            pointer-events: none;
+        }
+
+        .um-search {
+            min-height: 44px;
+            padding: 0.7rem 0.82rem 0.7rem 2.55rem;
+            border-radius: 12px;
+            border-color: #cbd5e1;
+        }
+
+        .um-filter-field {
+            min-width: 0;
+            display: grid;
+            gap: 0.32rem;
+        }
+
+        .um-filter-field label {
+            color: #475569;
+            font-size: 0.72rem;
+            font-weight: 800;
+            letter-spacing: 0.04em;
+            text-transform: uppercase;
+        }
+
+        .um-filter-field .um-select {
+            min-height: 44px;
+            padding: 0.62rem 0.7rem;
+            border-radius: 12px;
+            border-color: #cbd5e1;
+            font-size: 0.84rem;
+        }
+
+        .um-clear-btn {
+            min-height: 44px;
+            border: 1px solid #cbd5e1;
+            border-radius: 12px;
+            padding: 0.62rem 0.78rem;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 0.42rem;
+            color: #334155;
+            background: #ffffff;
+            font-weight: 800;
+            cursor: pointer;
+        }
+
+        .um-clear-btn:hover {
+            border-color: #94a3b8;
+            background: #f1f5f9;
+        }
+
+        .um-people-grid {
+            min-height: 230px;
+            padding: 1.1rem;
+            display: grid;
+            grid-template-columns: repeat(3, minmax(0, 1fr));
+            align-items: start;
+            gap: 0.95rem;
+            background: #f8fbff;
+        }
+
+        .um-person-card {
+            min-width: 0;
+            height: 100%;
+            border: 1px solid #dbe5f0;
+            border-radius: 18px;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+            background: #ffffff;
+            box-shadow: 0 8px 22px rgba(15, 23, 42, 0.055);
+            transition: border-color 0.2s ease, box-shadow 0.2s ease, transform 0.2s ease;
+        }
+
+        .um-person-card:hover {
+            border-color: #a5b4fc;
+            box-shadow: 0 14px 30px rgba(15, 23, 42, 0.1);
+            transform: translateY(-2px);
+        }
+
+        .um-person-card.is-inactive {
+            background: #fbfcfe;
+        }
+
+        .um-person-main {
+            padding: 1rem;
+            display: grid;
+            gap: 0.9rem;
+            flex: 1 1 auto;
+        }
+
+        .um-person-head {
+            display: grid;
+            grid-template-columns: auto minmax(0, 1fr) auto;
+            align-items: start;
+            gap: 0.72rem;
+        }
+
+        .um-avatar {
+            width: 46px;
+            height: 46px;
+            border-radius: 15px;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            color: #0f766e;
+            background: linear-gradient(145deg, #ccfbf1, #cffafe);
+            border: 1px solid #99f6e4;
+            font-size: 0.88rem;
+            font-weight: 900;
+            letter-spacing: 0.03em;
+        }
+
+        .um-person-card[data-role="dispatcher"] .um-avatar {
+            color: #3730a3;
+            background: linear-gradient(145deg, #e0e7ff, #ede9fe);
+            border-color: #c7d2fe;
+        }
+
+        .um-person-identity {
+            min-width: 0;
+        }
+
+        .um-person-identity h3 {
+            margin: 0;
+            color: #0f172a;
+            font-size: 1rem;
+            line-height: 1.35;
+            overflow-wrap: anywhere;
+        }
+
+        .um-person-role {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.36rem;
+            margin-top: 0.26rem;
+            color: #64748b;
+            font-size: 0.78rem;
+            font-weight: 700;
+        }
+
+        .um-chip {
+            gap: 0.35rem;
+            padding: 0.3rem 0.58rem;
+            text-transform: none;
+            white-space: nowrap;
+        }
+
+        .um-chip i {
+            font-size: 0.52rem;
+        }
+
+        .um-contact-list {
+            display: grid;
+            gap: 0.48rem;
+        }
+
+        .um-contact-link,
+        .um-contact-empty {
+            min-width: 0;
+            display: grid;
+            grid-template-columns: 22px minmax(0, 1fr);
+            align-items: center;
+            gap: 0.45rem;
+            color: #475569;
+            font-size: 0.82rem;
+            text-decoration: none;
+        }
+
+        .um-contact-link i,
+        .um-contact-empty i {
+            color: #64748b;
+            text-align: center;
+        }
+
+        .um-contact-link span,
+        .um-contact-empty span {
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+
+        .um-contact-link:hover {
+            color: #0f766e;
+            text-decoration: underline;
+        }
+
+        .um-assignment {
+            border: 1px solid #e2e8f0;
+            border-radius: 14px;
+            padding: 0.75rem;
+            display: grid;
+            gap: 0.58rem;
+            background: #f8fafc;
+        }
+
+        .um-assignment-head {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 0.6rem;
+        }
+
+        .um-assignment-head span:first-child {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.4rem;
+            color: #334155;
+            font-size: 0.78rem;
+            font-weight: 800;
+        }
+
+        .um-unit-state {
+            color: #64748b;
+            font-size: 0.7rem;
+            font-weight: 800;
+        }
+
+        .um-assignment-grid {
+            display: grid;
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+            gap: 0.55rem;
+        }
+
+        .um-assignment-item {
+            min-width: 0;
+            display: grid;
+            gap: 0.16rem;
+        }
+
+        .um-assignment-item span {
+            color: #64748b;
+            font-size: 0.67rem;
+            font-weight: 800;
+            letter-spacing: 0.04em;
+            text-transform: uppercase;
+        }
+
+        .um-assignment-item strong {
+            color: #1e293b;
+            font-size: 0.8rem;
+            font-weight: 750;
+            overflow-wrap: anywhere;
+        }
+
+        .um-person-note {
+            margin: 0;
+            display: flex;
+            align-items: flex-start;
+            gap: 0.45rem;
+            color: #64748b;
+            font-size: 0.77rem;
+            line-height: 1.45;
+        }
+
+        .um-person-note i {
+            margin-top: 0.15rem;
+        }
+
+        .um-person-actions {
+            padding: 0.72rem;
+            border-top: 1px solid #e2e8f0;
+            display: flex;
+            align-items: center;
+            gap: 0.45rem;
+            flex-wrap: wrap;
+            background: #fbfdff;
+        }
+
+        .um-action {
+            width: auto;
+            min-height: 44px;
+            height: auto;
+            padding: 0.48rem 0.65rem;
+            gap: 0.4rem;
+            border-radius: 10px;
+            color: #334155;
+            font-size: 0.76rem;
+            font-weight: 800;
+        }
+
+        .um-action.view {
+            color: #1d4ed8;
+            border-color: #bfdbfe;
+            background: #eff6ff;
+        }
+
+        .um-action.invite {
+            color: #0f766e;
+            border-color: #99f6e4;
+            background: #f0fdfa;
+        }
+
+        .um-action.delete {
+            margin-left: auto;
+            color: #b91c1c;
+        }
+
+        .um-action:disabled,
+        .um-btn:disabled {
+            opacity: 0.55;
+            cursor: wait;
+            transform: none;
+        }
+
+        .um-directory-state {
+            grid-column: 1 / -1;
+            min-height: 210px;
+            padding: 2rem 1rem;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            text-align: center;
+            color: #64748b;
+        }
+
+        .um-directory-state > i {
+            width: 54px;
+            height: 54px;
+            border-radius: 18px;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            color: #1d4ed8;
+            background: #dbeafe;
+            font-size: 1.25rem;
+        }
+
+        .um-directory-state h3 {
+            margin: 0.85rem 0 0;
+            color: #1e293b;
+            font-size: 1rem;
+        }
+
+        .um-directory-state p {
+            max-width: 440px;
+            margin: 0.38rem 0 0;
+            font-size: 0.86rem;
+            line-height: 1.55;
+        }
+
+        .um-directory-state .um-btn {
+            margin-top: 0.85rem;
+        }
+
+        .um-modal {
+            background: rgba(2, 6, 23, 0.62);
+            backdrop-filter: blur(4px);
+        }
+
+        .um-modal-card {
+            width: min(680px, 100%);
+            max-height: calc(100vh - 2rem);
+            max-height: calc(100dvh - 2rem);
+            overflow: auto;
+            border-radius: 22px;
+        }
+
+        .um-modal-head {
+            position: sticky;
+            top: 0;
+            z-index: 2;
+            padding: 1rem 1.15rem;
+        }
+
+        .um-modal-head h2 {
+            margin: 0.25rem 0 0;
+            font-size: 1.15rem;
+        }
+
+        .um-modal-body {
+            padding: 1.15rem;
+        }
+
+        .um-form-grid {
+            gap: 0.9rem;
+        }
+
+        .um-field label {
+            text-transform: none;
+            letter-spacing: 0;
+            font-size: 0.8rem;
+        }
+
+        .um-input,
+        .um-select {
+            min-height: 44px;
+            border-radius: 11px;
+            padding: 0.62rem 0.7rem;
+        }
+
+        .um-modal-foot {
+            position: sticky;
+            bottom: 0;
+            z-index: 2;
+            padding: 0.85rem 1.15rem;
+        }
+
+        .um-btn {
+            min-height: 44px;
+            border-radius: 11px;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 0.4rem;
+        }
+
+        .um-details-card {
+            width: min(720px, 100%);
+        }
+
+        .um-detail-profile {
+            display: grid;
+            grid-template-columns: auto minmax(0, 1fr);
+            align-items: center;
+            gap: 0.9rem;
+            padding: 0.95rem;
+            border: 1px solid #dbe5f0;
+            border-radius: 17px;
+            background: #f8fbff;
+        }
+
+        .um-detail-profile .um-avatar {
+            width: 58px;
+            height: 58px;
+            font-size: 1rem;
+        }
+
+        .um-detail-profile[data-role="dispatcher"] .um-avatar {
+            color: #3730a3;
+            background: linear-gradient(145deg, #e0e7ff, #ede9fe);
+            border-color: #c7d2fe;
+        }
+
+        .um-input[readonly] {
+            color: #475569;
+            background: #f1f5f9;
+            cursor: default;
+        }
+
+        .um-detail-profile h3 {
+            margin: 0;
+            color: #0f172a;
+            font-size: 1.2rem;
+        }
+
+        .um-detail-profile p {
+            margin: 0.3rem 0 0;
+            color: #64748b;
+            font-size: 0.84rem;
+        }
+
+        .um-detail-badges {
+            margin-top: 0.55rem;
+            display: flex;
+            gap: 0.42rem;
+            flex-wrap: wrap;
+        }
+
+        .um-detail-grid {
+            margin-top: 0.9rem;
+            display: grid;
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+            gap: 0.68rem;
+        }
+
+        .um-detail-item {
+            min-width: 0;
+            padding: 0.78rem;
+            border: 1px solid #e2e8f0;
+            border-radius: 13px;
+            display: grid;
+            gap: 0.3rem;
+            background: #ffffff;
+        }
+
+        .um-detail-item span {
+            color: #64748b;
+            font-size: 0.69rem;
+            font-weight: 800;
+            letter-spacing: 0.05em;
+            text-transform: uppercase;
+        }
+
+        .um-detail-item strong,
+        .um-detail-item a {
+            color: #1e293b;
+            font-size: 0.85rem;
+            font-weight: 700;
+            overflow-wrap: anywhere;
+            text-decoration: none;
+        }
+
+        .um-detail-item a:hover {
+            color: #0f766e;
+            text-decoration: underline;
+        }
+
+        .um-details-actions {
+            flex-wrap: wrap;
+        }
+
+        .um-toast {
+            bottom: 1.25rem;
+            right: 1.25rem;
+            max-width: min(420px, calc(100vw - 2rem));
+            padding: 0.82rem 1rem;
+            border-radius: 13px;
+        }
+
+        html[data-theme="dark"] .main-content {
+            background:
+                radial-gradient(circle at 92% 2%, rgba(37, 99, 235, 0.16), transparent 30%),
+                radial-gradient(circle at 10% 32%, rgba(13, 148, 136, 0.1), transparent 28%),
+                #08111f;
+        }
+
+        html[data-theme="dark"] .um-stat,
+        html[data-theme="dark"] .um-directory.um-card,
+        html[data-theme="dark"] .um-person-card,
+        html[data-theme="dark"] .um-modal-card {
+            color: #e2e8f0;
+            border-color: #334155;
+            background: linear-gradient(180deg, rgba(15, 23, 42, 0.98), rgba(2, 6, 23, 0.98));
+            box-shadow: 0 16px 36px rgba(2, 6, 23, 0.34);
+        }
+
+        html[data-theme="dark"] .um-stat strong,
+        html[data-theme="dark"] .um-directory-head h2,
+        html[data-theme="dark"] .um-person-identity h3,
+        html[data-theme="dark"] .um-assignment-item strong,
+        html[data-theme="dark"] .um-directory-state h3,
+        html[data-theme="dark"] .um-detail-profile h3,
+        html[data-theme="dark"] .um-detail-item strong,
+        html[data-theme="dark"] .um-detail-item a {
+            color: #f8fafc;
+        }
+
+        html[data-theme="dark"] .um-section-kicker {
+            color: #5eead4;
+        }
+
+        html[data-theme="dark"] .um-directory-head,
+        html[data-theme="dark"] .um-person-actions {
+            border-color: #334155;
+        }
+
+        html[data-theme="dark"] .um-toolbar,
+        html[data-theme="dark"] .um-people-grid,
+        html[data-theme="dark"] .um-person-actions,
+        html[data-theme="dark"] .um-assignment,
+        html[data-theme="dark"] .um-detail-profile {
+            color: #e2e8f0;
+            border-color: #334155;
+            background: #0b1323;
+        }
+
+        html[data-theme="dark"] .um-search,
+        html[data-theme="dark"] .um-filter-field .um-select,
+        html[data-theme="dark"] .um-clear-btn,
+        html[data-theme="dark"] .um-detail-item {
+            color: #f8fafc;
+            border-color: #475569;
+            background: #0f172a;
+        }
+
+        html[data-theme="dark"] .um-input[readonly] {
+            color: #cbd5e1;
+            background: #1e293b;
+        }
+
+        html[data-theme="dark"] .um-filter-field label,
+        html[data-theme="dark"] .um-stat > div > span,
+        html[data-theme="dark"] .um-stat small,
+        html[data-theme="dark"] .um-directory-head p,
+        html[data-theme="dark"] .um-person-role,
+        html[data-theme="dark"] .um-contact-link,
+        html[data-theme="dark"] .um-contact-empty,
+        html[data-theme="dark"] .um-assignment-item span,
+        html[data-theme="dark"] .um-person-note,
+        html[data-theme="dark"] .um-directory-state,
+        html[data-theme="dark"] .um-detail-profile p,
+        html[data-theme="dark"] .um-detail-item span {
+            color: #94a3b8;
+        }
+
+        html[data-theme="dark"] .um-assignment-head span:first-child,
+        html[data-theme="dark"] .um-action {
             color: #cbd5e1;
         }
 
-        @media (max-width: 880px) {
+        html[data-theme="dark"] .um-summary {
+            color: #e2e8f0;
+            border-color: #475569;
+            background: #1e293b;
+        }
+
+        html[data-theme="dark"] .um-action.view {
+            color: #bfdbfe;
+            border-color: #1e40af;
+            background: #172554;
+        }
+
+        html[data-theme="dark"] .um-action.invite {
+            color: #99f6e4;
+            border-color: #115e59;
+            background: #042f2e;
+        }
+
+        html[data-theme="dark"] .um-action.delete {
+            color: #fecaca;
+        }
+
+        @media (max-width: 1220px) {
             .um-toolbar {
-                grid-template-columns: 1fr;
+                grid-template-columns: repeat(4, minmax(0, 1fr));
             }
 
-            .um-head {
-                flex-direction: column;
-                align-items: flex-start;
+            .um-search-wrap {
+                grid-column: span 3;
             }
 
-            .um-add-btn {
+            .um-people-grid {
+                grid-template-columns: repeat(2, minmax(0, 1fr));
+            }
+        }
+
+        @media (max-width: 920px) {
+            .um-stats {
+                grid-template-columns: repeat(2, minmax(0, 1fr));
+            }
+
+            .um-toolbar {
+                grid-template-columns: repeat(2, minmax(0, 1fr));
+            }
+
+            .um-search-wrap {
+                grid-column: 1 / -1;
+            }
+
+            .um-clear-btn {
                 width: 100%;
             }
         }
@@ -657,27 +1460,123 @@ $adminName = $_SESSION['user_name'] ?? 'Admin';
         @media (max-width: 680px) {
             .main-content {
                 padding:
-                    calc(var(--app-header-height-mobile-1) + 1rem)
-                    0.75rem
+                    calc(var(--app-header-height-mobile-1) + 0.85rem)
+                    0.7rem
                     1.5rem;
             }
 
-            .um-head h1 {
-                font-size: 1.35rem;
+            .um-shell {
+                gap: 0.8rem;
             }
 
-            .um-head p {
-                font-size: 0.86rem;
+            .um-hero {
+                min-height: 0;
+                padding: 1.15rem;
+                border-radius: 19px;
+                flex-direction: column;
+                align-items: stretch;
             }
 
-            .um-form-grid {
+            .um-add-btn {
+                width: 100%;
+            }
+
+            .um-stats {
+                grid-template-columns: 1fr 1fr;
+                gap: 0.65rem;
+            }
+
+            .um-stat {
+                padding: 0.8rem;
+                gap: 0.62rem;
+            }
+
+            .um-stat-icon {
+                width: 36px;
+                height: 36px;
+                border-radius: 11px;
+            }
+
+            .um-stat strong {
+                font-size: 1.45rem;
+            }
+
+            .um-stat small {
+                display: none;
+            }
+
+            .um-directory-head {
+                padding: 1rem;
+                flex-direction: column;
+            }
+
+            .um-toolbar {
+                padding: 0.8rem;
                 grid-template-columns: 1fr;
             }
 
-            .um-table th,
-            .um-table td {
-                font-size: 0.78rem;
-                padding: 0.62rem 0.5rem;
+            .um-search-wrap {
+                grid-column: auto;
+            }
+
+            .um-people-grid {
+                padding: 0.75rem;
+                grid-template-columns: 1fr;
+            }
+
+            .um-person-card:hover {
+                transform: none;
+            }
+
+            .um-action {
+                flex: 1 1 auto;
+            }
+
+            .um-action.delete {
+                margin-left: 0;
+                flex: 0 0 auto;
+            }
+
+            .um-modal {
+                padding: 0.5rem;
+                align-items: flex-end;
+            }
+
+            .um-modal-card {
+                width: 100%;
+                max-height: calc(100vh - 1rem);
+                max-height: calc(100dvh - 1rem);
+                border-radius: 20px 20px 12px 12px;
+            }
+
+            .um-form-grid,
+            .um-detail-grid {
+                grid-template-columns: 1fr;
+            }
+
+            .um-field.full {
+                grid-column: auto;
+            }
+
+            .um-modal-foot,
+            .um-details-actions {
+                display: grid;
+                grid-template-columns: 1fr;
+            }
+
+            .um-details-actions .um-btn {
+                width: 100%;
+            }
+        }
+
+        @media (prefers-reduced-motion: reduce) {
+            .um-add-btn,
+            .um-action,
+            .um-person-card,
+            .um-btn,
+            .um-toast {
+                transition: none !important;
+                animation: none !important;
             }
         }
     </style>
@@ -686,58 +1585,109 @@ $adminName = $_SESSION['user_name'] ?? 'Admin';
     <?php include $rootDir . '/includes/sidebar.php'; ?>
     <?php include $rootDir . '/includes/admin-header.php'; ?>
 
-    <div class="main-content">
+    <main class="main-content">
         <div class="main-container um-shell">
-            <section class="um-head">
-                <div>
-                    <h1>User Management</h1>
-                    <p>Hi <?php echo htmlspecialchars($adminName); ?>. Manage dispatcher and responder accounts in one panel.</p>
+            <section class="um-hero" aria-labelledby="userManagementTitle">
+                <div class="um-hero-copy">
+                    <span class="um-eyebrow"><i class="fas fa-shield-halved" aria-hidden="true"></i> Account operations</span>
+                    <h1 id="userManagementTitle">People &amp; access</h1>
+                    <p>Hi <?php echo htmlspecialchars($adminName); ?>. Keep dispatchers ready, responders assigned, and account access up to date.</p>
                 </div>
                 <button type="button" class="um-add-btn" id="openAddUserBtn">
-                    <i class="fas fa-user-plus"></i> Add User
+                    <i class="fas fa-user-plus" aria-hidden="true"></i>
+                    <span>Add team member</span>
                 </button>
             </section>
 
-            <section class="um-card">
-                <div class="um-toolbar">
-                    <input
-                        type="text"
-                        id="userSearchInput"
-                        class="um-search"
-                        placeholder="Search name, email, contact, role, or department...">
-                    <span class="um-summary" id="userCountBadge">0 account(s)</span>
+            <section class="um-stats" aria-label="Account overview" aria-live="polite">
+                <article class="um-stat um-stat-total">
+                    <span class="um-stat-icon"><i class="fas fa-users" aria-hidden="true"></i></span>
+                    <div><span>Team accounts</span><strong id="statTotal">0</strong><small>Dispatchers and responders</small></div>
+                </article>
+                <article class="um-stat um-stat-active">
+                    <span class="um-stat-icon"><i class="fas fa-circle-check" aria-hidden="true"></i></span>
+                    <div><span>Active access</span><strong id="statActive">0</strong><small id="statActiveMeta">No accounts loaded</small></div>
+                </article>
+                <article class="um-stat um-stat-responder">
+                    <span class="um-stat-icon"><i class="fas fa-truck-medical" aria-hidden="true"></i></span>
+                    <div><span>Responders</span><strong id="statResponders">0</strong><small id="statResponderMeta">0 assigned to units</small></div>
+                </article>
+                <article class="um-stat um-stat-dispatcher">
+                    <span class="um-stat-icon"><i class="fas fa-headset" aria-hidden="true"></i></span>
+                    <div><span>Dispatchers</span><strong id="statDispatchers">0</strong><small>Command and coordination</small></div>
+                </article>
+            </section>
+
+            <section class="um-directory um-card" aria-labelledby="teamDirectoryTitle">
+                <header class="um-directory-head">
+                    <div>
+                        <span class="um-section-kicker">Team directory</span>
+                        <h2 id="teamDirectoryTitle">Find and manage a team member</h2>
+                        <p>Contact details, access state, and responder assignments are grouped per person.</p>
+                    </div>
+                    <span class="um-summary" id="userCountBadge" aria-live="polite">0 people</span>
+                </header>
+
+                <div class="um-toolbar" role="search" aria-label="Filter team members">
+                    <div class="um-search-wrap">
+                        <i class="fas fa-magnifying-glass" aria-hidden="true"></i>
+                        <label class="um-sr-only" for="userSearchInput">Search team members</label>
+                        <input
+                            type="search"
+                            id="userSearchInput"
+                            class="um-search"
+                            autocomplete="off"
+                            placeholder="Search by name, email, phone, unit, or plate...">
+                    </div>
+                    <div class="um-filter-field">
+                        <label for="userRoleFilter">Role</label>
+                        <select id="userRoleFilter" class="um-select">
+                            <option value="all">All roles</option>
+                            <option value="dispatcher">Dispatchers</option>
+                            <option value="responder">Responders</option>
+                        </select>
+                    </div>
+                    <div class="um-filter-field">
+                        <label for="userStatusFilter">Access</label>
+                        <select id="userStatusFilter" class="um-select">
+                            <option value="all">Any status</option>
+                            <option value="active">Active</option>
+                            <option value="inactive">Inactive</option>
+                        </select>
+                    </div>
+                    <div class="um-filter-field">
+                        <label for="userDepartmentFilter">Department</label>
+                        <select id="userDepartmentFilter" class="um-select">
+                            <option value="all">All departments</option>
+                            <option value="medical">Medical</option>
+                            <option value="police">Police</option>
+                            <option value="fire">Fire</option>
+                            <option value="unassigned">Not assigned</option>
+                        </select>
+                    </div>
+                    <div class="um-filter-field">
+                        <label for="userSortSelect">Order</label>
+                        <select id="userSortSelect" class="um-select">
+                            <option value="newest">Newest first</option>
+                            <option value="name">Name A–Z</option>
+                            <option value="readiness">Active first</option>
+                        </select>
+                    </div>
+                    <button type="button" class="um-clear-btn" id="clearUserFiltersBtn">
+                        <i class="fas fa-rotate-left" aria-hidden="true"></i>
+                        <span>Clear</span>
+                    </button>
                 </div>
 
-                <div class="um-table-wrap">
-                    <table class="um-table">
-                        <thead>
-                            <tr>
-                                <th>No.</th>
-                                <th>Name</th>
-                                <th>Email</th>
-                                <th>Contact</th>
-                                <th>Role</th>
-                                <th>Department</th>
-                                <th>Status</th>
-                                <th>Unit Code</th>
-                                <th>Unit Type</th>
-                                <th>Vehicle Plate</th>
-                                <th>Unit Status</th>
-                                <th>Created</th>
-                                <th>Actions</th>
-                            </tr>
-                        </thead>
-                        <tbody id="usersTableBody"></tbody>
-                    </table>
-                </div>
+                <div class="um-people-grid" id="usersTableBody" aria-live="polite" aria-busy="true"></div>
             </section>
         </div>
-    </div>
+    </main>
 
     <?php include $rootDir . '/includes/admin-footer.php'; ?>
 
     <div class="um-modal" id="addUserModal" aria-hidden="true">
-        <div class="um-modal-card">
+        <div class="um-modal-card" role="dialog" aria-modal="true" aria-labelledby="accountModalTitle" tabindex="-1">
             <div class="um-modal-head">
                 <h2 id="accountModalTitle">Add New Account</h2>
                 <button type="button" class="um-close" id="closeAddUserModal" aria-label="Close">
@@ -791,22 +1741,25 @@ $adminName = $_SESSION['user_name'] ?? 'Admin';
                                 <option value="">Select available unit</option>
                             </select>
                             <div class="um-field-note" id="newUserUnitHint">Only available units are listed.</div>
+                            <button type="button" class="um-btn um-unit-retry" id="retryAvailableUnitsBtn" hidden>
+                                <i class="fas fa-rotate" aria-hidden="true"></i> Retry unit check
+                            </button>
                         </div>
                         <div class="um-field" id="newUserUnitCodeField" hidden>
                             <label for="newUserUnitCode">Unit Code</label>
-                            <input id="newUserUnitCode" class="um-input" maxlength="50" placeholder="Select a unit">
+                            <input id="newUserUnitCode" class="um-input" maxlength="50" placeholder="Select a unit" readonly aria-readonly="true">
                         </div>
                         <div class="um-field" id="newUserPlateField" hidden>
                             <label for="newUserPlateNumber">Plate Number</label>
-                            <input id="newUserPlateNumber" class="um-input" maxlength="50" placeholder="Select a unit">
+                            <input id="newUserPlateNumber" class="um-input" maxlength="50" placeholder="Select a unit" readonly aria-readonly="true">
                         </div>
                         <div class="um-field" id="newUserUnitTypeField" hidden>
                             <label for="newUserUnitType">Unit Type</label>
-                            <input id="newUserUnitType" class="um-input" maxlength="50" placeholder="Select a unit">
+                            <input id="newUserUnitType" class="um-input" maxlength="50" placeholder="Select a unit" readonly aria-readonly="true">
                         </div>
                         <div class="um-field" id="newUserUnitStatusField" hidden>
                             <label for="newUserUnitStatus">Unit Status</label>
-                            <input id="newUserUnitStatus" class="um-input" maxlength="50" placeholder="Select a unit">
+                            <input id="newUserUnitStatus" class="um-input" maxlength="50" placeholder="Select a unit" readonly aria-readonly="true">
                         </div>
                         <div class="um-field">
                             <label for="newUserStatus">Status</label>
@@ -834,7 +1787,31 @@ $adminName = $_SESSION['user_name'] ?? 'Admin';
         </div>
     </div>
 
-    <div class="um-toast" id="userToast"></div>
+    <div class="um-modal" id="userDetailsModal" aria-hidden="true">
+        <div class="um-modal-card um-details-card" role="dialog" aria-modal="true" aria-labelledby="userDetailsTitle" tabindex="-1">
+            <div class="um-modal-head">
+                <div>
+                    <span class="um-section-kicker">Team member</span>
+                    <h2 id="userDetailsTitle">Account details</h2>
+                </div>
+                <button type="button" class="um-close" id="closeUserDetailsModal" aria-label="Close account details">
+                    <i class="fas fa-times" aria-hidden="true"></i>
+                </button>
+            </div>
+            <div class="um-modal-body" id="userDetailsBody"></div>
+            <div class="um-modal-foot um-details-actions">
+                <button type="button" class="um-btn" id="detailsCloseBtn">Close</button>
+                <button type="button" class="um-btn" id="detailsInviteBtn" hidden>
+                    <i class="fas fa-envelope" aria-hidden="true"></i> Resend invitation
+                </button>
+                <button type="button" class="um-btn primary" id="detailsEditBtn">
+                    <i class="fas fa-pen" aria-hidden="true"></i> Edit account
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <div class="um-toast" id="userToast" role="status" aria-live="polite" aria-atomic="true"></div>
 
     <script>
         const adminUsersApiUrl = 'api/admin_users.php';
@@ -844,11 +1821,23 @@ $adminName = $_SESSION['user_name'] ?? 'Admin';
         let availableUnits = [];
         let availableUnitsLoaded = false;
         let availableUnitsLoading = false;
+        let availableUnitsError = '';
         let editingId = null;
 
         const usersTableBody = document.getElementById('usersTableBody');
         const userCountBadge = document.getElementById('userCountBadge');
         const userSearchInput = document.getElementById('userSearchInput');
+        const userRoleFilter = document.getElementById('userRoleFilter');
+        const userStatusFilter = document.getElementById('userStatusFilter');
+        const userDepartmentFilter = document.getElementById('userDepartmentFilter');
+        const userSortSelect = document.getElementById('userSortSelect');
+        const clearUserFiltersBtn = document.getElementById('clearUserFiltersBtn');
+        const statTotal = document.getElementById('statTotal');
+        const statActive = document.getElementById('statActive');
+        const statActiveMeta = document.getElementById('statActiveMeta');
+        const statResponders = document.getElementById('statResponders');
+        const statResponderMeta = document.getElementById('statResponderMeta');
+        const statDispatchers = document.getElementById('statDispatchers');
         const addUserModal = document.getElementById('addUserModal');
         const accountModalTitle = document.getElementById('accountModalTitle');
         const openAddUserBtn = document.getElementById('openAddUserBtn');
@@ -865,6 +1854,7 @@ $adminName = $_SESSION['user_name'] ?? 'Admin';
         const newUserUnitField = document.getElementById('newUserUnitField');
         const newUserAssignedUnit = document.getElementById('newUserAssignedUnit');
         const newUserUnitHint = document.getElementById('newUserUnitHint');
+        const retryAvailableUnitsBtn = document.getElementById('retryAvailableUnitsBtn');
         const newUserUnitCodeField = document.getElementById('newUserUnitCodeField');
         const newUserUnitCode = document.getElementById('newUserUnitCode');
         const newUserPlateField = document.getElementById('newUserPlateField');
@@ -878,9 +1868,20 @@ $adminName = $_SESSION['user_name'] ?? 'Admin';
         const passwordRequirements = document.getElementById('passwordRequirements');
         const userToast = document.getElementById('userToast');
         const addUserSubmitBtn = document.getElementById('accountModalSubmitBtn');
+        const userDetailsModal = document.getElementById('userDetailsModal');
+        const userDetailsTitle = document.getElementById('userDetailsTitle');
+        const userDetailsBody = document.getElementById('userDetailsBody');
+        const closeUserDetailsModal = document.getElementById('closeUserDetailsModal');
+        const detailsCloseBtn = document.getElementById('detailsCloseBtn');
+        const detailsInviteBtn = document.getElementById('detailsInviteBtn');
+        const detailsEditBtn = document.getElementById('detailsEditBtn');
+        let detailsUserId = null;
+        let accountFormBaseline = '';
         const passwordRuleElements = passwordRequirements
             ? Array.from(passwordRequirements.querySelectorAll('[data-rule]'))
             : [];
+        const modalReturnFocus = new WeakMap();
+        const modalBackgroundState = new Map();
 
         function escapeHtml(value) {
             return String(value)
@@ -898,6 +1899,81 @@ $adminName = $_SESSION['user_name'] ?? 'Admin';
             showToast._timer = window.setTimeout(() => {
                 userToast.classList.remove('show');
             }, 2000);
+        }
+
+        function serializeAccountForm() {
+            return JSON.stringify({
+                name: newUserName.value,
+                email: newUserEmail.value,
+                contact: newUserContact.value,
+                password: newUserPassword.value,
+                role: newUserRole.value,
+                department: newUserDepartment.value,
+                status: newUserStatus.value,
+                assignedUnit: newUserAssignedUnit
+                    ? (newUserAssignedUnit.dataset.pendingValue || newUserAssignedUnit.value)
+                    : ''
+            });
+        }
+
+        function formHasUnsavedChanges() {
+            return addUserModal.classList.contains('show') && serializeAccountForm() !== accountFormBaseline;
+        }
+
+        function focusableElements(modal) {
+            return Array.from(modal.querySelectorAll(
+                'button:not([disabled]):not([hidden]), input:not([disabled]):not([type="hidden"]), select:not([disabled]), textarea:not([disabled]), a[href], [tabindex]:not([tabindex="-1"])'
+            )).filter((element) => !element.closest('[hidden]'));
+        }
+
+        function setModalBackgroundInert(active) {
+            if (active) {
+                Array.from(document.body.children).forEach((element) => {
+                    if (
+                        element === addUserModal ||
+                        element === userDetailsModal ||
+                        element === userToast ||
+                        element.matches('script')
+                    ) {
+                        return;
+                    }
+                    if (!modalBackgroundState.has(element)) {
+                        modalBackgroundState.set(element, Boolean(element.inert));
+                    }
+                    element.inert = true;
+                });
+                return;
+            }
+            modalBackgroundState.forEach((wasInert, element) => {
+                if (element.isConnected) element.inert = wasInert;
+            });
+            modalBackgroundState.clear();
+        }
+
+        function showModal(modal, preferredFocus) {
+            modalReturnFocus.set(modal, document.activeElement instanceof HTMLElement ? document.activeElement : null);
+            modal.classList.add('show');
+            modal.setAttribute('aria-hidden', 'false');
+            document.body.style.overflow = 'hidden';
+            setModalBackgroundInert(true);
+            window.setTimeout(() => {
+                const target = preferredFocus || focusableElements(modal)[0] || modal.querySelector('[role="dialog"]');
+                if (target && typeof target.focus === 'function') target.focus();
+            }, 0);
+        }
+
+        function hideModal(modal) {
+            modal.classList.remove('show');
+            modal.setAttribute('aria-hidden', 'true');
+            if (!document.querySelector('.um-modal.show')) {
+                document.body.style.overflow = '';
+                setModalBackgroundInert(false);
+            }
+            const returnTarget = modalReturnFocus.get(modal);
+            modalReturnFocus.delete(modal);
+            if (returnTarget && document.contains(returnTarget) && typeof returnTarget.focus === 'function') {
+                window.setTimeout(() => returnTarget.focus(), 0);
+            }
         }
 
         function validatePassword(value) {
@@ -973,7 +2049,17 @@ $adminName = $_SESSION['user_name'] ?? 'Admin';
         function unitMatchesSelectedDepartment(unit) {
             const expectedType = departmentToUnitType(newUserDepartment ? newUserDepartment.value : '');
             if (!expectedType) return true;
-            return String(unit.unit_type || '').trim().toLowerCase() === expectedType;
+            const unitType = String(unit.unit_type || '').trim().toLowerCase();
+            if (expectedType === 'ambulance') {
+                return /\b(ambulance|medical|medic|ems|emt)\b/.test(unitType);
+            }
+            if (expectedType === 'police') {
+                return /\b(police|patrol|pnp|law enforcement)\b/.test(unitType);
+            }
+            if (expectedType === 'fire') {
+                return /\b(fire|engine|ladder|bfp)\b/.test(unitType);
+            }
+            return unitType === expectedType;
         }
 
         function unitHasOtherResponderAssignment(unit) {
@@ -986,14 +2072,14 @@ $adminName = $_SESSION['user_name'] ?? 'Admin';
             }
 
             return userRows.some((row) => {
-                if (!row || row.id === editingId) return false;
+                if (!row || Number(row.id) === editingId) return false;
                 if (String(row.role || '').trim().toLowerCase() !== 'responder') return false;
                 return (Number(row.assigned_unit_id) || 0) === unitId;
             });
         }
 
         function getEditingRow() {
-            return editingId !== null ? (userRows.find((row) => row.id === editingId) || null) : null;
+            return editingId !== null ? (userRows.find((row) => Number(row.id) === editingId) || null) : null;
         }
 
         function unitFromUserRow(row) {
@@ -1058,7 +2144,10 @@ $adminName = $_SESSION['user_name'] ?? 'Admin';
         function renderAvailableUnitOptions() {
             if (!newUserAssignedUnit || !newUserUnitHint) return;
 
-            const pendingValue = newUserAssignedUnit.dataset.pendingValue || newUserAssignedUnit.value || '';
+            const editingUnitId = Number(getEditingRow()?.assigned_unit_id) || 0;
+            const pendingValue = newUserAssignedUnit.dataset.pendingValue ||
+                newUserAssignedUnit.value ||
+                (editingUnitId > 0 ? String(editingUnitId) : '');
             ensureCurrentAssignedUnitOption(pendingValue);
 
             if (availableUnitsLoading) {
@@ -1066,6 +2155,7 @@ $adminName = $_SESSION['user_name'] ?? 'Admin';
                 newUserAssignedUnit.disabled = true;
                 newUserAssignedUnit.required = false;
                 newUserUnitHint.textContent = 'Loading currently available units.';
+                if (retryAvailableUnitsBtn) retryAvailableUnitsBtn.hidden = true;
                 updateResponderUnitDetails();
                 return;
             }
@@ -1075,7 +2165,18 @@ $adminName = $_SESSION['user_name'] ?? 'Admin';
                 newUserAssignedUnit.disabled = true;
                 newUserAssignedUnit.required = false;
                 newUserUnitHint.textContent = 'Select Medical, Police, or Fire to show matching units.';
+                if (retryAvailableUnitsBtn) retryAvailableUnitsBtn.hidden = true;
                 clearResponderUnitDetails();
+                updateResponderUnitDetails();
+                return;
+            }
+
+            if (availableUnitsError) {
+                newUserAssignedUnit.innerHTML = '<option value="">Unit service unavailable</option>';
+                newUserAssignedUnit.disabled = true;
+                newUserAssignedUnit.required = false;
+                newUserUnitHint.textContent = availableUnitsError;
+                if (retryAvailableUnitsBtn) retryAvailableUnitsBtn.hidden = false;
                 updateResponderUnitDetails();
                 return;
             }
@@ -1085,6 +2186,7 @@ $adminName = $_SESSION['user_name'] ?? 'Admin';
                 newUserAssignedUnit.disabled = true;
                 newUserAssignedUnit.required = false;
                 newUserUnitHint.textContent = 'No available units are ready right now.';
+                if (retryAvailableUnitsBtn) retryAvailableUnitsBtn.hidden = true;
                 updateResponderUnitDetails();
                 return;
             }
@@ -1097,6 +2199,7 @@ $adminName = $_SESSION['user_name'] ?? 'Admin';
                 newUserAssignedUnit.disabled = true;
                 newUserAssignedUnit.required = false;
                 newUserUnitHint.textContent = 'No unassigned units match the selected department.';
+                if (retryAvailableUnitsBtn) retryAvailableUnitsBtn.hidden = true;
                 updateResponderUnitDetails();
                 return;
             }
@@ -1108,6 +2211,7 @@ $adminName = $_SESSION['user_name'] ?? 'Admin';
             newUserAssignedUnit.disabled = false;
             newUserAssignedUnit.required = newUserRole && newUserRole.value === 'responder';
             newUserAssignedUnit.innerHTML = '<option value="">Select available unit</option>' + options;
+            if (retryAvailableUnitsBtn) retryAvailableUnitsBtn.hidden = true;
 
             if (pendingValue && filteredUnits.some((unit) => String(unit.id) === String(pendingValue))) {
                 newUserAssignedUnit.value = String(pendingValue);
@@ -1122,6 +2226,7 @@ $adminName = $_SESSION['user_name'] ?? 'Admin';
         async function loadAvailableUnits() {
             if (availableUnitsLoading) return;
             availableUnitsLoading = true;
+            availableUnitsError = '';
             renderAvailableUnitOptions();
 
             try {
@@ -1150,9 +2255,7 @@ $adminName = $_SESSION['user_name'] ?? 'Admin';
             } catch (error) {
                 availableUnits = [];
                 availableUnitsLoaded = false;
-                if (newUserUnitHint) {
-                    newUserUnitHint.textContent = error.message || 'Unable to load available units.';
-                }
+                availableUnitsError = error.message || 'Unable to load available units.';
             } finally {
                 availableUnitsLoading = false;
                 renderAvailableUnitOptions();
@@ -1231,15 +2334,16 @@ $adminName = $_SESSION['user_name'] ?? 'Admin';
         }
 
         function roleChip(role) {
-            const safe = (role || '').toLowerCase();
+            const normalized = String(role || '').toLowerCase();
+            const safe = ['dispatcher', 'responder'].includes(normalized) ? normalized : 'dispatcher';
             const label = safe.charAt(0).toUpperCase() + safe.slice(1);
             return '<span class="um-chip ' + safe + '">' + escapeHtml(label) + '</span>';
         }
 
         function statusChip(status) {
-            const safe = (status || '').toLowerCase();
+            const safe = String(status || '').toLowerCase() === 'active' ? 'active' : 'inactive';
             const label = safe.charAt(0).toUpperCase() + safe.slice(1);
-            return '<span class="um-chip ' + safe + '">' + escapeHtml(label) + '</span>';
+            return '<span class="um-chip ' + safe + '"><i class="fas fa-circle" aria-hidden="true"></i>' + escapeHtml(label) + '</span>';
         }
 
         function displayUnitValue(value) {
@@ -1251,10 +2355,71 @@ $adminName = $_SESSION['user_name'] ?? 'Admin';
             return raw.charAt(0).toUpperCase() + raw.slice(1);
         }
 
+        function normalizedRole(role) {
+            return String(role || '').trim().toLowerCase() === 'responder' ? 'responder' : 'dispatcher';
+        }
+
+        function normalizedStatus(status) {
+            return String(status || '').trim().toLowerCase() === 'active' ? 'active' : 'inactive';
+        }
+
+        function personInitials(name) {
+            const words = String(name || '').trim().split(/\s+/).filter(Boolean);
+            if (!words.length) return 'TM';
+            return words.slice(0, 2).map((word) => word.charAt(0).toUpperCase()).join('');
+        }
+
+        function formattedCreatedDate(value) {
+            const raw = String(value || '').trim();
+            if (!raw) return 'Date unavailable';
+            const date = new Date(raw + (raw.length === 10 ? 'T00:00:00' : ''));
+            if (Number.isNaN(date.getTime())) return raw;
+            return new Intl.DateTimeFormat('en-PH', {
+                year: 'numeric',
+                month: 'short',
+                day: 'numeric'
+            }).format(date);
+        }
+
+        function renderStats() {
+            const total = userRows.length;
+            const active = userRows.filter((row) => normalizedStatus(row.status) === 'active').length;
+            const responders = userRows.filter((row) => normalizedRole(row.role) === 'responder');
+            const dispatchers = total - responders.length;
+            const assignedResponders = responders.filter((row) => Number(row.assigned_unit_id) > 0 || String(row.unit_code || '').trim() !== '').length;
+            const activeRate = total > 0 ? Math.round((active / total) * 100) : 0;
+
+            statTotal.textContent = String(total);
+            statActive.textContent = String(active);
+            statResponders.textContent = String(responders.length);
+            statDispatchers.textContent = String(dispatchers);
+            statActiveMeta.textContent = total > 0 ? activeRate + '% of team accounts' : 'No accounts loaded';
+            statResponderMeta.textContent = assignedResponders + ' assigned to unit' + (assignedResponders === 1 ? '' : 's');
+        }
+
+        function filtersAreActive() {
+            return userSearchInput.value.trim() !== '' ||
+                userRoleFilter.value !== 'all' ||
+                userStatusFilter.value !== 'all' ||
+                userDepartmentFilter.value !== 'all';
+        }
+
         function filteredRows() {
             const needle = userSearchInput.value.trim().toLowerCase();
-            if (!needle) return userRows.slice();
-            return userRows.filter((row) => {
+            const role = userRoleFilter.value;
+            const status = userStatusFilter.value;
+            const department = userDepartmentFilter.value;
+            const rows = userRows.filter((row) => {
+                const rowRole = normalizedRole(row.role);
+                const rowStatus = normalizedStatus(row.status);
+                const rowDepartment = normalizeDepartmentValue(row.department);
+
+                if (role !== 'all' && rowRole !== role) return false;
+                if (status !== 'all' && rowStatus !== status) return false;
+                if (department === 'unassigned' && rowDepartment !== '') return false;
+                if (department !== 'all' && department !== 'unassigned' && rowDepartment !== department) return false;
+                if (!needle) return true;
+
                 const hay = [
                     row.name,
                     row.email,
@@ -1269,47 +2434,117 @@ $adminName = $_SESSION['user_name'] ?? 'Admin';
                 ].join(' ').toLowerCase();
                 return hay.includes(needle);
             });
+
+            if (userSortSelect.value === 'name') {
+                rows.sort((a, b) => String(a.name || '').localeCompare(String(b.name || ''), undefined, { sensitivity: 'base' }));
+            } else if (userSortSelect.value === 'readiness') {
+                rows.sort((a, b) => {
+                    const statusDifference = normalizedStatus(a.status) === normalizedStatus(b.status)
+                        ? 0
+                        : (normalizedStatus(a.status) === 'active' ? -1 : 1);
+                    return statusDifference || String(a.name || '').localeCompare(String(b.name || ''), undefined, { sensitivity: 'base' });
+                });
+            }
+
+            return rows;
+        }
+
+        function directoryState(icon, title, message, actionHtml = '') {
+            return `
+                <div class="um-directory-state">
+                    <i class="fas ${icon}" aria-hidden="true"></i>
+                    <h3>${escapeHtml(title)}</h3>
+                    <p>${escapeHtml(message)}</p>
+                    ${actionHtml}
+                </div>
+            `;
         }
 
         function renderRows() {
             const rows = filteredRows();
-            userCountBadge.textContent = rows.length + ' account(s)';
+            renderStats();
+            userCountBadge.textContent = filtersAreActive()
+                ? rows.length + ' of ' + userRows.length + ' people'
+                : rows.length + ' ' + (rows.length === 1 ? 'person' : 'people');
+            usersTableBody.setAttribute('aria-busy', 'false');
 
             if (!rows.length) {
-                usersTableBody.innerHTML = '<tr><td colspan="13" class="um-empty">No user accounts found.</td></tr>';
+                const message = filtersAreActive()
+                    ? 'Try another name or clear one of the role, access, or department filters.'
+                    : 'Add a dispatcher or responder to begin building the response team.';
+                const action = filtersAreActive()
+                    ? '<button type="button" class="um-btn" data-action="clear-filters"><i class="fas fa-rotate-left" aria-hidden="true"></i> Clear filters</button>'
+                    : '<button type="button" class="um-btn primary" data-action="add"><i class="fas fa-user-plus" aria-hidden="true"></i> Add team member</button>';
+                usersTableBody.innerHTML = directoryState('fa-users-slash', 'No matching team members', message, action);
                 return;
             }
 
-            usersTableBody.innerHTML = rows.map((row, index) => {
-                return `
-                    <tr data-row-id="${row.id}">
-                        <td class="um-code">${index + 1}</td>
-                        <td>${escapeHtml(row.name)}</td>
-                        <td>${escapeHtml(row.email)}</td>
-                        <td>${escapeHtml(row.contact_number || '')}</td>
-                        <td>${roleChip(row.role)}</td>
-                        <td>${escapeHtml(displayDepartmentValue(row.department))}</td>
-                        <td>${statusChip(row.status)}</td>
-                        <td>${escapeHtml(row.unit_code || 'N/A')}</td>
-                        <td>${escapeHtml(displayUnitValue(row.unit_type))}</td>
-                        <td>${escapeHtml(row.vehicle_plate || 'N/A')}</td>
-                        <td>${escapeHtml(displayUnitValue(row.unit_status))}</td>
-                        <td>${escapeHtml(row.created)}</td>
-                        <td>
-                            <div class="um-actions">
-                                ${row.role === 'responder' ? `
-                                <button type="button" class="um-action" data-action="invite" data-id="${row.id}" title="Resend app invitation" aria-label="Resend app invitation">
-                                    <i class="fas fa-envelope"></i>
-                                </button>` : ''}
-                                <button type="button" class="um-action edit" data-action="edit" data-id="${row.id}" title="Edit" aria-label="Edit">
-                                    <i class="fas fa-pen"></i>
-                                </button>
-                                <button type="button" class="um-action delete" data-action="delete" data-id="${row.id}" title="Delete" aria-label="Delete">
-                                    <i class="fas fa-trash"></i>
-                                </button>
+            usersTableBody.innerHTML = rows.map((row) => {
+                const role = normalizedRole(row.role);
+                const status = normalizedStatus(row.status);
+                const department = displayDepartmentValue(row.department);
+                const contactNumber = String(row.contact_number || '').trim();
+                const phoneHref = contactNumber.replace(/[^\d+]/g, '');
+                const unitCode = String(row.unit_code || '').trim();
+                const unitType = displayUnitValue(row.unit_type);
+                const vehiclePlate = String(row.vehicle_plate || '').trim();
+                const unitStatus = displayUnitValue(row.unit_status);
+                const hasUnit = Number(row.assigned_unit_id) > 0 || unitCode !== '';
+                const assignment = role === 'responder'
+                    ? `
+                        <div class="um-assignment">
+                            <div class="um-assignment-head">
+                                <span><i class="fas fa-truck-medical" aria-hidden="true"></i> Response assignment</span>
+                                <span class="um-unit-state">${escapeHtml(hasUnit ? unitStatus : 'Not assigned')}</span>
                             </div>
-                        </td>
-                    </tr>
+                            <div class="um-assignment-grid">
+                                <div class="um-assignment-item"><span>Department</span><strong>${escapeHtml(department)}</strong></div>
+                                <div class="um-assignment-item"><span>Unit</span><strong>${escapeHtml(unitCode || 'Not assigned')}</strong></div>
+                                <div class="um-assignment-item"><span>Unit type</span><strong>${escapeHtml(hasUnit ? unitType : '—')}</strong></div>
+                                <div class="um-assignment-item"><span>Plate</span><strong>${escapeHtml(vehiclePlate || '—')}</strong></div>
+                            </div>
+                        </div>
+                    `
+                    : `
+                        <div class="um-assignment">
+                            <div class="um-assignment-head">
+                                <span><i class="fas fa-headset" aria-hidden="true"></i> Coordination access</span>
+                                <span class="um-unit-state">${escapeHtml(status === 'active' ? 'Ready' : 'Disabled')}</span>
+                            </div>
+                            <div class="um-assignment-grid">
+                                <div class="um-assignment-item"><span>Assignment</span><strong>${escapeHtml(department === 'N/A' ? 'Command center' : department)}</strong></div>
+                                <div class="um-assignment-item"><span>Member since</span><strong>${escapeHtml(formattedCreatedDate(row.created))}</strong></div>
+                            </div>
+                        </div>
+                    `;
+
+                return `
+                    <article class="um-person-card ${status === 'inactive' ? 'is-inactive' : ''}" data-row-id="${Number(row.id)}" data-role="${role}">
+                        <div class="um-person-main">
+                            <div class="um-person-head">
+                                <span class="um-avatar" aria-hidden="true">${escapeHtml(personInitials(row.name))}</span>
+                                <div class="um-person-identity">
+                                    <h3>${escapeHtml(row.name || 'Unnamed team member')}</h3>
+                                    <span class="um-person-role"><i class="fas ${role === 'responder' ? 'fa-truck-medical' : 'fa-headset'}" aria-hidden="true"></i>${escapeHtml(role === 'responder' ? 'Responder' : 'Dispatcher')}</span>
+                                </div>
+                                ${statusChip(status)}
+                            </div>
+                            <div class="um-contact-list">
+                                <a class="um-contact-link" href="mailto:${escapeHtml(row.email || '')}" title="Email ${escapeHtml(row.name || 'team member')}"><i class="fas fa-envelope" aria-hidden="true"></i><span>${escapeHtml(row.email || 'No email')}</span></a>
+                                ${contactNumber
+                                    ? `<a class="um-contact-link" href="tel:${escapeHtml(phoneHref)}" title="Call ${escapeHtml(row.name || 'team member')}"><i class="fas fa-phone" aria-hidden="true"></i><span>${escapeHtml(contactNumber)}</span></a>`
+                                    : '<span class="um-contact-empty"><i class="fas fa-phone" aria-hidden="true"></i><span>No contact number</span></span>'}
+                            </div>
+                            ${assignment}
+                            <p class="um-person-note"><i class="fas fa-calendar" aria-hidden="true"></i><span>Account added ${escapeHtml(formattedCreatedDate(row.created))}</span></p>
+                        </div>
+                        <div class="um-person-actions" aria-label="Actions for ${escapeHtml(row.name || 'team member')}">
+                            <button type="button" class="um-action view" data-action="view" data-id="${Number(row.id)}"><i class="fas fa-address-card" aria-hidden="true"></i><span>Details</span></button>
+                            ${role === 'responder' && status === 'active' ? `<button type="button" class="um-action invite" data-action="invite" data-id="${Number(row.id)}"><i class="fas fa-paper-plane" aria-hidden="true"></i><span>Resend invite</span></button>` : ''}
+                            <button type="button" class="um-action edit" data-action="edit" data-id="${Number(row.id)}"><i class="fas fa-pen" aria-hidden="true"></i><span>Edit</span></button>
+                            <button type="button" class="um-action delete" data-action="delete" data-id="${Number(row.id)}" aria-label="Delete ${escapeHtml(row.name || 'team member')}"><i class="fas fa-trash" aria-hidden="true"></i><span class="um-sr-only">Delete</span></button>
+                        </div>
+                    </article>
                 `;
             }).join('');
         }
@@ -1326,14 +2561,13 @@ $adminName = $_SESSION['user_name'] ?? 'Admin';
 
         function openModal() {
             setAccountModalMode(editingId === null ? 'create' : 'edit');
-            addUserModal.classList.add('show');
-            addUserModal.setAttribute('aria-hidden', 'false');
-            document.body.style.overflow = 'hidden';
             availableUnits = [];
             availableUnitsLoaded = false;
+            availableUnitsError = '';
             syncPasswordFieldForRole();
             updatePasswordRequirements(false);
-            newUserName.focus();
+            accountFormBaseline = serializeAccountForm();
+            showModal(addUserModal, newUserName);
         }
 
         function resetPasswordToggle() {
@@ -1348,17 +2582,22 @@ $adminName = $_SESSION['user_name'] ?? 'Admin';
             toggleNewUserPassword.setAttribute('title', 'Show password');
         }
 
-        function closeModal() {
-            addUserModal.classList.remove('show');
-            addUserModal.setAttribute('aria-hidden', 'true');
-            document.body.style.overflow = '';
+        function closeModal(force = false) {
+            if (!force && formHasUnsavedChanges()) {
+                const discard = window.confirm('Discard the unsaved account changes?');
+                if (!discard) return false;
+            }
+
+            hideModal(addUserModal);
             addUserForm.reset();
             editingId = null;
+            accountFormBaseline = '';
             resetPasswordToggle();
             syncPasswordFieldForRole();
             syncResponderUnitField();
             updatePasswordRequirements(false);
             setAccountModalMode('create');
+            return true;
         }
 
         function restoreAddUserForm(payload) {
@@ -1391,8 +2630,83 @@ $adminName = $_SESSION['user_name'] ?? 'Admin';
             updatePasswordRequirements(Boolean(payload.password));
         }
 
+        function detailItem(label, value, href = '') {
+            const displayed = String(value || '').trim() || 'Not provided';
+            const content = href
+                ? `<a href="${escapeHtml(href)}">${escapeHtml(displayed)}</a>`
+                : `<strong>${escapeHtml(displayed)}</strong>`;
+            return `<div class="um-detail-item"><span>${escapeHtml(label)}</span>${content}</div>`;
+        }
+
+        function openUserDetails(row) {
+            if (!row) return;
+
+            const role = normalizedRole(row.role);
+            const status = normalizedStatus(row.status);
+            const contactNumber = String(row.contact_number || '').trim();
+            const phoneHref = contactNumber.replace(/[^\d+]/g, '');
+            const department = displayDepartmentValue(row.department);
+            const hasUnit = Number(row.assigned_unit_id) > 0 || String(row.unit_code || '').trim() !== '';
+
+            detailsUserId = Number(row.id);
+            userDetailsTitle.textContent = row.name || 'Account details';
+            userDetailsBody.innerHTML = `
+                <section class="um-detail-profile" data-role="${role}">
+                    <span class="um-avatar" aria-hidden="true">${escapeHtml(personInitials(row.name))}</span>
+                    <div>
+                        <h3>${escapeHtml(row.name || 'Unnamed team member')}</h3>
+                        <p>${escapeHtml(role === 'responder' ? 'Field response account' : 'Dispatch and coordination account')}</p>
+                        <div class="um-detail-badges">${roleChip(role)}${statusChip(status)}</div>
+                    </div>
+                </section>
+                <section class="um-detail-grid" aria-label="Account information">
+                    ${detailItem('Email address', row.email, 'mailto:' + String(row.email || ''))}
+                    ${detailItem('Contact number', contactNumber, phoneHref ? 'tel:' + phoneHref : '')}
+                    ${detailItem('Department', department === 'N/A' ? (role === 'dispatcher' ? 'Command center' : 'Not assigned') : department)}
+                    ${detailItem('Account created', formattedCreatedDate(row.created))}
+                    ${role === 'responder' ? detailItem('Assigned unit', hasUnit ? row.unit_code : 'Not assigned') : ''}
+                    ${role === 'responder' ? detailItem('Unit type', hasUnit ? displayUnitValue(row.unit_type) : 'Not assigned') : ''}
+                    ${role === 'responder' ? detailItem('Vehicle plate', hasUnit ? row.vehicle_plate : 'Not assigned') : ''}
+                    ${role === 'responder' ? detailItem('Unit readiness', hasUnit ? displayUnitValue(row.unit_status) : 'Not assigned') : ''}
+                </section>
+            `;
+            detailsInviteBtn.hidden = role !== 'responder' || status !== 'active';
+            showModal(userDetailsModal, closeUserDetailsModal);
+        }
+
+        function closeDetailsModal() {
+            detailsUserId = null;
+            hideModal(userDetailsModal);
+        }
+
+        async function sendResponderInvitation(id, button) {
+            if (button) button.disabled = true;
+            try {
+                const response = await fetch(responderAppInviteApiUrl, {
+                    method: 'POST',
+                    headers: {
+                        'Accept': 'application/json',
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ user_id: id })
+                });
+                const result = await response.json();
+                if (!response.ok || !result.success) {
+                    throw new Error(result.message || 'Unable to send the app invitation.');
+                }
+                showToast(result.message || 'App invitation email sent.');
+                return true;
+            } catch (error) {
+                showToast(error.message || 'Unable to send the app invitation.');
+                return false;
+            } finally {
+                if (button) button.disabled = false;
+            }
+        }
+
         async function loadUsers() {
-            usersTableBody.innerHTML = '<tr><td colspan="13" class="um-empty">Loading user accounts...</td></tr>';
+            usersTableBody.setAttribute('aria-busy', 'true');
+            usersTableBody.innerHTML = directoryState('fa-spinner fa-spin', 'Loading team directory', 'Retrieving the latest account and responder assignment information.');
 
             try {
                 const response = await fetch(adminUsersApiUrl, {
@@ -1410,41 +2724,48 @@ $adminName = $_SESSION['user_name'] ?? 'Admin';
                 editingId = null;
                 renderRows();
             } catch (error) {
-                usersTableBody.innerHTML = '<tr><td colspan="13" class="um-empty">Unable to load user accounts.</td></tr>';
+                usersTableBody.setAttribute('aria-busy', 'false');
+                usersTableBody.innerHTML = directoryState(
+                    'fa-triangle-exclamation',
+                    'Team directory is unavailable',
+                    'Check the connection and try loading the accounts again.',
+                    '<button type="button" class="um-btn primary" data-action="reload"><i class="fas fa-rotate" aria-hidden="true"></i> Try again</button>'
+                );
                 showToast(error.message || 'Unable to load users.');
             }
         }
 
         usersTableBody.addEventListener('click', async (event) => {
-            const button = event.target.closest('.um-action');
+            const button = event.target.closest('[data-action]');
             if (!button) return;
 
             const action = button.getAttribute('data-action');
+            if (action === 'clear-filters') {
+                clearUserFilters();
+                return;
+            }
+            if (action === 'add') {
+                editingId = null;
+                addUserForm.reset();
+                openModal();
+                return;
+            }
+            if (action === 'reload') {
+                loadUsers();
+                return;
+            }
+
             const id = Number(button.getAttribute('data-id'));
-            const target = userRows.find((row) => row.id === id);
+            const target = userRows.find((row) => Number(row.id) === id);
             if (!target) return;
 
+            if (action === 'view') {
+                openUserDetails(target);
+                return;
+            }
+
             if (action === 'invite') {
-                button.disabled = true;
-                try {
-                    const response = await fetch(responderAppInviteApiUrl, {
-                        method: 'POST',
-                        headers: {
-                            'Accept': 'application/json',
-                            'Content-Type': 'application/json'
-                        },
-                        body: JSON.stringify({ user_id: id })
-                    });
-                    const result = await response.json();
-                    if (!response.ok || !result.success) {
-                        throw new Error(result.message || 'Unable to send the app invitation.');
-                    }
-                    showToast(result.message || 'App invitation email sent.');
-                } catch (error) {
-                    showToast(error.message || 'Unable to send the app invitation.');
-                } finally {
-                    button.disabled = false;
-                }
+                await sendResponderInvitation(id, button);
                 return;
             }
 
@@ -1457,9 +2778,15 @@ $adminName = $_SESSION['user_name'] ?? 'Admin';
             }
 
             if (action === 'delete') {
-                const ok = window.confirm('Permanently delete account for ' + target.name + '?');
+                const roleMessage = normalizedRole(target.role) === 'responder'
+                    ? ' Their responder record and current unit assignment will also be released.'
+                    : '';
+                const ok = window.confirm(
+                    'Permanently delete the account for ' + target.name + '?' + roleMessage + '\n\nThis action cannot be undone.'
+                );
                 if (!ok) return;
 
+                button.disabled = true;
                 try {
                     const response = await fetch(adminUsersApiUrl, {
                         method: 'DELETE',
@@ -1475,13 +2802,14 @@ $adminName = $_SESSION['user_name'] ?? 'Admin';
                         throw new Error(result.message || 'Unable to delete user.');
                     }
 
-                    const index = userRows.findIndex((row) => row.id === id);
+                    const index = userRows.findIndex((row) => Number(row.id) === id);
                     if (index >= 0) userRows.splice(index, 1);
                     if (editingId === id) editingId = null;
                     renderRows();
                     showToast(result.message || 'User account permanently deleted.');
                 } catch (error) {
                     showToast(error.message || 'Unable to delete user.');
+                    button.disabled = false;
                 }
                 return;
             }
@@ -1492,23 +2820,85 @@ $adminName = $_SESSION['user_name'] ?? 'Admin';
             addUserForm.reset();
             openModal();
         });
-        closeAddUserModal.addEventListener('click', closeModal);
-        cancelAddUserBtn.addEventListener('click', closeModal);
+        closeAddUserModal.addEventListener('click', () => closeModal());
+        cancelAddUserBtn.addEventListener('click', () => closeModal());
 
         addUserModal.addEventListener('click', (event) => {
             if (event.target === addUserModal) closeModal();
         });
 
+        closeUserDetailsModal.addEventListener('click', closeDetailsModal);
+        detailsCloseBtn.addEventListener('click', closeDetailsModal);
+        userDetailsModal.addEventListener('click', (event) => {
+            if (event.target === userDetailsModal) closeDetailsModal();
+        });
+
+        detailsEditBtn.addEventListener('click', () => {
+            const target = userRows.find((row) => Number(row.id) === detailsUserId);
+            if (!target) return;
+            const returnTarget = usersTableBody.querySelector(`.um-action.edit[data-id="${Number(target.id)}"]`);
+            hideModal(userDetailsModal);
+            detailsUserId = null;
+            editingId = Number(target.id);
+            addUserForm.reset();
+            restoreAddUserForm(target);
+            openModal();
+            if (returnTarget) modalReturnFocus.set(addUserModal, returnTarget);
+        });
+
+        detailsInviteBtn.addEventListener('click', async () => {
+            const target = userRows.find((row) => Number(row.id) === detailsUserId);
+            if (!target || normalizedRole(target.role) !== 'responder') return;
+            await sendResponderInvitation(Number(target.id), detailsInviteBtn);
+        });
+
         document.addEventListener('keydown', (event) => {
-            if (event.key === 'Escape' && addUserModal.classList.contains('show')) {
-                closeModal();
+            const activeModal = userDetailsModal.classList.contains('show')
+                ? userDetailsModal
+                : (addUserModal.classList.contains('show') ? addUserModal : null);
+            if (!activeModal) return;
+
+            if (event.key === 'Escape') {
+                event.preventDefault();
+                if (activeModal === userDetailsModal) closeDetailsModal();
+                else closeModal();
+                return;
             }
+
+            if (event.key === 'Tab') {
+                const focusable = focusableElements(activeModal);
+                if (!focusable.length) return;
+                const first = focusable[0];
+                const last = focusable[focusable.length - 1];
+                if (event.shiftKey && document.activeElement === first) {
+                    event.preventDefault();
+                    last.focus();
+                } else if (!event.shiftKey && document.activeElement === last) {
+                    event.preventDefault();
+                    first.focus();
+                }
+            }
+        });
+
+        window.addEventListener('beforeunload', (event) => {
+            if (!formHasUnsavedChanges()) return;
+            event.preventDefault();
+            event.returnValue = '';
         });
 
         addUserForm.addEventListener('submit', async (event) => {
             event.preventDefault();
             const editId = editingId;
             const isEdit = editId !== null;
+
+            if (newUserRole.value === 'responder' && newUserAssignedUnit && availableUnitsLoading) {
+                showToast('Please wait while available units are being checked.');
+                return;
+            }
+            if (newUserRole.value === 'responder' && newUserAssignedUnit && !availableUnitsLoaded) {
+                showToast('Unable to verify unit availability. Use Retry unit check before saving.');
+                return;
+            }
 
             const payload = {
                 ...(isEdit ? { id: editId } : {}),
@@ -1547,7 +2937,10 @@ $adminName = $_SESSION['user_name'] ?? 'Admin';
                 return;
             }
 
-            const emailExists = userRows.some((row) => row.id !== editId && row.email.toLowerCase() === payload.email.toLowerCase());
+            const emailExists = userRows.some((row) => (
+                Number(row.id) !== editId &&
+                String(row.email || '').toLowerCase() === payload.email.toLowerCase()
+            ));
             if (emailExists) {
                 showToast('Email is already in use.');
                 return;
@@ -1573,14 +2966,14 @@ $adminName = $_SESSION['user_name'] ?? 'Admin';
                 }
 
                 if (isEdit) {
-                    const targetIndex = userRows.findIndex((row) => row.id === editId);
+                    const targetIndex = userRows.findIndex((row) => Number(row.id) === editId);
                     if (targetIndex >= 0) {
                         userRows[targetIndex] = result.user;
                     }
                 } else {
                     userRows.unshift(result.user);
                 }
-                closeModal();
+                closeModal(true);
                 renderRows();
                 showToast(result.message || (isEdit ? 'User account updated.' : 'New user account added.'));
             } catch (error) {
@@ -1641,7 +3034,29 @@ $adminName = $_SESSION['user_name'] ?? 'Admin';
             newUserAssignedUnit.addEventListener('change', updateResponderUnitDetails);
         }
 
+        if (retryAvailableUnitsBtn) {
+            retryAvailableUnitsBtn.addEventListener('click', () => {
+                availableUnitsLoaded = false;
+                availableUnitsError = '';
+                loadAvailableUnits();
+            });
+        }
+
+        function clearUserFilters() {
+            userSearchInput.value = '';
+            userRoleFilter.value = 'all';
+            userStatusFilter.value = 'all';
+            userDepartmentFilter.value = 'all';
+            userSortSelect.value = 'newest';
+            renderRows();
+            userSearchInput.focus();
+        }
+
         userSearchInput.addEventListener('input', renderRows);
+        [userRoleFilter, userStatusFilter, userDepartmentFilter, userSortSelect].forEach((control) => {
+            control.addEventListener('change', renderRows);
+        });
+        clearUserFiltersBtn.addEventListener('click', clearUserFilters);
 
         loadUsers();
     </script>
