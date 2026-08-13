@@ -265,17 +265,23 @@ function ers_incidents_classify_intake_source(
     bool $hasSystemExternalCard,
     bool $hasAcceptedCall,
     bool $hasReportedCall,
-    ?string $explicitSource = null
+    ?string $explicitSource = null,
+    ?string $referenceNo = null
 ): array {
-    if ($hasTipOrigin) {
+    $referenceNo = strtoupper(trim((string)$referenceNo));
+    $isTipReference = str_starts_with($referenceNo, 'TIP-');
+    $isTransferredReference = str_starts_with($referenceNo, 'TRN-');
+    $isWebsiteReference = str_starts_with($referenceNo, 'REF-');
+    $explicitSource = strtolower(trim((string)$explicitSource));
+
+    if ($isTipReference || $hasTipOrigin) {
         return [
             'source' => 'tip',
             'label' => 'Converted TIP',
-            'detection' => 'anonymous_tip_link',
+            'detection' => $isTipReference ? 'reference_prefix' : 'anonymous_tip_link',
             'inferred' => false,
         ];
     }
-    $explicitSource = strtolower(trim((string)$explicitSource));
     if ($explicitSource === 'tip') {
         return [
             'source' => 'tip',
@@ -284,43 +290,51 @@ function ers_incidents_classify_intake_source(
             'inferred' => false,
         ];
     }
-    if ($explicitSource === 'call' || $hasAcceptedCall) {
+    if ($isTransferredReference) {
         return [
             'source' => 'call',
-            'label' => 'Emergency Call',
+            'label' => 'Transferred App Call',
+            'detection' => 'reference_prefix',
+            'inferred' => false,
+        ];
+    }
+    if ($isWebsiteReference && ($explicitSource === 'call' || $hasAcceptedCall)) {
+        return [
+            'source' => 'call',
+            'label' => 'Website Call',
             'detection' => $explicitSource === 'call' ? 'recorded_intake_source' : 'accepted_call_audit',
             'inferred' => false,
         ];
     }
-    if ($hasExternalOrigin) {
+    if ($isWebsiteReference) {
         return [
-            'source' => 'interagency',
-            'label' => 'Inter-agency',
-            'detection' => 'external_incident_link',
+            'source' => 'manual',
+            'label' => 'Website Manual',
+            'detection' => $explicitSource === 'manual' ? 'recorded_intake_source' : 'website_reference',
+            'inferred' => $explicitSource !== 'manual',
+        ];
+    }
+    if ($explicitSource === 'call' || $hasAcceptedCall) {
+        return [
+            'source' => 'call',
+            'label' => 'Website Call',
+            'detection' => $explicitSource === 'call' ? 'recorded_intake_source' : 'accepted_call_audit',
             'inferred' => false,
         ];
     }
-    if ($hasIncidentExternalSource) {
+    if ($hasExternalOrigin || $hasIncidentExternalSource || $hasSystemExternalCard || $explicitSource === 'interagency') {
+        $detection = 'recorded_intake_source';
+        if ($hasExternalOrigin) {
+            $detection = 'external_incident_link';
+        } elseif ($hasIncidentExternalSource) {
+            $detection = 'incident_external_source';
+        } elseif ($hasSystemExternalCard) {
+            $detection = 'system_incident_card';
+        }
         return [
-            'source' => 'interagency',
-            'label' => 'Inter-agency',
-            'detection' => 'incident_external_source',
-            'inferred' => false,
-        ];
-    }
-    if ($hasSystemExternalCard) {
-        return [
-            'source' => 'interagency',
-            'label' => 'Inter-agency',
-            'detection' => 'system_incident_card',
-            'inferred' => false,
-        ];
-    }
-    if ($explicitSource === 'interagency') {
-        return [
-            'source' => 'interagency',
-            'label' => 'Inter-agency',
-            'detection' => 'recorded_intake_source',
+            'source' => 'call',
+            'label' => 'Transferred App Call',
+            'detection' => $detection,
             'inferred' => false,
         ];
     }
@@ -333,8 +347,8 @@ function ers_incidents_classify_intake_source(
         ];
     }
     return [
-        'source' => 'unverified',
-        'label' => 'Source unverified',
+        'source' => 'manual',
+        'label' => 'Manual Incident',
         'detection' => $hasReportedCall ? 'legacy_linked_record' : 'legacy_direct_record',
         'inferred' => true,
     ];
@@ -384,6 +398,7 @@ $incidentExpr = static function (string $column, string $fallback = 'NULL') use 
 };
 
 $referenceNoExpr = $incidentExpr('reference_no', "''");
+$normalizedReferenceNoExpr = "UPPER(TRIM(COALESCE({$referenceNoExpr}, '')))";
 $typeExpr = $incidentExpr('type', "''");
 $priorityExpr = $incidentExpr('priority', "''");
 $statusExpr = $incidentExpr('status', "''");
@@ -428,8 +443,9 @@ $longitudeExpr = ers_incidents_coalesce([$incidentLngExpr, $callLngExpr]);
 
 // Intake-source signals are returned as read-only metadata for the Dispatcher
 // queue. The existing incident workflow and status filters remain unchanged.
-// TIP takes precedence over other external links; accepted call-session audit
-// events distinguish live calls from manually entered local incidents.
+// Reference prefixes follow the operational contract: TIP is a converted tip,
+// TRN is a partner-app call, and REF is split between website Call/Manual using
+// the existing recorded source or accepted-call audit. No workflow is mutated.
 $externalOriginJoin = '';
 $hasTipOriginExpr = '0';
 $hasExternalOriginExpr = '0';
@@ -558,34 +574,38 @@ if (
 }
 
 $intakeSourceExpr = "CASE
-    WHEN {$hasTipOriginExpr} = 1
+    WHEN {$normalizedReferenceNoExpr} LIKE 'TIP-%'
+      OR {$hasTipOriginExpr} = 1
       OR {$normalizedIncidentIntakeSourceExpr} = 'tip' THEN 'tip'
+    WHEN {$normalizedReferenceNoExpr} LIKE 'TRN-%' THEN 'call'
+    WHEN {$normalizedReferenceNoExpr} LIKE 'REF-%'
+      AND ({$normalizedIncidentIntakeSourceExpr} = 'call' OR {$hasAcceptedCallExpr} = 1) THEN 'call'
+    WHEN {$normalizedReferenceNoExpr} LIKE 'REF-%' THEN 'manual'
     WHEN {$normalizedIncidentIntakeSourceExpr} = 'call'
-      OR {$hasAcceptedCallExpr} = 1 THEN 'call'
-    WHEN {$hasExternalOriginExpr} = 1
+      OR {$hasAcceptedCallExpr} = 1
+      OR {$hasExternalOriginExpr} = 1
       OR {$hasSystemExternalCardExpr} = 1
       OR {$hasIncidentExternalSourceExpr} = 1
-      OR {$normalizedIncidentIntakeSourceExpr} = 'interagency' THEN 'interagency'
-    WHEN {$normalizedIncidentIntakeSourceExpr} = 'manual' THEN 'manual'
-    ELSE 'unverified'
+      OR {$normalizedIncidentIntakeSourceExpr} = 'interagency' THEN 'call'
+    ELSE 'manual'
 END";
 $intakeSourceLabelExpr = "CASE
-    WHEN {$hasTipOriginExpr} = 1
+    WHEN {$normalizedReferenceNoExpr} LIKE 'TIP-%'
+      OR {$hasTipOriginExpr} = 1
       OR {$normalizedIncidentIntakeSourceExpr} = 'tip' THEN 'Converted TIP'
+    WHEN {$normalizedReferenceNoExpr} LIKE 'TRN-%' THEN 'Transferred App Call'
+    WHEN {$normalizedReferenceNoExpr} LIKE 'REF-%'
+      AND ({$normalizedIncidentIntakeSourceExpr} = 'call' OR {$hasAcceptedCallExpr} = 1) THEN 'Website Call'
+    WHEN {$normalizedReferenceNoExpr} LIKE 'REF-%' THEN 'Website Manual'
     WHEN {$normalizedIncidentIntakeSourceExpr} = 'call'
-      OR {$hasAcceptedCallExpr} = 1 THEN 'Emergency Call'
+      OR {$hasAcceptedCallExpr} = 1 THEN 'Website Call'
     WHEN {$hasExternalOriginExpr} = 1
       OR {$hasSystemExternalCardExpr} = 1
       OR {$hasIncidentExternalSourceExpr} = 1
       OR {$normalizedIncidentIntakeSourceExpr} = 'interagency'
-      THEN COALESCE(
-          NULLIF({$externalSourceSystemExpr}, ''),
-          NULLIF({$systemExternalSourceExpr}, ''),
-          NULLIF(TRIM({$incidentExternalSourceExpr}), ''),
-          'Inter-agency'
-      )
-    WHEN {$normalizedIncidentIntakeSourceExpr} = 'manual' THEN 'Manual Incident'
-    ELSE 'Source unverified'
+      THEN 'Transferred App Call'
+    WHEN {$normalizedIncidentIntakeSourceExpr} = 'manual' THEN 'Website Manual'
+    ELSE 'Manual Incident'
 END";
 $intakeSourceSystemExpr = "CASE
     WHEN {$hasTipOriginExpr} = 1
@@ -606,8 +626,17 @@ $intakeExternalIdExpr = "CASE
     ELSE NULL
 END";
 $intakeDetectionExpr = "CASE
+    WHEN {$normalizedReferenceNoExpr} LIKE 'TIP-%' THEN 'reference_prefix'
     WHEN {$hasTipOriginExpr} = 1 THEN 'anonymous_tip_link'
     WHEN {$normalizedIncidentIntakeSourceExpr} = 'tip' THEN 'recorded_intake_source'
+    WHEN {$normalizedReferenceNoExpr} LIKE 'TRN-%' THEN 'reference_prefix'
+    WHEN {$normalizedReferenceNoExpr} LIKE 'REF-%'
+      AND {$normalizedIncidentIntakeSourceExpr} = 'call' THEN 'recorded_intake_source'
+    WHEN {$normalizedReferenceNoExpr} LIKE 'REF-%'
+      AND {$hasAcceptedCallExpr} = 1 THEN 'accepted_call_audit'
+    WHEN {$normalizedReferenceNoExpr} LIKE 'REF-%'
+      AND {$normalizedIncidentIntakeSourceExpr} = 'manual' THEN 'recorded_intake_source'
+    WHEN {$normalizedReferenceNoExpr} LIKE 'REF-%' THEN 'website_reference'
     WHEN {$normalizedIncidentIntakeSourceExpr} = 'call' THEN 'recorded_intake_source'
     WHEN {$hasAcceptedCallExpr} = 1 THEN 'accepted_call_audit'
     WHEN {$hasExternalOriginExpr} = 1 THEN 'external_incident_link'
@@ -619,7 +648,9 @@ $intakeDetectionExpr = "CASE
     ELSE 'legacy_direct_record'
 END";
 $intakeSourceInferredExpr = "CASE
-    WHEN {$hasTipOriginExpr} = 1
+    WHEN {$normalizedReferenceNoExpr} LIKE 'TIP-%'
+      OR {$normalizedReferenceNoExpr} LIKE 'TRN-%'
+      OR {$hasTipOriginExpr} = 1
       OR {$hasExternalOriginExpr} = 1
       OR {$hasIncidentExternalSourceExpr} = 1
       OR {$hasSystemExternalCardExpr} = 1
@@ -1024,17 +1055,20 @@ try {
     $rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
     $items = array_map(static function (array $row): array {
-        $intakeSource = strtolower(trim((string)($row['intake_source'] ?? 'unverified')));
-        if (!in_array($intakeSource, ['call', 'manual', 'tip', 'interagency', 'unverified'], true)) {
-            $intakeSource = 'unverified';
+        $intakeSource = strtolower(trim((string)($row['intake_source'] ?? 'manual')));
+        if (!in_array($intakeSource, ['call', 'manual', 'tip'], true)) {
+            $intakeSource = 'manual';
         }
         $intakeLabels = [
             'call' => 'Emergency Call',
             'manual' => 'Manual Incident',
             'tip' => 'Converted TIP',
-            'interagency' => 'Inter-agency',
-            'unverified' => 'Source unverified',
         ];
+        $intakeSourceLabel = trim(strip_tags((string)($row['intake_source_label'] ?? '')));
+        if ($intakeSourceLabel === '') {
+            $intakeSourceLabel = $intakeLabels[$intakeSource];
+        }
+        $intakeSourceLabel = substr($intakeSourceLabel, 0, 80);
         return [
             'id' => isset($row['id']) ? (int)$row['id'] : 0,
             'incident_code' => $row['reference_no'] ?? '',
@@ -1060,7 +1094,7 @@ try {
                 ? (int)$row['reported_by_call_id']
                 : null,
             'intake_source' => $intakeSource,
-            'intake_source_label' => $intakeLabels[$intakeSource],
+            'intake_source_label' => $intakeSourceLabel,
             'intake_source_system' => $row['intake_source_system'] ?? null,
             'external_incident_id' => $row['external_incident_id'] ?? null,
             'intake_source_detection' => $row['intake_source_detection'] ?? 'legacy_direct_record',

@@ -207,7 +207,7 @@ try {
                         </button>
                         <button type="button" class="intake-source-filter" data-intake-filter="call" aria-pressed="false">
                             <i class="fas fa-phone" aria-hidden="true"></i>
-                            <span>Calls</span>
+                            <span>Call</span>
                             <strong data-intake-count="call">0</strong>
                         </button>
                         <button type="button" class="intake-source-filter" data-intake-filter="manual" aria-pressed="false">
@@ -2053,8 +2053,8 @@ document.addEventListener('DOMContentLoaded', () => {
             }
             showNotification(
                 code
-                    ? `Call incident ${code} is saved and highlighted in Calls. Select a dispatch unit.`
-                    : 'Call incident is saved in Calls. Select a dispatch unit.',
+                    ? `Call incident ${code} is saved and highlighted in Call. Select a dispatch unit.`
+                    : 'Call incident is saved in Call. Select a dispatch unit.',
                 'success'
             );
             refreshActiveCalls().finally(() => {
@@ -2475,11 +2475,9 @@ function resolveIncident(btn) {
 
 const INCIDENT_INTAKE_SOURCES = Object.freeze({
     all: { label: 'All sources', shortLabel: 'All', icon: 'fa-list' },
-    call: { label: 'Emergency Calls', shortLabel: 'Calls', cardLabel: 'Emergency Call', icon: 'fa-phone' },
+    call: { label: 'Call incidents', shortLabel: 'Call', cardLabel: 'Emergency Call', icon: 'fa-phone' },
     manual: { label: 'Manual Incidents', shortLabel: 'Manual', cardLabel: 'Manual Entry', icon: 'fa-edit' },
-    tip: { label: 'Converted TIPs', shortLabel: 'TIP', cardLabel: 'Converted TIP', icon: 'fa-lightbulb' },
-    interagency: { label: 'Inter-agency Incidents', shortLabel: 'Inter-agency', cardLabel: 'Inter-agency', icon: 'fa-building' },
-    unverified: { label: 'Sources needing review', shortLabel: 'Needs review', cardLabel: 'Source unverified', icon: 'fa-exclamation-triangle' }
+    tip: { label: 'Converted TIPs', shortLabel: 'TIP', cardLabel: 'Converted TIP', icon: 'fa-lightbulb' }
 });
 const VISIBLE_INTAKE_FILTERS = new Set(['all', 'call', 'manual', 'tip']);
 
@@ -2494,7 +2492,7 @@ function normalizeIncidentIntakeSource(item) {
     const source = String(item && item.intake_source ? item.intake_source : '').trim().toLowerCase();
     return Object.prototype.hasOwnProperty.call(INCIDENT_INTAKE_SOURCES, source) && source !== 'all'
         ? source
-        : 'unverified';
+        : 'manual';
 }
 
 function normalizeIncidentPriority(value) {
@@ -2590,7 +2588,7 @@ function renderIncidentIntakeQueue() {
         const incidentId = toIncidentId(item && item.id);
         if (incidentId === null) return '';
         const source = normalizeIncidentIntakeSource(item);
-        const sourceInfo = INCIDENT_INTAKE_SOURCES[source] || INCIDENT_INTAKE_SOURCES.unverified;
+        const sourceInfo = INCIDENT_INTAKE_SOURCES[source] || INCIDENT_INTAKE_SOURCES.manual;
         const priority = normalizeIncidentPriority(item.priority);
         const priorityLabel = priority.charAt(0).toUpperCase() + priority.slice(1);
         const reference = String(item.incident_code || item.reference_no || `Incident ${incidentId}`).trim();
@@ -2598,13 +2596,10 @@ function renderIncidentIntakeQueue() {
         const timeAgo = formatTimeAgo(item.created_at) || 'Just now';
         const phone = String(item.caller_phone || item.contact_number || item.phone || '').trim();
         const sourceSystem = String(item.intake_source_system || '').trim();
+        const sourceLabel = String(item.intake_source_label || sourceInfo.cardLabel || sourceInfo.shortLabel).trim();
         const sourceDetail = source === 'call' && sourceSystem
             ? `<span class="intake-source-system" title="Call origin">Via ${escapeHtml(sourceSystem)}</span>`
-            : (source === 'interagency' && sourceSystem
-            ? `<span class="intake-source-system" title="Source system">${escapeHtml(sourceSystem)}</span>`
-            : (source === 'unverified'
-                ? '<span class="intake-source-system" title="This older record has no durable source metadata">Legacy source</span>'
-                : ''));
+            : '';
         const callAction = phone
             ? `<button type="button" class="btn-action-small call-phone-btn" onclick="contactCaller(this)" data-phone="${escapeHtml(phone)}"><i class="fas fa-phone" aria-hidden="true"></i> Call Reporter</button>`
             : '<button type="button" class="btn-action-small call-phone-btn" disabled aria-disabled="true" title="No reporter phone number is available"><i class="fas fa-phone-slash" aria-hidden="true"></i> No Phone</button>';
@@ -2612,7 +2607,7 @@ function renderIncidentIntakeQueue() {
         return `
             <article class="call-card incident-intake-card ${priority} source-${source}${incidentId === recentlyLoggedIncidentId ? ' is-recently-logged' : ''}" data-incident-id="${incidentId}" role="listitem" aria-label="${escapeHtml(reference)}, ${escapeHtml(sourceInfo.label)}">
                 <div class="intake-card-topline">
-                    <span class="intake-source-badge source-${source}"><i class="fas ${sourceInfo.icon}" aria-hidden="true"></i> ${escapeHtml(sourceInfo.cardLabel || sourceInfo.shortLabel)}</span>
+                    <span class="intake-source-badge source-${source}"><i class="fas ${sourceInfo.icon}" aria-hidden="true"></i> ${escapeHtml(sourceLabel)}</span>
                     <strong class="intake-reference">${escapeHtml(reference)}</strong>
                 </div>
                 <div class="call-info">

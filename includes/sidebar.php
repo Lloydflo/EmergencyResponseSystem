@@ -130,9 +130,10 @@ $isDispatcherSidebar = $sidebarRole === 'dispatcher';
                     <div class="sidebar-section-title">Operations</div>
                     <ul class="sidebar-menu">
                         <li class="sidebar-menu-item">
-                            <a href="dispatcher/call.php" class="sidebar-link <?php echo basename($_SERVER['PHP_SELF']) == 'call.php' ? 'active' : ''; ?>" aria-current="<?php echo basename($_SERVER['PHP_SELF']) == 'call.php' ? 'page' : 'false'; ?>">
+                            <a href="dispatcher/call.php" id="dispatcherCallReceivingLink" class="sidebar-link <?php echo basename($_SERVER['PHP_SELF']) == 'call.php' ? 'active' : ''; ?>" aria-current="<?php echo basename($_SERVER['PHP_SELF']) == 'call.php' ? 'page' : 'false'; ?>">
                                 <i class="fa-solid fa-phone"></i>
                                 <span>Call Receiving & Logs</span>
+                                <span class="sidebar-incoming-call-badge" id="dispatcherIncomingCallBadge" hidden aria-label="Incoming calls">0</span>
                             </a>
                         </li>
                         <li class="sidebar-menu-item">
@@ -201,6 +202,19 @@ $isDispatcherSidebar = $sidebarRole === 'dispatcher';
 <div class="sidebar-overlay" id="sidebarOverlay"></div>
 
 <?php if ($isDispatcherSidebar): ?>
+<aside class="dispatcher-incoming-call-alert" id="dispatcherIncomingCallAlert" role="alert" aria-live="assertive" aria-atomic="true" hidden>
+    <span class="dispatcher-incoming-call-icon" aria-hidden="true"><i class="fa-solid fa-phone"></i></span>
+    <span class="dispatcher-incoming-call-copy">
+        <span class="dispatcher-incoming-call-eyebrow">Incoming partner-app call</span>
+        <strong id="dispatcherIncomingCallTitle">Emergency caller</strong>
+        <small id="dispatcherIncomingCallMeta">Open Call Receiving to answer.</small>
+        <small class="dispatcher-incoming-call-more" id="dispatcherIncomingCallMore" hidden></small>
+    </span>
+    <a class="dispatcher-incoming-call-open" id="dispatcherIncomingCallOpen" href="dispatcher/call.php">
+        Open Calls <i class="fa-solid fa-arrow-right" aria-hidden="true"></i>
+    </a>
+</aside>
+
 <div class="floating-call-widget" id="floatingCallWidget" aria-live="polite" hidden>
     <button type="button" class="floating-call-summary" id="floatingCallSummary" title="Open Dispatch Center">
         <span class="floating-call-label">Live Call</span>
@@ -220,6 +234,170 @@ $isDispatcherSidebar = $sidebarRole === 'dispatcher';
         </button>
     </div>
 </div>
+
+<style>
+.sidebar-incoming-call-badge {
+    margin-left: auto;
+    min-width: 1.45rem;
+    height: 1.45rem;
+    padding: 0 .38rem;
+    border-radius: 999px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    background: #dc2626;
+    color: #fff;
+    font-size: .68rem;
+    font-weight: 800;
+    line-height: 1;
+    box-shadow: 0 0 0 3px rgba(220, 38, 38, .12);
+}
+
+.sidebar-incoming-call-badge[hidden],
+.dispatcher-incoming-call-alert[hidden] {
+    display: none !important;
+}
+
+.dispatcher-incoming-call-alert {
+    position: fixed;
+    z-index: 2100;
+    top: 4.75rem;
+    right: 1.25rem;
+    width: min(25rem, calc(100vw - 2rem));
+    display: grid;
+    grid-template-columns: 2.75rem minmax(0, 1fr) auto;
+    gap: .75rem;
+    align-items: center;
+    padding: .85rem;
+    border: 1px solid rgba(220, 38, 38, .3);
+    border-left: 4px solid #dc2626;
+    border-radius: .9rem;
+    background: #fff;
+    color: #122033;
+    box-shadow: 0 18px 44px rgba(15, 23, 42, .22);
+    animation: dispatcherIncomingCallEnter .22s ease-out both;
+}
+
+.dispatcher-incoming-call-icon {
+    width: 2.75rem;
+    height: 2.75rem;
+    border-radius: .8rem;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    background: #fee2e2;
+    color: #b91c1c;
+    font-size: 1.05rem;
+    animation: dispatcherIncomingCallPulse 1.4s ease-in-out infinite;
+}
+
+.dispatcher-incoming-call-copy {
+    min-width: 0;
+    display: grid;
+    gap: .12rem;
+}
+
+.dispatcher-incoming-call-eyebrow {
+    color: #b91c1c;
+    font-size: .67rem;
+    font-weight: 800;
+    letter-spacing: .055em;
+    text-transform: uppercase;
+}
+
+.dispatcher-incoming-call-copy strong,
+.dispatcher-incoming-call-copy small {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.dispatcher-incoming-call-copy strong {
+    font-size: .9rem;
+}
+
+.dispatcher-incoming-call-copy small {
+    color: #64748b;
+    font-size: .72rem;
+}
+
+.dispatcher-incoming-call-more {
+    color: #b91c1c !important;
+    font-weight: 700;
+}
+
+.dispatcher-incoming-call-open {
+    min-height: 2.75rem;
+    padding: .62rem .78rem;
+    border-radius: .7rem;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: .4rem;
+    background: #0f766e;
+    color: #fff;
+    font-size: .74rem;
+    font-weight: 800;
+    text-decoration: none;
+    white-space: nowrap;
+}
+
+.dispatcher-incoming-call-open:hover,
+.dispatcher-incoming-call-open:focus-visible {
+    background: #115e59;
+    color: #fff;
+}
+
+[data-theme="dark"] .dispatcher-incoming-call-alert {
+    border-color: rgba(248, 113, 113, .42);
+    border-left-color: #f87171;
+    background: #111827;
+    color: #f8fafc;
+    box-shadow: 0 20px 48px rgba(0, 0, 0, .46);
+}
+
+[data-theme="dark"] .dispatcher-incoming-call-icon {
+    background: rgba(220, 38, 38, .18);
+    color: #fca5a5;
+}
+
+[data-theme="dark"] .dispatcher-incoming-call-copy small {
+    color: #cbd5e1;
+}
+
+@keyframes dispatcherIncomingCallEnter {
+    from { opacity: 0; transform: translateY(-.5rem); }
+    to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes dispatcherIncomingCallPulse {
+    0%, 100% { box-shadow: 0 0 0 0 rgba(220, 38, 38, .25); }
+    50% { box-shadow: 0 0 0 .45rem rgba(220, 38, 38, 0); }
+}
+
+@media (max-width: 640px) {
+    .dispatcher-incoming-call-alert {
+        top: auto;
+        right: 1rem;
+        bottom: 1rem;
+        left: 1rem;
+        width: auto;
+        grid-template-columns: 2.6rem minmax(0, 1fr);
+    }
+
+    .dispatcher-incoming-call-open {
+        grid-column: 1 / -1;
+        width: 100%;
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .dispatcher-incoming-call-alert,
+    .dispatcher-incoming-call-icon {
+        animation: none;
+    }
+}
+</style>
 <?php endif; ?>
 
 <script>
@@ -698,6 +876,155 @@ document.addEventListener('DOMContentLoaded', function() {
             emitChange(session);
         }
     });
+})();
+</script>
+<?php endif; ?>
+
+<?php if ($isDispatcherSidebar): ?>
+<script>
+(function() {
+    const isCallReceivingPage = /\/dispatcher\/call\.php\/?$/i.test(window.location.pathname);
+    if (isCallReceivingPage) {
+        return;
+    }
+
+    const endpoint = 'api/dispatcher_incoming_call_alert.php';
+    const pollIntervalMs = 5000;
+    const originalDocumentTitle = document.title;
+    let pollTimer = null;
+    let activeRequest = null;
+
+    function hasActiveCallSession() {
+        try {
+            return !!(window.ersCallSession && window.ersCallSession.getState());
+        } catch (error) {
+            return false;
+        }
+    }
+
+    function scheduleNextPoll(delay) {
+        if (pollTimer) {
+            window.clearTimeout(pollTimer);
+        }
+        pollTimer = window.setTimeout(pollIncomingCalls, Number(delay) || pollIntervalMs);
+    }
+
+    function hideIncomingCallAlert() {
+        const alert = document.getElementById('dispatcherIncomingCallAlert');
+        const badge = document.getElementById('dispatcherIncomingCallBadge');
+        if (alert) {
+            alert.hidden = true;
+        }
+        if (badge) {
+            badge.hidden = true;
+            badge.textContent = '0';
+        }
+        if (document.title.indexOf('Incoming Call • ') === 0) {
+            document.title = originalDocumentTitle;
+        }
+    }
+
+    function renderIncomingCallAlert(calls) {
+        const incomingCalls = Array.isArray(calls) ? calls.filter(Boolean) : [];
+        if (!incomingCalls.length || hasActiveCallSession()) {
+            hideIncomingCallAlert();
+            return;
+        }
+
+        const alert = document.getElementById('dispatcherIncomingCallAlert');
+        const badge = document.getElementById('dispatcherIncomingCallBadge');
+        const title = document.getElementById('dispatcherIncomingCallTitle');
+        const meta = document.getElementById('dispatcherIncomingCallMeta');
+        const more = document.getElementById('dispatcherIncomingCallMore');
+        if (!alert || !badge || !title || !meta || !more) {
+            return;
+        }
+
+        const newest = incomingCalls[0] || {};
+        const callerName = String(newest.caller_name || 'Emergency caller').trim();
+        const sourceSystem = String(newest.source_system || 'Partner emergency app').trim();
+        const referenceNo = String(newest.reference_no || 'Transferred call').trim();
+        const location = String(newest.location || 'Location pending').trim();
+
+        title.textContent = callerName + ' · ' + sourceSystem;
+        meta.textContent = referenceNo + ' · ' + location;
+        more.hidden = incomingCalls.length <= 1;
+        more.textContent = incomingCalls.length > 1 ? ('+' + (incomingCalls.length - 1) + ' more incoming call' + (incomingCalls.length > 2 ? 's' : '')) : '';
+        badge.textContent = incomingCalls.length > 9 ? '9+' : String(incomingCalls.length);
+        badge.hidden = false;
+        alert.hidden = false;
+        document.title = 'Incoming Call • ' + originalDocumentTitle;
+    }
+
+    async function pollIncomingCalls() {
+        if (hasActiveCallSession()) {
+            hideIncomingCallAlert();
+            scheduleNextPoll(pollIntervalMs);
+            return;
+        }
+
+        if (activeRequest) {
+            activeRequest.abort();
+        }
+        activeRequest = new AbortController();
+
+        try {
+            const response = await fetch(endpoint, {
+                method: 'GET',
+                credentials: 'same-origin',
+                cache: 'no-store',
+                headers: { 'Accept': 'application/json' },
+                signal: activeRequest.signal
+            });
+            if (!response.ok) {
+                throw new Error('Incoming-call alert request failed');
+            }
+            const payload = await response.json();
+            if (payload && payload.ok === true) {
+                renderIncomingCallAlert(payload.calls);
+            }
+        } catch (error) {
+            if (error && error.name === 'AbortError') {
+                return;
+            }
+            // Keep an already visible alert during a temporary network failure.
+            console.warn('Incoming-call alert is temporarily unavailable.');
+        } finally {
+            activeRequest = null;
+            scheduleNextPoll(document.hidden ? 15000 : pollIntervalMs);
+        }
+    }
+
+    document.addEventListener('ers:call-session-change', function(event) {
+        if (event && event.detail && event.detail.session) {
+            hideIncomingCallAlert();
+            return;
+        }
+        pollIncomingCalls();
+    });
+
+    document.addEventListener('visibilitychange', function() {
+        if (!document.hidden) {
+            pollIncomingCalls();
+        }
+    });
+
+    window.addEventListener('beforeunload', function() {
+        if (pollTimer) {
+            window.clearTimeout(pollTimer);
+        }
+        if (activeRequest) {
+            activeRequest.abort();
+        }
+    });
+
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', function() {
+            scheduleNextPoll(300);
+        }, { once: true });
+    } else {
+        scheduleNextPoll(300);
+    }
 })();
 </script>
 <?php endif; ?>

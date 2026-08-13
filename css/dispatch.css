@@ -864,16 +864,6 @@
     background: #fef3c7;
 }
 
-.dispatcher-dispatch-page .intake-source-badge.source-interagency {
-    color: #6d28d9;
-    background: #ede9fe;
-}
-
-.dispatcher-dispatch-page .intake-source-badge.source-unverified {
-    color: #854d0e;
-    background: #fef9c3;
-}
-
 .dispatcher-dispatch-page .call-phone-btn:disabled,
 .dispatcher-dispatch-page .call-phone-btn[aria-disabled="true"] {
     color: #64748b;
@@ -1308,16 +1298,6 @@
 }
 
 [data-theme="dark"] .dispatcher-dispatch-page .intake-source-badge.source-tip {
-    color: #fef3c7;
-    background: #713f12;
-}
-
-[data-theme="dark"] .dispatcher-dispatch-page .intake-source-badge.source-interagency {
-    color: #ede9fe;
-    background: #4c1d95;
-}
-
-[data-theme="dark"] .dispatcher-dispatch-page .intake-source-badge.source-unverified {
     color: #fef3c7;
     background: #713f12;
 }
