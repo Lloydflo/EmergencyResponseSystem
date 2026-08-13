@@ -1215,7 +1215,7 @@ if ($turnIsConfigured && preg_match('/^turns?:(?:\/\/)?([^:\/?]+)/i', $turnUrl, 
         if (notificationId) card.dataset.transferNotification = notificationId;
         card.innerHTML = [
             '<div class="transfer-report-head">',
-                '<span class="transfer-report-icon" aria-hidden="true"><i class="fas fa-file-lines"></i></span>',
+                '<span class="transfer-report-icon" aria-hidden="true">' + transferSourceIconSvg(false) + '</span>',
                 '<div>',
                     '<div class="transfer-report-eyebrow">Incoming Transferred Report</div>',
                     '<strong class="transfer-report-title"></strong>',
@@ -1408,8 +1408,8 @@ if ($turnIsConfigured && preg_match('/^turns?:(?:\/\/)?([^:\/?]+)/i', $turnUrl, 
         return `
             <article class="transfer-queue-card ${isLiveCall ? 'is-live' : 'is-report'} priority-${priorityClass}">
                 <div class="transfer-queue-card-head">
-                    <span class="transfer-queue-icon" aria-hidden="true"><i class="fas ${isLiveCall ? 'fa-phone-volume' : 'fa-file-lines'}"></i></span>
-                    <div>
+                    <span class="transfer-queue-icon" aria-hidden="true">${transferSourceIconSvg(isLiveCall)}</span>
+                    <div class="transfer-queue-copy">
                         <strong>${escapeHtml(title)}</strong>
                         <span>${escapeHtml(isLiveCall ? 'Live call waiting' : 'Message/report waiting')}</span>
                     </div>
@@ -1430,6 +1430,14 @@ if ($turnIsConfigured && preg_match('/^turns?:(?:\/\/)?([^:\/?]+)/i', $turnUrl, 
                 </button>
             </article>
         `;
+    }
+
+    function transferSourceIconSvg(isLiveCall) {
+        if (isLiveCall) {
+            return '<svg class="transfer-source-glyph" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" focusable="false" aria-hidden="true"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6A19.79 19.79 0 0 1 2.12 4.18 2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72c.13.96.36 1.9.69 2.8a2 2 0 0 1-.45 2.11L8.08 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45c.91.33 1.85.56 2.81.69A2 2 0 0 1 22 16.92Z"/></svg>';
+        }
+
+        return '<svg class="transfer-source-glyph" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" focusable="false" aria-hidden="true"><path d="M6 3h8l4 4v14H6Z"/><path d="M14 3v5h5"/><path d="M9 13h6"/><path d="M9 17h6"/></svg>';
     }
 
     function findTransferredQueueItem(key) {

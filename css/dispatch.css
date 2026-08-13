@@ -948,12 +948,12 @@
     line-height: 1.15;
 }
 
-.dispatcher-dispatch-page .intake-card-actions .btn-dispatch > i {
+.dispatcher-dispatch-page .intake-card-actions .dispatch-action-icon {
     flex: 0 0 auto;
     width: 1rem;
-    font-size: 0.92rem;
-    line-height: 1;
-    text-align: center;
+    height: 1rem;
+    display: block;
+    overflow: visible;
 }
 
 .dispatcher-dispatch-page .intake-card-actions .btn-dispatch > span {

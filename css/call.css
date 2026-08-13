@@ -491,10 +491,12 @@ body.incoming-call-modal-open {
     font-size: 1.05rem;
 }
 
-.transfer-report-icon i,
-.transfer-queue-icon i {
+.transfer-source-glyph {
     display: block;
-    line-height: 1;
+    width: 1.15rem;
+    height: 1.15rem;
+    flex: 0 0 auto;
+    overflow: visible;
 }
 
 .transfer-report-eyebrow {
@@ -700,23 +702,23 @@ body.incoming-call-modal-open {
 
 .transfer-queue-card-head {
     display: grid;
-    grid-template-columns: auto minmax(0, 1fr) auto;
+    grid-template-columns: 2.2rem minmax(0, 1fr) 1.85rem;
     gap: 0.7rem;
-    align-items: start;
+    align-items: center;
 }
 
-.transfer-queue-card-head strong,
-.transfer-queue-card-head span {
+.transfer-queue-copy strong,
+.transfer-queue-copy > span {
     display: block;
 }
 
-.transfer-queue-card-head strong {
+.transfer-queue-copy strong {
     color: #0f172a;
     font-size: 0.95rem;
     line-height: 1.3;
 }
 
-.transfer-queue-card-head span {
+.transfer-queue-copy > span {
     color: #64748b;
     font-size: 0.78rem;
     font-weight: 700;
@@ -726,18 +728,15 @@ body.incoming-call-modal-open {
 .transfer-queue-icon {
     width: 2.2rem;
     height: 2.2rem;
+    min-width: 2.2rem;
     border-radius: 12px;
-    display: inline-flex;
+    display: flex;
     align-items: center;
     justify-content: center;
-    color: #ecfeff;
+    align-self: center;
+    margin: 0;
+    color: #ffffff;
     background: #155e75;
-}
-
-.transfer-queue-icon i {
-    width: 1rem;
-    font-size: 0.95rem;
-    text-align: center;
 }
 
 .transfer-queue-dismiss {
@@ -2136,7 +2135,7 @@ body.incident-details-modal-open {
 }
 
 [data-theme="dark"] .transfer-queue-head h4,
-[data-theme="dark"] .transfer-queue-card-head strong {
+[data-theme="dark"] .transfer-queue-copy strong {
     color: #f8fafc;
 }
 
@@ -2145,7 +2144,7 @@ body.incident-details-modal-open {
     background: rgba(15, 23, 42, 0.86);
 }
 
-[data-theme="dark"] .transfer-queue-card-head span,
+[data-theme="dark"] .transfer-queue-copy > span,
 [data-theme="dark"] .transfer-queue-card p,
 [data-theme="dark"] .transfer-queue-location {
     color: #cbd5e1;
