@@ -1,0 +1,538 @@
+/* Dispatcher-only presentation refinements.
+ * Operational handlers and inter-agency API contracts remain unchanged. */
+
+.dispatcher-interagency-page .ia-module-modal {
+    align-items: center;
+    padding: 0.75rem;
+}
+
+.dispatcher-interagency-page .ia-module-modal[data-active-module="iaCommandCenter"] .ia-module-modal-dialog {
+    align-self: center;
+    width: min(1480px, calc(100vw - 1.5rem));
+    height: auto;
+    max-height: calc(100dvh - 1.5rem);
+    border-radius: 18px;
+    border-color: #cbd8e5;
+    box-shadow: 0 28px 80px rgba(15, 23, 42, 0.34);
+}
+
+.dispatcher-interagency-page .ia-module-modal[data-active-module="iaCommandCenter"] .ia-module-modal-head {
+    flex: 0 0 auto;
+    padding: 0.9rem 1.1rem;
+    background:
+        radial-gradient(circle at 94% 0%, rgba(45, 212, 191, 0.16), transparent 15rem),
+        linear-gradient(135deg, #f8fbff, #eef7f6);
+}
+
+.dispatcher-interagency-page .ia-module-modal[data-active-module="iaCommandCenter"] .ia-module-modal-title {
+    font-size: 1.12rem;
+    letter-spacing: -0.015em;
+}
+
+.dispatcher-interagency-page .ia-module-modal[data-active-module="iaCommandCenter"] .ia-module-modal-body {
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    padding: 0.9rem;
+    background: #f2f6fa;
+}
+
+.dispatcher-interagency-page .ia-module-modal[data-active-module="iaCommandCenter"] .ia-command-center {
+    margin: 0;
+    overflow: visible;
+    border: 0;
+    border-radius: 0;
+    background: transparent;
+    box-shadow: none;
+}
+
+/* The outer modal already identifies the module. */
+.dispatcher-interagency-page .ia-module-modal[data-active-module="iaCommandCenter"] .ia-command-head {
+    display: none;
+}
+
+.dispatcher-interagency-page .ia-module-modal[data-active-module="iaCommandCenter"] .ia-command-dropdown {
+    background: transparent;
+}
+
+.dispatcher-interagency-page .ia-module-modal[data-active-module="iaCommandCenter"] .ia-command-controls {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 0.65rem;
+    position: sticky;
+    top: -0.9rem;
+    z-index: 4;
+    padding: 0.8rem;
+    border: 1px solid #d7e2ec;
+    border-radius: 14px;
+    background: rgba(255, 255, 255, 0.96);
+    box-shadow: 0 8px 24px rgba(15, 23, 42, 0.08);
+    backdrop-filter: blur(8px);
+}
+
+.dispatcher-interagency-page .ia-module-modal[data-active-module="iaCommandCenter"] .ia-command-controls .ia-command-select {
+    width: 100%;
+    min-width: 0;
+}
+
+.dispatcher-interagency-page .ia-module-modal[data-active-module="iaCommandCenter"] .ia-command-body {
+    padding: 0.85rem 0 0;
+}
+
+.dispatcher-interagency-page .ia-command-incident {
+    gap: 0.75rem;
+    margin-bottom: 0.85rem;
+}
+
+.dispatcher-interagency-page .ia-command-kpi {
+    min-height: 76px;
+    padding: 0.8rem 0.85rem;
+    border-color: #d7e2ec;
+    border-radius: 14px;
+    background: #ffffff;
+    box-shadow: 0 5px 16px rgba(15, 23, 42, 0.045);
+}
+
+.dispatcher-interagency-page .ia-command-kpi span {
+    color: #64748b;
+    font-size: 0.65rem;
+    letter-spacing: 0.06em;
+}
+
+.dispatcher-interagency-page .ia-command-kpi strong {
+    margin-top: 0.4rem;
+    font-size: 0.94rem;
+}
+
+.dispatcher-interagency-page .ia-command-room-layout {
+    grid-template-columns: minmax(250px, 0.88fr) minmax(410px, 1.55fr) minmax(260px, 0.92fr);
+    gap: 0.85rem;
+}
+
+.dispatcher-interagency-page .ia-command-main-stack {
+    gap: 0.85rem;
+}
+
+.dispatcher-interagency-page .ia-command-panel {
+    border-color: #d7e2ec;
+    border-radius: 14px;
+    box-shadow: 0 7px 20px rgba(15, 23, 42, 0.055);
+}
+
+.dispatcher-interagency-page .ia-command-panel-head {
+    min-height: 45px;
+    padding: 0.72rem 0.85rem;
+    background: linear-gradient(180deg, #ffffff, #f8fafc);
+}
+
+.dispatcher-interagency-page .ia-command-panel-title {
+    font-size: 0.86rem;
+    letter-spacing: -0.005em;
+}
+
+.dispatcher-interagency-page .ia-command-panel-body {
+    padding: 0.8rem;
+}
+
+.dispatcher-interagency-page .ia-command-intel-hero {
+    border-color: #bfdbfe;
+    border-radius: 12px;
+    background: linear-gradient(145deg, #f8fbff, #eff6ff);
+}
+
+.dispatcher-interagency-page .ia-command-readiness {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.dispatcher-interagency-page .ia-command-readiness div {
+    min-width: 0;
+    align-items: flex-start;
+    flex-direction: column;
+    border-radius: 10px;
+}
+
+.dispatcher-interagency-page .ia-command-readiness strong {
+    text-align: left;
+}
+
+.dispatcher-interagency-page .ia-command-intel .ia-command-audit p {
+    max-height: 11rem;
+    padding-right: 0.3rem;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    line-height: 1.5;
+    scrollbar-width: thin;
+}
+
+.dispatcher-interagency-page .ia-command-form:has(#iaTaskAgency) {
+    grid-template-columns: minmax(120px, 0.65fr) minmax(180px, 1fr) auto;
+    grid-template-areas:
+        "agency template add"
+        "task task add";
+}
+
+.dispatcher-interagency-page #iaTaskAgency { grid-area: agency; }
+.dispatcher-interagency-page #iaTaskTemplate { grid-area: template; }
+.dispatcher-interagency-page #iaTaskInput { grid-area: task; }
+.dispatcher-interagency-page #iaAddTaskBtn { grid-area: add; }
+
+.dispatcher-interagency-page .ia-command-form:has(#iaBroadcastPriority) {
+    grid-template-columns: minmax(110px, 0.55fr) minmax(200px, 1fr) auto !important;
+    grid-template-areas:
+        "priority broadcast-template send"
+        "message message send";
+}
+
+.dispatcher-interagency-page #iaBroadcastPriority { grid-area: priority; }
+.dispatcher-interagency-page #iaBroadcastTemplate { grid-area: broadcast-template; }
+.dispatcher-interagency-page #iaBroadcastMessage { grid-area: message; }
+.dispatcher-interagency-page #iaSendBroadcastBtn { grid-area: send; }
+
+.dispatcher-interagency-page #iaAddTaskBtn,
+.dispatcher-interagency-page #iaSendBroadcastBtn {
+    min-width: 82px;
+    min-height: 44px;
+    align-self: stretch;
+}
+
+.dispatcher-interagency-page .ia-command-select,
+.dispatcher-interagency-page .ia-command-input,
+.dispatcher-interagency-page .ia-command-status {
+    min-height: 42px;
+}
+
+.dispatcher-interagency-page .ia-command-textarea {
+    min-height: 74px;
+}
+
+.dispatcher-interagency-page .ia-command-task-list,
+.dispatcher-interagency-page .ia-command-broadcast-list,
+.dispatcher-interagency-page .ia-command-audit-list {
+    max-height: 260px;
+    padding-right: 0.2rem;
+    scrollbar-width: thin;
+}
+
+/* External incident detail: scan-first summary, dedicated location, and a
+ * readable narrative panel instead of one long database-style row list. */
+.dispatcher-interagency-page #incidentDetailModal.is-external-incident-detail .ia-modal {
+    width: min(820px, calc(100vw - 1.5rem));
+    max-height: calc(100dvh - 1.5rem);
+    border-radius: 20px;
+    border-color: #cbd8e5;
+    box-shadow: 0 30px 90px rgba(15, 23, 42, 0.38);
+}
+
+.dispatcher-interagency-page #incidentDetailModal.is-external-incident-detail .ia-modal-head {
+    padding: 1rem 1.15rem;
+    background:
+        radial-gradient(circle at 92% 0%, rgba(45, 212, 191, 0.15), transparent 12rem),
+        linear-gradient(135deg, #f8fbff, #eef7f6);
+}
+
+.dispatcher-interagency-page #incidentDetailModal.is-external-incident-detail .ia-modal-body {
+    padding: 1rem;
+    background: #f3f7fa;
+}
+
+.dispatcher-incident-detail {
+    display: grid;
+    gap: 0.85rem;
+}
+
+.dispatcher-incident-detail-hero {
+    display: grid;
+    grid-template-columns: 48px minmax(0, 1fr) auto;
+    gap: 0.8rem;
+    align-items: center;
+    padding: 0.9rem;
+    border: 1px solid #cfe3e0;
+    border-radius: 15px;
+    background: linear-gradient(135deg, #ffffff, #edf8f6);
+}
+
+.dispatcher-incident-detail-icon {
+    width: 48px;
+    height: 48px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 14px;
+    background: #0f766e;
+    color: #ffffff;
+    font-size: 1.05rem;
+}
+
+.dispatcher-incident-detail-heading {
+    min-width: 0;
+}
+
+.dispatcher-incident-detail-eyebrow,
+.dispatcher-detail-fact > span {
+    display: block;
+    color: #64748b;
+    font-size: 0.68rem;
+    font-weight: 800;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+}
+
+.dispatcher-incident-detail-heading h3 {
+    margin: 0.2rem 0 0;
+    color: #0f172a;
+    font-size: 1.04rem;
+    line-height: 1.25;
+    overflow-wrap: anywhere;
+}
+
+.dispatcher-incident-detail-heading p {
+    margin: 0.2rem 0 0;
+    color: #475569;
+    font-size: 0.82rem;
+    line-height: 1.4;
+}
+
+.dispatcher-incident-detail-badges {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+    gap: 0.4rem;
+}
+
+.dispatcher-detail-badge {
+    display: inline-flex;
+    align-items: center;
+    min-height: 28px;
+    padding: 0.3rem 0.58rem;
+    border-radius: 999px;
+    background: #e2e8f0;
+    color: #334155;
+    font-size: 0.68rem;
+    font-weight: 900;
+    text-transform: capitalize;
+}
+
+.dispatcher-detail-badge.priority-critical,
+.dispatcher-detail-badge.priority-high {
+    background: #fee2e2;
+    color: #991b1b;
+}
+
+.dispatcher-detail-badge.priority-medium {
+    background: #fef3c7;
+    color: #92400e;
+}
+
+.dispatcher-detail-badge.priority-low {
+    background: #dcfce7;
+    color: #166534;
+}
+
+.dispatcher-incident-detail-facts {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 0.65rem;
+}
+
+.dispatcher-detail-fact {
+    min-width: 0;
+    padding: 0.75rem;
+    border: 1px solid #dbe4ed;
+    border-radius: 12px;
+    background: #ffffff;
+}
+
+.dispatcher-detail-fact strong {
+    display: block;
+    margin-top: 0.3rem;
+    color: #0f172a;
+    font-size: 0.82rem;
+    line-height: 1.35;
+    overflow-wrap: anywhere;
+}
+
+.dispatcher-detail-block {
+    padding: 0.85rem 0.9rem;
+    border: 1px solid #dbe4ed;
+    border-radius: 13px;
+    background: #ffffff;
+}
+
+.dispatcher-detail-block-title {
+    display: flex;
+    align-items: center;
+    gap: 0.45rem;
+    color: #0f766e;
+    font-size: 0.73rem;
+    font-weight: 900;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+}
+
+.dispatcher-detail-block > p {
+    margin: 0.45rem 0 0;
+    color: #334155;
+    font-size: 0.86rem;
+    line-height: 1.5;
+    overflow-wrap: anywhere;
+}
+
+.dispatcher-detail-narrative-copy {
+    max-height: min(32vh, 270px);
+    margin-top: 0.55rem;
+    padding: 0.75rem;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    border-radius: 10px;
+    background: #f8fafc;
+    color: #334155;
+    font-size: 0.84rem;
+    line-height: 1.62;
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+    scrollbar-width: thin;
+}
+
+.dispatcher-incident-detail-footer {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: space-between;
+    gap: 0.65rem;
+    color: #64748b;
+    font-size: 0.72rem;
+    font-weight: 700;
+}
+
+.dispatcher-incident-detail-footer span {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.38rem;
+}
+
+html[data-theme="dark"] .dispatcher-interagency-page .ia-module-modal[data-active-module="iaCommandCenter"] .ia-module-modal-body,
+html[data-theme="dark"] .dispatcher-interagency-page #incidentDetailModal.is-external-incident-detail .ia-modal-body {
+    background: #0b1220;
+}
+
+html[data-theme="dark"] .dispatcher-interagency-page .ia-module-modal[data-active-module="iaCommandCenter"] .ia-module-modal-head,
+html[data-theme="dark"] .dispatcher-interagency-page #incidentDetailModal.is-external-incident-detail .ia-modal-head {
+    background: linear-gradient(135deg, #111827, #0f2f2d);
+}
+
+html[data-theme="dark"] .dispatcher-interagency-page .ia-command-controls,
+html[data-theme="dark"] .dispatcher-incident-detail-hero,
+html[data-theme="dark"] .dispatcher-detail-fact,
+html[data-theme="dark"] .dispatcher-detail-block {
+    border-color: #334155;
+    background: #111827;
+}
+
+html[data-theme="dark"] .dispatcher-incident-detail-heading h3,
+html[data-theme="dark"] .dispatcher-detail-fact strong {
+    color: #f8fafc;
+}
+
+html[data-theme="dark"] .dispatcher-incident-detail-heading p,
+html[data-theme="dark"] .dispatcher-detail-block > p,
+html[data-theme="dark"] .dispatcher-detail-narrative-copy,
+html[data-theme="dark"] .dispatcher-incident-detail-footer {
+    color: #cbd5e1;
+}
+
+html[data-theme="dark"] .dispatcher-detail-narrative-copy {
+    background: #0f172a;
+}
+
+@media (max-width: 1180px) {
+    .dispatcher-interagency-page .ia-command-room-layout {
+        grid-template-columns: minmax(230px, 0.85fr) minmax(0, 1.5fr);
+    }
+
+    .dispatcher-interagency-page .ia-command-room-layout > :last-child {
+        grid-column: 1 / -1;
+    }
+
+    .dispatcher-interagency-page .ia-command-audit-list {
+        max-height: 220px;
+    }
+}
+
+@media (max-width: 820px) {
+    .dispatcher-interagency-page .ia-command-incident,
+    .dispatcher-incident-detail-facts {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .dispatcher-interagency-page .ia-command-room-layout {
+        grid-template-columns: 1fr;
+    }
+
+    .dispatcher-interagency-page .ia-command-room-layout > :last-child {
+        grid-column: auto;
+    }
+
+    .dispatcher-interagency-page .ia-command-form:has(#iaTaskAgency),
+    .dispatcher-interagency-page .ia-command-form:has(#iaBroadcastPriority) {
+        grid-template-columns: 1fr !important;
+        grid-template-areas: none;
+    }
+
+    .dispatcher-interagency-page .ia-command-form:has(#iaTaskAgency) > *,
+    .dispatcher-interagency-page .ia-command-form:has(#iaBroadcastPriority) > * {
+        grid-area: auto;
+        width: 100%;
+    }
+}
+
+@media (max-width: 560px) {
+    .dispatcher-interagency-page .ia-module-modal {
+        padding: 0.35rem;
+    }
+
+    .dispatcher-interagency-page .ia-module-modal[data-active-module="iaCommandCenter"] .ia-module-modal-dialog,
+    .dispatcher-interagency-page #incidentDetailModal.is-external-incident-detail .ia-modal {
+        width: calc(100vw - 0.7rem);
+        max-height: calc(100dvh - 0.7rem);
+        border-radius: 14px;
+    }
+
+    .dispatcher-interagency-page .ia-command-controls {
+        grid-template-columns: 1fr;
+        top: -0.9rem;
+    }
+
+    .dispatcher-interagency-page .ia-command-controls .ia-command-btn {
+        width: 100%;
+    }
+
+    .dispatcher-interagency-page .ia-command-incident,
+    .dispatcher-incident-detail-facts {
+        grid-template-columns: 1fr;
+    }
+
+    .dispatcher-incident-detail-hero {
+        grid-template-columns: 42px minmax(0, 1fr);
+    }
+
+    .dispatcher-incident-detail-icon {
+        width: 42px;
+        height: 42px;
+    }
+
+    .dispatcher-incident-detail-badges {
+        grid-column: 1 / -1;
+        justify-content: flex-start;
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .dispatcher-interagency-page *,
+    .dispatcher-interagency-page *::before,
+    .dispatcher-interagency-page *::after {
+        scroll-behavior: auto !important;
+        transition-duration: 0.01ms !important;
+        animation-duration: 0.01ms !important;
+        animation-iteration-count: 1 !important;
+    }
+}

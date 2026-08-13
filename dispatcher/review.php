@@ -25,9 +25,9 @@ if ($reviewerName === '') {
     <link rel="stylesheet" href="css/admin-header.css">
     <link rel="stylesheet" href="css/sidebar-footer.css">
     <link rel="stylesheet" href="css/cards.css">
-    <link rel="stylesheet" href="css/review.css">
+    <link rel="stylesheet" href="css/review.css?v=<?php echo rawurlencode((string)filemtime($rootDir . '/css/review.css')); ?>">
 </head>
-<body>
+<body class="dispatcher-review-page">
     <?php include $rootDir . '/includes/sidebar.php'; ?>
     <?php include $rootDir . '/includes/admin-header.php'; ?>
 
@@ -196,6 +196,6 @@ if ($reviewerName === '') {
         </div>
     </div>
 
-    <script src="js/review-feedback.js?v=20260809-ph-time-v1"></script>
+    <script src="js/review-feedback.js?v=<?php echo rawurlencode((string)filemtime($rootDir . '/js/review-feedback.js')); ?>"></script>
 </body>
 </html>

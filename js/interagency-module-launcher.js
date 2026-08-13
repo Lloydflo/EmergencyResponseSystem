@@ -8,6 +8,13 @@
     const launcher = document.querySelector('.ia-module-launcher');
     if (!stage || !modal || !modalBody || !launcher) return;
 
+    // Dispatcher module dialogs should use the full viewport instead of the
+    // transformed page content area. Moving the existing element does not
+    // change any module state, handlers, or API workflow.
+    if (document.body.classList.contains('dispatcher-interagency-page') && modal.parentElement !== document.body) {
+        document.body.appendChild(modal);
+    }
+
     const moduleLabels = {
         iaCommandCenter: 'active command incident',
         iaEventCoordination: 'high-risk event',

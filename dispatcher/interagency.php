@@ -22,6 +22,7 @@ $pageTitle = 'Inter-Agency Coordination';
     <link rel="stylesheet" href="css/interagency-command.css?v=<?php echo filemtime($rootDir . '/css/interagency-command.css'); ?>">
     <link rel="stylesheet" href="css/interagency-events.css">
     <link rel="stylesheet" href="css/interagency-tips.css">
+    <link rel="stylesheet" href="css/dispatcher-interagency-ux.css?v=<?php echo filemtime($rootDir . '/css/dispatcher-interagency-ux.css'); ?>">
     <style>
         :root {
             --ia-bg: #f4f7fb;
@@ -2039,7 +2040,7 @@ $pageTitle = 'Inter-Agency Coordination';
         }
     </style>
 </head>
-<body>
+<body class="dispatcher-interagency-page">
     <?php include $rootDir . '/includes/sidebar.php'; ?>
     <?php include $rootDir . '/includes/admin-header.php'; ?>
 
