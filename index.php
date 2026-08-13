@@ -1,7 +1,7 @@
 <?php
 declare(strict_types=1);
 
-$pageTitle = 'LERTARA Emergency Response System';
+$pageTitle = 'ALERTARA Emergency Response System';
 $landingCssVersion = is_file(__DIR__ . '/css/landing.css')
     ? (string)filemtime(__DIR__ . '/css/landing.css')
     : '1';
@@ -11,7 +11,7 @@ $landingCssVersion = is_file(__DIR__ . '/css/landing.css')
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <meta name="description" content="LERTARA is an emergency response coordination system for incident intake, dispatch, responder tracking, resource readiness, and inter-agency collaboration.">
+    <meta name="description" content="ALERTARA is an emergency response coordination system for incident intake, dispatch, responder tracking, resource readiness, and inter-agency collaboration.">
     <meta name="theme-color" content="#0b3b52">
     <title><?php echo htmlspecialchars($pageTitle, ENT_QUOTES, 'UTF-8'); ?></title>
     <link rel="icon" type="image/x-icon" href="images/favicon.ico">
@@ -22,9 +22,9 @@ $landingCssVersion = is_file(__DIR__ . '/css/landing.css')
     <a class="skip-link" href="#main-content">Skip to content</a>
 
     <header class="landing-header">
-        <a class="landing-brand" href="index.php" aria-label="LERTARA home">
-            <img src="images/logo.svg" alt="LERTARA">
-            <span><strong>LERTARA</strong><small>Emergency Response System</small></span>
+        <a class="landing-brand" href="index.php" aria-label="ALERTARA home">
+            <img src="images/logo.svg" alt="ALERTARA">
+            <span><strong>ALERTARA</strong><small>Emergency Response System</small></span>
         </a>
         <nav class="landing-nav" aria-label="Main navigation">
             <a href="#capabilities">Capabilities</a>
@@ -39,7 +39,7 @@ $landingCssVersion = is_file(__DIR__ . '/css/landing.css')
             <div class="hero-copy">
                 <span class="hero-eyebrow"><i class="fas fa-tower-broadcast"></i> Connected emergency operations</span>
                 <h1 id="hero-title">One response system.<br><span>Clearer decisions when every second matters.</span></h1>
-                <p>LERTARA brings incident intake, dispatcher coordination, responder navigation, resource readiness, and inter-agency updates into one operational workspace.</p>
+                <p>ALERTARA brings incident intake, dispatcher coordination, responder navigation, resource readiness, and inter-agency updates into one operational workspace.</p>
                 <div class="hero-actions">
                     <a class="landing-btn primary" href="login.php"><i class="fas fa-lock"></i> Access the System</a>
                     <a class="landing-btn secondary" href="#capabilities"><i class="fas fa-circle-play"></i> Explore Features</a>
@@ -119,9 +119,9 @@ $landingCssVersion = is_file(__DIR__ . '/css/landing.css')
 
         <section id="about" class="landing-section about-section" aria-labelledby="about-title">
             <div class="about-copy">
-                <span class="section-eyebrow">About LERTARA</span>
+                <span class="section-eyebrow">About ALERTARA</span>
                 <h2 id="about-title">Designed for coordinated, accountable emergency operations</h2>
-                <p>LERTARA provides a shared operational picture without replacing the responsibilities of dispatchers, responders, administrators, or connected agencies. It organizes information so the right people can act on the same incident context.</p>
+                <p>ALERTARA provides a shared operational picture without replacing the responsibilities of dispatchers, responders, administrators, or connected agencies. It organizes information so the right people can act on the same incident context.</p>
                 <ul class="about-list">
                     <li><i class="fas fa-user-shield"></i><span><strong>Role-aware workspaces</strong> for administrators and dispatchers</span></li>
                     <li><i class="fas fa-clock-rotate-left"></i><span><strong>Traceable activity</strong> for incident decisions and updates</span></li>
@@ -139,7 +139,7 @@ $landingCssVersion = is_file(__DIR__ . '/css/landing.css')
     </main>
 
     <footer class="landing-footer">
-        <a class="landing-brand footer-brand" href="index.php"><img src="images/logo.svg" alt=""><span><strong>LERTARA</strong><small>Emergency Response System</small></span></a>
+        <a class="landing-brand footer-brand" href="index.php"><img src="images/logo.svg" alt=""><span><strong>ALERTARA</strong><small>Emergency Response System</small></span></a>
         <p>Supporting clearer coordination across the emergency response lifecycle.</p>
         <a href="login.php">Authorized Access <i class="fas fa-arrow-right"></i></a>
     </footer>
