@@ -35,7 +35,7 @@ try {
         // Get available units
         $availableUnits = ers_count_available_vehicle_resource_units($pdo, $vehicleResourceTable ?? null);
         
-        // Get pending calls that do not already have responders assigned.
+        // Get all pending intake incidents that do not already have responders assigned.
         $pendingCallsSql = "SELECT COUNT(*) AS c FROM incidents i WHERE i.status='pending'";
         if (function_exists('ers_vehicle_resource_table_exists') && ers_vehicle_resource_table_exists($pdo, 'dispatches')) {
             $pendingCallsSql .= " AND NOT EXISTS (
@@ -105,7 +105,7 @@ try {
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
     <link rel="stylesheet" href="https://unpkg.com/leaflet-routing-machine@latest/dist/leaflet-routing-machine.css"/>
 </head>
-<body>
+<body class="dispatcher-dispatch-page">
     <!-- Include Sidebar Component -->
     <?php include $rootDir . '/includes/sidebar.php'; ?>
 
@@ -137,7 +137,7 @@ try {
                             <strong class="dispatch-stat-value"><?php echo $availableUnits; ?></strong>
                         </div>
                         <div class="dispatch-stat-card queue">
-                            <span class="dispatch-stat-label">Pending Calls</span>
+                            <span class="dispatch-stat-label">Pending Intake</span>
                             <strong class="dispatch-stat-value"><?php echo $pendingCalls; ?></strong>
                         </div>
                     </div>
@@ -188,17 +188,46 @@ try {
                 <section class="dispatch-panel dispatch-panel-calls">
                     <div class="panel-header">
                         <div>
-                            <div class="panel-eyebrow">Incident Queue</div>
+                            <div class="panel-eyebrow">Incident Intake</div>
                             <h2 class="panel-title">
-                                <i class="fas fa-phone"></i>
-                                Active Emergency Calls
+                                <i class="fas fa-inbox"></i>
+                                Incident Intake Queue
                             </h2>
                         </div>
                         <span id="active-calls-badge" class="panel-badge panel-badge-danger"><?php echo $pendingCalls; ?> Pending</span>
                     </div>
-                    <div id="active-calls-container" class="dispatch-scroll-list">
+                    <p class="intake-queue-guidance">View all pending incidents together, or filter by where each report came from.</p>
+                    <div class="intake-source-filters" role="group" aria-label="Filter pending incidents by source">
+                        <button type="button" class="intake-source-filter is-active intake-source-filter-all" data-intake-filter="all" aria-pressed="true">
+                            <i class="fas fa-list" aria-hidden="true"></i>
+                            <span>All</span>
+                            <strong data-intake-count="all">0</strong>
+                        </button>
+                        <button type="button" class="intake-source-filter" data-intake-filter="call" aria-pressed="false">
+                            <i class="fas fa-phone" aria-hidden="true"></i>
+                            <span>Calls</span>
+                            <strong data-intake-count="call">0</strong>
+                        </button>
+                        <button type="button" class="intake-source-filter" data-intake-filter="manual" aria-pressed="false">
+                            <i class="fas fa-edit" aria-hidden="true"></i>
+                            <span>Manual</span>
+                            <strong data-intake-count="manual">0</strong>
+                        </button>
+                        <button type="button" class="intake-source-filter" data-intake-filter="tip" aria-pressed="false">
+                            <i class="fas fa-lightbulb" aria-hidden="true"></i>
+                            <span>TIP</span>
+                            <strong data-intake-count="tip">0</strong>
+                        </button>
+                        <button type="button" class="intake-source-filter" data-intake-filter="interagency" aria-pressed="false">
+                            <i class="fas fa-building" aria-hidden="true"></i>
+                            <span>Inter-agency</span>
+                            <strong data-intake-count="interagency">0</strong>
+                        </button>
+                    </div>
+                    <div id="intake-queue-summary" class="intake-queue-summary" aria-live="polite">Loading pending incidents…</div>
+                    <div id="active-calls-container" class="dispatch-scroll-list incident-intake-list" role="list" aria-live="polite" aria-busy="true">
                     <?php
-                    // ...existing code for active calls...
+                    // Source-aware pending incidents are rendered by the canonical client queue.
                     ?>
                     </div>
                 </section>
@@ -905,7 +934,6 @@ document.addEventListener('DOMContentLoaded', function() {
     };
 });
 </script>
-        </script>
 
         <!-- Uncomment if already have content -->
         <?php include $rootDir . '/includes/admin-footer.php'; ?>
@@ -2045,64 +2073,6 @@ document.addEventListener('DOMContentLoaded', () => {
 });
 </script>
 <script>
-// Fallback: populate Active Emergency Calls from API when server-side list is empty
-document.addEventListener('DOMContentLoaded', () => {
-    try {
-        const container = document.getElementById('active-calls-container');
-        if (!container) return;
-        const hasCards = container.querySelector('.call-card');
-        if (hasCards) return; // server-side rendered
-        fetch('api/incidents_list.php?status=pending', { cache: 'no-store' })
-            .then(r => r.json())
-            .then(res => {
-                if (!res.ok) return;
-                const items = res.items || [];
-                const badge = document.getElementById('active-calls-badge');
-                if (badge) badge.textContent = `${items.length} Pending`;
-                if (!items.length) {
-                    container.innerHTML = '<div class="call-card"><div class="call-info"><div class="call-details"><div class="call-title">No pending emergency calls.</div></div></div></div>';
-                    return;
-                }
-                container.innerHTML = '';
-                items.forEach(it => {
-                    const prio = (it.priority || 'medium').toLowerCase();
-                    const prioClass = prio === 'critical'
-                        ? 'critical'
-                        : (prio === 'high' || prio === 'urgent'
-                            ? 'high'
-                            : (prio === 'low' ? 'low' : 'medium'));
-                    const timeAgo = formatTimeAgo(it.created_at) || 'Just now';
-                    const title = it.title || it.type || 'Incident';
-                    const caller = it.caller_name || 'Unknown';
-                    const phone = it.caller_phone || '';
-                    const card = document.createElement('div');
-                    card.className = 'call-card ' + prioClass;
-                    card.setAttribute('data-incident-id', String(it.id));
-                    card.innerHTML = `
-                        <div class="call-info">
-                            <div class="call-details">
-                                <div class="call-title">${escapeHtml(title)}</div>
-                                <div class="call-meta">
-                                    <span><i class="fas fa-clock"></i> ${escapeHtml(timeAgo)}</span>
-                                    <span><i class="fas fa-user"></i> ${escapeHtml(caller)}</span>
-                                    <span class="status-indicator status-${prioClass}"></span> ${prio.charAt(0).toUpperCase() + prio.slice(1)} Priority
-                                </div>
-                            </div>
-                        </div>
-                        <div class="call-actions">
-                            <button class="btn-dispatch" onclick="openDispatchModal(${it.id})">Dispatch Unit</button>
-                            <button class="btn-action-small" onclick="viewDetails(this)" data-incident-id="${it.id}"><i class="fas fa-eye"></i> Details</button>
-                            ${phone ? `<button class="btn-action-small call-phone-btn" onclick="contactCaller(this)" data-phone="${escapeAttr(phone)}"><i class="fas fa-phone"></i> Call</button>` : ''}
-                        </div>`;
-                    container.appendChild(card);
-                });
-            })
-            .catch(() => {});
-    } catch (e) {}
-
-    function escapeHtml(s) { return String(s || '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','\"':'&quot;','\'':'&#39;'})[c] || c); }
-    function escapeAttr(s) { return String(s || '').replace(/['"]/g, '_'); }
-});
 // Quick Action Handlers
 function postJSON(url, payload) {
     return fetch(url, {
@@ -2501,73 +2471,222 @@ function resolveIncident(btn) {
     }).catch(() => showNotification('Network error', 'error'));
 }
 
-function refreshActiveCalls() {
+const INCIDENT_INTAKE_SOURCES = Object.freeze({
+    all: { label: 'All sources', shortLabel: 'All', icon: 'fa-list' },
+    call: { label: 'Emergency Calls', shortLabel: 'Calls', icon: 'fa-phone' },
+    manual: { label: 'Manual Incidents', shortLabel: 'Manual', icon: 'fa-edit' },
+    tip: { label: 'Converted TIPs', shortLabel: 'TIP', icon: 'fa-lightbulb' },
+    interagency: { label: 'Inter-agency Incidents', shortLabel: 'Inter-agency', icon: 'fa-building' }
+});
+
+let incidentIntakeItems = [];
+let activeIncidentIntakeFilter = 'all';
+let activeCallsRefreshPromise = null;
+let incidentIntakeInitialized = false;
+
+function normalizeIncidentIntakeSource(item) {
+    const source = String(item && item.intake_source ? item.intake_source : '').trim().toLowerCase();
+    return Object.prototype.hasOwnProperty.call(INCIDENT_INTAKE_SOURCES, source) && source !== 'all'
+        ? source
+        : 'manual';
+}
+
+function normalizeIncidentPriority(value) {
+    const priority = String(value || 'medium').trim().toLowerCase();
+    if (priority === 'critical') return 'critical';
+    if (priority === 'high' || priority === 'urgent') return 'high';
+    if (priority === 'low') return 'low';
+    return 'medium';
+}
+
+function incidentIntakeTitle(item) {
+    const rawTitle = String(item && item.title ? item.title : '').trim();
+    const type = String(item && item.type ? item.type : 'Incident').trim();
+    if (/^incident from call\b/i.test(rawTitle)) {
+        const readableType = type ? type.charAt(0).toUpperCase() + type.slice(1) : 'Emergency';
+        return `${readableType} incident`;
+    }
+    return rawTitle || `${type || 'Emergency'} incident`;
+}
+
+function renderIncidentIntakeState(kind, title, message) {
     const container = document.getElementById('active-calls-container');
-    if (!container) return Promise.resolve([]);
-    return fetch('api/incidents_list.php?status=pending', { cache: 'no-store' })
-      .then(r => r.json())
-      .then(res => {
-        if (!res.ok) return;
-        const items = res.items || [];
-        const badge = document.getElementById('active-calls-badge');
-        if (badge) badge.textContent = `${items.length} Pending`;
-        if (!items.length) {
-            container.innerHTML = '<div class="call-card"><div class="call-info"><div class="call-details"><div class="call-title">No pending emergency calls.</div></div></div></div>';
-            return items;
-        }
-        container.innerHTML = '';
-        items.forEach(it => {
-            const prio = (it.priority || 'medium').toLowerCase();
-            const prioClass = prio === 'critical'
-                ? 'critical'
-                : (prio === 'high' || prio === 'urgent'
-                    ? 'high'
-                    : (prio === 'low' ? 'low' : 'medium'));
-            const timeAgo = formatTimeAgo(it.created_at) || 'Just now';
-            const title = it.title || it.type || 'Incident';
-            const caller = it.caller_name || 'Unknown';
-            const phone = it.caller_phone || '';
-            const card = document.createElement('div');
-            card.className = 'call-card ' + prioClass;
-            card.setAttribute('data-incident-id', String(it.id));
-            card.innerHTML = `
+    if (!container) return;
+    container.setAttribute('role', 'status');
+    const icons = {
+        loading: 'fa-spinner fa-spin',
+        empty: 'fa-inbox',
+        error: 'fa-exclamation-triangle'
+    };
+    const retry = kind === 'error'
+        ? '<button type="button" class="intake-state-retry" onclick="refreshActiveCalls()"><i class="fas fa-sync-alt" aria-hidden="true"></i> Retry</button>'
+        : '';
+    container.innerHTML = `
+        <div class="intake-queue-state intake-queue-state-${kind}" role="status">
+            <span class="intake-state-icon"><i class="fas ${icons[kind] || icons.empty}" aria-hidden="true"></i></span>
+            <strong>${escapeHtml(title)}</strong>
+            <p>${escapeHtml(message)}</p>
+            ${retry}
+        </div>`;
+}
+
+function updateIncidentIntakeControls() {
+    const counts = { all: incidentIntakeItems.length, call: 0, manual: 0, tip: 0, interagency: 0 };
+    incidentIntakeItems.forEach(item => {
+        counts[normalizeIncidentIntakeSource(item)] += 1;
+    });
+
+    document.querySelectorAll('[data-intake-filter]').forEach(button => {
+        const source = String(button.dataset.intakeFilter || 'all');
+        const isActive = source === activeIncidentIntakeFilter;
+        button.classList.toggle('is-active', isActive);
+        button.setAttribute('aria-pressed', isActive ? 'true' : 'false');
+    });
+    document.querySelectorAll('[data-intake-count]').forEach(counter => {
+        const source = String(counter.dataset.intakeCount || 'all');
+        counter.textContent = String(counts[source] || 0);
+    });
+
+    const badge = document.getElementById('active-calls-badge');
+    if (badge) badge.textContent = `${incidentIntakeItems.length} Pending`;
+    return counts;
+}
+
+function renderIncidentIntakeQueue() {
+    const container = document.getElementById('active-calls-container');
+    const summary = document.getElementById('intake-queue-summary');
+    if (!container) return;
+
+    updateIncidentIntakeControls();
+    const visibleItems = activeIncidentIntakeFilter === 'all'
+        ? incidentIntakeItems.slice()
+        : incidentIntakeItems.filter(item => normalizeIncidentIntakeSource(item) === activeIncidentIntakeFilter);
+    const sourceMeta = INCIDENT_INTAKE_SOURCES[activeIncidentIntakeFilter] || INCIDENT_INTAKE_SOURCES.all;
+
+    if (summary) {
+        summary.textContent = `Showing ${visibleItems.length} of ${incidentIntakeItems.length} pending · ${sourceMeta.label}`;
+    }
+    if (!visibleItems.length) {
+        const isAll = activeIncidentIntakeFilter === 'all';
+        renderIncidentIntakeState(
+            'empty',
+            isAll ? 'No pending incidents' : `No pending ${sourceMeta.shortLabel.toLowerCase()} incidents`,
+            isAll ? 'New reports will appear here when they need dispatch.' : 'Choose another source or return to All to view the complete queue.'
+        );
+        return;
+    }
+
+    container.setAttribute('role', 'list');
+    container.innerHTML = visibleItems.map(item => {
+        const incidentId = toIncidentId(item && item.id);
+        if (incidentId === null) return '';
+        const source = normalizeIncidentIntakeSource(item);
+        const sourceInfo = INCIDENT_INTAKE_SOURCES[source];
+        const priority = normalizeIncidentPriority(item.priority);
+        const priorityLabel = priority.charAt(0).toUpperCase() + priority.slice(1);
+        const reference = String(item.incident_code || item.reference_no || `Incident ${incidentId}`).trim();
+        const location = String(item.location || item.location_address || 'Location not recorded').trim();
+        const timeAgo = formatTimeAgo(item.created_at) || 'Just now';
+        const phone = String(item.caller_phone || item.contact_number || item.phone || '').trim();
+        const sourceSystem = String(item.intake_source_system || '').trim();
+        const sourceDetail = source === 'interagency' && sourceSystem
+            ? `<span class="intake-source-system" title="Source system">${escapeHtml(sourceSystem)}</span>`
+            : '';
+        const callAction = phone
+            ? `<button type="button" class="btn-action-small call-phone-btn" onclick="contactCaller(this)" data-phone="${escapeHtml(phone)}"><i class="fas fa-phone" aria-hidden="true"></i> Call Reporter</button>`
+            : '<button type="button" class="btn-action-small call-phone-btn" disabled aria-disabled="true" title="No reporter phone number is available"><i class="fas fa-phone-slash" aria-hidden="true"></i> No Phone</button>';
+
+        return `
+            <article class="call-card incident-intake-card ${priority} source-${source}" data-incident-id="${incidentId}" role="listitem" aria-label="${escapeHtml(reference)}, ${escapeHtml(sourceInfo.label)}">
+                <div class="intake-card-topline">
+                    <span class="intake-source-badge source-${source}"><i class="fas ${sourceInfo.icon}" aria-hidden="true"></i> ${escapeHtml(sourceInfo.shortLabel)}</span>
+                    <strong class="intake-reference">${escapeHtml(reference)}</strong>
+                </div>
                 <div class="call-info">
                     <div class="call-details">
-                        <div class="call-title">${escapeHtml(title)}</div>
+                        <h3 class="call-title">${escapeHtml(incidentIntakeTitle(item))}</h3>
+                        <p class="intake-location"><i class="fas fa-map-marker-alt" aria-hidden="true"></i> ${escapeHtml(location)}</p>
                         <div class="call-meta">
-                            <span><i class="fas fa-clock"></i> ${escapeHtml(timeAgo)}</span>
-                            <span><i class="fas fa-user"></i> ${escapeHtml(caller)}</span>
-                            <span class="status-indicator status-${prioClass}"></span> ${prio.charAt(0).toUpperCase() + prio.slice(1)} Priority
+                            <span><i class="fas fa-clock" aria-hidden="true"></i> ${escapeHtml(timeAgo)}</span>
+                            <span class="intake-priority priority-${priority}"><span class="status-indicator status-${priority}"></span>${priorityLabel} Priority</span>
+                            ${sourceDetail}
                         </div>
                     </div>
                 </div>
-                <div class="call-actions">
-                    <button class="btn-dispatch" onclick="openDispatchModal(${it.id})">Dispatch Unit</button>
-                    <button class="btn-action-small" onclick="viewDetails(this)" data-incident-id="${it.id}"><i class="fas fa-eye"></i> Details</button>
-                    ${phone ? `<button class="btn-action-small call-phone-btn" onclick="contactCaller(this)" data-phone="${escapeAttr(phone)}"><i class="fas fa-phone"></i> Call</button>` : ''}
-                </div>`;
-            container.appendChild(card);
-        });
-        return items;
-      }).catch(() => []);
+                <div class="call-actions intake-card-actions">
+                    <button type="button" class="btn-dispatch" onclick="openDispatchModal(${incidentId})"><i class="fas fa-ambulance" aria-hidden="true"></i> Dispatch Unit</button>
+                    <button type="button" class="btn-action-small" onclick="viewDetails(this)" data-incident-id="${incidentId}"><i class="fas fa-eye" aria-hidden="true"></i> View Details</button>
+                    ${callAction}
+                </div>
+            </article>`;
+    }).join('');
+}
+
+function setIncidentIntakeFilter(source) {
+    if (!Object.prototype.hasOwnProperty.call(INCIDENT_INTAKE_SOURCES, source)) return;
+    activeIncidentIntakeFilter = source;
+    renderIncidentIntakeQueue();
+}
+
+function initializeIncidentIntakeQueue() {
+    if (incidentIntakeInitialized) return;
+    incidentIntakeInitialized = true;
+    document.querySelectorAll('[data-intake-filter]').forEach(button => {
+        button.addEventListener('click', () => setIncidentIntakeFilter(String(button.dataset.intakeFilter || 'all')));
+    });
+    renderIncidentIntakeState('loading', 'Loading incident queue', 'Checking all pending incident sources…');
+    refreshActiveCalls();
+}
+
+function refreshActiveCalls() {
+    const container = document.getElementById('active-calls-container');
+    if (!container) return Promise.resolve([]);
+    if (activeCallsRefreshPromise) return activeCallsRefreshPromise;
+
+    container.setAttribute('aria-busy', 'true');
+    activeCallsRefreshPromise = fetch('api/incidents_list.php?status=pending&include_intake_source=1', {
+        cache: 'no-store',
+        credentials: 'same-origin',
+        headers: { 'Accept': 'application/json' }
+    })
+      .then(async response => {
+        const payload = await response.json().catch(() => ({}));
+        if (!response.ok || !payload.ok) {
+            throw new Error(payload.error || 'Could not load the incident queue.');
+        }
+        incidentIntakeItems = Array.isArray(payload.items)
+            ? payload.items.filter(item => toIncidentId(item && item.id) !== null)
+            : [];
+        renderIncidentIntakeQueue();
+        return incidentIntakeItems;
+      })
+      .catch(error => {
+        const summary = document.getElementById('intake-queue-summary');
+        if (incidentIntakeItems.length) {
+            renderIncidentIntakeQueue();
+            if (summary) summary.textContent = 'Showing the last loaded queue · Refresh failed';
+        } else {
+            updateIncidentIntakeControls();
+            if (summary) summary.textContent = 'Incident queue unavailable';
+            renderIncidentIntakeState('error', 'Could not load the queue', error.message || 'Check the connection and try again.');
+        }
+        return incidentIntakeItems;
+      })
+      .finally(() => {
+        container.setAttribute('aria-busy', 'false');
+        activeCallsRefreshPromise = null;
+      });
+    return activeCallsRefreshPromise;
 }
 
 function removeIncidentFromActiveCalls(incidentId) {
     const id = toIncidentId(incidentId);
     if (id === null) return;
-    const container = document.getElementById('active-calls-container');
-    if (!container) return;
-    const card = container.querySelector(`[data-incident-id="${id}"]`);
-    if (card) {
-        card.remove();
-    }
-    const remaining = container.querySelectorAll('.call-card[data-incident-id]').length;
-    const badge = document.getElementById('active-calls-badge');
-    if (badge) badge.textContent = `${remaining} Pending`;
-    if (remaining === 0) {
-        container.innerHTML = '<div class="call-card"><div class="call-info"><div class="call-details"><div class="call-title">No pending emergency calls.</div></div></div></div>';
-    }
+    incidentIntakeItems = incidentIntakeItems.filter(item => toIncidentId(item && item.id) !== id);
+    renderIncidentIntakeQueue();
 }
+
+document.addEventListener('DOMContentLoaded', initializeIncidentIntakeQueue);
 
 window.addEventListener('storage', function(e) {
     if (e.key === 'ers_incidents' || e.key === 'ers_incidents_changed' || e.key === 'ers_last_logged_incident') {
