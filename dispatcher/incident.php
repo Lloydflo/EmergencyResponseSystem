@@ -4,8 +4,15 @@ require_once $rootDir . '/includes/auth.php';
 // Require full login (including OTP verification) before loading page
 require_role('dispatcher', 'dispatcher/incident.php');
 require_once $rootDir . '/includes/db.php';
+header('Cache-Control: private, no-store, max-age=0');
+header('Pragma: no-cache');
 
 $pageTitle = 'Incident Priority Management';
+$assetUrl = static function (string $relativePath) use ($rootDir): string {
+    $fullPath = $rootDir . DIRECTORY_SEPARATOR . str_replace(['/', '\\'], DIRECTORY_SEPARATOR, $relativePath);
+    $version = @filemtime($fullPath) ?: time();
+    return htmlspecialchars($relativePath . '?v=' . $version, ENT_QUOTES, 'UTF-8');
+};
 $aiIncidentData = [
     'type' => 'Unknown',
     'location' => 'Unknown',
@@ -58,16 +65,16 @@ try {
     <?php include $rootDir . '/includes/theme-init.php'; ?>
     <base href="../">
     <link rel="icon" type="image/x-icon" href="images/favicon.ico">
-    <link rel="stylesheet" href="css/global.css">
+    <link rel="stylesheet" href="<?php echo $assetUrl('css/global.css'); ?>">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
-    <link rel="stylesheet" href="css/sidebar.css">
-    <link rel="stylesheet" href="css/admin-header.css">
-    <link rel="stylesheet" href="css/sidebar-footer.css">
-    <link rel="stylesheet" href="css/cards.css">
-    <link rel="stylesheet" href="css/incident.css">
+    <link rel="stylesheet" href="<?php echo $assetUrl('css/sidebar.css'); ?>">
+    <link rel="stylesheet" href="<?php echo $assetUrl('css/admin-header.css'); ?>">
+    <link rel="stylesheet" href="<?php echo $assetUrl('css/sidebar-footer.css'); ?>">
+    <link rel="stylesheet" href="<?php echo $assetUrl('css/cards.css'); ?>">
+    <link rel="stylesheet" href="<?php echo $assetUrl('css/incident.css'); ?>">
 
 </head>
-<body>
+<body class="dispatcher-incident-page">
     <!-- Include Sidebar Component -->
     <?php include $rootDir . '/includes/sidebar.php'; ?>
 
@@ -1116,7 +1123,7 @@ try {
         } catch (e) {}
     });
     </script>
-    
+
     <script>
         // Resolved incidents modal: list + per-incident details
         function openResolvedModal() {

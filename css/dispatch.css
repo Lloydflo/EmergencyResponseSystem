@@ -388,7 +388,7 @@
 
 .dispatcher-dispatch-page .intake-source-filters {
     display: grid;
-    grid-template-columns: repeat(3, minmax(0, 1fr));
+    grid-template-columns: repeat(2, minmax(0, 1fr));
     gap: 0.5rem;
     margin-bottom: 0.7rem;
 }
@@ -416,10 +416,6 @@
 
 .dispatcher-dispatch-page .intake-source-filter-all {
     grid-column: auto;
-}
-
-.dispatcher-dispatch-page .intake-source-filter[data-intake-filter="interagency"] {
-    grid-column: span 2;
 }
 
 .dispatcher-dispatch-page .intake-source-filter i {
@@ -851,6 +847,21 @@
 .dispatcher-dispatch-page .intake-source-badge.source-interagency {
     color: #6d28d9;
     background: #ede9fe;
+}
+
+.dispatcher-dispatch-page .intake-source-badge.source-unverified {
+    color: #854d0e;
+    background: #fef9c3;
+}
+
+.dispatcher-dispatch-page .call-phone-btn:disabled,
+.dispatcher-dispatch-page .call-phone-btn[aria-disabled="true"] {
+    color: #64748b;
+    background: #e2e8f0;
+    box-shadow: none;
+    cursor: not-allowed;
+    opacity: 1;
+    transform: none;
 }
 
 .dispatcher-dispatch-page .intake-reference {
@@ -1286,6 +1297,17 @@
     background: #4c1d95;
 }
 
+[data-theme="dark"] .dispatcher-dispatch-page .intake-source-badge.source-unverified {
+    color: #fef3c7;
+    background: #713f12;
+}
+
+[data-theme="dark"] .dispatcher-dispatch-page .call-phone-btn:disabled,
+[data-theme="dark"] .dispatcher-dispatch-page .call-phone-btn[aria-disabled="true"] {
+    color: #94a3b8;
+    background: #1e293b;
+}
+
 [data-theme="dark"] .dispatcher-dispatch-page .intake-source-system {
     color: #c4b5fd;
 }
@@ -1643,15 +1665,6 @@
 }
 
 @media (max-width: 420px) {
-    .dispatcher-dispatch-page .intake-source-filters {
-        grid-template-columns: repeat(2, minmax(0, 1fr));
-    }
-
-    .dispatcher-dispatch-page .intake-source-filter-all,
-    .dispatcher-dispatch-page .intake-source-filter[data-intake-filter="interagency"] {
-        grid-column: 1 / -1;
-    }
-
     .dispatcher-dispatch-page .intake-card-topline {
         align-items: flex-start;
         flex-direction: column;

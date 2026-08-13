@@ -4,6 +4,8 @@ require_once $rootDir . '/includes/config.php';
 require_once $rootDir . '/includes/auth.php';
 // Require full login (including OTP verification) before loading page
 require_role('dispatcher', 'dispatcher/call.php');
+header('Cache-Control: private, no-store, max-age=0');
+header('Pragma: no-cache');
 
 $pageTitle = 'Emergency Call Center';
 $turnUrl = trim((string) ers_env('WEBRTC_TURN_URL', ''));
@@ -1648,7 +1650,8 @@ if ($turnIsConfigured && preg_match('/^turns?:(?:\/\/)?([^:\/?]+)/i', $turnUrl, 
     }
 
     function transferSubmitContext(form) {
-        const session = getSharedCallSession() || {};
+        const sharedSession = getSharedCallSession() || {};
+        const session = sharedSession.isTransfer === true ? sharedSession : {};
         const call = activeTransferCall || {};
         const incidentId = Number(
             (form && form.dataset ? form.dataset.transferIncidentId : '')
@@ -2988,6 +2991,7 @@ if ($turnIsConfigured && preg_match('/^turns?:(?:\/\/)?([^:\/?]+)/i', $turnUrl, 
         if (submitButton && submitButton.disabled) {
             return;
         }
+        const isManualEntry = document.getElementById('activeCallPanel')?.classList.contains('manual-create') === true;
         const locationText = document.getElementById('incidentLocation').value.trim();
         if (!locationText) {
             alert('Please provide an incident location.');
@@ -3011,26 +3015,39 @@ if ($turnIsConfigured && preg_match('/^turns?:(?:\/\/)?([^:\/?]+)/i', $turnUrl, 
             location: finalLocationText,
             description: document.getElementById('incidentDescription').value.trim(),
             priority: priorityValue,
-            status: document.getElementById('status').value
+            status: document.getElementById('status').value,
+            // Persist provenance at creation time. Both live calls and manual
+            // entries use the same endpoint, so reported_by_call_id alone is
+            // not enough to classify them later in Dispatch Center.
+            intake_source: isManualEntry ? 'manual' : 'call'
         };
-        const callContext = activeTransferCall || getSharedCallSession() || activeCall || {};
-        const receivedAtMs = Number(callContext.start || form?.dataset?.callReceivedAtMs || 0);
-        const acceptedAtMs = Number(callContext.acceptedAt || form?.dataset?.callAcceptedAtMs || 0);
+        const callContext = isManualEntry
+            ? {}
+            : (activeTransferCall || getSharedCallSession() || activeCall || {});
+        const receivedAtMs = isManualEntry
+            ? 0
+            : Number(callContext.start || form?.dataset?.callReceivedAtMs || 0);
+        const acceptedAtMs = isManualEntry
+            ? 0
+            : Number(callContext.acceptedAt || form?.dataset?.callAcceptedAtMs || 0);
         if (Number.isFinite(receivedAtMs) && receivedAtMs > 0) {
             payload.received_at = new Date(receivedAtMs).toISOString();
         }
         if (Number.isFinite(acceptedAtMs) && acceptedAtMs > 0) {
             payload.accepted_at = new Date(acceptedAtMs).toISOString();
         }
-        const auditSessionId = String(
-            callContext.auditSessionId || form?.dataset?.callAuditSessionId || ''
-        ).trim();
+        const auditSessionId = isManualEntry
+            ? ''
+            : String(callContext.auditSessionId || form?.dataset?.callAuditSessionId || '').trim();
         if (/^[A-Za-z0-9.:-]{8,96}$/.test(auditSessionId)) {
             payload.audit_session_id = auditSessionId;
         }
 
-        const transferContext = transferSubmitContext(form);
+        const transferContext = isManualEntry
+            ? { incidentId: 0, transferId: '', callId: '', referenceNo: '', sourceSystem: '' }
+            : transferSubmitContext(form);
         if (transferContext.incidentId > 0 || transferContext.transferId || transferContext.callId || transferContext.referenceNo) {
+            payload.intake_source = 'interagency';
             if (transferContext.incidentId > 0) {
                 payload.transfer_incident_id = transferContext.incidentId;
             }

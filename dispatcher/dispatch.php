@@ -3,6 +3,8 @@ $rootDir = dirname(__DIR__);
 require_once $rootDir . '/includes/auth.php';
 // Require full login (including OTP verification) before loading page
 require_role('dispatcher', 'dispatcher/dispatch.php');
+header('Cache-Control: private, no-store, max-age=0');
+header('Pragma: no-cache');
 $pageTitle = 'Emergency Dispatch Center';
 $assetUrl = static function (string $relativePath) use ($rootDir): string {
     $fullPath = $rootDir . DIRECTORY_SEPARATOR . str_replace(['/', '\\'], DIRECTORY_SEPARATOR, $relativePath);
@@ -22,7 +24,7 @@ try {
     require_once $rootDir . '/includes/db.php';
     require_once $rootDir . '/includes/vehicle_resource_units.php';
     $pdo = get_db_connection();
-    
+
     if ($pdo) {
         $vehicleResourceTable = ers_vehicle_resource_units_table($pdo);
         if ($vehicleResourceTable !== null) {
@@ -31,10 +33,10 @@ try {
 
         // Get active incidents (pending or dispatched)
         $activeIncidents = (int)$pdo->query("SELECT COUNT(*) AS c FROM incidents WHERE status IN ('pending','dispatched')")->fetch()['c'];
-        
+
         // Get available units
         $availableUnits = ers_count_available_vehicle_resource_units($pdo, $vehicleResourceTable ?? null);
-        
+
         // Get all pending intake incidents that do not already have responders assigned.
         $pendingCallsSql = "SELECT COUNT(*) AS c FROM incidents i WHERE i.status='pending'";
         if (function_exists('ers_vehicle_resource_table_exists') && ers_vehicle_resource_table_exists($pdo, 'dispatches')) {
@@ -68,7 +70,7 @@ try {
                 strtoupper((string)($topIncident['priority'] ?? ''))
             );
         }
-        
+
         // Determine system status based on available units and active incidents
         if ($availableUnits === 0 && $activeIncidents > 0) {
             $systemStatus = 'Warning: No available units';
@@ -222,6 +224,11 @@ try {
                             <i class="fas fa-building" aria-hidden="true"></i>
                             <span>Inter-agency</span>
                             <strong data-intake-count="interagency">0</strong>
+                        </button>
+                        <button type="button" class="intake-source-filter" data-intake-filter="unverified" aria-pressed="false" title="Older incidents whose source was not recorded">
+                            <i class="fas fa-exclamation-triangle" aria-hidden="true"></i>
+                            <span>Needs review</span>
+                            <strong data-intake-count="unverified">0</strong>
                         </button>
                     </div>
                     <div id="intake-queue-summary" class="intake-queue-summary" aria-live="polite">Loading pending incidents…</div>
@@ -2473,10 +2480,11 @@ function resolveIncident(btn) {
 
 const INCIDENT_INTAKE_SOURCES = Object.freeze({
     all: { label: 'All sources', shortLabel: 'All', icon: 'fa-list' },
-    call: { label: 'Emergency Calls', shortLabel: 'Calls', icon: 'fa-phone' },
-    manual: { label: 'Manual Incidents', shortLabel: 'Manual', icon: 'fa-edit' },
-    tip: { label: 'Converted TIPs', shortLabel: 'TIP', icon: 'fa-lightbulb' },
-    interagency: { label: 'Inter-agency Incidents', shortLabel: 'Inter-agency', icon: 'fa-building' }
+    call: { label: 'Emergency Calls', shortLabel: 'Calls', cardLabel: 'Emergency Call', icon: 'fa-phone' },
+    manual: { label: 'Manual Incidents', shortLabel: 'Manual', cardLabel: 'Manual Entry', icon: 'fa-edit' },
+    tip: { label: 'Converted TIPs', shortLabel: 'TIP', cardLabel: 'Converted TIP', icon: 'fa-lightbulb' },
+    interagency: { label: 'Inter-agency Incidents', shortLabel: 'Inter-agency', cardLabel: 'Inter-agency', icon: 'fa-building' },
+    unverified: { label: 'Sources needing review', shortLabel: 'Needs review', cardLabel: 'Source unverified', icon: 'fa-exclamation-triangle' }
 });
 
 let incidentIntakeItems = [];
@@ -2488,7 +2496,7 @@ function normalizeIncidentIntakeSource(item) {
     const source = String(item && item.intake_source ? item.intake_source : '').trim().toLowerCase();
     return Object.prototype.hasOwnProperty.call(INCIDENT_INTAKE_SOURCES, source) && source !== 'all'
         ? source
-        : 'manual';
+        : 'unverified';
 }
 
 function normalizeIncidentPriority(value) {
@@ -2531,7 +2539,7 @@ function renderIncidentIntakeState(kind, title, message) {
 }
 
 function updateIncidentIntakeControls() {
-    const counts = { all: incidentIntakeItems.length, call: 0, manual: 0, tip: 0, interagency: 0 };
+    const counts = { all: incidentIntakeItems.length, call: 0, manual: 0, tip: 0, interagency: 0, unverified: 0 };
     incidentIntakeItems.forEach(item => {
         counts[normalizeIncidentIntakeSource(item)] += 1;
     });
@@ -2591,7 +2599,9 @@ function renderIncidentIntakeQueue() {
         const sourceSystem = String(item.intake_source_system || '').trim();
         const sourceDetail = source === 'interagency' && sourceSystem
             ? `<span class="intake-source-system" title="Source system">${escapeHtml(sourceSystem)}</span>`
-            : '';
+            : (source === 'unverified'
+                ? '<span class="intake-source-system" title="This older record has no durable source metadata">Source not recorded in legacy data</span>'
+                : '');
         const callAction = phone
             ? `<button type="button" class="btn-action-small call-phone-btn" onclick="contactCaller(this)" data-phone="${escapeHtml(phone)}"><i class="fas fa-phone" aria-hidden="true"></i> Call Reporter</button>`
             : '<button type="button" class="btn-action-small call-phone-btn" disabled aria-disabled="true" title="No reporter phone number is available"><i class="fas fa-phone-slash" aria-hidden="true"></i> No Phone</button>';
@@ -2599,7 +2609,7 @@ function renderIncidentIntakeQueue() {
         return `
             <article class="call-card incident-intake-card ${priority} source-${source}" data-incident-id="${incidentId}" role="listitem" aria-label="${escapeHtml(reference)}, ${escapeHtml(sourceInfo.label)}">
                 <div class="intake-card-topline">
-                    <span class="intake-source-badge source-${source}"><i class="fas ${sourceInfo.icon}" aria-hidden="true"></i> ${escapeHtml(sourceInfo.shortLabel)}</span>
+                    <span class="intake-source-badge source-${source}"><i class="fas ${sourceInfo.icon}" aria-hidden="true"></i> ${escapeHtml(sourceInfo.cardLabel || sourceInfo.shortLabel)}</span>
                     <strong class="intake-reference">${escapeHtml(reference)}</strong>
                 </div>
                 <div class="call-info">
