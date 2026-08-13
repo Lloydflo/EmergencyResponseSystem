@@ -97,8 +97,6 @@ try {
 
                     <div class="incident-hero-chips">
                         <span class="incident-chip incident-chip-live"><span class="incident-chip-dot"></span> Priority Queue Live</span>
-                        <span class="incident-chip">Dispatcher Review Ready</span>
-                        <span class="incident-chip">AI Analysis Enabled</span>
                     </div>
                 </div>
 
@@ -108,7 +106,7 @@ try {
                         <div class="incident-focus-value"><?php echo htmlspecialchars($aiIncidentData['type']); ?></div>
                         <div class="incident-focus-meta"><?php echo htmlspecialchars($aiIncidentData['location']); ?></div>
                         <div class="incident-focus-severity">Priority: <?php echo htmlspecialchars($aiIncidentData['severity']); ?></div>
-                        <div class="incident-focus-desc"><?php echo htmlspecialchars($aiIncidentData['description']); ?></div>
+                        <div class="incident-focus-desc" title="<?php echo htmlspecialchars($aiIncidentData['description']); ?>"><?php echo htmlspecialchars($aiIncidentData['description']); ?></div>
                     </div>
                 </div>
             </section>
@@ -170,6 +168,7 @@ try {
                         <label for="priority-filter">Priority Level</label>
                         <select id="priority-filter">
                             <option value="">All Priorities</option>
+                            <option value="critical">Critical Priority</option>
                             <option value="high">High Priority</option>
                             <option value="medium">Medium Priority</option>
                             <option value="low">Low Priority</option>
@@ -596,6 +595,23 @@ try {
             return match ? String(match[1]).trim() : '';
         }
 
+        function incidentDisplaySummary(incident) {
+            const raw = String(incident && incident.description ? incident.description : '').replace(/\s+/g, ' ').trim();
+            if (!raw) return 'No description recorded.';
+            if (/emergency report conversation summary/i.test(raw)) {
+                const caller = raw.match(/Citizen:\s*([^]+?)\s+Phone:/i);
+                const reportedType = raw.match(/Incident Type:\s*([^]+?)\s+Location:/i)
+                    || raw.match(/Emergency type:\s*([^]+?)\s+Location:/i);
+                const typeLabel = reportedType && reportedType[1]
+                    ? reportedType[1].trim()
+                    : String(incident.type || 'Emergency').trim();
+                const callerLabel = caller && caller[1] ? ` reported by ${caller[1].trim()}` : '';
+                return `${typeLabel}${callerLabel}. Open details for the complete call narrative.`;
+            }
+            const withoutLinks = raw.replace(/https?:\/\/\S+/gi, '').replace(/\s+/g, ' ').trim();
+            return withoutLinks.length > 220 ? `${withoutLinks.slice(0, 217).trim()}…` : withoutLinks;
+        }
+
         function escapeHtml(value) {
             return String(value === null || value === undefined ? '' : value)
                 .replace(/&/g, '&amp;')
@@ -613,7 +629,7 @@ try {
             const ref = i.incident_code || i.reference_no || '';
             const type = capitalize(i.type || 'Unknown');
             const priorityLabel = capitalize(priority);
-            const description = (i.description || '').trim();
+            const description = incidentDisplaySummary(i);
             const id = Number(i.id || 0);
             const phone = getIncidentPhone(i);
             const phoneDisabled = phone ? '' : ' disabled aria-disabled="true"';
@@ -650,15 +666,15 @@ try {
                     <div class="incident-card-actions" aria-label="Actions for incident ${escapeHtml(ref || type)}">
                         <button class="btn-incident-action action-priority btn-priority priority-${escapeHtml(priority)}" type="button" data-action="priority" title="Change the current ${escapeHtml(priorityLabel)} priority" aria-label="Change priority for ${escapeHtml(ref || type)}">
                             <i class="fas fa-flag" aria-hidden="true"></i>
-                            <span>Change Priority</span>
+                            <span>Set Priority</span>
                         </button>
                         <button class="btn-incident-action action-edit" type="button" data-action="edit" title="Edit incident details" aria-label="Edit incident ${escapeHtml(ref || type)}">
                             <i class="fas fa-pen-to-square" aria-hidden="true"></i>
-                            <span>Edit Details</span>
+                            <span>Edit</span>
                         </button>
                         <button class="btn-incident-action action-call" type="button" data-action="call" title="${escapeHtml(phoneTitle)}" aria-label="Call contact for incident ${escapeHtml(ref || type)}"${phoneDisabled}>
                             <i class="fas fa-phone" aria-hidden="true"></i>
-                            <span>${phone ? 'Call Contact' : 'No Phone'}</span>
+                            <span>${phone ? 'Call' : 'No Phone'}</span>
                         </button>
                         <button class="btn-incident-action action-resolve" type="button" data-action="resolve" title="Resolve incident" aria-label="Resolve incident ${escapeHtml(ref || type)}">
                             <i class="fas fa-circle-check" aria-hidden="true"></i>

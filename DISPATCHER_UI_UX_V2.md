@@ -1,4 +1,4 @@
-# Dispatcher UI/UX v2
+# Dispatcher UI/UX v3
 
 ## Deployment
 
@@ -15,21 +15,26 @@ but running the migration during deployment is the recommended path.
 - Accepted live call: **Emergency Call**
 - Create Incident form: **Manual Entry**
 - Converted anonymous tip: **Converted TIP**
-- Incoming external/group case: **Inter-agency**
-- Historical row without durable provenance: **Needs review**
+- Incoming external/group case: stays visible in **All** with its source badge
+- Historical row without durable provenance: stays visible in **All** as an
+  unverified legacy source
 
-Historical ambiguous rows are not guessed as Manual or Call. The former schema
-used the same call/incident records for both flows, so a guess could hide an
-operational case under the wrong filter. Newly created records are persisted
-with an exact source, and accepted-call audit rows are linked to their call ID.
-Existing TIP, inter-agency, and bound accepted-call records are recognized from
-their durable link/audit evidence at read time.
+The four visible filters are **All**, **Calls**, **Manual**, and **TIP**. No
+pending incident is removed from All. Historical ambiguous rows are not guessed
+as Manual or Call because the former schema used the same call/incident records
+for both flows. Existing TIP, external, and bound accepted-call records are
+recognized from their durable link/audit evidence at read time. A linked
+`call_accepted` audit is shown in Calls even when its original incident record
+also carries an external source label.
 
 ## UI fixes
 
-- Incident Priority styles are cache-versioned, and incident cards adapt from
-  two columns to one without horizontal scrolling.
+- Incident Priority uses one readable queue column, compact operational
+  summaries, labeled actions, and no horizontal scrolling.
 - Incident actions remain labeled and touch-sized.
-- Dispatch Center has live source counts, explicit source badges, and a separate
-  Needs review queue for legacy records.
+- Dispatch Center has exactly four visible source filters with live counts.
+  External and legacy items remain identified inside All without adding tabs.
+- Call Center layout is visually reorganized by CSS only. `dispatcher/call.php`,
+  `api/calls_create.php`, Socket.IO/WebRTC, accept/reject, transfer, and logging
+  behavior are unchanged from the uploaded project.
 - Dispatch, Details, Call Reporter, unit assignment, and map workflows are unchanged.

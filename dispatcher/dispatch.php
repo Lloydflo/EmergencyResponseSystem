@@ -198,7 +198,7 @@ try {
                         </div>
                         <span id="active-calls-badge" class="panel-badge panel-badge-danger"><?php echo $pendingCalls; ?> Pending</span>
                     </div>
-                    <p class="intake-queue-guidance">View all pending incidents together, or filter by where each report came from.</p>
+                    <p class="intake-queue-guidance">Keep the complete queue in All, or focus on calls, manual logs, and converted TIPs.</p>
                     <div class="intake-source-filters" role="group" aria-label="Filter pending incidents by source">
                         <button type="button" class="intake-source-filter is-active intake-source-filter-all" data-intake-filter="all" aria-pressed="true">
                             <i class="fas fa-list" aria-hidden="true"></i>
@@ -219,16 +219,6 @@ try {
                             <i class="fas fa-lightbulb" aria-hidden="true"></i>
                             <span>TIP</span>
                             <strong data-intake-count="tip">0</strong>
-                        </button>
-                        <button type="button" class="intake-source-filter" data-intake-filter="interagency" aria-pressed="false">
-                            <i class="fas fa-building" aria-hidden="true"></i>
-                            <span>Inter-agency</span>
-                            <strong data-intake-count="interagency">0</strong>
-                        </button>
-                        <button type="button" class="intake-source-filter" data-intake-filter="unverified" aria-pressed="false" title="Older incidents whose source was not recorded">
-                            <i class="fas fa-exclamation-triangle" aria-hidden="true"></i>
-                            <span>Needs review</span>
-                            <strong data-intake-count="unverified">0</strong>
                         </button>
                     </div>
                     <div id="intake-queue-summary" class="intake-queue-summary" aria-live="polite">Loading pending incidents…</div>
@@ -2061,7 +2051,12 @@ document.addEventListener('DOMContentLoaded', () => {
                     incidentReferenceNo: code || ''
                 });
             }
-            showNotification(code ? `Incident ${code} logged. Select a dispatch unit.` : 'Incident logged. Select a dispatch unit.', 'info');
+            showNotification(
+                code
+                    ? `Call incident ${code} is saved and highlighted in Calls. Select a dispatch unit.`
+                    : 'Call incident is saved in Calls. Select a dispatch unit.',
+                'success'
+            );
             refreshActiveCalls().finally(() => {
                 if (incidentId !== null) {
                     window.setTimeout(() => openDispatchModal(incidentId), 220);
@@ -2486,11 +2481,14 @@ const INCIDENT_INTAKE_SOURCES = Object.freeze({
     interagency: { label: 'Inter-agency Incidents', shortLabel: 'Inter-agency', cardLabel: 'Inter-agency', icon: 'fa-building' },
     unverified: { label: 'Sources needing review', shortLabel: 'Needs review', cardLabel: 'Source unverified', icon: 'fa-exclamation-triangle' }
 });
+const VISIBLE_INTAKE_FILTERS = new Set(['all', 'call', 'manual', 'tip']);
 
 let incidentIntakeItems = [];
 let activeIncidentIntakeFilter = 'all';
 let activeCallsRefreshPromise = null;
 let incidentIntakeInitialized = false;
+let recentlyLoggedIncidentId = null;
+let recentlyLoggedIncidentHighlighted = false;
 
 function normalizeIncidentIntakeSource(item) {
     const source = String(item && item.intake_source ? item.intake_source : '').trim().toLowerCase();
@@ -2539,9 +2537,12 @@ function renderIncidentIntakeState(kind, title, message) {
 }
 
 function updateIncidentIntakeControls() {
-    const counts = { all: incidentIntakeItems.length, call: 0, manual: 0, tip: 0, interagency: 0, unverified: 0 };
+    const counts = { all: incidentIntakeItems.length, call: 0, manual: 0, tip: 0 };
     incidentIntakeItems.forEach(item => {
-        counts[normalizeIncidentIntakeSource(item)] += 1;
+        const source = normalizeIncidentIntakeSource(item);
+        if (Object.prototype.hasOwnProperty.call(counts, source)) {
+            counts[source] += 1;
+        }
     });
 
     document.querySelectorAll('[data-intake-filter]').forEach(button => {
@@ -2589,7 +2590,7 @@ function renderIncidentIntakeQueue() {
         const incidentId = toIncidentId(item && item.id);
         if (incidentId === null) return '';
         const source = normalizeIncidentIntakeSource(item);
-        const sourceInfo = INCIDENT_INTAKE_SOURCES[source];
+        const sourceInfo = INCIDENT_INTAKE_SOURCES[source] || INCIDENT_INTAKE_SOURCES.unverified;
         const priority = normalizeIncidentPriority(item.priority);
         const priorityLabel = priority.charAt(0).toUpperCase() + priority.slice(1);
         const reference = String(item.incident_code || item.reference_no || `Incident ${incidentId}`).trim();
@@ -2597,17 +2598,19 @@ function renderIncidentIntakeQueue() {
         const timeAgo = formatTimeAgo(item.created_at) || 'Just now';
         const phone = String(item.caller_phone || item.contact_number || item.phone || '').trim();
         const sourceSystem = String(item.intake_source_system || '').trim();
-        const sourceDetail = source === 'interagency' && sourceSystem
+        const sourceDetail = source === 'call' && sourceSystem
+            ? `<span class="intake-source-system" title="Call origin">Via ${escapeHtml(sourceSystem)}</span>`
+            : (source === 'interagency' && sourceSystem
             ? `<span class="intake-source-system" title="Source system">${escapeHtml(sourceSystem)}</span>`
             : (source === 'unverified'
-                ? '<span class="intake-source-system" title="This older record has no durable source metadata">Source not recorded in legacy data</span>'
-                : '');
+                ? '<span class="intake-source-system" title="This older record has no durable source metadata">Legacy source</span>'
+                : ''));
         const callAction = phone
             ? `<button type="button" class="btn-action-small call-phone-btn" onclick="contactCaller(this)" data-phone="${escapeHtml(phone)}"><i class="fas fa-phone" aria-hidden="true"></i> Call Reporter</button>`
             : '<button type="button" class="btn-action-small call-phone-btn" disabled aria-disabled="true" title="No reporter phone number is available"><i class="fas fa-phone-slash" aria-hidden="true"></i> No Phone</button>';
 
         return `
-            <article class="call-card incident-intake-card ${priority} source-${source}" data-incident-id="${incidentId}" role="listitem" aria-label="${escapeHtml(reference)}, ${escapeHtml(sourceInfo.label)}">
+            <article class="call-card incident-intake-card ${priority} source-${source}${incidentId === recentlyLoggedIncidentId ? ' is-recently-logged' : ''}" data-incident-id="${incidentId}" role="listitem" aria-label="${escapeHtml(reference)}, ${escapeHtml(sourceInfo.label)}">
                 <div class="intake-card-topline">
                     <span class="intake-source-badge source-${source}"><i class="fas ${sourceInfo.icon}" aria-hidden="true"></i> ${escapeHtml(sourceInfo.cardLabel || sourceInfo.shortLabel)}</span>
                     <strong class="intake-reference">${escapeHtml(reference)}</strong>
@@ -2630,10 +2633,19 @@ function renderIncidentIntakeQueue() {
                 </div>
             </article>`;
     }).join('');
+
+    if (recentlyLoggedIncidentId !== null && !recentlyLoggedIncidentHighlighted) {
+        const loggedCard = container.querySelector(`[data-incident-id="${recentlyLoggedIncidentId}"]`);
+        if (loggedCard) {
+            recentlyLoggedIncidentHighlighted = true;
+            loggedCard.setAttribute('tabindex', '-1');
+            window.setTimeout(() => loggedCard.scrollIntoView({ behavior: 'smooth', block: 'nearest' }), 80);
+        }
+    }
 }
 
 function setIncidentIntakeFilter(source) {
-    if (!Object.prototype.hasOwnProperty.call(INCIDENT_INTAKE_SOURCES, source)) return;
+    if (!VISIBLE_INTAKE_FILTERS.has(source)) return;
     activeIncidentIntakeFilter = source;
     renderIncidentIntakeQueue();
 }
@@ -2641,6 +2653,16 @@ function setIncidentIntakeFilter(source) {
 function initializeIncidentIntakeQueue() {
     if (incidentIntakeInitialized) return;
     incidentIntakeInitialized = true;
+    try {
+        const params = new URLSearchParams(window.location.search);
+        const requestedFilter = String(
+            params.get('source') || (params.get('from_call') === '1' ? 'call' : '')
+        ).trim().toLowerCase();
+        if (VISIBLE_INTAKE_FILTERS.has(requestedFilter)) {
+            activeIncidentIntakeFilter = requestedFilter;
+        }
+        recentlyLoggedIncidentId = toIncidentId(params.get('incident_id'));
+    } catch (error) {}
     document.querySelectorAll('[data-intake-filter]').forEach(button => {
         button.addEventListener('click', () => setIncidentIntakeFilter(String(button.dataset.intakeFilter || 'all')));
     });
