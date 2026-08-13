@@ -30,7 +30,7 @@ $landingCssVersion = is_file(__DIR__ . '/css/landing.css')
             <a href="#capabilities">Capabilities</a>
             <a href="#workflow">How it works</a>
             <a href="#about">About</a>
-            <a class="nav-login" href="login.php"><i class="fas fa-arrow-right-to-bracket"></i> System Login</a>
+            <a class="nav-login" href="login.php"><i class="fas fa-arrow-right-to-bracket"></i> Login</a>
         </nav>
     </header>
 
