@@ -12,8 +12,26 @@ $landingCssVersion = is_file(__DIR__ . '/css/landing.css')
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta name="description" content="ALERTARA is an emergency response coordination system for incident intake, dispatch, responder tracking, resource readiness, and inter-agency collaboration.">
+    <meta name="robots" content="index, follow">
     <meta name="theme-color" content="#0b3b52">
+    <meta property="og:locale" content="en_PH">
+    <meta property="og:type" content="website">
+    <meta property="og:site_name" content="ALERTARA">
+    <meta property="og:title" content="ALERTARA Emergency Response System">
+    <meta property="og:description" content="Emergency response coordination for incident intake, dispatch operations, responder monitoring, resource readiness, and inter-agency collaboration.">
+    <meta property="og:url" content="https://emergency-response.alertaraqc.com/">
+    <meta property="og:image" content="https://emergency-response.alertaraqc.com/images/alertara-social-preview-v1.png">
+    <meta property="og:image:secure_url" content="https://emergency-response.alertaraqc.com/images/alertara-social-preview-v1.png">
+    <meta property="og:image:type" content="image/png">
+    <meta property="og:image:width" content="1200">
+    <meta property="og:image:height" content="630">
+    <meta property="og:image:alt" content="ALERTARA Emergency Response System — clearer emergency coordination when every second matters.">
+    <meta name="twitter:card" content="summary_large_image">
+    <meta name="twitter:title" content="ALERTARA Emergency Response System">
+    <meta name="twitter:description" content="Emergency response coordination for incident intake, dispatch operations, responder monitoring, resource readiness, and inter-agency collaboration.">
+    <meta name="twitter:image" content="https://emergency-response.alertaraqc.com/images/alertara-social-preview-v1.png">
     <title><?php echo htmlspecialchars($pageTitle, ENT_QUOTES, 'UTF-8'); ?></title>
+    <link rel="canonical" href="https://emergency-response.alertaraqc.com/">
     <link rel="icon" type="image/x-icon" href="images/favicon.ico">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
     <link rel="stylesheet" href="css/landing.css?v=<?php echo rawurlencode($landingCssVersion); ?>">
@@ -51,7 +69,7 @@ $landingCssVersion = is_file(__DIR__ . '/css/landing.css')
                 </div>
             </div>
 
-            <div class="hero-console" aria-label="Illustration of the LERTARA operations dashboard">
+            <div class="hero-console" aria-label="Illustration of the ALERTARA operations dashboard">
                 <div class="console-topbar">
                     <span><i class="fas fa-wave-square"></i> Operations Overview</span>
                     <span class="console-live"><i class="fas fa-circle"></i> System preview</span>
