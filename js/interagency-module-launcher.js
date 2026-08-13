@@ -118,6 +118,7 @@
         returnActiveToStage();
         modalBody.appendChild(section);
         state.activeId = targetId;
+        modal.dataset.activeModule = targetId;
 
         if (modalTitle) modalTitle.textContent = button.getAttribute('data-module-title') || 'Inter-Agency Module';
         if (modalSub) modalSub.textContent = button.getAttribute('data-module-subtitle') || 'Operational tools and inboxes.';
@@ -131,6 +132,7 @@
 
     const closeModule = () => {
         returnActiveToStage();
+        modal.removeAttribute('data-active-module');
         modal.classList.remove('show');
         modal.setAttribute('aria-hidden', 'true');
         modal.hidden = true;
@@ -151,6 +153,8 @@
 
     document.addEventListener('keydown', (event) => {
         if (event.key === 'Escape' && modal.classList.contains('show')) {
+            const incidentDetailModal = document.getElementById('incidentDetailModal');
+            if (incidentDetailModal && incidentDetailModal.classList.contains('show')) return;
             closeModule();
         }
     });

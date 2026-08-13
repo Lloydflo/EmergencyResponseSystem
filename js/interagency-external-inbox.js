@@ -249,7 +249,8 @@
         detailModal.classList.remove('show');
         detailModal.setAttribute('aria-hidden', 'true');
         detailModal.hidden = true;
-        document.body.style.overflow = '';
+        const moduleModal = document.getElementById('iaModuleModal');
+        document.body.style.overflow = moduleModal && moduleModal.classList.contains('show') ? 'hidden' : '';
     }
 
     function openDetailModal() {

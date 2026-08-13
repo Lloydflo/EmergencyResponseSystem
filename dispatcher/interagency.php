@@ -19,7 +19,7 @@ $pageTitle = 'Inter-Agency Coordination';
     <link rel="stylesheet" href="css/sidebar.css">
     <link rel="stylesheet" href="css/admin-header.css">
     <link rel="stylesheet" href="css/sidebar-footer.css">
-    <link rel="stylesheet" href="css/interagency-command.css">
+    <link rel="stylesheet" href="css/interagency-command.css?v=<?php echo filemtime($rootDir . '/css/interagency-command.css'); ?>">
     <link rel="stylesheet" href="css/interagency-events.css">
     <link rel="stylesheet" href="css/interagency-tips.css">
     <style>
@@ -4446,7 +4446,7 @@ $pageTitle = 'Inter-Agency Coordination';
     <script src="js/interagency-command.js"></script>
     <script src="js/interagency-events.js"></script>
     <script src="js/interagency-tips.js?v=20260809-ph-time-v1"></script>
-    <script src="js/interagency-external-inbox.js"></script>
-    <script src="js/interagency-module-launcher.js"></script>
+    <script src="js/interagency-external-inbox.js?v=<?php echo filemtime($rootDir . '/js/interagency-external-inbox.js'); ?>"></script>
+    <script src="js/interagency-module-launcher.js?v=<?php echo filemtime($rootDir . '/js/interagency-module-launcher.js'); ?>"></script>
 </body>
 </html>
