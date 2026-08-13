@@ -1215,7 +1215,7 @@ if ($turnIsConfigured && preg_match('/^turns?:(?:\/\/)?([^:\/?]+)/i', $turnUrl, 
         if (notificationId) card.dataset.transferNotification = notificationId;
         card.innerHTML = [
             '<div class="transfer-report-head">',
-                '<span class="transfer-report-icon" aria-hidden="true"><i class="fas fa-file-medical-alt"></i></span>',
+                '<span class="transfer-report-icon" aria-hidden="true"><i class="fas fa-file-lines"></i></span>',
                 '<div>',
                     '<div class="transfer-report-eyebrow">Incoming Transferred Report</div>',
                     '<strong class="transfer-report-title"></strong>',
@@ -1408,7 +1408,7 @@ if ($turnIsConfigured && preg_match('/^turns?:(?:\/\/)?([^:\/?]+)/i', $turnUrl, 
         return `
             <article class="transfer-queue-card ${isLiveCall ? 'is-live' : 'is-report'} priority-${priorityClass}">
                 <div class="transfer-queue-card-head">
-                    <span class="transfer-queue-icon"><i class="fas ${isLiveCall ? 'fa-headset' : 'fa-file-medical-alt'}"></i></span>
+                    <span class="transfer-queue-icon" aria-hidden="true"><i class="fas ${isLiveCall ? 'fa-phone-volume' : 'fa-file-lines'}"></i></span>
                     <div>
                         <strong>${escapeHtml(title)}</strong>
                         <span>${escapeHtml(isLiveCall ? 'Live call waiting' : 'Message/report waiting')}</span>

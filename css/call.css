@@ -491,6 +491,12 @@ body.incoming-call-modal-open {
     font-size: 1.05rem;
 }
 
+.transfer-report-icon i,
+.transfer-queue-icon i {
+    display: block;
+    line-height: 1;
+}
+
 .transfer-report-eyebrow {
     margin-bottom: 0.15rem;
     color: #64748b;
@@ -726,6 +732,12 @@ body.incoming-call-modal-open {
     justify-content: center;
     color: #ecfeff;
     background: #155e75;
+}
+
+.transfer-queue-icon i {
+    width: 1rem;
+    font-size: 0.95rem;
+    text-align: center;
 }
 
 .transfer-queue-dismiss {

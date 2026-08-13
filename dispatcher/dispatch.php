@@ -2622,7 +2622,7 @@ function renderIncidentIntakeQueue() {
                     </div>
                 </div>
                 <div class="call-actions intake-card-actions">
-                    <button type="button" class="btn-dispatch" onclick="openDispatchModal(${incidentId})"><i class="fas fa-ambulance" aria-hidden="true"></i> Dispatch Unit</button>
+                    <button type="button" class="btn-dispatch" onclick="openDispatchModal(${incidentId})"><i class="fas fa-truck-medical" aria-hidden="true"></i><span>Dispatch Unit</span></button>
                     <button type="button" class="btn-action-small" onclick="viewDetails(this)" data-incident-id="${incidentId}"><i class="fas fa-eye" aria-hidden="true"></i> View Details</button>
                     ${callAction}
                 </div>

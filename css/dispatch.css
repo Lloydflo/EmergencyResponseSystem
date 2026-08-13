@@ -941,10 +941,23 @@
     display: inline-flex;
     align-items: center;
     justify-content: center;
+    gap: 0.42rem;
     width: 100%;
     min-height: 44px;
     padding: 0.58rem 0.65rem;
     line-height: 1.15;
+}
+
+.dispatcher-dispatch-page .intake-card-actions .btn-dispatch > i {
+    flex: 0 0 auto;
+    width: 1rem;
+    font-size: 0.92rem;
+    line-height: 1;
+    text-align: center;
+}
+
+.dispatcher-dispatch-page .intake-card-actions .btn-dispatch > span {
+    min-width: 0;
 }
 
 
