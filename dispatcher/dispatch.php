@@ -10,6 +10,58 @@ $assetUrl = static function (string $relativePath) use ($rootDir): string {
     return htmlspecialchars($relativePath . '?v=' . $version, ENT_QUOTES, 'UTF-8');
 };
 
+function dispatch_ai_inline_html(string $text): string
+{
+    $safe = htmlspecialchars(trim($text), ENT_QUOTES, 'UTF-8');
+    return preg_replace('/\*\*(.+?)\*\*/s', '<strong>$1</strong>', $safe) ?? $safe;
+}
+
+function dispatch_ai_text_html(string $text, string $wrapperClass): string
+{
+    $lines = preg_split('/\R/u', trim($text)) ?: [];
+    $html = '<div class="' . htmlspecialchars($wrapperClass, ENT_QUOTES, 'UTF-8') . ' ai-formatted-text">';
+    $listOpen = false;
+    foreach ($lines as $line) {
+        $line = trim((string)$line);
+        if ($line === '') {
+            if ($listOpen) {
+                $html .= '</ul>';
+                $listOpen = false;
+            }
+            continue;
+        }
+        if (preg_match('/^\*\*([^*:\n]+):\*\*\s*(.*)$/u', $line, $match)) {
+            if ($listOpen) {
+                $html .= '</ul>';
+                $listOpen = false;
+            }
+            $html .= '<section class="ai-text-item"><h3>' . htmlspecialchars(trim($match[1]), ENT_QUOTES, 'UTF-8') . '</h3>';
+            if (trim((string)($match[2] ?? '')) !== '') {
+                $html .= '<p>' . dispatch_ai_inline_html((string)$match[2]) . '</p>';
+            }
+            $html .= '</section>';
+            continue;
+        }
+        if (preg_match('/^[*-]\s+(.*)$/u', $line, $match)) {
+            if (!$listOpen) {
+                $html .= '<ul class="ai-text-list">';
+                $listOpen = true;
+            }
+            $html .= '<li>' . dispatch_ai_inline_html((string)$match[1]) . '</li>';
+            continue;
+        }
+        if ($listOpen) {
+            $html .= '</ul>';
+            $listOpen = false;
+        }
+        $html .= '<p>' . dispatch_ai_inline_html($line) . '</p>';
+    }
+    if ($listOpen) {
+        $html .= '</ul>';
+    }
+    return $html . '</div>';
+}
+
 // Initialize default values
 $activeIncidents = 0;
 $availableUnits = 0;
@@ -30,13 +82,13 @@ try {
         }
 
         // Get active incidents (pending or dispatched)
-        $activeIncidents = (int)$pdo->query("SELECT COUNT(*) AS c FROM incidents WHERE status IN ('pending','dispatched')")->fetch()['c'];
+        $activeIncidents = (int)$pdo->query("SELECT COUNT(*) AS c FROM incidents WHERE status IN ('pending','new','dispatched')")->fetch()['c'];
         
         // Get available units
         $availableUnits = ers_count_available_vehicle_resource_units($pdo, $vehicleResourceTable ?? null);
         
         // Get pending calls that do not already have responders assigned.
-        $pendingCallsSql = "SELECT COUNT(*) AS c FROM incidents i WHERE i.status='pending'";
+        $pendingCallsSql = "SELECT COUNT(*) AS c FROM incidents i WHERE i.status IN ('pending','new')";
         if (function_exists('ers_vehicle_resource_table_exists') && ers_vehicle_resource_table_exists($pdo, 'dispatches')) {
             $pendingCallsSql .= " AND NOT EXISTS (
                 SELECT 1
@@ -49,7 +101,7 @@ try {
 
         $topIncident = $pdo->query("SELECT reference_no, type, location_address, priority
                                     FROM incidents
-                                    WHERE status IN ('pending','dispatched','active','in_progress')
+                                    WHERE status IN ('pending','new','dispatched','active','in_progress')
                                     ORDER BY CASE LOWER(priority)
                                         WHEN 'critical' THEN 1
                                         WHEN 'high' THEN 2
@@ -269,7 +321,7 @@ try {
 
                         $recommendations = getDispatchRecommendations($dispatchData);
                         if ($recommendations) {
-                            echo '<div class="ai-recommendation-text">' . nl2br(htmlspecialchars($recommendations)) . '</div>';
+                            echo dispatch_ai_text_html((string)$recommendations, 'ai-recommendation-text');
                         } else {
                             $aiError = function_exists('getGeminiLastError') ? trim((string) getGeminiLastError()) : '';
                             if ($aiError === '') {
@@ -1620,6 +1672,51 @@ function escapeHtml(s) {
     return String(s || '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','\"':'&quot;','\'':'&#39;'})[c] || c);
 }
 
+function aiInlineHtml(value) {
+    return escapeHtml(value).replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
+}
+
+function renderAiText(value, wrapperClass) {
+    const lines = String(value || '').trim().split(/\r?\n/);
+    let html = `<div class="${escapeHtml(wrapperClass)} ai-formatted-text">`;
+    let listOpen = false;
+    const closeList = () => {
+        if (listOpen) {
+            html += '</ul>';
+            listOpen = false;
+        }
+    };
+
+    lines.forEach((rawLine) => {
+        const line = rawLine.trim();
+        if (!line) {
+            closeList();
+            return;
+        }
+        const headingMatch = line.match(/^\*\*([^*:\n]+):\*\*\s*(.*)$/);
+        if (headingMatch) {
+            closeList();
+            html += `<section class="ai-text-item"><h3>${escapeHtml(headingMatch[1])}</h3>`;
+            if (headingMatch[2]) html += `<p>${aiInlineHtml(headingMatch[2])}</p>`;
+            html += '</section>';
+            return;
+        }
+        const bulletMatch = line.match(/^[*-]\s+(.*)$/);
+        if (bulletMatch) {
+            if (!listOpen) {
+                html += '<ul class="ai-text-list">';
+                listOpen = true;
+            }
+            html += `<li>${aiInlineHtml(bulletMatch[1])}</li>`;
+            return;
+        }
+        closeList();
+        html += `<p>${aiInlineHtml(line)}</p>`;
+    });
+    closeList();
+    return html + '</div>';
+}
+
 function escapeAttr(s) {
     return String(s || '').replace(/['"]/g, '_');
 }
@@ -1961,12 +2058,11 @@ function refreshAIRecommendations() {
         .then(res => {
             const el = document.getElementById('ai-recommendations-content');
             if (res.ok && res.text) {
-                el.innerHTML = '<div class="ai-recommendation-text">' +
-                    res.text.replace(/\n/g, '<br>') + '</div>';
+                el.innerHTML = renderAiText(res.text, 'ai-recommendation-text');
                 showNotification('AI recommendations updated', 'success');
             } else {
                 const msg = (res && res.error) ? String(res.error) : 'AI service unavailable';
-                el.innerHTML = '<div class="ai-error"><i class="fas fa-exclamation-triangle"></i> ' + msg.replace(/\n/g, '<br>') + '</div>';
+                el.innerHTML = '<div class="ai-error"><i class="fas fa-exclamation-triangle"></i> ' + escapeHtml(msg).replace(/\n/g, '<br>') + '</div>';
                 showNotification(msg, 'error');
             }
         })
@@ -2471,10 +2567,10 @@ function refreshAIRecommendations() {
       .then(data => {
         const el = document.getElementById('ai-recommendations-content');
         if (data.ok && data.text) {
-            el.innerHTML = '<div class="ai-recommendation-text">' + (data.text || '').replace(/\n/g, '<br>') + '</div>';
+            el.innerHTML = renderAiText(data.text, 'ai-recommendation-text');
         } else {
             const msg = (data && data.error) ? String(data.error) : 'Unable to generate AI recommendations at this time.';
-            el.innerHTML = '<div class="ai-error"><i class="fas fa-exclamation-triangle"></i> ' + msg.replace(/\n/g, '<br>') + '</div>';
+            el.innerHTML = '<div class="ai-error"><i class="fas fa-exclamation-triangle"></i> ' + escapeHtml(msg).replace(/\n/g, '<br>') + '</div>';
         }
       })
       .catch(() => alert('Network error'));

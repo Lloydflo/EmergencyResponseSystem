@@ -322,6 +322,9 @@ if ($turnIsConfigured && preg_match('/^turns?:(?:\/\/)?([^:\/?]+)/i', $turnUrl, 
                                         <button type="button" class="priority-option high" data-value="high" role="radio" aria-checked="false">High</button>
                                         <button type="button" class="priority-option critical" data-value="critical" role="radio" aria-checked="false">Critical</button>
                                     </div>
+                                    <div class="priority-ai-suggestion" id="priorityAiSuggestion" aria-live="polite">
+                                        AI priority suggestion will appear after the incident details are entered.
+                                    </div>
                                     <input type="hidden" id="incidentPriority" name="incidentPriority" value="low" required>
                                 </div>
                             </div>
@@ -433,6 +436,7 @@ if ($turnIsConfigured && preg_match('/^turns?:(?:\/\/)?([^:\/?]+)/i', $turnUrl, 
     const API_LIST_URL = 'api/incidents_list.php';
     const API_CREATE_CALL_URL = 'api/calls_create.php';
     const API_CALL_AUDIT_URL = 'api/call_audit_event.php';
+    const API_AI_PRIORITY_URL = 'api/ai_priority_suggestion.php';
     const API_INCOMING_TRANSFERS_URL = 'api/incoming_transfers.php';
     const ALERTARA_SOCKET_URL = 'https://emergency-comm.alertaraqc.com';
     const ALERTARA_SOCKET_PATH = '/socket.io';
@@ -453,6 +457,7 @@ if ($turnIsConfigured && preg_match('/^turns?:(?:\/\/)?([^:\/?]+)/i', $turnUrl, 
     const TRANSFER_INBOX_ROOM = 'ers-transfer-inbox';
     let priorityAuto = true; // keeps transferred/manual fallback priority until the user chooses one
     let prioritySuggestTimer = null; // debounce timer for suggestion updates
+    let prioritySuggestRequestSeq = 0;
     let currentSearch = '';
     let filterDay = '';
     let filterMonth = '';
@@ -693,6 +698,7 @@ if ($turnIsConfigured && preg_match('/^turns?:(?:\/\/)?([^:\/?]+)/i', $turnUrl, 
         }
         resetIncidentTypeChecklist();
         setPrioritySelection('low');
+        setPrioritySuggestionMessage('AI priority suggestion will appear after the incident details are entered.', 'idle');
         priorityAuto = true;
         clearTransferFormContext();
         const locationInput = document.getElementById('incidentLocation');
@@ -716,6 +722,7 @@ if ($turnIsConfigured && preg_match('/^turns?:(?:\/\/)?([^:\/?]+)/i', $turnUrl, 
         }
         resetIncidentTypeChecklist();
         setPrioritySelection('low');
+        setPrioritySuggestionMessage('AI priority suggestion will appear after the incident details are entered.', 'idle');
         priorityAuto = true;
         const locationInput = document.getElementById('incidentLocation');
         if (locationInput) {
@@ -772,17 +779,20 @@ if ($turnIsConfigured && preg_match('/^turns?:(?:\/\/)?([^:\/?]+)/i', $turnUrl, 
         initIncidentSidebarControls();
         // Hook suggestion on description input
         const descEl = document.getElementById('incidentDescription');
+        const schedulePrioritySuggestion = () => {
+            const val = descEl ? descEl.value : '';
+            if (prioritySuggestTimer) clearTimeout(prioritySuggestTimer);
+            prioritySuggestTimer = setTimeout(() => updatePrioritySuggestion(val), 450);
+        };
         if (descEl) {
-            descEl.addEventListener('input', (e) => {
-                const val = e.target.value;
-                if (prioritySuggestTimer) clearTimeout(prioritySuggestTimer);
-                prioritySuggestTimer = setTimeout(() => updatePrioritySuggestion(val), 250);
-            });
+            descEl.addEventListener('input', schedulePrioritySuggestion);
             // Initialize suggestion only if there is content
             if ((descEl.value || '').trim().length >= 3) {
                 updatePrioritySuggestion(descEl.value);
             }
         }
+        document.getElementById('incidentLocation')?.addEventListener('input', schedulePrioritySuggestion);
+        document.getElementById('callNotes')?.addEventListener('input', schedulePrioritySuggestion);
         renderActiveCallPanel(getSharedCallSession());
         document.addEventListener('ers:call-session-change', (event) => {
             renderActiveCallPanel(event.detail ? event.detail.session : getSharedCallSession());
@@ -936,9 +946,10 @@ if ($turnIsConfigured && preg_match('/^turns?:(?:\/\/)?([^:\/?]+)/i', $turnUrl, 
     }
 
     function showNextQueuedIncomingCall() {
-        if (activeCall || pendingIncomingCall || !incomingCallQueue.length) return;
+        if (activeCall || pendingIncomingCall || !incomingCallQueue.length) return false;
         incomingCallQueue.sort(comparePriorityThenOldest);
         displayIncomingCallModal(incomingCallQueue.shift());
+        return true;
     }
 
     function enqueueIncomingCall(call) {
@@ -1149,7 +1160,9 @@ if ($turnIsConfigured && preg_match('/^turns?:(?:\/\/)?([^:\/?]+)/i', $turnUrl, 
         window.setTimeout(() => {
             endingTransferCall = false;
         }, 250);
-        showNextQueuedIncomingCall();
+        if (!showNextQueuedIncomingCall()) {
+            showNextTransferredQueueCall();
+        }
     }
 
     function endCall() {
@@ -1491,6 +1504,29 @@ if ($turnIsConfigured && preg_match('/^turns?:(?:\/\/)?([^:\/?]+)/i', $turnUrl, 
             longitude: item.longitude ?? null,
             description: item.description || ''
         };
+    }
+
+    async function showNextTransferredQueueCall() {
+        if (activeCall || pendingIncomingCall || !transferQueueItems.length) return false;
+        const liveQueueItems = transferQueueItems
+            .filter((item) => item && item.transfer_type === 'live_call' && !isTransferQueueDismissed(item.queue_key))
+            .sort(comparePriorityThenNewest);
+
+        for (const item of liveQueueItems) {
+            const resolvedCall = await resolveOnlineTransferredCall(item);
+            applyResolvedLiveCallToQueueItem(item, resolvedCall);
+            if (!String(item.room || '').trim()) {
+                continue;
+            }
+            if (activeCall || pendingIncomingCall) return false;
+            displayIncomingCallModal(normalizeIncomingCallDetail(incomingCallDetailFromTransfer(item)));
+            return true;
+        }
+
+        if (liveQueueItems.length) {
+            setTransferQueueStatus('Transferred calls are queued, but no online caller room is available yet.', 'error');
+        }
+        return false;
     }
 
     function resolveOnlineTransferredCall(item) {
@@ -2698,9 +2734,17 @@ if ($turnIsConfigured && preg_match('/^turns?:(?:\/\/)?([^:\/?]+)/i', $turnUrl, 
             opt.addEventListener('click', () => {
                 priorityAuto = false; // user manually chose a priority
                 setPrioritySelection(opt.dataset.value);
+                setPrioritySuggestionMessage('Manual priority selected by dispatcher.', 'manual');
             });
         });
         setPrioritySelection(document.getElementById('incidentPriority')?.value || 'low');
+    }
+
+    function setPrioritySuggestionMessage(message, state = 'idle') {
+        const suggestionEl = document.getElementById('priorityAiSuggestion');
+        if (!suggestionEl) return;
+        suggestionEl.textContent = message || '';
+        suggestionEl.dataset.state = state;
     }
 
     function getSelectedIncidentTypes() {
@@ -2835,14 +2879,66 @@ if ($turnIsConfigured && preg_match('/^turns?:(?:\/\/)?([^:\/?]+)/i', $turnUrl, 
         return 'low';
     }
 
-    function updatePrioritySuggestion(desc) {
-        const text = (desc || '').trim();
-        if (!text || text.length < 3) {
-            return;
-        }
+    function buildAiPriorityPayload(text) {
+        return {
+            description: text,
+            location: document.getElementById('incidentLocation')?.value.trim() || '',
+            call_notes: document.getElementById('callNotes')?.value.trim() || '',
+            incident_types: getSelectedIncidentTypes()
+        };
+    }
+
+    function applyLocalPrioritySuggestion(text, reason = '') {
         const suggested = suggestPriorityFromDescription(text);
         if (priorityAuto) {
             setPrioritySelection(suggested);
+        }
+        if (reason) {
+            setPrioritySuggestionMessage(`Suggested ${suggested.toUpperCase()}: ${reason}`, 'fallback');
+        }
+    }
+
+    async function updatePrioritySuggestion(desc) {
+        const text = (desc || '').trim();
+        if (!text || text.length < 3) {
+            setPrioritySuggestionMessage('AI priority suggestion will appear after the incident details are entered.', 'idle');
+            return;
+        }
+
+        const requestSeq = ++prioritySuggestRequestSeq;
+        const suggested = suggestPriorityFromDescription(text);
+        if (priorityAuto) {
+            setPrioritySelection(suggested);
+        }
+        setPrioritySuggestionMessage(`Checking with Gemini AI... Local fallback: ${suggested.toUpperCase()}.`, 'loading');
+
+        try {
+            const res = await fetch(API_AI_PRIORITY_URL, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(buildAiPriorityPayload(text))
+            });
+            const data = await res.json().catch(() => null);
+            if (requestSeq !== prioritySuggestRequestSeq) return;
+
+            if (!res.ok || !data || data.ok !== true) {
+                applyLocalPrioritySuggestion(text, 'Gemini unavailable, using local keyword rules.');
+                return;
+            }
+
+            const aiSuggested = normalizePriority(data.priority, suggested);
+            if (priorityAuto) {
+                setPrioritySelection(aiSuggested);
+            }
+
+            let message = `Gemini suggests ${aiSuggested.toUpperCase()}: ${data.reason || 'based on the incident details.'}`;
+            if (Array.isArray(data.needs_more_info) && data.needs_more_info.length) {
+                message += ` Ask: ${data.needs_more_info.join(' ')}`;
+            }
+            setPrioritySuggestionMessage(message, 'ai');
+        } catch (e) {
+            if (requestSeq !== prioritySuggestRequestSeq) return;
+            applyLocalPrioritySuggestion(text, 'Gemini unavailable, using local keyword rules.');
         }
     }
 
@@ -3093,6 +3189,7 @@ if ($turnIsConfigured && preg_match('/^turns?:(?:\/\/)?([^:\/?]+)/i', $turnUrl, 
             e.target.reset();
             resetIncidentTypeChecklist();
             setPrioritySelection('low');
+            setPrioritySuggestionMessage('AI priority suggestion will appear after the incident details are entered.', 'idle');
             const locationInput = document.getElementById('incidentLocation');
             if (locationInput) {
                 delete locationInput.dataset.lat;

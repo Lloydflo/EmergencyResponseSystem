@@ -5,6 +5,8 @@ declare(strict_types=1);
 use PHPMailer\PHPMailer\PHPMailer;
 use PHPMailer\PHPMailer\SMTP;
 
+require_once __DIR__ . '/phpmailer_loader.php';
+
 /**
  * Responder application invitation helper.
  *
@@ -243,9 +245,10 @@ if (!function_exists('ers_send_responder_app_invitation_email')) {
                 throw new RuntimeException('SMTP configuration is incomplete.');
             }
 
-            require_once __DIR__ . '/../vendor/phpmailer/phpmailer/src/PHPMailer.php';
-            require_once __DIR__ . '/../vendor/phpmailer/phpmailer/src/SMTP.php';
-            require_once __DIR__ . '/../vendor/phpmailer/phpmailer/src/Exception.php';
+            $phpMailerError = null;
+            if (!ers_load_phpmailer($phpMailerError)) {
+                throw new RuntimeException($phpMailerError ?? 'PHPMailer dependency is missing.');
+            }
 
             $version = trim((string)ers_responder_app_env('RESPONDER_APP_VERSION', 'Current release'));
             $supportEmail = trim((string)ers_responder_app_env(

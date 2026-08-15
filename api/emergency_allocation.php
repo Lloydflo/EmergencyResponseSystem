@@ -9,6 +9,7 @@ require_once __DIR__ . '/../includes/activity_log.php';
 require_once __DIR__ . '/../includes/vehicle_resource_units.php';
 require_once __DIR__ . '/../includes/emergency_com_status_sync.php';
 require_once __DIR__ . '/../includes/anonymous_tip_status_sync.php';
+require_once __DIR__ . '/../includes/incident_priority.php';
 
 if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
     http_response_code(405);
@@ -192,11 +193,20 @@ function emergency_priority_weight(string $priority): int
 
 function emergency_desired_units(array $incident): int
 {
+    if (isset($incident['priority_score']) && $incident['priority_score'] !== null) {
+        return (int)$incident['priority_score'] >= 50 ? 2 : 1;
+    }
     return emergency_priority_weight((string)($incident['priority'] ?? '')) >= 3 ? 2 : 1;
 }
 
 function emergency_max_units(array $incident): int
 {
+    if (isset($incident['priority_score']) && $incident['priority_score'] !== null) {
+        $score = (int)$incident['priority_score'];
+        if ($score >= 50) return 3;
+        if ($score >= 25) return 2;
+        return 1;
+    }
     $weight = emergency_priority_weight((string)($incident['priority'] ?? ''));
     if ($weight >= 3) return 3;
     if ($weight === 2) return 2;
@@ -249,12 +259,28 @@ function emergency_take_unit(array &$units, string $preferredType = ''): ?array
 
 function emergency_load_active_incidents(PDO $pdo): array
 {
+    $hasPriorityScore = emergency_column_exists($pdo, 'incidents', 'priority_score');
+    $priorityScoreSelect = $hasPriorityScore ? 'i.priority_score' : 'NULL AS priority_score';
+    $labelRank = "CASE LOWER(COALESCE(i.priority, ''))
+                WHEN 'critical' THEN 1
+                WHEN 'high' THEN 2
+                WHEN 'urgent' THEN 2
+                WHEN 'medium' THEN 3
+                WHEN 'moderate' THEN 3
+                WHEN 'low' THEN 4
+                ELSE 6
+            END";
+    $priorityOrder = $hasPriorityScore
+        ? "COALESCE(i.priority_score, 0) DESC, {$labelRank}"
+        : $labelRank;
+
     $stmt = $pdo->query("
         SELECT
             i.id,
             i.reference_no,
             i.type,
             i.priority,
+            {$priorityScoreSelect},
             i.status,
             i.title,
             i.description,
@@ -271,15 +297,7 @@ function emergency_load_active_incidents(PDO $pdo): array
         FROM incidents i
         WHERE i.status IN ('pending','dispatched','active','in_progress')
         ORDER BY
-            CASE LOWER(COALESCE(i.priority, ''))
-                WHEN 'critical' THEN 1
-                WHEN 'high' THEN 2
-                WHEN 'urgent' THEN 2
-                WHEN 'medium' THEN 3
-                WHEN 'moderate' THEN 3
-                WHEN 'low' THEN 4
-                ELSE 6
-            END,
+            {$priorityOrder},
             i.created_at ASC,
             i.id ASC
     ");
@@ -357,6 +375,7 @@ function emergency_log_dispatch_notification(?int $userId, int $dispatchId, arra
 }
 
 try {
+    ers_ensure_incident_priority_schema($pdo);
     emergency_ensure_operator_records_table($pdo);
     emergency_ensure_dispatches_assignment_schema($pdo);
 

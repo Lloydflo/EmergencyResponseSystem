@@ -70,6 +70,12 @@ if ($caller_name === '' || $caller_phone === '' || $type === '' || $location ===
     exit;
 }
 
+$priorityAssessment = ers_build_incident_priority_assessment([
+    'description' => $description,
+    'location' => $location,
+    'type' => $type,
+], $priority);
+
 try {
     ensure_no_auto_value_on_zero_mode($pdo);
     // Self-heal for deployments where id columns were created without AUTO_INCREMENT.
@@ -97,7 +103,8 @@ if ($transfer_incident_id > 0) {
             $priority,
             $status,
             $latitude,
-            $longitude
+            $longitude,
+            $priorityAssessment
         );
         if ($updatedIncident !== null) {
             $updatedCallId = isset($updatedIncident['call_id']) ? (int)$updatedIncident['call_id'] : null;
@@ -118,7 +125,8 @@ if ($transfer_incident_id > 0) {
                 $location,
                 true,
                 $accepted_at,
-                $audit_session_id
+                $audit_session_id,
+                $priorityAssessment
             );
             $group1Sync = calls_create_try_group1_sync(
                 $pdo,
@@ -191,7 +199,7 @@ try {
         ':status' => $callStatus,
         ':description' => $description,
         ':received_at' => $received_at,
-    ]);
+    ], $priorityAssessment);
 
     $stmt2 = $pdo->prepare('SELECT id, reference_no, status FROM incidents WHERE reported_by_call_id = :cid LIMIT 1');
     $stmt2->execute([':cid' => $call_id]);
@@ -209,15 +217,15 @@ try {
             ':latitude' => $latitude,
             ':longitude' => $longitude,
             ':reported_by_call_id' => $call_id,
-        ]);
+        ], $priorityAssessment);
         $incident = [
             'id' => $incident_id,
             'reference_no' => $reference_no,
             'status' => 'pending',
         ];
-        update_incident_priority_indicator($pdo, $incident_id, $priority);
+        update_incident_priority_indicator($pdo, $incident_id, $priority, $priorityAssessment);
     } else {
-        update_incident_priority_indicator($pdo, (int)$incident['id'], $priority);
+        update_incident_priority_indicator($pdo, (int)$incident['id'], $priority, $priorityAssessment);
     }
 
     $pdo->commit();
@@ -234,7 +242,8 @@ try {
         $location,
         false,
         $accepted_at,
-        $audit_session_id
+        $audit_session_id,
+        $priorityAssessment
     );
     $group1Sync = calls_create_try_group1_sync($pdo, $call_id, $incidentId ?? 0);
 
@@ -267,7 +276,8 @@ function log_incident_created_audit(
     string $location,
     bool $updatedTransfer = false,
     ?string $acceptedAt = null,
-    ?string $auditSessionId = null
+    ?string $auditSessionId = null,
+    array $priorityAssessment = []
 ): void {
     if ($incidentId === null || $incidentId < 1) {
         return;
@@ -304,6 +314,13 @@ function log_incident_created_audit(
         'location_address' => $location,
         'transfer_intake_updated' => $updatedTransfer,
     ];
+    if (isset($priorityAssessment['score'])) {
+        $baseMetadata['priority_score'] = (int)$priorityAssessment['score'];
+        $baseMetadata['priority_metric_priority'] = (string)($priorityAssessment['priority'] ?? $priority);
+        $baseMetadata['priority_metric_confidence'] = isset($priorityAssessment['confidence'])
+            ? (float)$priorityAssessment['confidence']
+            : null;
+    }
 
     if ($callId !== null && $callId > 0) {
         $callEventPrefix = $auditSessionId !== null
@@ -565,7 +582,8 @@ function update_existing_transfer_incident(
     string $priority,
     string $requestedStatus,
     ?float $latitude,
-    ?float $longitude
+    ?float $longitude,
+    array $priorityAssessment = []
 ): ?array {
     if ($incidentId <= 0) {
         return null;
@@ -626,6 +644,7 @@ function update_existing_transfer_incident(
         $callUpdatedAtSet = calls_create_column_exists($pdo, 'calls', 'updated_at')
             ? ', updated_at = CURRENT_TIMESTAMP'
             : '';
+        $callAssessmentSets = calls_create_priority_assessment_update_sets($pdo, 'calls', $priorityAssessment);
         $callUpdate = $pdo->prepare(
             'UPDATE calls
              SET reference_no = ?,
@@ -637,10 +656,12 @@ function update_existing_transfer_incident(
                  incident_type = ?,
                  priority = ?,
                  status = ?,
-                 description = ?' . $callUpdatedAtSet . '
+                 description = ?'
+                 . ($callAssessmentSets !== [] ? ', ' . implode(', ', $callAssessmentSets['sets']) : '')
+                 . $callUpdatedAtSet . '
              WHERE id = ?'
         );
-        $callUpdate->execute([
+        $callParams = [
             $referenceNo,
             $callerName,
             $callerPhone,
@@ -651,14 +672,19 @@ function update_existing_transfer_incident(
             $priority,
             $nextCallStatus,
             $description,
-            $callId,
-        ]);
+        ];
+        if ($callAssessmentSets !== []) {
+            $callParams = array_merge($callParams, array_values($callAssessmentSets['values']));
+        }
+        $callParams[] = $callId;
+        $callUpdate->execute($callParams);
     }
 
     $title = 'Incident from call ' . $referenceNo;
     $incidentUpdatedAtSet = calls_create_column_exists($pdo, 'incidents', 'updated_at')
         ? ', updated_at = CURRENT_TIMESTAMP'
         : '';
+    $incidentAssessmentSets = calls_create_priority_assessment_update_sets($pdo, 'incidents', $priorityAssessment);
     $incidentUpdate = $pdo->prepare(
         'UPDATE incidents
          SET reference_no = ?,
@@ -669,10 +695,12 @@ function update_existing_transfer_incident(
              description = ?,
              location_address = ?,
              latitude = ?,
-             longitude = ?' . $incidentUpdatedAtSet . '
+             longitude = ?'
+             . ($incidentAssessmentSets !== [] ? ', ' . implode(', ', $incidentAssessmentSets['sets']) : '')
+             . $incidentUpdatedAtSet . '
          WHERE id = ?'
     );
-    $incidentUpdate->execute([
+    $incidentParams = [
         $referenceNo,
         $type,
         $priority,
@@ -682,10 +710,14 @@ function update_existing_transfer_incident(
         $location,
         $latitude,
         $longitude,
-        $incidentId,
-    ]);
+    ];
+    if ($incidentAssessmentSets !== []) {
+        $incidentParams = array_merge($incidentParams, array_values($incidentAssessmentSets['values']));
+    }
+    $incidentParams[] = $incidentId;
+    $incidentUpdate->execute($incidentParams);
 
-    update_incident_priority_indicator($pdo, $incidentId, $priority);
+    update_incident_priority_indicator($pdo, $incidentId, $priority, $priorityAssessment);
 
     $pdo->commit();
 
@@ -730,14 +762,77 @@ function calls_create_column_exists(PDO $pdo, string $tableName, string $columnN
     }
 }
 
-function insert_call_row(PDO $pdo, array $params): int {
+function calls_create_priority_assessment_insert_parts(PDO $pdo, string $tableName, array $assessment): array {
+    if ($assessment === []) {
+        return [];
+    }
+
+    $dbParams = ers_priority_assessment_db_params($assessment);
+    $map = [
+        'priority_score' => ':priority_score',
+        'priority_confidence' => ':priority_confidence',
+        'priority_factors_json' => ':priority_factors_json',
+        'priority_model' => ':priority_model',
+        'priority_assessed_at' => ':priority_assessed_at',
+    ];
+    $columns = [];
+    $placeholders = [];
+    $params = [];
+    foreach ($map as $column => $placeholder) {
+        if (!calls_create_column_exists($pdo, $tableName, $column)) {
+            continue;
+        }
+        $columns[] = '`' . $column . '`';
+        $placeholders[] = $placeholder;
+        $params[$placeholder] = $dbParams[$placeholder] ?? null;
+    }
+
+    return $columns === []
+        ? []
+        : ['columns' => $columns, 'placeholders' => $placeholders, 'params' => $params];
+}
+
+function calls_create_priority_assessment_update_sets(PDO $pdo, string $tableName, array $assessment): array {
+    if ($assessment === []) {
+        return [];
+    }
+
+    $dbParams = ers_priority_assessment_db_params($assessment);
+    $map = [
+        'priority_score' => ':priority_score',
+        'priority_confidence' => ':priority_confidence',
+        'priority_factors_json' => ':priority_factors_json',
+        'priority_model' => ':priority_model',
+        'priority_assessed_at' => ':priority_assessed_at',
+    ];
+    $sets = [];
+    $values = [];
+    foreach ($map as $column => $placeholder) {
+        if (!calls_create_column_exists($pdo, $tableName, $column)) {
+            continue;
+        }
+        $sets[] = '`' . $column . '` = ?';
+        $values[] = $dbParams[$placeholder] ?? null;
+    }
+
+    return $sets === [] ? [] : ['sets' => $sets, 'values' => $values];
+}
+
+function insert_call_row(PDO $pdo, array $params, array $priorityAssessment = []): int {
+    $assessmentInsert = calls_create_priority_assessment_insert_parts($pdo, 'calls', $priorityAssessment);
+    $assessmentColumns = $assessmentInsert !== [] ? ', ' . implode(', ', $assessmentInsert['columns']) : '';
+    $assessmentValues = $assessmentInsert !== [] ? ', ' . implode(', ', $assessmentInsert['placeholders']) : '';
+    if ($assessmentInsert !== []) {
+        $params = array_merge($params, $assessmentInsert['params']);
+    }
+
     $sql = 'INSERT INTO calls (
                 reference_no, caller_name, caller_phone, caller_email, location_address, latitude, longitude,
-                incident_type, priority, status, description, received_at
+                incident_type, priority, status, description, received_at' . $assessmentColumns . '
             )
             VALUES (
                 :reference_no, :caller_name, :caller_phone, NULL, :location_address, :latitude, :longitude,
-                :incident_type, :priority, :status, :description, :received_at
+                :incident_type, :priority, :status, :description, :received_at' . $assessmentValues . '
             )';
     $stmt = $pdo->prepare($sql);
     try {
@@ -746,7 +841,7 @@ function insert_call_row(PDO $pdo, array $params): int {
         if (!requires_manual_id($e)) {
             throw $e;
         }
-        return insert_call_row_with_id($pdo, $params);
+        return insert_call_row_with_id($pdo, $params, $priorityAssessment);
     }
 
     $id = (int)$pdo->lastInsertId();
@@ -790,14 +885,21 @@ function normalize_incident_type_input($value): string {
     return implode(', ', $items);
 }
 
-function insert_call_row_with_id(PDO $pdo, array $params): int {
+function insert_call_row_with_id(PDO $pdo, array $params, array $priorityAssessment = []): int {
+    $assessmentInsert = calls_create_priority_assessment_insert_parts($pdo, 'calls', $priorityAssessment);
+    $assessmentColumns = $assessmentInsert !== [] ? ', ' . implode(', ', $assessmentInsert['columns']) : '';
+    $assessmentValues = $assessmentInsert !== [] ? ', ' . implode(', ', $assessmentInsert['placeholders']) : '';
+    if ($assessmentInsert !== []) {
+        $params = array_merge($params, $assessmentInsert['params']);
+    }
+
     $sql = 'INSERT INTO calls (
                 id, reference_no, caller_name, caller_phone, caller_email, location_address, latitude, longitude,
-                incident_type, priority, status, description, received_at
+                incident_type, priority, status, description, received_at' . $assessmentColumns . '
             )
             VALUES (
                 :id, :reference_no, :caller_name, :caller_phone, NULL, :location_address, :latitude, :longitude,
-                :incident_type, :priority, :status, :description, :received_at
+                :incident_type, :priority, :status, :description, :received_at' . $assessmentValues . '
             )';
     $stmt = $pdo->prepare($sql);
 
@@ -818,9 +920,16 @@ function insert_call_row_with_id(PDO $pdo, array $params): int {
     throw new RuntimeException('Unable to allocate id for calls table');
 }
 
-function insert_incident_row(PDO $pdo, array $params): int {
-    $sql = 'INSERT INTO incidents (reference_no, type, priority, status, title, description, location_address, latitude, longitude, reported_by_call_id, created_at)
-            VALUES (:reference_no, :type, :priority, \'pending\', :title, :description, :location_address, :latitude, :longitude, :reported_by_call_id, NOW())';
+function insert_incident_row(PDO $pdo, array $params, array $priorityAssessment = []): int {
+    $assessmentInsert = calls_create_priority_assessment_insert_parts($pdo, 'incidents', $priorityAssessment);
+    $assessmentColumns = $assessmentInsert !== [] ? ', ' . implode(', ', $assessmentInsert['columns']) : '';
+    $assessmentValues = $assessmentInsert !== [] ? ', ' . implode(', ', $assessmentInsert['placeholders']) : '';
+    if ($assessmentInsert !== []) {
+        $params = array_merge($params, $assessmentInsert['params']);
+    }
+
+    $sql = 'INSERT INTO incidents (reference_no, type, priority, status, title, description, location_address, latitude, longitude, reported_by_call_id, created_at' . $assessmentColumns . ')
+            VALUES (:reference_no, :type, :priority, \'pending\', :title, :description, :location_address, :latitude, :longitude, :reported_by_call_id, NOW()' . $assessmentValues . ')';
     $stmt = $pdo->prepare($sql);
     try {
         $stmt->execute($params);
@@ -828,7 +937,7 @@ function insert_incident_row(PDO $pdo, array $params): int {
         if (!requires_manual_id($e)) {
             throw $e;
         }
-        return insert_incident_row_with_id($pdo, $params);
+        return insert_incident_row_with_id($pdo, $params, $priorityAssessment);
     }
 
     $id = (int)$pdo->lastInsertId();
@@ -844,27 +953,39 @@ function insert_incident_row(PDO $pdo, array $params): int {
     throw new RuntimeException('Incident insert did not return a valid id');
 }
 
-function update_incident_priority_indicator(PDO $pdo, int $incidentId, string $priority): void {
+function update_incident_priority_indicator(PDO $pdo, int $incidentId, string $priority, array $priorityAssessment = []): void {
     if ($incidentId < 1) {
         return;
     }
     $updatedAtSet = calls_create_column_exists($pdo, 'incidents', 'updated_at')
         ? ', updated_at = CURRENT_TIMESTAMP'
         : '';
+    $assessmentSets = calls_create_priority_assessment_update_sets($pdo, 'incidents', $priorityAssessment);
     $stmt = $pdo->prepare(
         'UPDATE incidents
-         SET priority = :priority' . $updatedAtSet . '
-         WHERE id = :id'
+         SET priority = ?'
+         . ($assessmentSets !== [] ? ', ' . implode(', ', $assessmentSets['sets']) : '')
+         . $updatedAtSet . '
+         WHERE id = ?'
     );
-    $stmt->execute([
-        ':priority' => $priority,
-        ':id' => $incidentId,
-    ]);
+    $params = [$priority];
+    if ($assessmentSets !== []) {
+        $params = array_merge($params, array_values($assessmentSets['values']));
+    }
+    $params[] = $incidentId;
+    $stmt->execute($params);
 }
 
-function insert_incident_row_with_id(PDO $pdo, array $params): int {
-    $sql = 'INSERT INTO incidents (id, reference_no, type, priority, status, title, description, location_address, latitude, longitude, reported_by_call_id, created_at)
-            VALUES (:id, :reference_no, :type, :priority, \'pending\', :title, :description, :location_address, :latitude, :longitude, :reported_by_call_id, NOW())';
+function insert_incident_row_with_id(PDO $pdo, array $params, array $priorityAssessment = []): int {
+    $assessmentInsert = calls_create_priority_assessment_insert_parts($pdo, 'incidents', $priorityAssessment);
+    $assessmentColumns = $assessmentInsert !== [] ? ', ' . implode(', ', $assessmentInsert['columns']) : '';
+    $assessmentValues = $assessmentInsert !== [] ? ', ' . implode(', ', $assessmentInsert['placeholders']) : '';
+    if ($assessmentInsert !== []) {
+        $params = array_merge($params, $assessmentInsert['params']);
+    }
+
+    $sql = 'INSERT INTO incidents (id, reference_no, type, priority, status, title, description, location_address, latitude, longitude, reported_by_call_id, created_at' . $assessmentColumns . ')
+            VALUES (:id, :reference_no, :type, :priority, \'pending\', :title, :description, :location_address, :latitude, :longitude, :reported_by_call_id, NOW()' . $assessmentValues . ')';
     $stmt = $pdo->prepare($sql);
 
     for ($attempt = 0; $attempt < 5; $attempt++) {

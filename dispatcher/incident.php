@@ -13,6 +13,66 @@ $aiIncidentData = [
     'severity' => 'Unknown',
 ];
 
+function incident_ai_inline_html(string $text): string
+{
+    $safe = htmlspecialchars(trim($text), ENT_QUOTES, 'UTF-8');
+    return preg_replace('/\*\*(.+?)\*\*/s', '<strong>$1</strong>', $safe) ?? $safe;
+}
+
+function incident_ai_analysis_html(string $text): string
+{
+    $lines = preg_split('/\R/u', trim($text)) ?: [];
+    $html = '<div class="ai-analysis-text">';
+    $listOpen = false;
+
+    foreach ($lines as $line) {
+        $line = trim((string)$line);
+        if ($line === '') {
+            if ($listOpen) {
+                $html .= '</ul>';
+                $listOpen = false;
+            }
+            continue;
+        }
+
+        if (preg_match('/^\*\*([^*:\n]+):\*\*\s*(.*)$/u', $line, $match)) {
+            if ($listOpen) {
+                $html .= '</ul>';
+                $listOpen = false;
+            }
+            $label = htmlspecialchars(trim($match[1]), ENT_QUOTES, 'UTF-8');
+            $value = incident_ai_inline_html((string)($match[2] ?? ''));
+            $html .= '<section class="ai-analysis-item"><h3>' . $label . '</h3>';
+            if ($value !== '') {
+                $html .= '<p>' . $value . '</p>';
+            }
+            $html .= '</section>';
+            continue;
+        }
+
+        if (preg_match('/^[*-]\s+(.*)$/u', $line, $match)) {
+            if (!$listOpen) {
+                $html .= '<ul class="ai-analysis-list">';
+                $listOpen = true;
+            }
+            $html .= '<li>' . incident_ai_inline_html((string)$match[1]) . '</li>';
+            continue;
+        }
+
+        if ($listOpen) {
+            $html .= '</ul>';
+            $listOpen = false;
+        }
+        $html .= '<p>' . incident_ai_inline_html($line) . '</p>';
+    }
+
+    if ($listOpen) {
+        $html .= '</ul>';
+    }
+
+    return $html . '</div>';
+}
+
 try {
     $pdo = get_db_connection();
     if ($pdo) {
@@ -222,7 +282,7 @@ try {
                             include $rootDir . '/includes/gemini_helper.php';
                             $analysis = analyzeIncident($aiIncidentData);
                             if ($analysis) {
-                                echo '<div class="ai-analysis-text">' . nl2br(htmlspecialchars($analysis)) . '</div>';
+                                echo incident_ai_analysis_html((string)$analysis);
                             } else {
                                 $aiError = function_exists('getGeminiLastError') ? trim((string) getGeminiLastError()) : '';
                                 if ($aiError === '') {
@@ -435,10 +495,10 @@ try {
             .then(r => r.json())
             .then(json => {
                 if (json.ok && json.text) {
-                    container.innerHTML = '<div class="ai-analysis-text">' + String(json.text).replace(/\n/g,'<br>') + '</div>';
+                    container.innerHTML = renderAiAnalysisText(json.text);
                 } else {
                     const msg = (json && json.error) ? String(json.error) : 'Unable to generate AI analysis at this time.';
-                    container.innerHTML = '<div class="ai-error"><i class="fas fa-exclamation-triangle"></i> ' + msg.replace(/\n/g,'<br>') + '</div>';
+                    container.innerHTML = '<div class="ai-error"><i class="fas fa-exclamation-triangle"></i> ' + escapeHtml(msg).replace(/\n/g,'<br>') + '</div>';
                 }
             })
             .catch(() => {
@@ -607,6 +667,57 @@ try {
                 .replace(/>/g, '&gt;')
                 .replace(/"/g, '&quot;')
                 .replace(/'/g, '&#39;');
+        }
+
+        function aiInlineHtml(value) {
+            return escapeHtml(value).replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
+        }
+
+        function renderAiAnalysisText(value) {
+            const lines = String(value || '').trim().split(/\r?\n/);
+            let html = '<div class="ai-analysis-text">';
+            let listOpen = false;
+            const closeList = () => {
+                if (listOpen) {
+                    html += '</ul>';
+                    listOpen = false;
+                }
+            };
+
+            lines.forEach((rawLine) => {
+                const line = rawLine.trim();
+                if (!line) {
+                    closeList();
+                    return;
+                }
+
+                const headingMatch = line.match(/^\*\*([^*:\n]+):\*\*\s*(.*)$/);
+                if (headingMatch) {
+                    closeList();
+                    html += `<section class="ai-analysis-item"><h3>${escapeHtml(headingMatch[1])}</h3>`;
+                    if (headingMatch[2]) {
+                        html += `<p>${aiInlineHtml(headingMatch[2])}</p>`;
+                    }
+                    html += '</section>';
+                    return;
+                }
+
+                const bulletMatch = line.match(/^[*-]\s+(.*)$/);
+                if (bulletMatch) {
+                    if (!listOpen) {
+                        html += '<ul class="ai-analysis-list">';
+                        listOpen = true;
+                    }
+                    html += `<li>${aiInlineHtml(bulletMatch[1])}</li>`;
+                    return;
+                }
+
+                closeList();
+                html += `<p>${aiInlineHtml(line)}</p>`;
+            });
+
+            closeList();
+            return html + '</div>';
         }
 
         function incidentCardHtml(i) {

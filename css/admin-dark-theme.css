@@ -1297,6 +1297,24 @@
     color: #cbd5e1 !important;
 }
 
+[data-theme="dark"] .ai-text-item {
+    background: rgba(59, 130, 246, 0.1) !important;
+    border-left-color: #60a5fa !important;
+}
+
+[data-theme="dark"] .ai-text-item h3 {
+    color: #bfdbfe !important;
+}
+
+[data-theme="dark"] .ai-text-item p,
+[data-theme="dark"] .ai-formatted-text strong {
+    color: #f8fafc !important;
+}
+
+[data-theme="dark"] .ai-text-list {
+    background: rgba(148, 163, 184, 0.08) !important;
+}
+
 [data-theme="dark"] .status-badge.status-active,
 [data-theme="dark"] .status-badge.status-dispatched,
 [data-theme="dark"] .status-badge.status-resolved,

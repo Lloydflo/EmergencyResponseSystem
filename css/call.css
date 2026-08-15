@@ -1479,6 +1479,31 @@ body.incoming-call-modal-open {
     font-weight: 700;
 }
 
+.priority-ai-suggestion {
+    margin-top: 0.8rem;
+    padding: 0.75rem 0.85rem;
+    border-radius: 8px;
+    border: 1px solid #dbeafe;
+    background: #eff6ff;
+    color: #1e3a8a;
+    font-size: 0.84rem;
+    line-height: 1.45;
+    font-weight: 700;
+}
+
+.priority-ai-suggestion[data-state="loading"] {
+    border-color: #fde68a;
+    background: #fffbeb;
+    color: #92400e;
+}
+
+.priority-ai-suggestion[data-state="fallback"],
+.priority-ai-suggestion[data-state="manual"] {
+    border-color: #e2e8f0;
+    background: #f8fafc;
+    color: #475569;
+}
+
 .priority-select {
     display: flex;
     gap: 0.6rem;
@@ -2121,6 +2146,25 @@ body.incident-details-modal-open {
 }
 
 [data-theme="dark"] .form-group label {
+    color: #cbd5e1;
+}
+
+[data-theme="dark"] .priority-ai-suggestion {
+    border-color: rgba(96, 165, 250, 0.28);
+    background: rgba(30, 58, 138, 0.24);
+    color: #bfdbfe;
+}
+
+[data-theme="dark"] .priority-ai-suggestion[data-state="loading"] {
+    border-color: rgba(245, 158, 11, 0.38);
+    background: rgba(120, 53, 15, 0.22);
+    color: #fde68a;
+}
+
+[data-theme="dark"] .priority-ai-suggestion[data-state="fallback"],
+[data-theme="dark"] .priority-ai-suggestion[data-state="manual"] {
+    border-color: rgba(148, 163, 184, 0.25);
+    background: rgba(15, 23, 42, 0.62);
     color: #cbd5e1;
 }
 

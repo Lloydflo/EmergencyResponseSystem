@@ -577,7 +577,7 @@ if ($priority !== '' && ers_incidents_has_column($schema, 'incidents', 'priority
 
 if ($status !== '' && ers_incidents_has_column($schema, 'incidents', 'status')) {
     if ($status === 'pending') {
-        $where[] = "i.status = 'pending'";
+        $where[] = "i.status IN ('pending', 'new')";
         if (
             $hasLatestDispatch
             && ers_incidents_has_column($schema, 'dispatches', 'status')
@@ -590,7 +590,7 @@ if ($status !== '' && ers_incidents_has_column($schema, 'incidents', 'status')) 
             )";
         }
     } elseif ($status === 'active') {
-        $where[] = "i.status IN ('pending', 'dispatched')";
+        $where[] = "i.status IN ('pending', 'new', 'dispatched')";
     } elseif ($status === 'dispatched') {
         $where[] = "i.status = 'dispatched'";
     } elseif (in_array($status, ['resolved', 'closed'], true)) {

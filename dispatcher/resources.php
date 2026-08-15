@@ -1176,7 +1176,7 @@ try {
                 .then(data => {
                     if (!container) return;
                     if (data && data.ok && data.text) {
-                        container.innerHTML = '<div class="ai-predictive-text">' + String(data.text).replace(/\n/g, '<br>') + '</div>';
+                        container.innerHTML = renderAiText(data.text, 'ai-predictive-text');
                         if (data.snapshot) {
                             const snap = document.getElementById('ai-resource-snapshot');
                             if (snap) {
@@ -1192,7 +1192,7 @@ try {
                         }
                     } else {
                         const msg = (data && data.error) ? String(data.error) : 'Unable to generate AI resource recommendations at this time.';
-                        container.innerHTML = '<div class="ai-error"><i class="fas fa-exclamation-triangle"></i> ' + msg.replace(/\n/g, '<br>') + '</div>';
+                        container.innerHTML = '<div class="ai-error"><i class="fas fa-exclamation-triangle"></i> ' + escapeHtml(msg).replace(/\n/g, '<br>') + '</div>';
                         if (!silent) {
                             showNotification(msg, 'error');
                         }
@@ -1587,6 +1587,45 @@ try {
             };
         }
 
+        function normalizeUnitCode(value) {
+            return String(value || '').trim().toUpperCase();
+        }
+
+        function requestedVehicleUnitCodes(request) {
+            const codes = new Set();
+            const selectedResources = request && Array.isArray(request.selected_resources)
+                ? request.selected_resources
+                : [];
+
+            selectedResources.forEach((item) => {
+                const category = String(item && item.category ? item.category : '').trim().toLowerCase();
+                if (category !== 'vehicles' && category !== 'vehicle') {
+                    return;
+                }
+                const code = normalizeUnitCode(item.code || item.identifier || item.unit_code);
+                if (code) {
+                    codes.add(code);
+                }
+            });
+
+            return codes;
+        }
+
+        function autoSelectRequestedVehicleUnits() {
+            const requestedCodes = requestedVehicleUnitCodes(selectedDispatcherRequest);
+            if (!requestedCodes.size || !Array.isArray(dispatcherAvailableUnitsData)) {
+                return;
+            }
+
+            dispatcherAvailableUnitsData.forEach((unit) => {
+                const unitCode = normalizeUnitCode(unit && unit.identifier);
+                if (unitCode && requestedCodes.has(unitCode)) {
+                    selectedDispatcherUnitIds.add(Number(unit.id) || 0);
+                }
+            });
+            selectedDispatcherUnitIds.delete(0);
+        }
+
         function findDispatcherRequestPayload(requestId) {
             return dispatcherBackupRequestsData.find((item) => item && Number(item.id) === Number(requestId)) || null;
         }
@@ -1823,6 +1862,7 @@ try {
         function selectDispatcherRequest(requestId) {
             selectedDispatcherRequest = findDispatcherRequestPayload(requestId);
             selectedDispatcherUnitIds.clear();
+            autoSelectRequestedVehicleUnits();
 
             getDispatcherRequestRows().forEach((row) => {
                 row.classList.toggle('dispatcher-request-row-active', Number(row.getAttribute('data-request-id') || '0') === Number(requestId));
@@ -2131,6 +2171,51 @@ try {
                 .replace(/>/g, '&gt;')
                 .replace(/"/g, '&quot;')
                 .replace(/'/g, '&#039;');
+        }
+
+        function aiInlineHtml(value) {
+            return escapeHtml(value).replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
+        }
+
+        function renderAiText(value, wrapperClass) {
+            const lines = String(value || '').trim().split(/\r?\n/);
+            let html = `<div class="${escapeHtml(wrapperClass)} ai-formatted-text">`;
+            let listOpen = false;
+            const closeList = () => {
+                if (listOpen) {
+                    html += '</ul>';
+                    listOpen = false;
+                }
+            };
+
+            lines.forEach((rawLine) => {
+                const line = rawLine.trim();
+                if (!line) {
+                    closeList();
+                    return;
+                }
+                const headingMatch = line.match(/^\*\*([^*:\n]+):\*\*\s*(.*)$/);
+                if (headingMatch) {
+                    closeList();
+                    html += `<section class="ai-text-item"><h3>${escapeHtml(headingMatch[1])}</h3>`;
+                    if (headingMatch[2]) html += `<p>${aiInlineHtml(headingMatch[2])}</p>`;
+                    html += '</section>';
+                    return;
+                }
+                const bulletMatch = line.match(/^[*-]\s+(.*)$/);
+                if (bulletMatch) {
+                    if (!listOpen) {
+                        html += '<ul class="ai-text-list">';
+                        listOpen = true;
+                    }
+                    html += `<li>${aiInlineHtml(bulletMatch[1])}</li>`;
+                    return;
+                }
+                closeList();
+                html += `<p>${aiInlineHtml(line)}</p>`;
+            });
+            closeList();
+            return html + '</div>';
         }
 
         function escapeAttrValue(str) {

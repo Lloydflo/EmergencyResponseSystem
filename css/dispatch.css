@@ -763,8 +763,51 @@
     margin: 0;
     color: #1f2937;
     font-size: 0.95rem;
-    line-height: 1.6;
-    white-space: pre-line;
+    line-height: 1.55;
+}
+
+.ai-formatted-text {
+    display: flex;
+    flex-direction: column;
+    gap: 0.85rem;
+}
+
+.ai-formatted-text p {
+    margin: 0;
+}
+
+.ai-formatted-text strong {
+    color: #111827;
+    font-weight: 800;
+}
+
+.ai-text-item {
+    padding: 0.85rem 0.95rem;
+    border-left: 3px solid #f97316;
+    border-radius: 8px;
+    background: rgba(249, 115, 22, 0.08);
+}
+
+.ai-text-item h3 {
+    margin: 0 0 0.35rem;
+    color: #9a3412;
+    font-size: 0.78rem;
+    line-height: 1.25;
+    font-weight: 900;
+    text-transform: uppercase;
+    letter-spacing: 0;
+}
+
+.ai-text-list {
+    margin: 0;
+    padding: 0.8rem 1rem 0.8rem 1.35rem;
+    border-radius: 8px;
+    background: rgba(15, 23, 42, 0.04);
+}
+
+.ai-text-list li {
+    margin: 0.35rem 0;
+    padding-left: 0.15rem;
 }
 
 .ai-error {
@@ -867,6 +910,24 @@
 [data-theme="dark"] .status-command-summary,
 [data-theme="dark"] .ai-recommendation-text {
     color: #cbd5e1 !important;
+}
+
+[data-theme="dark"] .ai-formatted-text strong,
+[data-theme="dark"] .ai-text-item p {
+    color: #f8fafc;
+}
+
+[data-theme="dark"] .ai-text-item {
+    background: rgba(249, 115, 22, 0.1);
+    border-left-color: #fb923c;
+}
+
+[data-theme="dark"] .ai-text-item h3 {
+    color: #fed7aa;
+}
+
+[data-theme="dark"] .ai-text-list {
+    background: rgba(148, 163, 184, 0.08);
 }
 
 [data-theme="dark"] .btn-action-small {

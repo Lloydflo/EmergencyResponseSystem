@@ -600,13 +600,30 @@ function ers_tip_convert_to_incident(PDO $pdo, array $input): array
         $lookup->execute([$callId]);
         $created = $lookup->fetch(PDO::FETCH_ASSOC);
         if ($created) {
-            if ($coordinates['latitude'] !== null && $coordinates['longitude'] !== null) {
-                $update = $pdo->prepare('UPDATE incidents SET title = ?, latitude = ?, longitude = ?, updated_at = NOW() WHERE id = ?');
-                $update->execute([$title, $coordinates['latitude'], $coordinates['longitude'], (int)$created['id']]);
-            } else {
-                $update = $pdo->prepare('UPDATE incidents SET title = ?, updated_at = NOW() WHERE id = ?');
-                $update->execute([$title, (int)$created['id']]);
-            }
+            $update = $pdo->prepare(
+                "UPDATE incidents
+                 SET type = ?,
+                     priority = ?,
+                     status = 'pending',
+                     title = ?,
+                     description = ?,
+                     location_address = ?,
+                     latitude = ?,
+                     longitude = ?,
+                     updated_at = NOW()
+                 WHERE id = ?"
+            );
+            $update->execute([
+                $type,
+                $priority,
+                $title,
+                $description,
+                $location,
+                $coordinates['latitude'],
+                $coordinates['longitude'],
+                (int)$created['id'],
+            ]);
+            $created['status'] = 'pending';
         } else {
             $incidentId = ers_external_insert_incident($pdo, [
                 ':reference_no' => $referenceNo,

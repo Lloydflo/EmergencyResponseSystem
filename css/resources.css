@@ -508,24 +508,53 @@
     line-height: 1.55;
     color: #1f2937;
     font-size: 0.96rem;
-    white-space: pre-line;
     max-height: 280px;
     overflow-y: auto;
     margin: 0;
 }
 
+.ai-formatted-text {
+    display: flex;
+    flex-direction: column;
+    gap: 0.85rem;
+}
+
+.ai-formatted-text p {
+    margin: 0;
+}
+
 .ai-predictive-text strong {
     color: #2d3748;
-    font-weight: 600;
+    font-weight: 800;
 }
 
-.ai-predictive-text ul, .ai-predictive-text ol {
-    margin: 1rem 0;
-    padding-left: 1.5rem;
+.ai-text-item {
+    padding: 0.85rem 0.95rem;
+    border-left: 3px solid #2563eb;
+    border-radius: 8px;
+    background: rgba(37, 99, 235, 0.08);
 }
 
-.ai-predictive-text li {
-    margin-bottom: 0.5rem;
+.ai-text-item h3 {
+    margin: 0 0 0.35rem;
+    color: #1d4ed8;
+    font-size: 0.78rem;
+    line-height: 1.25;
+    font-weight: 900;
+    text-transform: uppercase;
+    letter-spacing: 0;
+}
+
+.ai-text-list {
+    margin: 0;
+    padding: 0.8rem 1rem 0.8rem 1.35rem;
+    border-radius: 8px;
+    background: rgba(15, 23, 42, 0.04);
+}
+
+.ai-text-list li {
+    margin: 0.35rem 0;
+    padding-left: 0.15rem;
     color: #4a5568;
 }
 

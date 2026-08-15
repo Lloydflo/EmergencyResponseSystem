@@ -193,6 +193,33 @@ function backup_dispatch_vehicle_label(string $unitType, string $vehicleName = '
     return $vehicleName !== '' ? $vehicleName : 'Vehicle';
 }
 
+function backup_dispatch_requested_vehicle_codes(array $details): array
+{
+    $codes = [];
+    $selectedResources = $details['selected_resources'] ?? [];
+    if (!is_array($selectedResources)) {
+        return $codes;
+    }
+
+    foreach ($selectedResources as $item) {
+        if (!is_array($item)) {
+            continue;
+        }
+
+        $category = strtolower(trim((string)($item['category'] ?? '')));
+        if ($category !== 'vehicles' && $category !== 'vehicle') {
+            continue;
+        }
+
+        $code = strtoupper(trim((string)($item['code'] ?? ($item['identifier'] ?? ($item['unit_code'] ?? '')))));
+        if ($code !== '') {
+            $codes[$code] = true;
+        }
+    }
+
+    return $codes;
+}
+
 $requestId = isset($_POST['request_id']) ? (int)$_POST['request_id'] : 0;
 $incidentId = isset($_POST['incident_id']) ? (int)$_POST['incident_id'] : 0;
 $dispatcherName = trim((string)($_POST['dispatcher_name'] ?? 'Dispatcher'));
@@ -256,6 +283,7 @@ try {
     if (!is_array($details)) {
         $details = [];
     }
+    $requestedVehicleCodes = backup_dispatch_requested_vehicle_codes($details);
 
     $requestIncidentId = isset($details['incident_id']) ? (int)$details['incident_id'] : 0;
     if ($requestIncidentId > 0 && $requestIncidentId !== $incidentId) {
@@ -334,8 +362,18 @@ try {
     $unitStmt->execute($unitIds);
     $availableUnits = [];
     foreach ($unitStmt->fetchAll(PDO::FETCH_ASSOC) as $unitRow) {
+        $unitLabel = (string)($unitRow['identifier'] ?? $unitRow['id']);
+        $unitCode = strtoupper(trim($unitLabel));
+        if ($requestedVehicleCodes !== [] && ($unitCode === '' || !isset($requestedVehicleCodes[$unitCode]))) {
+            backup_dispatch_fail_response($pdo, $incidentId, $unitIds, 'Unit ' . $unitLabel . ' was not selected in the admin backup request', [
+                'request_id' => $requestId,
+                'incident_id' => $incidentId,
+                'unit_ids' => $unitIds,
+                'unit_identifier' => $unitLabel,
+                'requested_vehicle_codes' => array_keys($requestedVehicleCodes),
+            ]);
+        }
         if ((string)($unitRow['status'] ?? '') !== 'available') {
-            $unitLabel = (string)($unitRow['identifier'] ?? $unitRow['id']);
             backup_dispatch_fail_response($pdo, $incidentId, $unitIds, 'Unit ' . $unitLabel . ' is no longer available', [
                 'request_id' => $requestId,
                 'incident_id' => $incidentId,
@@ -425,12 +463,21 @@ try {
         ];
     }
 
+    $incidentDestination = [
+        'incident_id' => $incidentId,
+        'incident_code' => $incidentReferenceNo,
+        'location' => (string)($incidentRow['location_address'] ?? ''),
+        'latitude' => $incidentRow['latitude'] !== null && $incidentRow['latitude'] !== '' ? (float)$incidentRow['latitude'] : null,
+        'longitude' => $incidentRow['longitude'] !== null && $incidentRow['longitude'] !== '' ? (float)$incidentRow['longitude'] : null,
+    ];
+
     $incidentUpdate = $pdo->prepare("UPDATE incidents SET status = 'dispatched', updated_at = CURRENT_TIMESTAMP WHERE id = ?");
     $incidentUpdate->execute([$incidentId]);
 
     $details['dispatcher_name'] = $dispatcherName !== '' ? $dispatcherName : 'Dispatcher';
     $details['dispatch_notes'] = $notes;
     $details['dispatched_at'] = $dispatchTime;
+    $details['incident_destination'] = $incidentDestination;
     $details['dispatched_units'] = $dispatchedUnits;
     $details['dispatched_unit_ids'] = $unitIds;
 
@@ -450,6 +497,7 @@ try {
         'ok' => true,
         'request_id' => $requestId,
         'incident_id' => $incidentId,
+        'incident_destination' => $incidentDestination,
         'dispatched_count' => count($dispatchedUnits),
         'dispatched_units' => $dispatchedUnits,
         'anonymous_tip_status_sync' => $anonymousTipStatusSync,
