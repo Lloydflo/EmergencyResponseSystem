@@ -4,6 +4,8 @@ require_once $rootDir . '/includes/config.php';
 require_once $rootDir . '/includes/auth.php';
 // Require full login (including OTP verification) before loading page
 require_role('dispatcher', 'dispatcher/call.php');
+header('Cache-Control: private, no-store, max-age=0');
+header('Pragma: no-cache');
 
 $pageTitle = 'Emergency Call Center';
 $turnUrl = trim((string) ers_env('WEBRTC_TURN_URL', ''));
@@ -1226,7 +1228,7 @@ if ($turnIsConfigured && preg_match('/^turns?:(?:\/\/)?([^:\/?]+)/i', $turnUrl, 
         if (notificationId) card.dataset.transferNotification = notificationId;
         card.innerHTML = [
             '<div class="transfer-report-head">',
-                '<span class="transfer-report-icon" aria-hidden="true"><i class="fas fa-file-medical-alt"></i></span>',
+                '<span class="transfer-report-icon" aria-hidden="true">' + transferSourceIconSvg(false) + '</span>',
                 '<div>',
                     '<div class="transfer-report-eyebrow">Incoming Transferred Report</div>',
                     '<strong class="transfer-report-title"></strong>',
@@ -1419,8 +1421,8 @@ if ($turnIsConfigured && preg_match('/^turns?:(?:\/\/)?([^:\/?]+)/i', $turnUrl, 
         return `
             <article class="transfer-queue-card ${isLiveCall ? 'is-live' : 'is-report'} priority-${priorityClass}">
                 <div class="transfer-queue-card-head">
-                    <span class="transfer-queue-icon"><i class="fas ${isLiveCall ? 'fa-headset' : 'fa-file-medical-alt'}"></i></span>
-                    <div>
+                    <span class="transfer-queue-icon" aria-hidden="true">${transferSourceIconSvg(isLiveCall)}</span>
+                    <div class="transfer-queue-copy">
                         <strong>${escapeHtml(title)}</strong>
                         <span>${escapeHtml(isLiveCall ? 'Live call waiting' : 'Message/report waiting')}</span>
                     </div>
@@ -1441,6 +1443,14 @@ if ($turnIsConfigured && preg_match('/^turns?:(?:\/\/)?([^:\/?]+)/i', $turnUrl, 
                 </button>
             </article>
         `;
+    }
+
+    function transferSourceIconSvg(isLiveCall) {
+        if (isLiveCall) {
+            return '<svg class="transfer-source-glyph" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" focusable="false" aria-hidden="true"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6A19.79 19.79 0 0 1 2.12 4.18 2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72c.13.96.36 1.9.69 2.8a2 2 0 0 1-.45 2.11L8.08 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45c.91.33 1.85.56 2.81.69A2 2 0 0 1 22 16.92Z"/></svg>';
+        }
+
+        return '<svg class="transfer-source-glyph" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" focusable="false" aria-hidden="true"><path d="M6 3h8l4 4v14H6Z"/><path d="M14 3v5h5"/><path d="M9 13h6"/><path d="M9 17h6"/></svg>';
     }
 
     function findTransferredQueueItem(key) {
@@ -1684,7 +1694,8 @@ if ($turnIsConfigured && preg_match('/^turns?:(?:\/\/)?([^:\/?]+)/i', $turnUrl, 
     }
 
     function transferSubmitContext(form) {
-        const session = getSharedCallSession() || {};
+        const sharedSession = getSharedCallSession() || {};
+        const session = sharedSession.isTransfer === true ? sharedSession : {};
         const call = activeTransferCall || {};
         const incidentId = Number(
             (form && form.dataset ? form.dataset.transferIncidentId : '')
@@ -3084,6 +3095,7 @@ if ($turnIsConfigured && preg_match('/^turns?:(?:\/\/)?([^:\/?]+)/i', $turnUrl, 
         if (submitButton && submitButton.disabled) {
             return;
         }
+        const isManualEntry = document.getElementById('activeCallPanel')?.classList.contains('manual-create') === true;
         const locationText = document.getElementById('incidentLocation').value.trim();
         if (!locationText) {
             alert('Please provide an incident location.');
@@ -3107,26 +3119,39 @@ if ($turnIsConfigured && preg_match('/^turns?:(?:\/\/)?([^:\/?]+)/i', $turnUrl, 
             location: finalLocationText,
             description: document.getElementById('incidentDescription').value.trim(),
             priority: priorityValue,
-            status: document.getElementById('status').value
+            status: document.getElementById('status').value,
+            // Persist provenance at creation time. Both live calls and manual
+            // entries use the same endpoint, so reported_by_call_id alone is
+            // not enough to classify them later in Dispatch Center.
+            intake_source: isManualEntry ? 'manual' : 'call'
         };
-        const callContext = activeTransferCall || getSharedCallSession() || activeCall || {};
-        const receivedAtMs = Number(callContext.start || form?.dataset?.callReceivedAtMs || 0);
-        const acceptedAtMs = Number(callContext.acceptedAt || form?.dataset?.callAcceptedAtMs || 0);
+        const callContext = isManualEntry
+            ? {}
+            : (activeTransferCall || getSharedCallSession() || activeCall || {});
+        const receivedAtMs = isManualEntry
+            ? 0
+            : Number(callContext.start || form?.dataset?.callReceivedAtMs || 0);
+        const acceptedAtMs = isManualEntry
+            ? 0
+            : Number(callContext.acceptedAt || form?.dataset?.callAcceptedAtMs || 0);
         if (Number.isFinite(receivedAtMs) && receivedAtMs > 0) {
             payload.received_at = new Date(receivedAtMs).toISOString();
         }
         if (Number.isFinite(acceptedAtMs) && acceptedAtMs > 0) {
             payload.accepted_at = new Date(acceptedAtMs).toISOString();
         }
-        const auditSessionId = String(
-            callContext.auditSessionId || form?.dataset?.callAuditSessionId || ''
-        ).trim();
+        const auditSessionId = isManualEntry
+            ? ''
+            : String(callContext.auditSessionId || form?.dataset?.callAuditSessionId || '').trim();
         if (/^[A-Za-z0-9.:-]{8,96}$/.test(auditSessionId)) {
             payload.audit_session_id = auditSessionId;
         }
 
-        const transferContext = transferSubmitContext(form);
+        const transferContext = isManualEntry
+            ? { incidentId: 0, transferId: '', callId: '', referenceNo: '', sourceSystem: '' }
+            : transferSubmitContext(form);
         if (transferContext.incidentId > 0 || transferContext.transferId || transferContext.callId || transferContext.referenceNo) {
+            payload.intake_source = 'interagency';
             if (transferContext.incidentId > 0) {
                 payload.transfer_incident_id = transferContext.incidentId;
             }

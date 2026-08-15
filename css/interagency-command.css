@@ -185,6 +185,45 @@
     padding: 1rem;
 }
 
+/* External Inbox uses the module body as its single scroll container. This
+ * avoids a short nested scroller that visually cuts the incident cards while
+ * leaving a large blank area below them. */
+.ia-module-modal[data-active-module="iaExternalIncidentInbox"] {
+    align-items: center;
+}
+
+.ia-module-modal[data-active-module="iaExternalIncidentInbox"] .ia-module-modal-dialog {
+    align-self: center;
+    height: auto;
+    max-height: calc(100dvh - 2.5rem);
+}
+
+.ia-module-modal[data-active-module="iaExternalIncidentInbox"] .ia-module-modal-body {
+    min-height: 0;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+}
+
+.ia-module-modal[data-active-module="iaExternalIncidentInbox"] .ia-external-inbox {
+    margin: 0;
+}
+
+.ia-module-modal[data-active-module="iaExternalIncidentInbox"] .ia-external-inbox-list {
+    max-height: none;
+    overflow: visible;
+    align-items: start;
+}
+
+/* Incident details are opened from inside the module overlay. Keep this modal
+ * above the External Inbox instead of underneath its backdrop. */
+#incidentDetailModal.ia-modal-shell {
+    z-index: 1600;
+}
+
+#incidentDetailModal .ia-modal-backdrop {
+    background: rgba(15, 23, 42, 0.62);
+}
+
 .ia-module-modal-body > section {
     margin: 0;
 }
@@ -1076,6 +1115,10 @@
 
     .ia-module-modal-dialog {
         max-height: calc(100vh - 1.5rem);
+    }
+
+    .ia-module-modal[data-active-module="iaExternalIncidentInbox"] .ia-module-modal-dialog {
+        max-height: calc(100dvh - 1.5rem);
     }
 
     .ia-module-modal-head {

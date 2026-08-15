@@ -3,7 +3,7 @@ $rootDir = dirname(__DIR__);
 require_once $rootDir . '/includes/auth.php';
 require_role('admin', 'admin/review.php');
 
-$reviewUiBuild = '20260807-after-action-landscape-v2';
+$reviewUiBuild = '20260811-admin-review-compact-queues-v4';
 if (!headers_sent()) {
     header('Cache-Control: no-store, no-cache, must-revalidate, max-age=0');
     header('Pragma: no-cache');
@@ -48,17 +48,17 @@ $reviewLandscapeCssVersion = rawurlencode($reviewUiBuild . '-' . $reviewLandscap
                 4rem;
             background: radial-gradient(circle at top right, rgba(56,189,248,.08), transparent 28%), #f3f7fb;
         }
-        .ar-shell { 
-            width: min(100%, 1360px); 
-            margin: 0 auto; 
-            display: grid; 
-            gap: 1rem; 
+        .ar-shell {
+            width: min(100%, 1360px);
+            margin: 0 auto;
+            display: grid;
+            gap: 1rem;
         }
-        .ar-hero { 
-            background: linear-gradient(135deg, #0f172a, #1e3a8a); 
-            color: #f8fafc; border-radius: 22px; 
-            padding: 1.3rem 1.4rem; 
-            box-shadow: 0 20px 40px rgba(15,23,42,.18); 
+        .ar-hero {
+            background: linear-gradient(135deg, #0f172a, #1e3a8a);
+            color: #f8fafc; border-radius: 22px;
+            padding: 1.3rem 1.4rem;
+            box-shadow: 0 20px 40px rgba(15,23,42,.18);
         }
         .ar-hero h1 { margin: 0; font-size: 1.6rem; }
         .ar-hero p { margin: .55rem 0 0; color: rgba(248,250,252,.88); line-height: 1.6; }
@@ -82,13 +82,6 @@ $reviewLandscapeCssVersion = rawurlencode($reviewUiBuild . '-' . $reviewLandscap
         .ar-card-head h2 { margin: 0; color: #0f172a; font-size: 1.05rem; }
         .ar-card-head p { margin: .3rem 0 0; color: #64748b; font-size: .9rem; }
         .ar-count { display: inline-flex; align-items: center; justify-content: center; border-radius: 999px; background: #e2e8f0; color: #334155; font-size: .82rem; font-weight: 800; padding: .38rem .72rem; }
-        .ar-scroll { max-height: 620px; overflow: auto; }
-        .ar-table { width: 100%; border-collapse: collapse; min-width: 1080px; }
-        .ar-table th, .ar-table td { padding: .82rem .8rem; border-bottom: 1px solid #eef2f7; text-align: left; vertical-align: top; font-size: .88rem; }
-        .ar-table th { position: sticky; top: 0; z-index: 1; background: #f8fafc; color: #334155; text-transform: uppercase; letter-spacing: .04em; font-size: .74rem; }
-        .ar-table tr:hover td { background: #f8fbff; }
-        .ar-ref { font-weight: 800; color: #0f172a; margin-bottom: .2rem; }
-        .ar-meta { color: #64748b; line-height: 1.55; }
         .ar-chip, .ar-pill { display: inline-flex; align-items: center; gap: .4rem; padding: .35rem .7rem; border-radius: 999px; font-size: .76rem; font-weight: 800; }
         .ar-chip.resolved { background: #dcfce7; color: #166534; }
         .ar-chip.cancelled { background: #fee2e2; color: #991b1b; }
@@ -150,12 +143,6 @@ $reviewLandscapeCssVersion = rawurlencode($reviewUiBuild . '-' . $reviewLandscap
         .ar-report-status.approved { background: #dcfce7; color: #166534; }
         .ar-report-status.revision { background: #fee2e2; color: #991b1b; }
         .ar-report-status.pending, .ar-report-status.none { background: #e2e8f0; color: #475569; }
-        .ar-report-cell { display: grid; gap: .25rem; min-width: 150px; }
-        .ar-report-cell > span:not(.ar-report-status) { color: #334155; font-size: .78rem; font-weight: 700; }
-        .ar-report-cell small { color: #64748b; line-height: 1.4; }
-        .ar-date-cell { display: grid; gap: .22rem; min-width: 145px; }
-        .ar-date-cell strong { color: #334155; font-size: .78rem; }
-        .ar-date-cell span { color: #64748b; font-size: .8rem; line-height: 1.4; }
         .ar-panel-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 1rem; }
         .ar-after-action-list { display: grid; gap: 1rem; margin-top: 1rem; }
         .ar-report-card { overflow: hidden; border: 1px solid #cbd5e1; border-radius: 18px; background: #fff; }
@@ -197,13 +184,13 @@ $reviewLandscapeCssVersion = rawurlencode($reviewUiBuild . '-' . $reviewLandscap
         html.ar-modal-open, html.ar-modal-open body { overflow: hidden; }
         [data-theme="dark"] .main-content { background: radial-gradient(circle at top right, rgba(59,130,246,.14), transparent 28%), #08111f; }
         [data-theme="dark"] .ar-stat, [data-theme="dark"] .ar-toolbar, [data-theme="dark"] .ar-card, [data-theme="dark"] .ar-modal-dialog { background: linear-gradient(180deg, rgba(15,23,42,.98), rgba(2,6,23,.98)); border-color: #334155; box-shadow: 0 18px 42px rgba(2,6,23,.38); }
-        [data-theme="dark"] .ar-stat strong, [data-theme="dark"] .ar-ref, [data-theme="dark"] .ar-card-head h2, [data-theme="dark"] .ar-modal-head h3, [data-theme="dark"] .ar-spotlight h4, [data-theme="dark"] .ar-side strong, [data-theme="dark"] .ar-grid h4, [data-theme="dark"] .ar-feedback-panel h4, [data-theme="dark"] .ar-detail strong, [data-theme="dark"] .ar-feedback-head strong, [data-theme="dark"] .ar-proof-card figcaption strong { color: #f8fafc !important; }
-        [data-theme="dark"] .ar-stat span, [data-theme="dark"] .ar-stat p, [data-theme="dark"] .ar-field label, [data-theme="dark"] .ar-card-head p, [data-theme="dark"] .ar-meta, [data-theme="dark"] .ar-modal-head p, [data-theme="dark"] .ar-spotlight .type, [data-theme="dark"] .ar-spotlight .desc, [data-theme="dark"] .ar-side span, [data-theme="dark"] .ar-detail span, [data-theme="dark"] .ar-feedback-panel p, [data-theme="dark"] .ar-feedback-head span, [data-theme="dark"] .ar-note, [data-theme="dark"] .ar-feedback-empty, [data-theme="dark"] .ar-proof-card figcaption { color: #94a3b8 !important; }
+        [data-theme="dark"] .ar-stat strong, [data-theme="dark"] .ar-card-head h2, [data-theme="dark"] .ar-modal-head h3, [data-theme="dark"] .ar-spotlight h4, [data-theme="dark"] .ar-side strong, [data-theme="dark"] .ar-grid h4, [data-theme="dark"] .ar-feedback-panel h4, [data-theme="dark"] .ar-detail strong, [data-theme="dark"] .ar-feedback-head strong, [data-theme="dark"] .ar-proof-card figcaption strong { color: #f8fafc !important; }
+        [data-theme="dark"] .ar-stat span, [data-theme="dark"] .ar-stat p, [data-theme="dark"] .ar-field label, [data-theme="dark"] .ar-card-head p, [data-theme="dark"] .ar-modal-head p, [data-theme="dark"] .ar-spotlight .type, [data-theme="dark"] .ar-spotlight .desc, [data-theme="dark"] .ar-side span, [data-theme="dark"] .ar-detail span, [data-theme="dark"] .ar-feedback-panel p, [data-theme="dark"] .ar-feedback-head span, [data-theme="dark"] .ar-note, [data-theme="dark"] .ar-feedback-empty, [data-theme="dark"] .ar-proof-card figcaption { color: #94a3b8 !important; }
         [data-theme="dark"] .ar-field input, [data-theme="dark"] .ar-field select, [data-theme="dark"] .ar-btn.secondary, [data-theme="dark"] .ar-action, [data-theme="dark"] .ar-close { background: #0f172a !important; color: #f8fafc !important; border-color: #475569 !important; }
         [data-theme="dark"] .ar-action.sync { background: #115e59 !important; color: #ccfbf1 !important; border-color: #0f766e !important; }
         [data-theme="dark"] .ar-action.danger { background: #7f1d1d !important; color: #fecaca !important; border-color: #991b1b !important; }
         [data-theme="dark"] .ar-action.sent, [data-theme="dark"] .ar-action:disabled { background: #1e293b !important; color: #94a3b8 !important; border-color: #334155 !important; }
-        [data-theme="dark"] .ar-card-head, [data-theme="dark"] .ar-table th, [data-theme="dark"] .ar-table tr:hover td, [data-theme="dark"] .ar-spotlight, [data-theme="dark"] .ar-grid article, [data-theme="dark"] .ar-feedback-panel, [data-theme="dark"] .ar-side, [data-theme="dark"] .ar-detail, [data-theme="dark"] .ar-feedback, [data-theme="dark"] .ar-feedback-empty, [data-theme="dark"] .ar-proof-card { background: #020617 !important; border-color: #334155 !important; }
+        [data-theme="dark"] .ar-card-head, [data-theme="dark"] .ar-spotlight, [data-theme="dark"] .ar-grid article, [data-theme="dark"] .ar-feedback-panel, [data-theme="dark"] .ar-side, [data-theme="dark"] .ar-detail, [data-theme="dark"] .ar-feedback, [data-theme="dark"] .ar-feedback-empty, [data-theme="dark"] .ar-proof-card { background: #020617 !important; border-color: #334155 !important; }
         [data-theme="dark"] .ar-count, [data-theme="dark"] .ar-pill.empty { background: #1e293b !important; color: #cbd5e1 !important; }
         [data-theme="dark"] .ar-chip.resolved { background: #052e16 !important; color: #bbf7d0 !important; }
         [data-theme="dark"] .ar-chip.cancelled { background: #450a0a !important; color: #fecaca !important; }
@@ -212,7 +199,7 @@ $reviewLandscapeCssVersion = rawurlencode($reviewUiBuild . '-' . $reviewLandscap
         [data-theme="dark"] .ar-pill.low { background: #052e16 !important; color: #bbf7d0 !important; }
         [data-theme="dark"] .ar-report-card, [data-theme="dark"] .ar-report-head, [data-theme="dark"] .ar-report-field, [data-theme="dark"] .ar-review-outcome, [data-theme="dark"] .ar-review-box { background: #020617 !important; border-color: #334155 !important; }
         [data-theme="dark"] .ar-report-head h5, [data-theme="dark"] .ar-report-field strong { color: #f8fafc !important; }
-        [data-theme="dark"] .ar-report-cell > span:not(.ar-report-status), [data-theme="dark"] .ar-date-cell strong, [data-theme="dark"] .ar-review-outcome p, [data-theme="dark"] .ar-review-outcome blockquote strong { color: #cbd5e1 !important; }
+        [data-theme="dark"] .ar-review-outcome p, [data-theme="dark"] .ar-review-outcome blockquote strong { color: #cbd5e1 !important; }
         [data-theme="dark"] .ar-review-box label { color: #93c5fd !important; }
         [data-theme="dark"] .ar-review-box textarea { background: #0f172a !important; color: #f8fafc !important; border-color: #475569 !important; }
         [data-theme="dark"] .ar-review-outcome blockquote { background: #0f172a !important; }
@@ -231,21 +218,45 @@ $reviewLandscapeCssVersion = rawurlencode($reviewUiBuild . '-' . $reviewLandscap
     <main class="main-content">
         <div class="main-container ar-shell">
             <section class="ar-hero">
-                <h1>Review &amp; Feedback Console</h1>
-                <p>Hi <?php echo htmlspecialchars($adminName); ?>. Review responder after-action reports, approve complete submissions, or return reports that require correction.</p>
+                <div class="ar-hero-icon" aria-hidden="true"><i class="fas fa-clipboard-check"></i></div>
+                <div class="ar-hero-copy">
+                    <span class="ar-eyebrow">Operations quality desk</span>
+                    <h1>Reviews &amp; Feedback</h1>
+                    <p>Hi <?php echo htmlspecialchars($adminName); ?>. Start with incidents missing a report, then review new submissions, revisions, and completed decisions.</p>
+                </div>
+                <div class="ar-hero-guide" aria-label="Review workflow">
+                    <span><i class="fas fa-1"></i> Open a case</span>
+                    <span><i class="fas fa-2"></i> Check the report and proof</span>
+                    <span><i class="fas fa-3"></i> Approve or return</span>
+                </div>
             </section>
 
-            <section class="ar-stats" aria-live="polite">
-                <article class="ar-stat"><span>After-Action Reports</span><strong id="statReports">0</strong><p>Total submitted, approved, and returned responder reports.</p></article>
-                <article class="ar-stat"><span>Awaiting Review</span><strong id="statPending">0</strong><p>Submitted reports that require an admin decision.</p></article>
-                <article class="ar-stat"><span>Approved</span><strong id="statApproved">0</strong><p>Reports available in the responder Approved tab.</p></article>
-                <article class="ar-stat"><span>Needs Revision</span><strong id="statRevision">0</strong><p>Reports returned to responders with an admin note.</p></article>
+            <section class="ar-stats" aria-label="Review workload" aria-live="polite">
+                <button type="button" class="ar-stat no-report is-active" data-queue-shortcut="no_report" aria-pressed="true">
+                    <span class="ar-stat-icon"><i class="fas fa-file-lines"></i></span>
+                    <span class="ar-stat-copy"><small>No after-action report</small><strong id="statNoReport">0</strong><em>Needs responder follow-up</em></span>
+                </button>
+                <button type="button" class="ar-stat pending" data-queue-shortcut="submitted" aria-pressed="false">
+                    <span class="ar-stat-icon"><i class="fas fa-inbox"></i></span>
+                    <span class="ar-stat-copy"><small>Needs approval</small><strong id="statPending">0</strong><em>Open review queue</em></span>
+                </button>
+                <button type="button" class="ar-stat revision" data-queue-shortcut="revision_required" aria-pressed="false">
+                    <span class="ar-stat-icon"><i class="fas fa-rotate-left"></i></span>
+                    <span class="ar-stat-copy"><small>Waiting on revision</small><strong id="statRevision">0</strong><em>Returned to responders</em></span>
+                </button>
+                <button type="button" class="ar-stat approved" data-queue-shortcut="approved" aria-pressed="false">
+                    <span class="ar-stat-icon"><i class="fas fa-circle-check"></i></span>
+                    <span class="ar-stat-copy"><small>Approved</small><strong id="statApproved">0</strong><em>Completed decisions</em></span>
+                </button>
             </section>
 
-            <section class="ar-toolbar">
-                <div class="ar-field">
-                    <label for="searchFilterInput">Search</label>
-                    <input type="text" id="searchFilterInput" placeholder="Search incident, responder, report summary, location, unit, or vehicle...">
+            <section class="ar-toolbar" aria-label="Review queue filters">
+                <div class="ar-field ar-search-field">
+                    <label for="searchFilterInput">Find a review case</label>
+                    <div class="ar-input-with-icon">
+                        <i class="fas fa-magnifying-glass" aria-hidden="true"></i>
+                        <input type="search" id="searchFilterInput" autocomplete="off" placeholder="Incident, responder, location, unit, vehicle, or report text">
+                    </div>
                 </div>
                 <div class="ar-field">
                     <label for="categoryFilterSelect">Category</label>
@@ -256,50 +267,40 @@ $reviewLandscapeCssVersion = rawurlencode($reviewUiBuild . '-' . $reviewLandscap
                         <option value="traffic">Traffic</option>
                         <option value="police">Police</option>
                         <option value="rescue">Rescue</option>
+                        <option value="disaster">Disaster</option>
+                        <option value="general">General</option>
+                        <option value="other">Other</option>
                     </select>
                 </div>
                 <div class="ar-field">
-                    <label for="statusFilterSelect">Queue Filter</label>
+                    <label for="statusFilterSelect">Work queue</label>
                     <select id="statusFilterSelect">
-                        <option value="">All Review Cases</option>
-                        <option value="submitted">Awaiting Review</option>
-                        <option value="approved">Approved Reports</option>
-                        <option value="revision_required">Needs Revision</option>
-                        <option value="no_report">No After-Action Report</option>
+                        <option value="no_report" selected>No after-action report</option>
+                        <option value="submitted">Needs approval</option>
+                        <option value="revision_required">Waiting on revision</option>
+                        <option value="approved">Approved reports</option>
+                        <option value="">All review cases</option>
                     </select>
                 </div>
                 <div class="ar-actions">
-                    <button type="button" class="ar-btn primary" id="refreshReviewBtn"><i class="fas fa-rotate"></i> Refresh</button>
-                    <button type="button" class="ar-btn secondary" id="resetFilterBtn"><i class="fas fa-rotate-left"></i> Reset</button>
+                    <button type="button" class="ar-btn primary" id="refreshReviewBtn"><i class="fas fa-rotate"></i> Refresh queue</button>
+                    <button type="button" class="ar-btn secondary" id="resetFilterBtn"><i class="fas fa-filter-circle-xmark"></i> Clear</button>
                 </div>
             </section>
 
             <section class="ar-card">
                 <div class="ar-card-head">
                     <div>
-                        <h2>After-Action Review Queue</h2>
+                        <span class="ar-section-kicker"><i class="fas fa-list-check"></i> Review workload</span>
+                        <h2 id="queueTitle">No after-action report</h2>
                         <p id="tableSubtitle">Loading responder after-action reports...</p>
                     </div>
-                    <span class="ar-count" id="incidentCountBadge">0 incident(s)</span>
+                    <div class="ar-card-head-actions">
+                        <button type="button" class="ar-view-all" data-queue-shortcut="" aria-pressed="false"><i class="fas fa-layer-group" aria-hidden="true"></i> All cases</button>
+                        <span class="ar-count" id="incidentCountBadge">0 cases</span>
+                    </div>
                 </div>
-                <div class="ar-scroll">
-                    <table class="ar-table">
-                        <thead>
-                            <tr>
-                                <th>Incident</th>
-                                <th>Type</th>
-                                <th>Location</th>
-                                <th>Priority</th>
-                                <th>Status</th>
-                                <th>Response</th>
-                                <th>After-Action</th>
-                                <th>Submitted / Reviewed</th>
-                                <th>Actions</th>
-                            </tr>
-                        </thead>
-                        <tbody id="incidentTableBody"></tbody>
-                    </table>
-                </div>
+                <div class="ar-queue" id="incidentTableBody" aria-live="polite" aria-busy="true"></div>
             </section>
         </div>
     </main>
@@ -353,7 +354,7 @@ $reviewLandscapeCssVersion = rawurlencode($reviewUiBuild . '-' . $reviewLandscap
                                 </div>
                             </article>
                             <article>
-                                <h4><i class="fas fa-file-circle-check"></i> Review Status</h4>
+                                <h4><i class="fas fa-clipboard-check"></i> Review Status</h4>
                                 <div class="ar-list">
                                     <div class="ar-detail"><span>Total Reports</span><strong id="adminModalReportCount">0</strong></div>
                                     <div class="ar-detail"><span>Awaiting Review</span><strong id="adminModalPendingCount">0</strong></div>

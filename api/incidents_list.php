@@ -41,6 +41,9 @@ function ers_incidents_schema(PDO $pdo): array
     $tables = [
         'incidents',
         'calls',
+        'external_incident_links',
+        'activity_log',
+        'interagency_incident_cards',
         'dispatches',
         'units',
         'resource_records',
@@ -249,6 +252,108 @@ function ers_incidents_coalesce(array $expressions): string
     return 'COALESCE(' . implode(', ', $expressions) . ')';
 }
 
+/**
+ * Return a deterministic source classification for one incident signal set.
+ * Kept pure so precedence remains easy to regression-test without a database.
+ *
+ * @return array{source:string,label:string,detection:string,inferred:bool}
+ */
+function ers_incidents_classify_intake_source(
+    bool $hasTipOrigin,
+    bool $hasExternalOrigin,
+    bool $hasIncidentExternalSource,
+    bool $hasSystemExternalCard,
+    bool $hasAcceptedCall,
+    bool $hasReportedCall,
+    ?string $explicitSource = null,
+    ?string $referenceNo = null
+): array {
+    $referenceNo = strtoupper(trim((string)$referenceNo));
+    $isTipReference = str_starts_with($referenceNo, 'TIP-');
+    $isTransferredReference = str_starts_with($referenceNo, 'TRN-');
+    $isWebsiteReference = str_starts_with($referenceNo, 'REF-');
+    $explicitSource = strtolower(trim((string)$explicitSource));
+
+    if ($isTipReference || $hasTipOrigin) {
+        return [
+            'source' => 'tip',
+            'label' => 'Converted TIP',
+            'detection' => $isTipReference ? 'reference_prefix' : 'anonymous_tip_link',
+            'inferred' => false,
+        ];
+    }
+    if ($explicitSource === 'tip') {
+        return [
+            'source' => 'tip',
+            'label' => 'Converted TIP',
+            'detection' => 'recorded_intake_source',
+            'inferred' => false,
+        ];
+    }
+    if ($isTransferredReference) {
+        return [
+            'source' => 'call',
+            'label' => 'Transferred App Call',
+            'detection' => 'reference_prefix',
+            'inferred' => false,
+        ];
+    }
+    if ($isWebsiteReference && ($explicitSource === 'call' || $hasAcceptedCall)) {
+        return [
+            'source' => 'call',
+            'label' => 'Website Call',
+            'detection' => $explicitSource === 'call' ? 'recorded_intake_source' : 'accepted_call_audit',
+            'inferred' => false,
+        ];
+    }
+    if ($isWebsiteReference) {
+        return [
+            'source' => 'manual',
+            'label' => 'Website Manual',
+            'detection' => $explicitSource === 'manual' ? 'recorded_intake_source' : 'website_reference',
+            'inferred' => $explicitSource !== 'manual',
+        ];
+    }
+    if ($explicitSource === 'call' || $hasAcceptedCall) {
+        return [
+            'source' => 'call',
+            'label' => 'Website Call',
+            'detection' => $explicitSource === 'call' ? 'recorded_intake_source' : 'accepted_call_audit',
+            'inferred' => false,
+        ];
+    }
+    if ($hasExternalOrigin || $hasIncidentExternalSource || $hasSystemExternalCard || $explicitSource === 'interagency') {
+        $detection = 'recorded_intake_source';
+        if ($hasExternalOrigin) {
+            $detection = 'external_incident_link';
+        } elseif ($hasIncidentExternalSource) {
+            $detection = 'incident_external_source';
+        } elseif ($hasSystemExternalCard) {
+            $detection = 'system_incident_card';
+        }
+        return [
+            'source' => 'call',
+            'label' => 'Transferred App Call',
+            'detection' => $detection,
+            'inferred' => false,
+        ];
+    }
+    if ($explicitSource === 'manual') {
+        return [
+            'source' => $explicitSource,
+            'label' => 'Manual Incident',
+            'detection' => 'recorded_intake_source',
+            'inferred' => false,
+        ];
+    }
+    return [
+        'source' => 'manual',
+        'label' => 'Manual Incident',
+        'detection' => $hasReportedCall ? 'legacy_linked_record' : 'legacy_direct_record',
+        'inferred' => true,
+    ];
+}
+
 $pdo = get_db_connection();
 if (!$pdo) {
     http_response_code(500);
@@ -271,6 +376,8 @@ $status = isset($_GET['status']) ? strtolower(trim((string)$_GET['status'])) : '
 $adminReview = isset($_GET['admin_review']) ? strtolower(trim((string)$_GET['admin_review'])) : '';
 $type = isset($_GET['type']) ? trim((string)$_GET['type']) : '';
 $search = isset($_GET['search']) ? trim((string)$_GET['search']) : '';
+$includeIntakeSource = isset($_GET['include_intake_source'])
+    && in_array(strtolower(trim((string)$_GET['include_intake_source'])), ['1', 'true', 'yes'], true);
 $typeValues = ers_incidents_normalized_type_values($type);
 [$rangeStart, $rangeEnd] = ers_incidents_resolve_range();
 
@@ -291,6 +398,7 @@ $incidentExpr = static function (string $column, string $fallback = 'NULL') use 
 };
 
 $referenceNoExpr = $incidentExpr('reference_no', "''");
+$normalizedReferenceNoExpr = "UPPER(TRIM(COALESCE({$referenceNoExpr}, '')))";
 $typeExpr = $incidentExpr('type', "''");
 $priorityExpr = $incidentExpr('priority', "''");
 $statusExpr = $incidentExpr('status', "''");
@@ -302,6 +410,16 @@ $resolvedAtExpr = $incidentExpr('resolved_at');
 $titleExpr = $incidentExpr('title', "''");
 $incidentLatExpr = $incidentExpr('latitude');
 $incidentLngExpr = $incidentExpr('longitude');
+$reportedByCallIdExpr = $incidentExpr('reported_by_call_id');
+$incidentExternalSourceExpr = $incidentExpr('external_source');
+$incidentExternalIdExpr = $incidentExpr('external_incident_id');
+$incidentIntakeSourceExpr = $incidentExpr('intake_source');
+$normalizedIncidentIntakeSourceExpr = $includeIntakeSource && $incidentIntakeSourceExpr !== 'NULL'
+    ? "LOWER(TRIM(COALESCE({$incidentIntakeSourceExpr}, '')))"
+    : "''";
+$hasIncidentExternalSourceExpr = $includeIntakeSource && $incidentExternalSourceExpr !== 'NULL'
+    ? "CASE WHEN NULLIF(TRIM(COALESCE({$incidentExternalSourceExpr}, '')), '') IS NULL THEN 0 ELSE 1 END"
+    : '0';
 
 // Call details and coordinate fallback.
 $callJoin = '';
@@ -322,6 +440,224 @@ if (
 }
 $latitudeExpr = ers_incidents_coalesce([$incidentLatExpr, $callLatExpr]);
 $longitudeExpr = ers_incidents_coalesce([$incidentLngExpr, $callLngExpr]);
+
+// Intake-source signals are returned as read-only metadata for the Dispatcher
+// queue. The existing incident workflow and status filters remain unchanged.
+// Reference prefixes follow the operational contract: TIP is a converted tip,
+// TRN is a partner-app call, and REF is split between website Call/Manual using
+// the existing recorded source or accepted-call audit. No workflow is mutated.
+$externalOriginJoin = '';
+$hasTipOriginExpr = '0';
+$hasExternalOriginExpr = '0';
+$tipSourceSystemExpr = 'NULL';
+$externalSourceSystemExpr = 'NULL';
+$tipExternalIdExpr = 'NULL';
+$externalLinkExternalIdExpr = 'NULL';
+if (
+    $includeIntakeSource
+    && ers_incidents_has_table($schema, 'external_incident_links')
+    && ers_incidents_has_column($schema, 'external_incident_links', 'incident_id')
+    && ers_incidents_has_column($schema, 'external_incident_links', 'source_system')
+) {
+    $payloadExpr = ers_incidents_has_column($schema, 'external_incident_links', 'payload_json')
+        ? "LOWER(COALESCE(payload_json, ''))"
+        : "''";
+    $tipSignal = "(LOWER(TRIM(COALESCE(source_system, ''))) = 'anonymous tip inbox'
+        OR {$payloadExpr} LIKE '%\"source\":\"anonymous_tip\"%')";
+    $tipExternalIdSelect = ers_incidents_has_column($schema, 'external_incident_links', 'external_incident_id')
+        ? "MAX(CASE WHEN {$tipSignal} THEN NULLIF(TRIM(external_incident_id), '') ELSE NULL END)"
+        : 'NULL';
+    $externalExternalIdSelect = ers_incidents_has_column($schema, 'external_incident_links', 'external_incident_id')
+        ? "MAX(CASE WHEN TRIM(COALESCE(source_system, '')) <> '' AND NOT {$tipSignal}
+            THEN NULLIF(TRIM(external_incident_id), '') ELSE NULL END)"
+        : 'NULL';
+    $externalOriginJoin = " LEFT JOIN (
+        SELECT
+            incident_id,
+            MAX(CASE WHEN {$tipSignal} THEN 1 ELSE 0 END) AS has_tip_origin,
+            MAX(CASE WHEN TRIM(COALESCE(source_system, '')) <> '' AND NOT {$tipSignal}
+                THEN 1 ELSE 0 END) AS has_external_origin,
+            MAX(CASE WHEN {$tipSignal}
+                THEN NULLIF(TRIM(source_system), '') ELSE NULL END) AS tip_source_system,
+            MAX(CASE WHEN TRIM(COALESCE(source_system, '')) <> '' AND NOT {$tipSignal}
+                THEN NULLIF(TRIM(source_system), '') ELSE NULL END) AS external_source_system,
+            {$tipExternalIdSelect} AS tip_external_id,
+            {$externalExternalIdSelect} AS external_external_id
+        FROM external_incident_links
+        GROUP BY incident_id
+    ) intake_links ON intake_links.incident_id = i.id";
+    $hasTipOriginExpr = 'COALESCE(intake_links.has_tip_origin, 0)';
+    $hasExternalOriginExpr = 'COALESCE(intake_links.has_external_origin, 0)';
+    $tipSourceSystemExpr = 'intake_links.tip_source_system';
+    $externalSourceSystemExpr = 'intake_links.external_source_system';
+    $tipExternalIdExpr = 'intake_links.tip_external_id';
+    $externalLinkExternalIdExpr = 'intake_links.external_external_id';
+}
+
+$acceptedCallJoin = '';
+$hasAcceptedCallExpr = '0';
+if (
+    $includeIntakeSource
+    && $reportedByCallIdExpr !== 'NULL'
+    && ers_incidents_has_table($schema, 'activity_log')
+    && ers_incidents_has_column($schema, 'activity_log', 'entity_type')
+    && ers_incidents_has_column($schema, 'activity_log', 'entity_id')
+    && (
+        ers_incidents_has_column($schema, 'activity_log', 'action')
+        || ers_incidents_has_column($schema, 'activity_log', 'event_key')
+    )
+) {
+    $acceptedEventFilter = ers_incidents_has_column($schema, 'activity_log', 'action')
+        ? "action = 'call_accepted'"
+        : "(event_key LIKE 'call_session:%:accepted' OR event_key LIKE 'call:%:accepted')";
+    $acceptedCallJoin = " LEFT JOIN (
+        SELECT entity_id AS call_id, 1 AS has_accepted_call
+        FROM activity_log
+        WHERE entity_type = 'call'
+          AND {$acceptedEventFilter}
+        GROUP BY entity_id
+    ) accepted_calls ON accepted_calls.call_id = i.reported_by_call_id";
+    $hasAcceptedCallExpr = 'COALESCE(accepted_calls.has_accepted_call, 0)';
+}
+
+// Some legacy inter-agency senders created a system-authored incident card
+// without an external_incident_links row. Only null-user system cards qualify;
+// locally shared incident cards must not be reclassified as incoming cases.
+$systemCardJoin = '';
+$hasSystemExternalCardExpr = '0';
+$systemExternalSourceExpr = 'NULL';
+$systemExternalIdExpr = 'NULL';
+if (
+    $includeIntakeSource
+    && ers_incidents_has_table($schema, 'interagency_incident_cards')
+    && ers_incidents_has_column($schema, 'interagency_incident_cards', 'incident_id')
+    && ers_incidents_has_column($schema, 'interagency_incident_cards', 'message_id')
+    && ers_incidents_has_table($schema, 'activity_log')
+    && ers_incidents_has_column($schema, 'activity_log', 'id')
+    && ers_incidents_has_column($schema, 'activity_log', 'user_id')
+    && ers_incidents_has_column($schema, 'activity_log', 'details')
+) {
+    $safeDetailsExpr = "CASE WHEN JSON_VALID(a.details) THEN a.details ELSE '{}' END";
+    $systemCardFilters = [
+        'a.user_id IS NULL',
+        'JSON_VALID(a.details)',
+        "JSON_EXTRACT({$safeDetailsExpr}, '$.incident_card') IS NOT NULL",
+    ];
+    if (ers_incidents_has_column($schema, 'activity_log', 'action')) {
+        $systemCardFilters[] = "LOWER(TRIM(COALESCE(a.action, ''))) = 'chat'";
+    }
+    if (ers_incidents_has_column($schema, 'activity_log', 'entity_type')) {
+        $systemCardFilters[] = "LOWER(TRIM(COALESCE(a.entity_type, ''))) = 'agency_user_chat'";
+    }
+    $systemCardWhere = implode(' AND ', $systemCardFilters);
+    $detailsSourceExpr = "MAX(COALESCE(
+        NULLIF(TRIM(JSON_UNQUOTE(JSON_EXTRACT({$safeDetailsExpr}, '$.incident_card.source_system'))), ''),
+        NULLIF(TRIM(JSON_UNQUOTE(JSON_EXTRACT({$safeDetailsExpr}, '$.external_sender_name'))), '')
+    ))";
+    $detailsExternalIdExpr = "MAX(NULLIF(TRIM(JSON_UNQUOTE(
+        JSON_EXTRACT({$safeDetailsExpr}, '$.incident_card.external_incident_id')
+    )), ''))";
+    $systemCardJoin = " LEFT JOIN (
+        SELECT
+            c.incident_id,
+            1 AS has_system_external_card,
+            {$detailsSourceExpr} AS system_external_source,
+            {$detailsExternalIdExpr} AS system_external_id
+        FROM interagency_incident_cards c
+        INNER JOIN activity_log a ON a.id = c.message_id
+        WHERE {$systemCardWhere}
+        GROUP BY c.incident_id
+    ) system_cards ON system_cards.incident_id = i.id";
+    $hasSystemExternalCardExpr = 'COALESCE(system_cards.has_system_external_card, 0)';
+    $systemExternalSourceExpr = 'system_cards.system_external_source';
+    $systemExternalIdExpr = 'system_cards.system_external_id';
+}
+
+$intakeSourceExpr = "CASE
+    WHEN {$normalizedReferenceNoExpr} LIKE 'TIP-%'
+      OR {$hasTipOriginExpr} = 1
+      OR {$normalizedIncidentIntakeSourceExpr} = 'tip' THEN 'tip'
+    WHEN {$normalizedReferenceNoExpr} LIKE 'TRN-%' THEN 'call'
+    WHEN {$normalizedReferenceNoExpr} LIKE 'REF-%'
+      AND ({$normalizedIncidentIntakeSourceExpr} = 'call' OR {$hasAcceptedCallExpr} = 1) THEN 'call'
+    WHEN {$normalizedReferenceNoExpr} LIKE 'REF-%' THEN 'manual'
+    WHEN {$normalizedIncidentIntakeSourceExpr} = 'call'
+      OR {$hasAcceptedCallExpr} = 1
+      OR {$hasExternalOriginExpr} = 1
+      OR {$hasSystemExternalCardExpr} = 1
+      OR {$hasIncidentExternalSourceExpr} = 1
+      OR {$normalizedIncidentIntakeSourceExpr} = 'interagency' THEN 'call'
+    ELSE 'manual'
+END";
+$intakeSourceLabelExpr = "CASE
+    WHEN {$normalizedReferenceNoExpr} LIKE 'TIP-%'
+      OR {$hasTipOriginExpr} = 1
+      OR {$normalizedIncidentIntakeSourceExpr} = 'tip' THEN 'Converted TIP'
+    WHEN {$normalizedReferenceNoExpr} LIKE 'TRN-%' THEN 'Transferred App Call'
+    WHEN {$normalizedReferenceNoExpr} LIKE 'REF-%'
+      AND ({$normalizedIncidentIntakeSourceExpr} = 'call' OR {$hasAcceptedCallExpr} = 1) THEN 'Website Call'
+    WHEN {$normalizedReferenceNoExpr} LIKE 'REF-%' THEN 'Website Manual'
+    WHEN {$normalizedIncidentIntakeSourceExpr} = 'call'
+      OR {$hasAcceptedCallExpr} = 1 THEN 'Website Call'
+    WHEN {$hasExternalOriginExpr} = 1
+      OR {$hasSystemExternalCardExpr} = 1
+      OR {$hasIncidentExternalSourceExpr} = 1
+      OR {$normalizedIncidentIntakeSourceExpr} = 'interagency'
+      THEN 'Transferred App Call'
+    WHEN {$normalizedIncidentIntakeSourceExpr} = 'manual' THEN 'Website Manual'
+    ELSE 'Manual Incident'
+END";
+$intakeSourceSystemExpr = "CASE
+    WHEN {$hasTipOriginExpr} = 1
+      THEN COALESCE(NULLIF({$tipSourceSystemExpr}, ''), 'Anonymous Tip Inbox')
+    WHEN {$hasExternalOriginExpr} = 1
+      THEN NULLIF({$externalSourceSystemExpr}, '')
+    WHEN {$hasIncidentExternalSourceExpr} = 1
+      THEN NULLIF(TRIM({$incidentExternalSourceExpr}), '')
+    WHEN {$hasSystemExternalCardExpr} = 1
+      THEN NULLIF({$systemExternalSourceExpr}, '')
+    ELSE NULL
+END";
+$intakeExternalIdExpr = "CASE
+    WHEN {$hasTipOriginExpr} = 1 THEN {$tipExternalIdExpr}
+    WHEN {$hasExternalOriginExpr} = 1 THEN {$externalLinkExternalIdExpr}
+    WHEN {$hasIncidentExternalSourceExpr} = 1 THEN {$incidentExternalIdExpr}
+    WHEN {$hasSystemExternalCardExpr} = 1 THEN {$systemExternalIdExpr}
+    ELSE NULL
+END";
+$intakeDetectionExpr = "CASE
+    WHEN {$normalizedReferenceNoExpr} LIKE 'TIP-%' THEN 'reference_prefix'
+    WHEN {$hasTipOriginExpr} = 1 THEN 'anonymous_tip_link'
+    WHEN {$normalizedIncidentIntakeSourceExpr} = 'tip' THEN 'recorded_intake_source'
+    WHEN {$normalizedReferenceNoExpr} LIKE 'TRN-%' THEN 'reference_prefix'
+    WHEN {$normalizedReferenceNoExpr} LIKE 'REF-%'
+      AND {$normalizedIncidentIntakeSourceExpr} = 'call' THEN 'recorded_intake_source'
+    WHEN {$normalizedReferenceNoExpr} LIKE 'REF-%'
+      AND {$hasAcceptedCallExpr} = 1 THEN 'accepted_call_audit'
+    WHEN {$normalizedReferenceNoExpr} LIKE 'REF-%'
+      AND {$normalizedIncidentIntakeSourceExpr} = 'manual' THEN 'recorded_intake_source'
+    WHEN {$normalizedReferenceNoExpr} LIKE 'REF-%' THEN 'website_reference'
+    WHEN {$normalizedIncidentIntakeSourceExpr} = 'call' THEN 'recorded_intake_source'
+    WHEN {$hasAcceptedCallExpr} = 1 THEN 'accepted_call_audit'
+    WHEN {$hasExternalOriginExpr} = 1 THEN 'external_incident_link'
+    WHEN {$hasIncidentExternalSourceExpr} = 1 THEN 'incident_external_source'
+    WHEN {$hasSystemExternalCardExpr} = 1 THEN 'system_incident_card'
+    WHEN {$normalizedIncidentIntakeSourceExpr} IN ('manual', 'interagency')
+      THEN 'recorded_intake_source'
+    WHEN {$reportedByCallIdExpr} IS NOT NULL THEN 'legacy_linked_record'
+    ELSE 'legacy_direct_record'
+END";
+$intakeSourceInferredExpr = "CASE
+    WHEN {$normalizedReferenceNoExpr} LIKE 'TIP-%'
+      OR {$normalizedReferenceNoExpr} LIKE 'TRN-%'
+      OR {$hasTipOriginExpr} = 1
+      OR {$hasExternalOriginExpr} = 1
+      OR {$hasIncidentExternalSourceExpr} = 1
+      OR {$hasSystemExternalCardExpr} = 1
+      OR {$normalizedIncidentIntakeSourceExpr} IN ('call', 'manual', 'tip', 'interagency')
+      OR {$hasAcceptedCallExpr} = 1 THEN 0
+    ELSE 1
+END";
 
 // Latest dispatch is computed once per incident.
 $dispatchJoin = '';
@@ -536,6 +872,13 @@ $sql = "SELECT
         {$titleExpr} AS title,
         {$callerNameExpr} AS caller_name,
         {$callerPhoneExpr} AS caller_phone,
+        {$reportedByCallIdExpr} AS reported_by_call_id,
+        {$intakeSourceExpr} AS intake_source,
+        {$intakeSourceLabelExpr} AS intake_source_label,
+        {$intakeSourceSystemExpr} AS intake_source_system,
+        {$intakeExternalIdExpr} AS external_incident_id,
+        {$intakeDetectionExpr} AS intake_source_detection,
+        {$intakeSourceInferredExpr} AS intake_source_inferred,
         {$assignedAtExpr} AS assigned_at,
         {$acknowledgedAtExpr} AS acknowledged_at,
         {$enrouteAtExpr} AS enroute_at,
@@ -562,6 +905,9 @@ $sql = "SELECT
     {$unitJoin}
     {$resourceJoin}
     {$callJoin}
+    {$externalOriginJoin}
+    {$acceptedCallJoin}
+    {$systemCardJoin}
     {$noteAggregateJoin}
     {$surveyAggregateJoin}
     {$adminReviewJoin}
@@ -709,6 +1055,20 @@ try {
     $rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
     $items = array_map(static function (array $row): array {
+        $intakeSource = strtolower(trim((string)($row['intake_source'] ?? 'manual')));
+        if (!in_array($intakeSource, ['call', 'manual', 'tip'], true)) {
+            $intakeSource = 'manual';
+        }
+        $intakeLabels = [
+            'call' => 'Emergency Call',
+            'manual' => 'Manual Incident',
+            'tip' => 'Converted TIP',
+        ];
+        $intakeSourceLabel = trim(strip_tags((string)($row['intake_source_label'] ?? '')));
+        if ($intakeSourceLabel === '') {
+            $intakeSourceLabel = $intakeLabels[$intakeSource];
+        }
+        $intakeSourceLabel = substr($intakeSourceLabel, 0, 80);
         return [
             'id' => isset($row['id']) ? (int)$row['id'] : 0,
             'incident_code' => $row['reference_no'] ?? '',
@@ -730,6 +1090,15 @@ try {
             'plate_number' => $row['plate_number'] ?? null,
             'caller_name' => $row['caller_name'] ?? null,
             'caller_phone' => $row['caller_phone'] ?? null,
+            'reported_by_call_id' => isset($row['reported_by_call_id']) && $row['reported_by_call_id'] !== null
+                ? (int)$row['reported_by_call_id']
+                : null,
+            'intake_source' => $intakeSource,
+            'intake_source_label' => $intakeSourceLabel,
+            'intake_source_system' => $row['intake_source_system'] ?? null,
+            'external_incident_id' => $row['external_incident_id'] ?? null,
+            'intake_source_detection' => $row['intake_source_detection'] ?? 'legacy_direct_record',
+            'intake_source_inferred' => ((int)($row['intake_source_inferred'] ?? 1)) === 1,
             'assigned_at' => $row['assigned_at'] ?? null,
             'acknowledged_at' => $row['acknowledged_at'] ?? null,
             'enroute_at' => $row['enroute_at'] ?? null,

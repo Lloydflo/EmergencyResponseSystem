@@ -267,9 +267,9 @@ try {
     <link rel="stylesheet" href="css/admin-header.css">
     <link rel="stylesheet" href="css/sidebar-footer.css">
     <link rel="stylesheet" href="css/cards.css">
-    <link rel="stylesheet" href="css/resources.css">
+    <link rel="stylesheet" href="css/resources.css?v=<?php echo rawurlencode((string)filemtime($rootDir . '/css/resources.css')); ?>">
 </head>
-<body>
+<body class="dispatcher-resources-shell">
     <!-- Include Sidebar Component -->
     <?php include $rootDir . '/includes/sidebar.php'; ?>
 
@@ -364,13 +364,16 @@ try {
             <div class="resources-table-section resources-panel" style="margin-top:2rem;">
                 <div class="panel-heading-row">
                     <h2 class="section-heading">
-                        <i class="fas fa-table"></i>
-                        All Resources
+                        <i class="fas fa-layer-group"></i>
+                        Resource Roster
                     </h2>
-                    <p class="section-heading-note">Unified live table for vehicles, personnel, and equipment.</p>
+                    <div class="section-heading-summary">
+                        <span id="resource-results-count" class="resource-results-count" aria-live="polite">Loading resources...</span>
+                        <p class="section-heading-note">Live vehicle, personnel, and equipment availability.</p>
+                    </div>
                 </div>
                 <div class="table-shell">
-                <div style="overflow-x:auto;">
+                <div class="resource-roster-scroll">
                 <style>
                 .resource-table {
                     width: 100%;
@@ -529,7 +532,7 @@ try {
                         </tr>
                     </thead>
                     <tbody id="resource-list-dynamic">
-                        <tr><td colspan="7" style="text-align:center;color:#888;">Loading resources...</td></tr>
+                        <tr class="resource-roster-state"><td colspan="7">Loading resources...</td></tr>
                     </tbody>
                 </table>
                 </div>
@@ -591,7 +594,7 @@ try {
                     resourcesLoadInFlight = true;
                     const container = document.getElementById('resource-list-dynamic');
                     if (showLoading && container) {
-                        container.innerHTML = '<tr><td colspan="7" style="text-align:center;color:#888;">Loading resources...</td></tr>';
+                        container.innerHTML = '<tr class="resource-roster-state"><td colspan="7">Loading resources...</td></tr>';
                     }
                     try {
                         const url = 'api/resources_combined.php?_=' + encodeURIComponent(String(Date.now()));
@@ -718,24 +721,24 @@ try {
                     const btns = [];
                     const resourceActions = Array.isArray(r.actions) ? r.actions.slice() : [];
                     const actionSet = new Set(resourceActions);
-                    if (actionSet.has('track')) btns.push(`<button class=\"resource-action-btn track\" title=\"Track\" aria-label=\"Track\" onclick=\"trackResource(this)\"><i class=\"fas fa-location-arrow\"></i></button>`);
-                    if (actionSet.has('service')) btns.push(`<button class=\"resource-action-btn service\" title=\"Service\" aria-label=\"Service\" onclick=\"serviceResource(this)\"><i class=\"fas fa-wrench\"></i></button>`);
-                    if (actionSet.has('details')) btns.push(`<button class=\"resource-action-btn details\" title=\"Details\" aria-label=\"Details\" onclick=\"resourceDetails(this)\"><i class=\"fas fa-info-circle\"></i></button>`);
-                    if (actionSet.has('contact')) btns.push(`<button class=\"resource-action-btn contact\" title=\"Contact\" aria-label=\"Contact\" onclick=\"contactPersonnel(this)\"><i class=\"fas fa-phone\"></i></button>`);
-                    if (actionSet.has('schedule')) btns.push(`<button class=\"resource-action-btn schedule\" title=\"Schedule\" aria-label=\"Schedule\" onclick=\"scheduleResource(this)\"><i class=\"fas fa-calendar\"></i></button>`);
-                    if (actionSet.has('assign')) btns.push(`<button class=\"resource-action-btn assign\" title=\"Assign\" aria-label=\"Assign\" onclick=\"assignEquipment(this)\"><i class=\"fas fa-link\"></i></button>`);
-                    if (actionSet.has('check')) btns.push(`<button class=\"resource-action-btn check\" title=\"Check\" aria-label=\"Check\" onclick=\"checkEquipment(this)\"><i class=\"fas fa-check-circle\"></i></button>`);
-                    if (actionSet.has('calibrate')) btns.push(`<button class=\"resource-action-btn calibrate\" title=\"Calibrate\" aria-label=\"Calibrate\" onclick=\"calibrateEquipment(this)\"><i class=\"fas fa-tools\"></i></button>`);
+                    if (actionSet.has('track')) btns.push(`<button class=\"resource-action-btn track\" title=\"Track resource\" onclick=\"trackResource(this)\"><i class=\"fas fa-location-arrow\"></i><span>Track</span></button>`);
+                    if (actionSet.has('service')) btns.push(`<button class=\"resource-action-btn service\" title=\"Service resource\" onclick=\"serviceResource(this)\"><i class=\"fas fa-wrench\"></i><span>Service</span></button>`);
+                    if (actionSet.has('details')) btns.push(`<button class=\"resource-action-btn details\" title=\"View resource details\" onclick=\"resourceDetails(this)\"><i class=\"fas fa-circle-info\"></i><span>Details</span></button>`);
+                    if (actionSet.has('contact')) btns.push(`<button class=\"resource-action-btn contact\" title=\"Contact personnel\" onclick=\"contactPersonnel(this)\"><i class=\"fas fa-phone\"></i><span>Contact</span></button>`);
+                    if (actionSet.has('schedule')) btns.push(`<button class=\"resource-action-btn schedule\" title=\"Schedule personnel\" onclick=\"scheduleResource(this)\"><i class=\"fas fa-calendar\"></i><span>Schedule</span></button>`);
+                    if (actionSet.has('assign')) btns.push(`<button class=\"resource-action-btn assign\" title=\"Assign equipment\" onclick=\"assignEquipment(this)\"><i class=\"fas fa-link\"></i><span>Assign</span></button>`);
+                    if (actionSet.has('check')) btns.push(`<button class=\"resource-action-btn check\" title=\"Check equipment\" onclick=\"checkEquipment(this)\"><i class=\"fas fa-circle-check\"></i><span>Check</span></button>`);
+                    if (actionSet.has('calibrate')) btns.push(`<button class=\"resource-action-btn calibrate\" title=\"Calibrate equipment\" onclick=\"calibrateEquipment(this)\"><i class=\"fas fa-screwdriver-wrench\"></i><span>Calibrate</span></button>`);
                     const visibleBtns = btns.slice(0, Math.min(btns.length, 4));
                     const actionsHtml = `<div class=\"actions-inline\">${visibleBtns.join('')}</div>`;
-                    return `<tr data-type=\"${r.type}\" data-status=\"${r.status}\" data-location=\"${escapeAttrValue(r.location || '')}\" data-resource-id=\"${escapeAttrValue(r.id)}\" data-resource-name=\"${escapeAttrValue(resourceName)}\" data-resource-code=\"${escapeAttrValue(resourceCode)}\" data-unit-identifier=\"${escapeAttrValue(unitIdentifier)}\" data-resource-source=\"${escapeAttrValue(r.source || '')}\" data-resource-details=\"${escapeAttrValue(r.details || '')}\" data-resource-role=\"${escapeAttrValue(r.role || '')}\" data-resource-updated=\"${escapeAttrValue(r.updatedAt || '')}\" data-resource-assignment=\"${escapeAttrValue(r.assignment || '')}\" data-resource-notes=\"${escapeAttrValue(r.notes || '')}\" data-resource-phone=\"${escapeAttrValue(r.phone || '')}\" data-resource-email=\"${escapeAttrValue(r.email || '')}\" data-resource-quantity=\"${safeQuantity}\">\n`+
-                        `<td>${safeResourceCode}</td>`+
-                        `<td class=\"name-cell resource-title\"><strong>${safeResourceName}</strong><span>${safeSubtitle}</span></td>`+
-                        `<td>${safeTypeLabel}</td>`+
-                        `<td><span class=\"${statusClass}\">${safeStatusLabel}</span></td>`+
-                        `<td class=\"detail-value\">${safeAssignmentLine}</td>`+
-                        `<td>${safeUpdatedAt}</td>`+
-                        `<td>${actionsHtml}</td>`+
+                    return `<tr class=\"resource-roster-card resource-row-${escapeAttrValue(r.type.replace(/s$/, ''))}\" data-type=\"${r.type}\" data-status=\"${r.status}\" data-location=\"${escapeAttrValue(r.location || '')}\" data-resource-id=\"${escapeAttrValue(r.id)}\" data-resource-name=\"${escapeAttrValue(resourceName)}\" data-resource-code=\"${escapeAttrValue(resourceCode)}\" data-unit-identifier=\"${escapeAttrValue(unitIdentifier)}\" data-resource-source=\"${escapeAttrValue(r.source || '')}\" data-resource-details=\"${escapeAttrValue(r.details || '')}\" data-resource-role=\"${escapeAttrValue(r.role || '')}\" data-resource-updated=\"${escapeAttrValue(r.updatedAt || '')}\" data-resource-assignment=\"${escapeAttrValue(r.assignment || '')}\" data-resource-notes=\"${escapeAttrValue(r.notes || '')}\" data-resource-phone=\"${escapeAttrValue(r.phone || '')}\" data-resource-email=\"${escapeAttrValue(r.email || '')}\" data-resource-quantity=\"${safeQuantity}\">\n`+
+                        `<td class=\"resource-cell-code\"><span class=\"resource-field-label\">Resource ID</span><strong>${safeResourceCode}</strong></td>`+
+                        `<td class=\"name-cell resource-title resource-cell-identity\"><strong>${safeResourceName}</strong><span>${safeSubtitle}</span></td>`+
+                        `<td class=\"resource-cell-category\"><span class=\"resource-field-label\">Category</span><strong>${safeTypeLabel}</strong></td>`+
+                        `<td class=\"resource-cell-status\"><span class=\"${statusClass}\">${safeStatusLabel}</span></td>`+
+                        `<td class=\"detail-value resource-cell-assignment\"><span class=\"resource-field-label\">Current assignment</span><strong>${safeAssignmentLine || 'Not currently assigned'}</strong></td>`+
+                        `<td class=\"resource-cell-updated\"><span class=\"resource-field-label\">Last updated</span><span>${safeUpdatedAt}</span></td>`+
+                        `<td class=\"resource-cell-actions\">${actionsHtml}</td>`+
                     `</tr>`;
                 }
 
@@ -743,8 +746,12 @@ try {
                     const container = document.getElementById('resource-list-dynamic');
                     if (!container) return;
                     const filtered = RESOURCES.filter(passFilters);
+                    const count = document.getElementById('resource-results-count');
+                    if (count) {
+                        count.textContent = `${filtered.length} of ${RESOURCES.length} resources shown`;
+                    }
                     if (!filtered.length) {
-                        container.innerHTML = '<tr><td colspan="7" style="text-align:center;color:#888;">No resources found.</td></tr>';
+                        container.innerHTML = '<tr class="resource-roster-state"><td colspan="7"><i class="fas fa-box-open"></i><strong>No resources match the current filters.</strong><span>Try changing the resource type, status, or search.</span></td></tr>';
                     } else {
                         container.innerHTML = filtered.map(resourceRowHtml).join('');
                     }
@@ -777,7 +784,7 @@ try {
                     <p class="section-heading-note">Review responder requests and approve or reject without changing the workflow.</p>
                 </div>
                 <div class="table-shell">
-                <div style="overflow-x:auto;">
+                <div class="request-roster-scroll">
                 <style>
                 .request-table {
                     width: 100%;

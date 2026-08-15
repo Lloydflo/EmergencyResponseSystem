@@ -13,6 +13,11 @@ require_once __DIR__ . '/../includes/auth.php';
 require_once __DIR__ . '/../includes/activity_log.php';
 require_once __DIR__ . '/../includes/incident_priority.php';
 require_once __DIR__ . '/system_API/group1_incident_client.php';
+if (!is_logged_in() || !in_array(current_session_role(), ['dispatcher', 'admin'], true)) {
+    http_response_code(401);
+    echo json_encode(['ok' => false, 'error' => 'Authenticated dispatcher or admin session required']);
+    exit;
+}
 $pdo = get_db_connection();
 if (!$pdo) {
     http_response_code(500);
@@ -37,6 +42,10 @@ $status = trim((string)($input['status'] ?? 'pending'));
 $latitude = array_key_exists('latitude', $input) && $input['latitude'] !== '' ? (float)$input['latitude'] : null;
 $longitude = array_key_exists('longitude', $input) && $input['longitude'] !== '' ? (float)$input['longitude'] : null;
 $transfer_incident_id = transfer_incident_id_from_input($input);
+$has_transfer_context = $transfer_incident_id > 0
+    || trim((string)($input['transfer_id'] ?? '')) !== ''
+    || trim((string)($input['transfer_call_id'] ?? '')) !== ''
+    || trim((string)($input['transfer_reference_no'] ?? '')) !== '';
 $received_at = ers_audit_normalize_operational_datetime($input['received_at'] ?? null, true);
 $accepted_at = ers_audit_normalize_operational_datetime($input['accepted_at'] ?? null, false);
 $audit_session_id = calls_create_normalize_audit_session_id($input['audit_session_id'] ?? null);
@@ -52,6 +61,10 @@ if ($accepted_at !== null && $received_at !== null) {
         $accepted_at = null;
     }
 }
+$has_accepted_call_context = $accepted_at !== null && $audit_session_id !== null;
+$local_intake_source = $has_transfer_context
+    ? 'interagency'
+    : ($has_accepted_call_context ? 'call' : 'manual');
 
 if ($latitude !== null && ($latitude < -90 || $latitude > 90)) {
     $latitude = null;
@@ -85,6 +98,11 @@ try {
 } catch (Throwable $schemaErr) {
     error_log('calls_create schema check warning: ' . $schemaErr->getMessage());
 }
+try {
+    calls_create_ensure_intake_source_schema($pdo);
+} catch (Throwable $sourceSchemaErr) {
+    error_log('calls_create intake-source schema warning: ' . $sourceSchemaErr->getMessage());
+}
 
 $transfer_incident_id = $transfer_incident_id > 0
     ? $transfer_incident_id
@@ -108,6 +126,11 @@ if ($transfer_incident_id > 0) {
         );
         if ($updatedIncident !== null) {
             $updatedCallId = isset($updatedIncident['call_id']) ? (int)$updatedIncident['call_id'] : null;
+            calls_create_persist_intake_source(
+                $pdo,
+                (int)$updatedIncident['id'],
+                'interagency'
+            );
             calls_create_link_audit_session(
                 $pdo,
                 $audit_session_id,
@@ -126,7 +149,8 @@ if ($transfer_incident_id > 0) {
                 true,
                 $accepted_at,
                 $audit_session_id,
-                $priorityAssessment
+                $priorityAssessment,
+                'interagency'
             );
             $group1Sync = calls_create_try_group1_sync(
                 $pdo,
@@ -142,6 +166,7 @@ if ($transfer_incident_id > 0) {
                 'incident_reference_no' => $updatedIncident['reference_no'],
                 'incident_status' => $updatedIncident['status'],
                 'priority' => $priority,
+                'intake_source' => 'interagency',
                 'group1_sync' => $group1Sync,
             ]);
             exit;
@@ -228,10 +253,25 @@ try {
         update_incident_priority_indicator($pdo, (int)$incident['id'], $priority, $priorityAssessment);
     }
 
+    calls_create_persist_intake_source(
+        $pdo,
+        (int)$incident['id'],
+        $local_intake_source
+    );
+
     $pdo->commit();
 
     $incidentId = $incident ? (int)$incident['id'] : null;
     $incidentReferenceNo = $incident ? (string)$incident['reference_no'] : $reference_no;
+    // The live call audit is first written against an ephemeral call_session.
+    // Bind it to the newly-created call before source classification reads it.
+    calls_create_link_audit_session(
+        $pdo,
+        $audit_session_id,
+        $call_id,
+        $incidentId,
+        $incidentReferenceNo
+    );
     log_incident_created_audit(
         $pdo,
         $call_id,
@@ -243,7 +283,8 @@ try {
         false,
         $accepted_at,
         $audit_session_id,
-        $priorityAssessment
+        $priorityAssessment,
+        $local_intake_source
     );
     $group1Sync = calls_create_try_group1_sync($pdo, $call_id, $incidentId ?? 0);
 
@@ -255,6 +296,7 @@ try {
         'incident_reference_no' => $incident ? $incident['reference_no'] : null,
         'incident_status' => $incident ? $incident['status'] : null,
         'priority' => $priority,
+        'intake_source' => $local_intake_source,
         'group1_sync' => $group1Sync,
     ]);
 } catch (Throwable $e) {
@@ -277,7 +319,8 @@ function log_incident_created_audit(
     bool $updatedTransfer = false,
     ?string $acceptedAt = null,
     ?string $auditSessionId = null,
-    array $priorityAssessment = []
+    array $priorityAssessment = [],
+    string $intakeSource = 'manual'
 ): void {
     if ($incidentId === null || $incidentId < 1) {
         return;
@@ -313,6 +356,7 @@ function log_incident_created_audit(
         'priority' => $priority,
         'location_address' => $location,
         'transfer_intake_updated' => $updatedTransfer,
+        'intake_source' => $intakeSource,
     ];
     if (isset($priorityAssessment['score'])) {
         $baseMetadata['priority_score'] = (int)$priorityAssessment['score'];
@@ -816,6 +860,39 @@ function calls_create_priority_assessment_update_sets(PDO $pdo, string $tableNam
     }
 
     return $sets === [] ? [] : ['sets' => $sets, 'values' => $values];
+}
+
+/**
+ * Persist source provenance on the incident itself. This is intentionally
+ * additive and nullable: old records remain unverified instead of being
+ * mislabeled as calls or manual entries.
+ */
+function calls_create_ensure_intake_source_schema(PDO $pdo): void {
+    if (!calls_create_table_exists($pdo, 'incidents')) {
+        return;
+    }
+    if (!calls_create_column_exists($pdo, 'incidents', 'intake_source')) {
+        $pdo->exec(
+            "ALTER TABLE `incidents`
+             ADD COLUMN `intake_source` VARCHAR(24) NULL AFTER `reported_by_call_id`"
+        );
+    }
+}
+
+function calls_create_persist_intake_source(PDO $pdo, int $incidentId, string $source): void {
+    if ($incidentId < 1 || !in_array($source, ['call', 'manual', 'tip', 'interagency'], true)) {
+        return;
+    }
+    if (!calls_create_column_exists($pdo, 'incidents', 'intake_source')) {
+        return;
+    }
+    $stmt = $pdo->prepare(
+        'UPDATE incidents SET intake_source = :source WHERE id = :id'
+    );
+    $stmt->execute([
+        ':source' => $source,
+        ':id' => $incidentId,
+    ]);
 }
 
 function insert_call_row(PDO $pdo, array $params, array $priorityAssessment = []): int {

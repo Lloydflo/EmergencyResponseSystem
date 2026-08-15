@@ -523,6 +523,7 @@ CREATE TABLE `incidents` (
   `latitude` decimal(10,7) DEFAULT NULL,
   `longitude` decimal(10,7) DEFAULT NULL,
   `reported_by_call_id` bigint(20) UNSIGNED DEFAULT NULL,
+  `intake_source` varchar(24) DEFAULT NULL,
   `created_at` datetime NOT NULL DEFAULT current_timestamp(),
   `updated_at` datetime DEFAULT NULL ON UPDATE current_timestamp(),
   `responded_at` datetime DEFAULT NULL,
@@ -533,19 +534,19 @@ CREATE TABLE `incidents` (
 -- Dumping data for table `incidents`
 --
 
-INSERT INTO `incidents` (`id`, `reference_no`, `type`, `priority`, `status`, `title`, `description`, `location_address`, `latitude`, `longitude`, `reported_by_call_id`, `created_at`, `updated_at`, `responded_at`, `resolved_at`) VALUES
-(1, 'REF-20260202152404-8436', 'police', 'medium', 'pending', 'Incident from call REF-20260202152404-8436', 'nakaw', 'Diliman', NULL, NULL, 1, '2026-02-12 00:07:39', NULL, NULL, NULL),
-(2, 'REF-20260203042136-4230', 'fire', 'low', 'pending', 'Incident from call REF-20260203042136-4230', 'bilog', 'Circle', NULL, NULL, 2, '2026-02-12 00:07:39', NULL, NULL, NULL),
-(3, 'REF-20260204035154-9212', 'traffic', 'low', 'pending', 'Incident from call REF-20260204035154-9212', 'hfffgdxffdf', 'bagong silang caloocan city', NULL, NULL, 3, '2026-02-12 00:07:39', NULL, NULL, NULL),
-(4, 'REF-20260204040430-8022', 'medical', 'high', 'pending', 'Incident from call REF-20260204040430-8022', 'stroke', 'Novaliches, Liliw, Laguna, Calabarzon, 4004, Philippines', NULL, NULL, 4, '2026-02-12 00:07:39', NULL, NULL, NULL),
-(5, 'REF-20260204040916-4898', 'medical', 'high', 'pending', 'Incident from call REF-20260204040916-4898', 'heart attack', 'novaliches', NULL, NULL, 5, '2026-02-12 00:07:39', NULL, NULL, NULL),
-(6, 'REF-20260204080042-4397', 'police', 'low', 'pending', 'Incident from call REF-20260204080042-4397', 'nakaw', 'City Hall', NULL, NULL, 6, '2026-02-12 00:07:39', NULL, NULL, NULL),
-(7, 'REF-20260206022224-2140', 'fire', 'medium', 'pending', 'Incident from call REF-20260206022224-2140', 'sunog', 'City Hall', NULL, NULL, 7, '2026-02-12 00:07:39', NULL, NULL, NULL),
-(8, 'REF-20260207142751-7153', 'medical', 'low', 'pending', 'Incident from call REF-20260207142751-7153', 'heart attack', 'novaliches', NULL, NULL, 8, '2026-02-12 00:07:39', NULL, NULL, NULL),
-(9, 'REF-20260211075330-5287', 'fire', 'medium', 'pending', 'Incident from call REF-20260211075330-5287', 'nasusunog na pagawaan ng sapatos', 'novaliches, quezon city', NULL, NULL, 9, '2026-02-12 00:07:39', NULL, NULL, NULL),
-(10, 'REF-20260211075707-4064', 'medical', 'low', 'pending', 'Incident from call REF-20260211075707-4064', 'fall from 2nd floor', 'Nicanor Padilla Street, San Miguel, Sixth District, Manila, Capital District, Metro Manila, 1005, Philippines', NULL, NULL, 10, '2026-02-12 00:07:39', NULL, NULL, NULL),
-(11, 'REF-20260211085107-1710', 'medical', 'low', 'pending', 'Incident from call REF-20260211085107-1710', 'cardiac', 'Circle', NULL, NULL, 11, '2026-02-12 00:07:39', NULL, NULL, NULL),
-(12, 'REF-20260211112610-3531', 'fire', 'low', 'pending', 'Incident from call REF-20260211112610-3531', 'burning stove', 'Quezon City Hall', NULL, NULL, 12, '2026-02-12 00:07:39', NULL, NULL, NULL);
+INSERT INTO `incidents` (`id`, `reference_no`, `type`, `priority`, `status`, `title`, `description`, `location_address`, `latitude`, `longitude`, `reported_by_call_id`, `intake_source`, `created_at`, `updated_at`, `responded_at`, `resolved_at`) VALUES
+(1, 'REF-20260202152404-8436', 'police', 'medium', 'pending', 'Incident from call REF-20260202152404-8436', 'nakaw', 'Diliman', NULL, NULL, 1, NULL, '2026-02-12 00:07:39', NULL, NULL, NULL),
+(2, 'REF-20260203042136-4230', 'fire', 'low', 'pending', 'Incident from call REF-20260203042136-4230', 'bilog', 'Circle', NULL, NULL, 2, NULL, '2026-02-12 00:07:39', NULL, NULL, NULL),
+(3, 'REF-20260204035154-9212', 'traffic', 'low', 'pending', 'Incident from call REF-20260204035154-9212', 'hfffgdxffdf', 'bagong silang caloocan city', NULL, NULL, 3, NULL, '2026-02-12 00:07:39', NULL, NULL, NULL),
+(4, 'REF-20260204040430-8022', 'medical', 'high', 'pending', 'Incident from call REF-20260204040430-8022', 'stroke', 'Novaliches, Liliw, Laguna, Calabarzon, 4004, Philippines', NULL, NULL, 4, NULL, '2026-02-12 00:07:39', NULL, NULL, NULL),
+(5, 'REF-20260204040916-4898', 'medical', 'high', 'pending', 'Incident from call REF-20260204040916-4898', 'heart attack', 'novaliches', NULL, NULL, 5, NULL, '2026-02-12 00:07:39', NULL, NULL, NULL),
+(6, 'REF-20260204080042-4397', 'police', 'low', 'pending', 'Incident from call REF-20260204080042-4397', 'nakaw', 'City Hall', NULL, NULL, 6, NULL, '2026-02-12 00:07:39', NULL, NULL, NULL),
+(7, 'REF-20260206022224-2140', 'fire', 'medium', 'pending', 'Incident from call REF-20260206022224-2140', 'sunog', 'City Hall', NULL, NULL, 7, NULL, '2026-02-12 00:07:39', NULL, NULL, NULL),
+(8, 'REF-20260207142751-7153', 'medical', 'low', 'pending', 'Incident from call REF-20260207142751-7153', 'heart attack', 'novaliches', NULL, NULL, 8, NULL, '2026-02-12 00:07:39', NULL, NULL, NULL),
+(9, 'REF-20260211075330-5287', 'fire', 'medium', 'pending', 'Incident from call REF-20260211075330-5287', 'nasusunog na pagawaan ng sapatos', 'novaliches, quezon city', NULL, NULL, 9, NULL, '2026-02-12 00:07:39', NULL, NULL, NULL),
+(10, 'REF-20260211075707-4064', 'medical', 'low', 'pending', 'Incident from call REF-20260211075707-4064', 'fall from 2nd floor', 'Nicanor Padilla Street, San Miguel, Sixth District, Manila, Capital District, Metro Manila, 1005, Philippines', NULL, NULL, 10, NULL, '2026-02-12 00:07:39', NULL, NULL, NULL),
+(11, 'REF-20260211085107-1710', 'medical', 'low', 'pending', 'Incident from call REF-20260211085107-1710', 'cardiac', 'Circle', NULL, NULL, 11, NULL, '2026-02-12 00:07:39', NULL, NULL, NULL),
+(12, 'REF-20260211112610-3531', 'fire', 'low', 'pending', 'Incident from call REF-20260211112610-3531', 'burning stove', 'Quezon City Hall', NULL, NULL, 12, NULL, '2026-02-12 00:07:39', NULL, NULL, NULL);
 
 -- --------------------------------------------------------
 
@@ -958,7 +959,8 @@ ALTER TABLE `activity_log`
   ADD KEY `idx_activity_log_source_created` (`source_channel`,`created_at`),
   ADD KEY `idx_activity_log_category_created` (`event_category`,`created_at`),
   ADD KEY `idx_activity_log_outcome_created` (`event_outcome`,`created_at`),
-  ADD KEY `idx_activity_log_reference_created` (`reference_no`,`created_at`);
+  ADD KEY `idx_activity_log_reference_created` (`reference_no`,`created_at`),
+  ADD KEY `idx_activity_log_entity_action` (`entity_type`,`action`,`entity_id`);
 
 --
 -- Indexes for table `admin_resources`
@@ -1034,6 +1036,7 @@ ALTER TABLE `incidents`
   ADD KEY `idx_incidents_type` (`type`),
   ADD KEY `idx_incidents_priority` (`priority`),
   ADD KEY `idx_incidents_status` (`status`),
+  ADD KEY `idx_incidents_intake_source` (`intake_source`),
   ADD KEY `idx_incidents_created_at` (`created_at`),
   ADD KEY `idx_incidents_responded_at` (`responded_at`),
   ADD KEY `fk_incidents_call` (`reported_by_call_id`);

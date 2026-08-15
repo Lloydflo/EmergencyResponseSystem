@@ -9,12 +9,14 @@
 
     const tableBody = qs('#incidentTableBody');
     const countBadge = qs('#incidentCountBadge');
+    const queueTitle = qs('#queueTitle');
     const tableSubtitle = qs('#tableSubtitle');
     const searchFilterInput = qs('#searchFilterInput');
     const categoryFilterSelect = qs('#categoryFilterSelect');
     const statusFilterSelect = qs('#statusFilterSelect');
     const resetFilterBtn = qs('#resetFilterBtn');
     const refreshReviewBtn = qs('#refreshReviewBtn');
+    const queueShortcuts = qsa('[data-queue-shortcut]');
     const modal = qs('#adminFeedbackModal');
     const modalOverlay = qs('#adminFeedbackOverlay');
     const modalClose = qs('#adminFeedbackClose');
@@ -25,6 +27,7 @@
     if (
         !tableBody
         || !countBadge
+        || !queueTitle
         || !tableSubtitle
         || !searchFilterInput
         || !categoryFilterSelect
@@ -44,6 +47,12 @@
     let reportById = new Map();
     let currentIncidentId = null;
     let queueRequestSerial = 0;
+    let modalRequestSerial = 0;
+    let modalReturnTarget = null;
+    let visibleCaseLimit = 6;
+    let lastQueueFilterSignature = '';
+    const modalBackgroundState = new Map();
+    const CASE_PAGE_SIZE = 6;
 
     const PH_TIME_ZONE = 'Asia/Manila';
     const PH_DATE_FORMATTER = new Intl.DateTimeFormat('en-PH', {
@@ -80,12 +89,21 @@
         if (!raw) {
             return new Date(NaN);
         }
-        if (/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/.test(raw)) {
-            return new Date(raw.replace(' ', 'T') + 'Z');
+
+        // Database DATETIME fields are stored as Philippine local wall time.
+        // A zone-less value must therefore use +08:00, not UTC (`Z`).
+        const localDateTime = raw.match(
+            /^(\d{4})-(\d{2})-(\d{2})[ T](\d{2}):(\d{2})(?::(\d{2})(?:\.(\d+))?)?$/
+        );
+        if (localDateTime) {
+            const [, year, month, day, hour, minute, second = '00', fraction = ''] = localDateTime;
+            const milliseconds = (fraction + '000').slice(0, 3);
+            return new Date(`${year}-${month}-${day}T${hour}:${minute}:${second}.${milliseconds}+08:00`);
         }
-        if (/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}$/.test(raw)) {
-            return new Date(raw + 'Z');
+        if (/^\d{4}-\d{2}-\d{2}$/.test(raw)) {
+            return new Date(`${raw}T00:00:00.000+08:00`);
         }
+
         return new Date(raw);
     }
 
@@ -119,6 +137,22 @@
         if (value === 'high') return 'high';
         if (value === 'medium') return 'medium';
         return 'low';
+    }
+
+    function incidentTypeTokens(value) {
+        const aliases = {
+            ambulance: 'medical',
+            medic: 'medical',
+            accident: 'traffic',
+            collision: 'traffic',
+            crime: 'police',
+        };
+        return [...new Set(String(value || '')
+            .toLowerCase()
+            .split(/[,|\/]+/)
+            .map((item) => item.trim())
+            .filter(Boolean)
+            .map((item) => aliases[item] || item))];
     }
 
     function workflowStatus(report) {
@@ -168,7 +202,7 @@
                 ? 'fa-circle-check'
                 : status === 'revision_required'
                     ? 'fa-rotate-left'
-                    : 'fa-file-pen';
+                    : 'fa-file-lines';
         return '<span class="ar-report-status ' + reportStatusClass(status) + '">'
             + (icon ? '<i class="fas ' + iconClass + '" aria-hidden="true"></i>' : '')
             + escapeHtml(reportStatusLabel(status))
@@ -215,41 +249,6 @@
 
     function latestReport(reports) {
         return [...reports].sort((left, right) => reportTimestamp(right) - reportTimestamp(left))[0] || null;
-    }
-
-    function dominantReportStatus(reports) {
-        if (reports.some((report) => workflowStatus(report) === 'submitted')) return 'submitted';
-        if (reports.some((report) => workflowStatus(report) === 'revision_required')) return 'revision_required';
-        if (reports.some((report) => workflowStatus(report) === 'approved')) return 'approved';
-        return reports.length ? 'pending' : 'none';
-    }
-
-    function afterActionCell(row) {
-        const reports = Array.isArray(row.after_action_reports) ? row.after_action_reports : [];
-        if (!reports.length) {
-            return '<span class="ar-report-status none"><i class="far fa-file" aria-hidden="true"></i>No report</span>';
-        }
-
-        const status = dominantReportStatus(reports);
-        const responders = [...new Set(reports.map((report) => String(report.responder_name || '').trim()).filter(Boolean))];
-        const responderText = responders.length ? responders.join(', ') : 'Responder';
-        return '<div class="ar-report-cell">'
-            + reportStatusPill(status)
-            + '<span>' + escapeHtml(reports.length + (reports.length === 1 ? ' report' : ' reports')) + '</span>'
-            + '<small>' + escapeHtml(responderText) + '</small>'
-            + '</div>';
-    }
-
-    function afterActionDateCell(row) {
-        const reports = Array.isArray(row.after_action_reports) ? row.after_action_reports : [];
-        const report = latestReport(reports);
-        if (!report) {
-            return '<span class="ar-meta">Not submitted</span>';
-        }
-        const date = reportDateValue(report);
-        return '<div class="ar-date-cell"><strong>' + escapeHtml(date.label) + '</strong><span>'
-            + escapeHtml(formatDate(date.value, date.milliseconds))
-            + '</span></div>';
     }
 
     function isCrimeAnalyticsCandidate(row) {
@@ -382,12 +381,10 @@
             });
         });
 
-        const rows = Array.from(incidentMap.values()).filter((row) => {
-            const reportsForIncident = row.after_action_reports || [];
-            return reportsForIncident.length > 0
-                || Boolean(row.submitted_to_admin)
-                || Number(row.feedback_count || 0) > 0;
-        });
+        // The endpoint already limits this list to closed incidents. Keep every
+        // returned incident so the No after-action report queue is complete,
+        // including cases that do not yet have separate feedback notes.
+        const rows = Array.from(incidentMap.values());
 
         rows.sort((left, right) => {
             const leftPending = (left.after_action_reports || []).some((report) => workflowStatus(report) === 'submitted');
@@ -408,12 +405,14 @@
         const serial = ++queueRequestSerial;
         const showLoading = options.showLoading !== false;
         if (showLoading) {
-            tableBody.innerHTML = '<tr><td colspan="9" class="ar-empty">Loading after-action review queue...</td></tr>';
+            tableBody.setAttribute('aria-busy', 'true');
+            tableBody.innerHTML = '<div class="ar-empty ar-queue-message"><i class="fas fa-spinner fa-spin" aria-hidden="true"></i><strong>Preparing the review queue</strong><span>Loading responder reports and closed incidents...</span></div>';
             tableSubtitle.textContent = 'Loading responder after-action reports and closed incidents...';
         }
 
         if (!Number.isInteger(adminUserId) || adminUserId < 1) {
-            tableBody.innerHTML = '<tr><td colspan="9" class="ar-empty">Admin account ID is unavailable. Sign in again before reviewing reports.</td></tr>';
+            tableBody.setAttribute('aria-busy', 'false');
+            tableBody.innerHTML = '<div class="ar-empty ar-queue-message error"><i class="fas fa-triangle-exclamation" aria-hidden="true"></i><strong>Review queue unavailable</strong><span>Admin account ID is unavailable. Sign in again before reviewing reports.</span></div>';
             return;
         }
 
@@ -448,20 +447,30 @@
             renderTable();
         } catch (error) {
             if (serial !== queueRequestSerial) return;
-            tableBody.innerHTML = '<tr><td colspan="9" class="ar-empty">' + escapeHtml(error.message || 'Failed to load after-action review queue.') + '</td></tr>';
+            tableBody.setAttribute('aria-busy', 'false');
+            tableBody.innerHTML = '<div class="ar-empty ar-queue-message error"><i class="fas fa-cloud-arrow-down" aria-hidden="true"></i><strong>Unable to load the review queue</strong><span>' + escapeHtml(error.message || 'Failed to load after-action review queue.') + '</span><button type="button" class="ar-action primary" data-action="retry-queue"><i class="fas fa-rotate"></i> Try again</button></div>';
             tableSubtitle.textContent = 'Unable to load after-action reports at the moment.';
             notify(error.message || 'Failed to load review queue.', 'error');
         }
     }
 
     function renderStats() {
-        const submitted = allReports.filter((report) => workflowStatus(report) === 'submitted').length;
-        const approved = allReports.filter((report) => workflowStatus(report) === 'approved').length;
-        const revision = allReports.filter((report) => workflowStatus(report) === 'revision_required').length;
-        qs('#statReports').textContent = String(allReports.length);
-        qs('#statPending').textContent = String(submitted);
-        qs('#statApproved').textContent = String(approved);
-        qs('#statRevision').textContent = String(revision);
+        const counts = {
+            submitted: 0,
+            revision_required: 0,
+            approved: 0,
+            no_report: 0,
+        };
+        incidentRows.forEach((row) => {
+            const state = rowReviewState(row).key;
+            if (Object.prototype.hasOwnProperty.call(counts, state)) {
+                counts[state] += 1;
+            }
+        });
+        qs('#statPending').textContent = String(counts.submitted);
+        qs('#statRevision').textContent = String(counts.revision_required);
+        qs('#statApproved').textContent = String(counts.approved);
+        qs('#statNoReport').textContent = String(counts.no_report);
     }
 
     function getFilteredRows() {
@@ -471,12 +480,11 @@
 
         return incidentRows.filter((row) => {
             const reports = Array.isArray(row.after_action_reports) ? row.after_action_reports : [];
-            if (categoryNeedle && String(row.type || '').toLowerCase() !== categoryNeedle) return false;
+            if (categoryNeedle && !incidentTypeTokens(row.type).includes(categoryNeedle)) return false;
 
-            if (queueNeedle === 'submitted' && !reports.some((report) => workflowStatus(report) === 'submitted')) return false;
-            if (queueNeedle === 'approved' && !reports.some((report) => workflowStatus(report) === 'approved')) return false;
-            if (queueNeedle === 'revision_required' && !reports.some((report) => workflowStatus(report) === 'revision_required')) return false;
-            if (queueNeedle === 'no_report' && reports.length > 0) return false;
+            // Each case belongs to one queue only. A newer submitted report takes
+            // priority over older approved/returned reports for the same incident.
+            if (queueNeedle && rowReviewState(row).key !== queueNeedle) return false;
 
             if (searchNeedle) {
                 const reportText = reports.map((report) => [
@@ -504,36 +512,190 @@
         });
     }
 
+    function rowReviewState(row) {
+        const reports = Array.isArray(row.after_action_reports) ? row.after_action_reports : [];
+        if (reports.some((report) => workflowStatus(report) === 'submitted')) {
+            return {
+                key: 'submitted',
+                label: 'Needs approval',
+                icon: 'fa-inbox',
+                description: 'Open the report, verify the evidence, then approve or return it.',
+            };
+        }
+        if (reports.some((report) => workflowStatus(report) === 'revision_required')) {
+            return {
+                key: 'revision_required',
+                label: 'Waiting on revision',
+                icon: 'fa-rotate-left',
+                description: 'The responder has been asked to correct and resubmit this report.',
+            };
+        }
+        if (reports.some((report) => workflowStatus(report) === 'approved')) {
+            return {
+                key: 'approved',
+                label: 'Review complete',
+                icon: 'fa-circle-check',
+                description: 'The submitted report has an approved admin decision.',
+            };
+        }
+        return {
+            key: 'no_report',
+            label: 'No report submitted',
+            icon: 'fa-file-lines',
+            description: 'This closed incident has feedback or notes but no after-action report.',
+        };
+    }
+
+    function reportActivity(row) {
+        const reports = Array.isArray(row.after_action_reports) ? row.after_action_reports : [];
+        const report = latestReport(reports);
+        if (!report) {
+            return { label: 'Report activity', value: 'Not submitted' };
+        }
+        const date = reportDateValue(report);
+        return {
+            label: date.label,
+            value: formatDate(date.value, date.milliseconds),
+        };
+    }
+
+    function renderCaseCard(row) {
+        const reports = Array.isArray(row.after_action_reports) ? row.after_action_reports : [];
+        const state = rowReviewState(row);
+        const latest = latestReport(reports);
+        const responders = [...new Set(reports
+            .map((report) => String(report.responder_name || '').trim())
+            .filter(Boolean))];
+        const responderText = responders.length ? responders.join(', ') : (row.driver_name || 'Not recorded');
+        const activity = reportActivity(row);
+        const primaryLabel = state.key === 'submitted' ? 'Review now' : 'View case';
+        const reportTitle = latest
+            ? (latest.operational_outcome || latest.incident_summary || 'After-action report')
+            : 'Incident feedback and operational notes';
+        const reportPreview = latest
+            ? (latest.incident_summary || latest.actions_taken || state.description)
+            : state.description;
+        const reference = row.incident_code || row.reference_no || ('Incident #' + row.id);
+        const location = row.location || row.location_address || 'Location not recorded';
+        const assignedUnit = row.assigned_unit || row.assigned_unit_identifier || 'No assigned unit';
+
+        return `
+            <article class="ar-case-card state-${escapeHtml(state.key)}">
+                <div class="ar-case-status-bar" aria-hidden="true"></div>
+                <header class="ar-case-head">
+                    <div class="ar-case-identity">
+                        <span class="ar-case-kicker"><i class="fas fa-hashtag" aria-hidden="true"></i> Incident</span>
+                        <h3>${escapeHtml(reference)}</h3>
+                        <p>${escapeHtml(row.type || 'General incident')} <span aria-hidden="true">&middot;</span> ${escapeHtml(assignedUnit)}</p>
+                    </div>
+                    <span class="ar-queue-state ${escapeHtml(state.key)}"><i class="fas ${escapeHtml(state.icon)}" aria-hidden="true"></i>${escapeHtml(state.label)}</span>
+                </header>
+                <div class="ar-case-content">
+                    <div class="ar-case-summary">
+                        <div class="ar-badges">${priorityChip(row.priority)} ${statusChip(row.status)}</div>
+                        <h4>${escapeHtml(reportTitle)}</h4>
+                        <p>${escapeHtml(reportPreview)}</p>
+                        <div class="ar-case-meta">
+                            <span title="${escapeHtml(location)}"><i class="fas fa-location-dot" aria-hidden="true"></i>${escapeHtml(location)}</span>
+                            <span title="${escapeHtml(responderText)}"><i class="fas fa-user-shield" aria-hidden="true"></i>${escapeHtml(responderText)}</span>
+                            <span><i class="fas fa-clock" aria-hidden="true"></i>${escapeHtml(activity.label)}: ${escapeHtml(activity.value)}</span>
+                            <span><i class="fas fa-file-lines" aria-hidden="true"></i>${escapeHtml(reports.length + (reports.length === 1 ? ' report' : ' reports'))}</span>
+                        </div>
+                    </div>
+                </div>
+                <footer class="ar-case-footer">
+                    <div class="ar-row-actions">
+                        <button type="button" class="ar-action primary" data-action="view-feedback" data-id="${escapeHtml(row.id)}"><i class="fas fa-arrow-right" aria-hidden="true"></i> ${escapeHtml(primaryLabel)}</button>
+                        ${crimeAnalyticsAction(row)}
+                    </div>
+                </footer>
+            </article>
+        `;
+    }
+
+    const QUEUE_CONFIGS = {
+        submitted: {
+            title: 'Needs approval',
+            description: 'New responder submissions ready for approval or return.',
+            emptyTitle: 'No reports need approval',
+            emptyDescription: 'You are caught up. New responder submissions will appear here.',
+            icon: 'fa-circle-check',
+        },
+        revision_required: {
+            title: 'Waiting on responder revision',
+            description: 'Returned reports that are waiting for a corrected resubmission.',
+            emptyTitle: 'No revision follow-ups',
+            emptyDescription: 'There are no reports currently waiting on responder revision.',
+            icon: 'fa-rotate-left',
+        },
+        approved: {
+            title: 'Approved reviews',
+            description: 'Completed admin decisions, kept separate from active review work.',
+            emptyTitle: 'No approved reviews found',
+            emptyDescription: 'Approved after-action reports will appear here.',
+            icon: 'fa-circle-check',
+        },
+        no_report: {
+            title: 'No after-action report',
+            description: 'Closed incidents that still need a responder after-action submission.',
+            emptyTitle: 'No missing reports',
+            emptyDescription: 'Every visible closed incident currently has an after-action report.',
+            icon: 'fa-file-lines',
+        },
+        all: {
+            title: 'All review cases',
+            description: 'A combined history view. Use a workload button above to focus on one queue.',
+            emptyTitle: 'No review cases found',
+            emptyDescription: 'There are no review cases available for the current filters.',
+            icon: 'fa-layer-group',
+        },
+    };
+
+    function updateQueueShortcuts() {
+        const activeQueue = String(statusFilterSelect.value || '');
+        queueShortcuts.forEach((button) => {
+            const isActive = String(button.dataset.queueShortcut || '') === activeQueue;
+            button.classList.toggle('is-active', isActive);
+            button.setAttribute('aria-pressed', isActive ? 'true' : 'false');
+        });
+    }
+
     function renderTable() {
         const rows = getFilteredRows();
-        countBadge.textContent = rows.length + ' incident(s)';
-        tableSubtitle.textContent = rows.length
-            ? 'Submitted responder after-action reports are reviewed here. Approval updates the report record and responder Approved tab.'
-            : 'No after-action review case matched the current filter.';
+        const activeQueue = String(statusFilterSelect.value || '');
+        const queueConfig = QUEUE_CONFIGS[activeQueue || 'all'];
+        const filterSignature = [
+            activeQueue,
+            String(searchFilterInput.value || '').trim().toLowerCase(),
+            String(categoryFilterSelect.value || '').trim().toLowerCase(),
+        ].join('|');
+        if (filterSignature !== lastQueueFilterSignature) {
+            visibleCaseLimit = CASE_PAGE_SIZE;
+            lastQueueFilterSignature = filterSignature;
+        }
+        const hasTextFilter = String(searchFilterInput.value || '').trim() !== ''
+            || String(categoryFilterSelect.value || '').trim() !== '';
+        tableBody.setAttribute('aria-busy', 'false');
+        queueTitle.textContent = queueConfig.title;
+        countBadge.textContent = rows.length + (rows.length === 1 ? ' case' : ' cases');
+        tableSubtitle.textContent = queueConfig.description;
+        updateQueueShortcuts();
 
         if (!rows.length) {
-            tableBody.innerHTML = '<tr><td colspan="9" class="ar-empty">No after-action review case matched the current filter.</td></tr>';
+            const emptyTitle = hasTextFilter ? 'No matching review cases' : queueConfig.emptyTitle;
+            const emptyDescription = hasTextFilter
+                ? 'Try a different search or category, or clear the filters.'
+                : queueConfig.emptyDescription;
+            tableBody.innerHTML = '<div class="ar-empty ar-queue-message"><i class="fas ' + escapeHtml(hasTextFilter ? 'fa-magnifying-glass' : queueConfig.icon) + '" aria-hidden="true"></i><strong>' + escapeHtml(emptyTitle) + '</strong><span>' + escapeHtml(emptyDescription) + '</span>' + (hasTextFilter ? '<button type="button" class="ar-action" data-action="clear-filters"><i class="fas fa-filter-circle-xmark"></i> Clear filters</button>' : '') + '</div>';
             return;
         }
 
-        tableBody.innerHTML = rows.map((row) => {
-            const reports = Array.isArray(row.after_action_reports) ? row.after_action_reports : [];
-            const hasSubmitted = reports.some((report) => workflowStatus(report) === 'submitted');
-            const primaryLabel = hasSubmitted ? 'Review Report' : 'View Feedback';
-            return `
-                <tr>
-                    <td><div class="ar-ref">${escapeHtml(row.incident_code || row.reference_no || 'No reference')}</div><div class="ar-meta">${escapeHtml(row.assigned_unit || 'No assigned unit')}</div></td>
-                    <td>${escapeHtml(row.type || '--')}</td>
-                    <td>${escapeHtml(row.location || row.location_address || '--')}</td>
-                    <td>${priorityChip(row.priority)}</td>
-                    <td>${statusChip(row.status)}</td>
-                    <td>${escapeHtml(formatMinutes(row.response_time_min))}</td>
-                    <td>${afterActionCell(row)}</td>
-                    <td>${afterActionDateCell(row)}</td>
-                    <td><div class="ar-row-actions"><button type="button" class="ar-action primary" data-action="view-feedback" data-id="${escapeHtml(row.id)}"><i class="fas fa-file-circle-check"></i> ${escapeHtml(primaryLabel)}</button>${crimeAnalyticsAction(row)}</div></td>
-                </tr>
-            `;
-        }).join('');
+        const visibleRows = rows.slice(0, visibleCaseLimit);
+        const remaining = Math.max(0, rows.length - visibleRows.length);
+        const moreMarkup = remaining > 0
+            ? '<div class="ar-queue-more" role="status"><span>Showing ' + escapeHtml(visibleRows.length) + ' of ' + escapeHtml(rows.length) + ' cases</span><button type="button" class="ar-action" data-action="show-more-cases"><i class="fas fa-chevron-down" aria-hidden="true"></i> Show next ' + escapeHtml(Math.min(CASE_PAGE_SIZE, remaining)) + '</button></div>'
+            : '';
+        tableBody.innerHTML = '<div class="ar-case-grid" data-active-queue="' + escapeHtml(activeQueue || 'all') + '">' + visibleRows.map(renderCaseCard).join('') + '</div>' + moreMarkup;
     }
 
     function setModalLoading() {
@@ -564,8 +726,26 @@
     function normalizeProofUrl(value) {
         const raw = String(value || '').trim();
         if (!raw) return '';
-        if (/^(https?:|data:|blob:)/i.test(raw)) return raw;
-        return raw.replace(/^\/+/, '');
+        if (/[\u0000-\u001f\u007f\\]/.test(raw) || /^\/\//.test(raw)) return '';
+
+        if (/^https?:\/\//i.test(raw)) {
+            try {
+                const absoluteUrl = new URL(raw);
+                return ['http:', 'https:'].includes(absoluteUrl.protocol) ? absoluteUrl.href : '';
+            } catch (error) {
+                return '';
+            }
+        }
+
+        // Reject executable/opaque schemes and only accept proof locations created by this app.
+        if (/^[a-z][a-z0-9+.-]*:/i.test(raw)) return '';
+        const relativeUrl = raw.replace(/^\/+/, '');
+        const pathOnly = relativeUrl.split(/[?#]/, 1)[0];
+        if (pathOnly.split('/').some((segment) => segment === '..')) return '';
+        if (!/^(?:images\/proofs|uploads\/completion_proof)\/[A-Za-z0-9._~!$&'()+,;=@%/-]+$/.test(pathOnly)) {
+            return '';
+        }
+        return relativeUrl;
     }
 
     function renderProofs(proofPayload) {
@@ -583,7 +763,19 @@
             const source = item.source === 'responder_completion'
                 ? 'Responder completion upload'
                 : 'Resolution proof upload';
-            const proofUrl = escapeHtml(normalizeProofUrl(item.url || ''));
+            const normalizedUrl = normalizeProofUrl(item.url || '');
+            if (!normalizedUrl) {
+                return `
+                    <figure class="ar-proof-card ar-proof-unavailable">
+                        <div class="ar-proof-placeholder"><i class="fas fa-image" aria-hidden="true"></i><span>Proof image unavailable</span></div>
+                        <figcaption>
+                            <strong>${escapeHtml(source)}</strong>
+                            <span>The stored image link is not valid.</span>
+                        </figcaption>
+                    </figure>
+                `;
+            }
+            const proofUrl = escapeHtml(normalizedUrl);
             return `
                 <figure class="ar-proof-card">
                     <a href="${proofUrl}" target="_blank" rel="noopener" title="Open full proof image">
@@ -679,10 +871,10 @@
         return `
             <div class="ar-review-box" data-report-review-box="${Number(report.id)}">
                 <label for="reviewNotes-${Number(report.id)}">Admin review note</label>
-                <textarea id="reviewNotes-${Number(report.id)}" data-review-notes-for="${Number(report.id)}" rows="3" placeholder="Optional for approval; required when rejecting or returning for revision."></textarea>
+                <textarea id="reviewNotes-${Number(report.id)}" data-review-notes-for="${Number(report.id)}" rows="3" placeholder="Optional for approval; required when returning for revision."></textarea>
                 <div class="ar-review-actions">
                     <button type="button" class="ar-review-btn approve" data-report-action="approve" data-report-id="${Number(report.id)}"><i class="fas fa-check"></i> Approve Report</button>
-                    <button type="button" class="ar-review-btn return" data-report-action="return" data-report-id="${Number(report.id)}"><i class="fas fa-rotate-left"></i> Reject / Return for Revision</button>
+                    <button type="button" class="ar-review-btn return" data-report-action="return" data-report-id="${Number(report.id)}"><i class="fas fa-rotate-left"></i> Return for Revision</button>
                 </div>
                 <p class="ar-review-help">Approval updates the database immediately and moves this report to the responder's Approved tab.</p>
                 <div class="ar-review-message" data-review-message-for="${Number(report.id)}" aria-live="polite"></div>
@@ -787,14 +979,40 @@
         });
     }
 
+    function setModalBackgroundInert(active) {
+        if (active) {
+            Array.from(document.body.children).forEach((element) => {
+                if (element === modal || element === modalOverlay || element.matches('.ar-toast, script')) return;
+                if (!modalBackgroundState.has(element)) {
+                    modalBackgroundState.set(element, Boolean(element.inert));
+                }
+                element.inert = true;
+            });
+            return;
+        }
+        modalBackgroundState.forEach((wasInert, element) => {
+            if (element.isConnected) element.inert = wasInert;
+        });
+        modalBackgroundState.clear();
+    }
+
     async function openModal(incidentId) {
-        currentIncidentId = Number(incidentId);
+        const requestedIncidentId = Number(incidentId);
+        if (!Number.isInteger(requestedIncidentId) || requestedIncidentId < 1) return;
+        const requestSerial = ++modalRequestSerial;
+        if (modal.hidden) {
+            modalReturnTarget = document.activeElement instanceof HTMLElement
+                ? document.activeElement
+                : null;
+        }
+        currentIncidentId = requestedIncidentId;
         setModalLoading();
         setModalExpanded(false);
         modalOverlay.hidden = false;
         modal.hidden = false;
         resetWorkspaceScroll();
         document.documentElement.classList.add('ar-modal-open');
+        setModalBackgroundInert(true);
         window.requestAnimationFrame(() => modalClose.focus());
 
         try {
@@ -808,13 +1026,27 @@
                 readOptionalJsonResponse(feedbackResponse),
                 readOptionalJsonResponse(proofsResponse),
             ]);
+            if (
+                requestSerial !== modalRequestSerial ||
+                currentIncidentId !== requestedIncidentId ||
+                modal.hidden
+            ) {
+                return;
+            }
             if (!payloadSucceeded(detailsPayload) || !detailsPayload.incident) {
                 throw new Error(detailsPayload.error || detailsPayload.message || 'Incident details are not available.');
             }
-            const row = incidentRows.find((item) => Number(item.id) === Number(incidentId));
+            const row = incidentRows.find((item) => Number(item.id) === requestedIncidentId);
             const reports = row?.after_action_reports || [];
             populateModal(detailsPayload.incident, feedbackPayload, proofsPayload, reports);
         } catch (error) {
+            if (
+                requestSerial !== modalRequestSerial ||
+                currentIncidentId !== requestedIncidentId ||
+                modal.hidden
+            ) {
+                return;
+            }
             afterActionList.innerHTML = '<div class="ar-feedback-empty">' + escapeHtml(error.message || 'Unable to load after-action reports.') + '</div>';
             qs('#adminFeedbackList').innerHTML = '<div class="ar-feedback-empty">Unable to load operational notes.</div>';
             qs('#adminProofGallery').innerHTML = '<div class="ar-feedback-empty">Unable to load responder proof images.</div>';
@@ -840,7 +1072,7 @@
             return;
         }
 
-        const actionLabel = action === 'approve' ? 'approve' : 'reject and return';
+        const actionLabel = action === 'approve' ? 'approve' : 'return for revision';
         const responderName = report.responder_name || 'this responder';
         if (!window.confirm('Confirm that you want to ' + actionLabel + ' the after-action report from ' + responderName + '?')) {
             return;
@@ -929,19 +1161,77 @@
     }
 
     function closeModal() {
+        modalRequestSerial += 1;
         modalOverlay.hidden = true;
         modal.hidden = true;
         currentIncidentId = null;
         setModalExpanded(false);
         document.documentElement.classList.remove('ar-modal-open');
+        setModalBackgroundInert(false);
+        const returnTarget = modalReturnTarget;
+        modalReturnTarget = null;
+        if (returnTarget && returnTarget.isConnected) {
+            window.requestAnimationFrame(() => returnTarget.focus());
+        }
+    }
+
+    function hasUnsavedReviewNote() {
+        return !modal.hidden && qsa('[data-review-notes-for]', modal)
+            .some((input) => String(input.value || '').trim() !== '');
+    }
+
+    function requestModalClose() {
+        if (hasUnsavedReviewNote() && !window.confirm('Close this review? The admin note you entered has not been submitted and will be discarded.')) {
+            return;
+        }
+        closeModal();
+    }
+
+    function keepModalFocus(event) {
+        if (event.key !== 'Tab' || modal.hidden) return;
+        const focusable = qsa(
+            'button:not([disabled]), textarea:not([disabled]), input:not([disabled]), select:not([disabled]), a[href]',
+            modal,
+        ).filter((element) => element.offsetParent !== null);
+        if (!focusable.length) {
+            event.preventDefault();
+            modalClose.focus();
+            return;
+        }
+        const first = focusable[0];
+        const last = focusable[focusable.length - 1];
+        if (event.shiftKey && document.activeElement === first) {
+            event.preventDefault();
+            last.focus();
+        } else if (!event.shiftKey && document.activeElement === last) {
+            event.preventDefault();
+            first.focus();
+        }
     }
 
     tableBody.addEventListener('click', (event) => {
         const button = event.target.closest('[data-action]');
         if (!button) return;
+        const action = button.getAttribute('data-action');
+        if (action === 'retry-queue') {
+            loadRows();
+            return;
+        }
+        if (action === 'clear-filters') {
+            clearFilters();
+            return;
+        }
+        if (action === 'show-more-cases') {
+            const previousLimit = visibleCaseLimit;
+            visibleCaseLimit += CASE_PAGE_SIZE;
+            renderTable();
+            const moreButton = qs('[data-action="show-more-cases"]', tableBody);
+            const firstNewAction = qsa('.ar-case-card .ar-action.primary', tableBody)[previousLimit];
+            (moreButton || firstNewAction)?.focus();
+            return;
+        }
         const incidentId = Number(button.getAttribute('data-id') || 0);
         if (!Number.isInteger(incidentId) || incidentId < 1) return;
-        const action = button.getAttribute('data-action');
         if (action === 'send-crime-analytics') {
             sendCrimeAnalytics(button, incidentId);
             return;
@@ -954,23 +1244,43 @@
         if (button) reviewAfterActionReport(button);
     });
 
-    resetFilterBtn.addEventListener('click', () => {
+    function clearFilters() {
         searchFilterInput.value = '';
         categoryFilterSelect.value = '';
-        statusFilterSelect.value = '';
+        statusFilterSelect.value = 'no_report';
         renderTable();
+    }
+
+    resetFilterBtn.addEventListener('click', clearFilters);
+    queueShortcuts.forEach((button) => {
+        button.addEventListener('click', () => {
+            statusFilterSelect.value = String(button.dataset.queueShortcut || '');
+            renderTable();
+            const reduceMotion = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches === true;
+            qs('.ar-card')?.scrollIntoView({ behavior: reduceMotion ? 'auto' : 'smooth', block: 'start' });
+        });
     });
     refreshReviewBtn.addEventListener('click', () => loadRows());
     searchFilterInput.addEventListener('input', renderTable);
     categoryFilterSelect.addEventListener('change', renderTable);
     statusFilterSelect.addEventListener('change', renderTable);
-    modalOverlay.addEventListener('click', closeModal);
-    modalClose.addEventListener('click', closeModal);
+    modalOverlay.addEventListener('click', requestModalClose);
+    modalClose.addEventListener('click', requestModalClose);
     modalExpand?.addEventListener('click', () => {
         setModalExpanded(!modalDialog?.classList.contains('is-expanded'));
     });
     document.addEventListener('keydown', (event) => {
-        if (event.key === 'Escape' && !modal.hidden) closeModal();
+        if (event.key === 'Escape' && !modal.hidden) {
+            event.preventDefault();
+            requestModalClose();
+            return;
+        }
+        keepModalFocus(event);
+    });
+    window.addEventListener('beforeunload', (event) => {
+        if (!hasUnsavedReviewNote()) return;
+        event.preventDefault();
+        event.returnValue = '';
     });
 
     closeModal();

@@ -854,7 +854,7 @@ function ers_tip_list(PDO $pdo): array
     if ($where !== []) {
         $sql .= ' WHERE ' . implode(' AND ', $where);
     }
-    $sql .= ' ORDER BY COALESCE(at.tip_datetime, at.received_at, at.updated_at) DESC LIMIT ' . $limit;
+    $sql .= ' ORDER BY COALESCE(at.received_at, at.tip_datetime, at.updated_at) DESC LIMIT ' . $limit;
 
     $stmt = $pdo->prepare($sql);
     $stmt->execute($params);
@@ -881,9 +881,52 @@ function ers_tip_find_for_action(PDO $pdo, int $id, string $tipId): array
     return is_array($row) ? ers_tip_hydrate_evidence($row) : [];
 }
 
+function ers_tip_ph_datetime(?string $value): ?DateTimeImmutable
+{
+    $raw = trim((string)$value);
+    if ($raw === '') {
+        return null;
+    }
+
+    try {
+        $philippineZone = new DateTimeZone('Asia/Manila');
+        $date = new DateTimeImmutable($raw, $philippineZone);
+        return $date->setTimezone($philippineZone);
+    } catch (Throwable $error) {
+        return null;
+    }
+}
+
+function ers_tip_ph_datetime_ms(?string $value): int
+{
+    $date = ers_tip_ph_datetime($value);
+    return $date instanceof DateTimeImmutable ? $date->getTimestamp() * 1000 : 0;
+}
+
+function ers_tip_ph_datetime_iso(?string $value): ?string
+{
+    $date = ers_tip_ph_datetime($value);
+    return $date instanceof DateTimeImmutable ? $date->format('Y-m-d\TH:i:sP') : null;
+}
+
 function ers_tip_prepare_response(array $row, ?PDO $pdo = null): array
 {
     $row = ers_tip_hydrate_evidence($row);
+
+    $tipDateTime = trim((string)($row['tip_datetime'] ?? ''));
+    $receivedAt = trim((string)($row['received_at'] ?? ''));
+    $updatedAt = trim((string)($row['updated_at'] ?? ''));
+    $displayDateTime = $receivedAt !== '' ? $receivedAt : ($tipDateTime !== '' ? $tipDateTime : $updatedAt);
+
+    $row['tip_datetime_ms'] = ers_tip_ph_datetime_ms($tipDateTime);
+    $row['tip_datetime_iso'] = ers_tip_ph_datetime_iso($tipDateTime);
+    $row['received_at_ms'] = ers_tip_ph_datetime_ms($receivedAt);
+    $row['received_at_iso'] = ers_tip_ph_datetime_iso($receivedAt);
+    $row['updated_at_ms'] = ers_tip_ph_datetime_ms($updatedAt);
+    $row['updated_at_iso'] = ers_tip_ph_datetime_iso($updatedAt);
+    $row['display_datetime'] = $displayDateTime !== '' ? $displayDateTime : null;
+    $row['display_datetime_ms'] = ers_tip_ph_datetime_ms($displayDateTime);
+    $row['display_datetime_iso'] = ers_tip_ph_datetime_iso($displayDateTime);
     $incidentId = (int)($row['converted_incident_id'] ?? 0);
     $incidentReference = trim((string)($row['converted_reference_no'] ?? ''));
     $dispatch = $pdo !== null
