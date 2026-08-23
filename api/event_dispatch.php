@@ -35,6 +35,12 @@ function event_dispatch_ensure_table(PDO $pdo): void
         KEY idx_event_unit_status (event_id, status),
         KEY idx_event_dispatch_unit (unit_id, status)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
+
+    $hasIncidentColumn = $pdo->prepare("SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'interagency_event_profiles' AND COLUMN_NAME = 'incident_id' LIMIT 1");
+    $hasIncidentColumn->execute();
+    if (!(bool)$hasIncidentColumn->fetchColumn()) {
+        $pdo->exec('ALTER TABLE interagency_event_profiles ADD COLUMN incident_id BIGINT UNSIGNED DEFAULT NULL, ADD KEY idx_event_incident_id (incident_id)');
+    }
 }
 
 function event_dispatch_event_exists(PDO $pdo, int $eventId): bool
@@ -54,6 +60,48 @@ function event_dispatch_assignments(PDO $pdo, int $eventId): array
                            ORDER BY ed.assigned_at DESC, ed.id DESC");
     $stmt->execute([$eventId]);
     return $stmt->fetchAll(PDO::FETCH_ASSOC) ?: [];
+}
+
+function event_dispatch_incident(PDO $pdo, int $eventId): int
+{
+    $eventStmt = $pdo->prepare("SELECT id, incident_id, coordination_id, event_profile, event_location, event_schedule, on_site_safety_hazard_level,
+                                       required_standby_responders, emergency_contact_persons, source_system
+                                FROM interagency_event_profiles WHERE id = ? FOR UPDATE");
+    $eventStmt->execute([$eventId]);
+    $event = $eventStmt->fetch(PDO::FETCH_ASSOC);
+    if (!$event) {
+        throw new RuntimeException('Event not found.');
+    }
+    $existingId = (int)($event['incident_id'] ?? 0);
+    if ($existingId > 0) {
+        return $existingId;
+    }
+
+    $priority = strtolower((string)($event['on_site_safety_hazard_level'] ?? 'medium'));
+    if (!in_array($priority, ['low', 'medium', 'high', 'critical'], true)) $priority = 'medium';
+    $reference = 'EVT-' . date('YmdHis') . '-' . $eventId;
+    $title = 'Event Standby: ' . trim((string)($event['event_profile'] ?? 'Event Coordination'));
+    $description = 'Event coordination ID: ' . (string)($event['coordination_id'] ?? '')
+        . "\nLocation: " . (string)($event['event_location'] ?? 'Not provided')
+        . "\nSchedule: " . (string)($event['event_schedule'] ?? 'Not provided')
+        . "\nRequired standby responders: " . (string)($event['required_standby_responders'] ?? 0)
+        . "\nEmergency contacts: " . (string)($event['emergency_contact_persons'] ?? 'Not provided')
+        . "\nSource system: " . (string)($event['source_system'] ?? 'ERS');
+    $insert = $pdo->prepare("INSERT INTO incidents
+        (reference_no, type, priority, status, title, description, location_address, latitude, longitude, reported_by_call_id, created_at)
+        VALUES (?, 'other', ?, 'dispatched', ?, ?, ?, NULL, NULL, NULL, NOW())");
+    $insert->execute([$reference, $priority, $title, $description, (string)($event['event_location'] ?? '') ?: 'Event location not provided']);
+    $incidentId = (int)$pdo->lastInsertId();
+    $link = $pdo->prepare('UPDATE interagency_event_profiles SET incident_id = ? WHERE id = ?');
+    $link->execute([$incidentId, $eventId]);
+    return $incidentId;
+}
+
+function event_dispatch_units_have_incident_column(PDO $pdo): bool
+{
+    $stmt = $pdo->prepare("SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'units' AND COLUMN_NAME = 'current_incident_id' LIMIT 1");
+    $stmt->execute();
+    return (bool)$stmt->fetchColumn();
 }
 
 event_dispatch_ensure_table($pdo);
@@ -116,6 +164,7 @@ try {
                 throw new RuntimeException('Unit ' . ($unit['identifier'] ?: $unit['id']) . ' is no longer available.');
             }
         }
+        $incidentId = event_dispatch_incident($pdo, $eventId);
         $operatorId = max(0, (int)($_SESSION['user_id'] ?? 0)) ?: null;
         $assignment = $pdo->prepare("INSERT INTO event_unit_dispatches (event_id, unit_id, status, assigned_by, assigned_at, released_at)
                                      VALUES (?, ?, 'assigned', ?, NOW(), NULL)
@@ -123,11 +172,16 @@ try {
         foreach ($unitIds as $unitId) {
             $assignment->execute([$eventId, $unitId, $operatorId]);
         }
-        $unitUpdate = $pdo->prepare("UPDATE units SET status = 'assigned' WHERE id IN ($placeholders)");
-        $unitUpdate->execute($unitIds);
+        if (event_dispatch_units_have_incident_column($pdo)) {
+            $unitUpdate = $pdo->prepare("UPDATE units SET status = 'assigned', current_incident_id = ? WHERE id IN ($placeholders)");
+            $unitUpdate->execute(array_merge([$incidentId], $unitIds));
+        } else {
+            $unitUpdate = $pdo->prepare("UPDATE units SET status = 'assigned' WHERE id IN ($placeholders)");
+            $unitUpdate->execute($unitIds);
+        }
     }
     $pdo->commit();
-    echo json_encode(['ok' => true, 'message' => $action === 'release' ? 'Units released from the event.' : 'Responder units assigned to the event.', 'assignments' => event_dispatch_assignments($pdo, $eventId)]);
+    echo json_encode(['ok' => true, 'message' => $action === 'release' ? 'Units released from the event.' : 'Responder units assigned to the event.', 'incident_id' => $incidentId ?? null, 'assignments' => event_dispatch_assignments($pdo, $eventId)]);
 } catch (Throwable $e) {
     if ($pdo->inTransaction()) $pdo->rollBack();
     http_response_code(422);

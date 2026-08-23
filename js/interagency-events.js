@@ -18,6 +18,8 @@
         dispatchStatusRows: [],
         dispatchStatusLoading: false,
         dispatchLoading: false,
+        knownEventIds: new Set(),
+        notificationsInitialized: false,
         search: '',
         status: 'all',
         expanded: true,
@@ -88,6 +90,70 @@
         source_system: form.elements.source_system.value.trim() || 'ERS',
     });
 
+    const eventNotificationKey = (kind, item) => `ers_event_${kind}_${Number(item.id)}_${String(item.event_schedule || '')}`;
+
+    const wasEventNotified = (kind, item) => {
+        try { return sessionStorage.getItem(eventNotificationKey(kind, item)) === '1'; } catch (_) { return false; }
+    };
+
+    const markEventNotified = (kind, item) => {
+        try { sessionStorage.setItem(eventNotificationKey(kind, item), '1'); } catch (_) {}
+    };
+
+    const openEventFromNotification = (item) => {
+        const launcher = document.querySelector('[data-module-open="iaEventCoordination"]');
+        if (launcher) launcher.click();
+        state.detailId = Number(item.id);
+        state.expanded = true;
+        render();
+    };
+
+    const showEventNotification = (title, message, item, kind) => {
+        if (!item || wasEventNotified(kind, item)) return;
+        markEventNotified(kind, item);
+        let toastRoot = document.getElementById('iaModuleToast');
+        if (!toastRoot) {
+            toastRoot = document.createElement('div');
+            toastRoot.className = 'ia-module-toast';
+            toastRoot.id = 'iaEventToastRoot';
+            toastRoot.setAttribute('aria-live', 'polite');
+            document.body.appendChild(toastRoot);
+        }
+        const toast = document.createElement('button');
+        toast.type = 'button';
+        toast.className = 'ia-module-toast-item';
+        toast.textContent = `${title}: ${message}`;
+        toast.addEventListener('click', () => {
+            openEventFromNotification(item);
+            toast.remove();
+        });
+        toastRoot.prepend(toast);
+        window.setTimeout(() => toast.remove(), 10000);
+        if ('Notification' in window && window.Notification.permission === 'granted') {
+            try { new window.Notification(title, { body: message }); } catch (_) {}
+        }
+    };
+
+    const checkEventNotifications = (items) => {
+        const previousIds = state.knownEventIds;
+        const now = Date.now();
+        const alertWindowMs = 30 * 60 * 1000;
+        items.forEach((item) => {
+            const id = Number(item.id);
+            if (state.notificationsInitialized && !previousIds.has(id)) {
+                showEventNotification('New interagency event received', `${item.event_profile || item.coordination_id || 'Event'} needs review and dispatch planning.`, item, 'received');
+            }
+            const schedule = new Date(String(item.event_schedule || '').replace(' ', 'T')).getTime();
+            const status = String(item.status || '').toLowerCase();
+            if (Number.isFinite(schedule) && schedule >= now && schedule - now <= alertWindowMs && ['active', 'standby'].includes(status)) {
+                const minutes = Math.max(0, Math.ceil((schedule - now) / 60000));
+                showEventNotification('Event dispatch reminder', `${item.event_profile || item.coordination_id || 'Event'} starts in ${minutes} minute${minutes === 1 ? '' : 's'}. Review and dispatch responders.`, item, 'near');
+            }
+        });
+        state.knownEventIds = new Set(items.map((item) => Number(item.id)));
+        state.notificationsInitialized = true;
+    };
+
     const loadEvents = async () => {
         state.loading = true;
         state.error = '';
@@ -103,6 +169,7 @@
                 throw new Error(data.error || 'Unable to load event coordination records');
             }
             state.items = Array.isArray(data.items) ? data.items : [];
+            checkEventNotifications(state.items);
         } catch (error) {
             state.error = error.message || 'Unable to load event coordination records';
         } finally {
@@ -217,6 +284,14 @@
             if (!response.ok || !data.ok) throw new Error(data.error || 'Unable to assign responder units.');
             state.assignments = Array.isArray(data.assignments) ? data.assignments : [];
             state.availableUnits = state.availableUnits.filter((unit) => !selected.includes(Number(unit.id)));
+            if (Number(data.incident_id) > 0) {
+                const tracking = new URLSearchParams({
+                    incident_id: String(data.incident_id),
+                    unit_id: String(selected[0]),
+                });
+                window.location.href = `dispatcher/gps.php?${tracking.toString()}`;
+                return;
+            }
         } catch (error) {
             state.error = error.message || 'Unable to assign responder units.';
         } finally {
@@ -318,6 +393,7 @@
                         <span><i class="fas fa-user-shield"></i> ${Number(item.required_standby_responders || 0)} standby</span>
                         <span><i class="fas fa-network-wired"></i> ${escapeHtml(item.source_system || 'ERS')}</span>
                     </div>
+                    ${item.event_location ? `<div class="ia-event-meta"><span><i class="fas fa-location-dot"></i> ${escapeHtml(item.event_location)}</span></div>` : ''}
                     ${item.emergency_contact_persons ? `<div class="ia-event-meta"><span><i class="fas fa-address-book"></i> ${escapeHtml(item.emergency_contact_persons)}</span></div>` : ''}
                     <div class="ia-event-flow">
                         <span class="${['active', 'standby', 'completed'].includes(item.status) ? 'is-done' : ''}">Profile</span>
@@ -419,7 +495,8 @@
             <p class="ia-event-details-sub">${escapeHtml(item.event_profile || 'Untitled event')}</p>
             <dl class="ia-event-detail-list">
                 <dt>Coordination ID</dt><dd>${escapeHtml(item.coordination_id)}</dd>
-                <dt>Schedule</dt><dd>${escapeHtml(formatDate(item.event_schedule))}</dd>
+                <dt>Event date &amp; time</dt><dd>${escapeHtml(formatDate(item.event_schedule))}</dd>
+                <dt>Location</dt><dd>${escapeHtml(item.event_location || 'Not provided')}</dd>
                 <dt>Hazard level</dt><dd>${escapeHtml(item.on_site_safety_hazard_level)}</dd>
                 <dt>Standby responders</dt><dd>${Number(item.required_standby_responders || 0)}</dd>
                 <dt>Status</dt><dd>${escapeHtml(item.status)}</dd>
@@ -565,4 +642,7 @@
 
     render();
     loadEvents();
+    window.setInterval(() => {
+        if (document.visibilityState === 'visible') loadEvents();
+    }, 30000);
 })();

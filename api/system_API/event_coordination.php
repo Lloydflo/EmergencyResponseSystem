@@ -106,6 +106,10 @@ function ers_event_normalize(array $input, ?string $externalClient = null): arra
     $eventSchedule = ers_event_normalize_datetime(
         $input['event_schedule']
             ?? $input['eventSchedule']
+            ?? $input['event_datetime']
+            ?? $input['eventDateTime']
+            ?? $input['date_time']
+            ?? $input['dateTime']
             ?? $input['schedule']
             ?? ''
     );
@@ -128,6 +132,15 @@ function ers_event_normalize(array $input, ?string $externalClient = null): arra
             $input['event_profile']
                 ?? $input['eventProfile']
                 ?? $input['profile']
+                ?? '',
+            255
+        ),
+        'event_location' => ers_external_clean(
+            $input['event_location']
+                ?? $input['eventLocation']
+                ?? $input['location_address']
+                ?? $input['location']
+                ?? $input['venue']
                 ?? '',
             255
         ),
@@ -186,6 +199,7 @@ function ers_event_save(PDO $pdo, array $item): array
         $stmt = $pdo->prepare(
             "UPDATE interagency_event_profiles
              SET event_profile = ?,
+                 event_location = ?,
                  event_schedule = ?,
                  on_site_safety_hazard_level = ?,
                  required_standby_responders = ?,
@@ -198,6 +212,7 @@ function ers_event_save(PDO $pdo, array $item): array
         );
         $stmt->execute([
             $item['event_profile'],
+            $item['event_location'],
             $item['event_schedule'],
             $item['on_site_safety_hazard_level'],
             $item['required_standby_responders'],
@@ -212,15 +227,16 @@ function ers_event_save(PDO $pdo, array $item): array
 
     $stmt = $pdo->prepare(
         "INSERT INTO interagency_event_profiles
-            (coordination_id, event_profile, event_schedule, on_site_safety_hazard_level,
+            (coordination_id, event_profile, event_location, event_schedule, on_site_safety_hazard_level,
              required_standby_responders, emergency_contact_persons, status, source_system,
              received_at, updated_at, raw_payload)
          VALUES
-            (?, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW(), ?)"
+            (?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW(), ?)"
     );
     $stmt->execute([
         $item['coordination_id'],
         $item['event_profile'],
+        $item['event_location'],
         $item['event_schedule'],
         $item['on_site_safety_hazard_level'],
         $item['required_standby_responders'],
@@ -236,7 +252,7 @@ function ers_event_save(PDO $pdo, array $item): array
 function ers_event_find(PDO $pdo, int $id): array
 {
     $stmt = $pdo->prepare(
-        "SELECT id, coordination_id, event_profile, event_schedule, on_site_safety_hazard_level,
+        "SELECT id, coordination_id, event_profile, event_location, event_schedule, on_site_safety_hazard_level,
                 required_standby_responders, emergency_contact_persons, status, source_system,
                 received_at, updated_at
          FROM interagency_event_profiles
@@ -268,7 +284,7 @@ function ers_event_list(PDO $pdo): array
         $params[] = $like;
     }
 
-    $sql = "SELECT id, coordination_id, event_profile, event_schedule, on_site_safety_hazard_level,
+    $sql = "SELECT id, coordination_id, event_profile, event_location, event_schedule, on_site_safety_hazard_level,
                    required_standby_responders, emergency_contact_persons, status, source_system,
                    received_at, updated_at
             FROM interagency_event_profiles";
@@ -317,6 +333,7 @@ function ers_event_send_to_group6(PDO $pdo, array $input): array
     $payload = [
         'coordination_id' => $item['coordination_id'] ?? '',
         'event_profile' => $item['event_profile'] ?? '',
+        'event_location' => $item['event_location'] ?? '',
         'event_schedule' => $item['event_schedule'] ?? null,
         'on_site_safety_hazard_level' => $item['on_site_safety_hazard_level'] ?? '',
         'required_standby_responders' => (int)($item['required_standby_responders'] ?? 0),
@@ -390,6 +407,7 @@ function ers_event_ensure_tables(PDO $pdo): void
             `id` BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
             `coordination_id` VARCHAR(120) NOT NULL,
             `event_profile` VARCHAR(255) NOT NULL,
+            `event_location` VARCHAR(255) DEFAULT NULL,
             `event_schedule` DATETIME DEFAULT NULL,
             `on_site_safety_hazard_level` ENUM('low','medium','high','critical') NOT NULL DEFAULT 'medium',
             `required_standby_responders` INT UNSIGNED NOT NULL DEFAULT 0,
@@ -410,7 +428,8 @@ function ers_event_ensure_tables(PDO $pdo): void
     $columns = [
         'coordination_id' => "ALTER TABLE `interagency_event_profiles` ADD COLUMN `coordination_id` VARCHAR(120) DEFAULT NULL AFTER `id`",
         'event_profile' => "ALTER TABLE `interagency_event_profiles` ADD COLUMN `event_profile` VARCHAR(255) DEFAULT NULL AFTER `coordination_id`",
-        'event_schedule' => "ALTER TABLE `interagency_event_profiles` ADD COLUMN `event_schedule` DATETIME DEFAULT NULL AFTER `event_profile`",
+        'event_location' => "ALTER TABLE `interagency_event_profiles` ADD COLUMN `event_location` VARCHAR(255) DEFAULT NULL AFTER `event_profile`",
+        'event_schedule' => "ALTER TABLE `interagency_event_profiles` ADD COLUMN `event_schedule` DATETIME DEFAULT NULL AFTER `event_location`",
         'on_site_safety_hazard_level' => "ALTER TABLE `interagency_event_profiles` ADD COLUMN `on_site_safety_hazard_level` ENUM('low','medium','high','critical') NOT NULL DEFAULT 'medium' AFTER `event_schedule`",
         'required_standby_responders' => "ALTER TABLE `interagency_event_profiles` ADD COLUMN `required_standby_responders` INT UNSIGNED NOT NULL DEFAULT 0 AFTER `on_site_safety_hazard_level`",
         'emergency_contact_persons' => "ALTER TABLE `interagency_event_profiles` ADD COLUMN `emergency_contact_persons` TEXT DEFAULT NULL AFTER `required_standby_responders`",
