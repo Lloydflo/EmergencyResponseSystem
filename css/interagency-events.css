@@ -3,6 +3,41 @@
     color: var(--ia-text, #122031);
 }
 
+.ia-event-dialog-backdrop {
+    position: fixed;
+    inset: 0;
+    z-index: 1300;
+    display: grid;
+    place-items: center;
+    padding: 1rem;
+    background: rgba(15, 23, 42, 0.62);
+}
+
+.ia-event-dialog {
+    position: relative;
+    width: min(620px, 100%);
+    max-height: calc(100dvh - 2rem);
+    overflow: auto;
+    padding: 1.35rem;
+    border: 1px solid var(--ia-border, #dfe6ee);
+    border-radius: 14px;
+    background: var(--ia-card, #fff);
+    box-shadow: 0 24px 70px rgba(15, 23, 42, 0.32);
+}
+
+.ia-event-dialog h3 { margin: 0 2rem 0.25rem 0; }
+.ia-event-dialog > p { margin: 0 0 1rem; color: var(--ia-muted, #5f7286); }
+.ia-event-dialog-close { position: absolute; top: 0.75rem; right: 0.75rem; border: 0; background: transparent; font-size: 1.7rem; cursor: pointer; color: var(--ia-muted, #5f7286); }
+.ia-event-detail-list { display: grid; grid-template-columns: minmax(130px, 0.8fr) minmax(0, 1.7fr); gap: 0.65rem 1rem; margin: 1rem 0 1.25rem; }
+.ia-event-detail-list dt { color: var(--ia-muted, #5f7286); font-weight: 700; }
+.ia-event-detail-list dd { margin: 0; overflow-wrap: anywhere; }
+.ia-event-assigned { display: grid; gap: 0.35rem; padding: 0.85rem; margin: 1rem 0; border-radius: 10px; background: var(--ia-soft, #f4f7fb); }
+.ia-event-assigned span { color: var(--ia-muted, #5f7286); font-size: 0.9rem; }
+.ia-event-unit-list { display: grid; gap: 0.55rem; max-height: 240px; overflow: auto; margin: 0.9rem 0 1rem; }
+.ia-event-unit-option { display: flex; align-items: center; gap: 0.7rem; padding: 0.75rem; border: 1px solid var(--ia-border, #dfe6ee); border-radius: 9px; cursor: pointer; }
+.ia-event-unit-option span { display: grid; gap: 0.18rem; }
+.ia-event-unit-option small { color: var(--ia-muted, #5f7286); }
+
 .ia-event-shell {
     border: 1px solid var(--ia-border, #dfe6ee);
     background: var(--ia-card, #ffffff);

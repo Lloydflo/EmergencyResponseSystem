@@ -10,6 +10,11 @@
         loading: true,
         error: '',
         editingId: null,
+        detailId: null,
+        dispatchId: null,
+        availableUnits: [],
+        assignments: [],
+        dispatchLoading: false,
         search: '',
         status: 'all',
         expanded: true,
@@ -65,6 +70,7 @@
     });
 
     const getEditingItem = () => state.items.find((item) => Number(item.id) === Number(state.editingId)) || null;
+    const getSelectedEvent = () => state.items.find((item) => Number(item.id) === Number(state.detailId || state.dispatchId)) || null;
 
     const buildPayloadFromForm = (form) => ({
         action: 'save',
@@ -164,6 +170,58 @@
         }
     };
 
+    const openDispatch = async (id) => {
+        state.dispatchId = Number(id);
+        state.detailId = null;
+        state.dispatchLoading = true;
+        state.error = '';
+        render();
+        try {
+            const [unitsResponse, assignmentsResponse] = await Promise.all([
+                fetch('api/units_list.php?status=available', { credentials: 'same-origin', headers: { Accept: 'application/json' } }),
+                fetch(`api/event_dispatch.php?event_id=${encodeURIComponent(id)}`, { credentials: 'same-origin', headers: { Accept: 'application/json' } }),
+            ]);
+            const units = await unitsResponse.json();
+            const assignments = await assignmentsResponse.json();
+            if (!unitsResponse.ok || !units.ok) throw new Error(units.error || 'Unable to load available units.');
+            if (!assignmentsResponse.ok || !assignments.ok) throw new Error(assignments.error || 'Unable to load event assignments.');
+            state.availableUnits = Array.isArray(units.items) ? units.items : [];
+            state.assignments = Array.isArray(assignments.assignments) ? assignments.assignments : [];
+        } catch (error) {
+            state.error = error.message || 'Unable to load event dispatch information.';
+        } finally {
+            state.dispatchLoading = false;
+            render();
+        }
+    };
+
+    const submitDispatch = async (form) => {
+        const selected = Array.from(form.querySelectorAll('input[name="event_unit_ids[]"]:checked')).map((input) => Number(input.value));
+        if (!selected.length) {
+            state.error = 'Select at least one available responder unit.';
+            render();
+            return;
+        }
+        state.dispatchLoading = true;
+        render();
+        try {
+            const response = await fetch('api/event_dispatch.php', {
+                method: 'POST', credentials: 'same-origin',
+                headers: { Accept: 'application/json', 'Content-Type': 'application/json' },
+                body: JSON.stringify({ event_id: state.dispatchId, unit_ids: selected }),
+            });
+            const data = await response.json();
+            if (!response.ok || !data.ok) throw new Error(data.error || 'Unable to assign responder units.');
+            state.assignments = Array.isArray(data.assignments) ? data.assignments : [];
+            state.availableUnits = state.availableUnits.filter((unit) => !selected.includes(Number(unit.id)));
+        } catch (error) {
+            state.error = error.message || 'Unable to assign responder units.';
+        } finally {
+            state.dispatchLoading = false;
+            render();
+        }
+    };
+
     const renderStats = () => {
         const active = state.items.filter((item) => ['active', 'standby'].includes(item.status)).length;
         const highHazards = state.items.filter((item) => ['high', 'critical'].includes(item.on_site_safety_hazard_level)).length;
@@ -234,6 +292,12 @@
                     </div>
                 </div>
                 <div class="ia-event-row-actions">
+                    <button type="button" class="ia-event-icon" data-event-details="${Number(item.id)}" title="View event details" aria-label="View event details">
+                        <i class="fas fa-eye"></i>
+                    </button>
+                    <button type="button" class="ia-event-icon" data-event-dispatch="${Number(item.id)}" title="Dispatch responders" aria-label="Dispatch responders">
+                        <i class="fas fa-ambulance"></i>
+                    </button>
                     <button type="button" class="ia-event-icon" data-event-edit="${Number(item.id)}" title="Edit event" aria-label="Edit event">
                         <i class="fas fa-pen"></i>
                     </button>
@@ -321,6 +385,36 @@
         `;
     };
 
+    const renderEventDialog = () => {
+        const item = getSelectedEvent();
+        if (!item) return '';
+        if (state.detailId) {
+            return `<div class="ia-event-dialog-backdrop"><section class="ia-event-dialog" role="dialog" aria-modal="true" aria-label="Event details">
+                <button type="button" class="ia-event-dialog-close" data-event-dialog-close aria-label="Close">&times;</button>
+                <h3>${escapeHtml(item.event_profile || 'Event details')}</h3>
+                <dl class="ia-event-detail-list">
+                    <dt>Coordination ID</dt><dd>${escapeHtml(item.coordination_id)}</dd>
+                    <dt>Schedule</dt><dd>${escapeHtml(formatDate(item.event_schedule))}</dd>
+                    <dt>Hazard level</dt><dd>${escapeHtml(item.on_site_safety_hazard_level)}</dd>
+                    <dt>Standby responders</dt><dd>${Number(item.required_standby_responders || 0)}</dd>
+                    <dt>Status</dt><dd>${escapeHtml(item.status)}</dd>
+                    <dt>Source</dt><dd>${escapeHtml(item.source_system || 'ERS')}</dd>
+                    <dt>Emergency contacts</dt><dd>${escapeHtml(item.emergency_contact_persons || 'Not provided')}</dd>
+                </dl>
+                <button type="button" class="ia-event-primary" data-event-dispatch="${Number(item.id)}"><i class="fas fa-ambulance"></i> Dispatch Responders</button>
+            </section></div>`;
+        }
+        const assigned = state.assignments.filter((assignment) => assignment.status === 'assigned');
+        const units = state.availableUnits.map((unit) => `<label class="ia-event-unit-option"><input type="checkbox" name="event_unit_ids[]" value="${Number(unit.id)}"><span><strong>${escapeHtml(unit.identifier || `Unit ${unit.id}`)}</strong><small>${escapeHtml(unit.unit_type || 'Responder unit')} ${unit.driver_name ? `• ${escapeHtml(unit.driver_name)}` : ''}</small></span></label>`).join('');
+        return `<div class="ia-event-dialog-backdrop"><section class="ia-event-dialog ia-event-dispatch-dialog" role="dialog" aria-modal="true" aria-label="Dispatch responders">
+            <button type="button" class="ia-event-dialog-close" data-event-dialog-close aria-label="Close">&times;</button>
+            <h3>Dispatch Responders</h3><p>${escapeHtml(item.event_profile || item.coordination_id)}</p>
+            <div class="ia-event-assigned"><strong>Assigned to this event</strong>${assigned.length ? assigned.map((assignment) => `<span>${escapeHtml(assignment.identifier || `Unit ${assignment.unit_id}`)} • ${escapeHtml(assignment.unit_type || 'Responder')}</span>`).join('') : '<span>No units assigned yet.</span>'}</div>
+            <form data-event-dispatch-form><div class="ia-event-unit-list">${state.dispatchLoading ? '<span>Loading units...</span>' : (units || '<span>No available responder units.</span>')}</div>
+            <div class="ia-event-form-actions"><button type="button" class="ia-event-secondary" data-event-dialog-close>Cancel</button><button type="submit" class="ia-event-primary" ${state.dispatchLoading || !units ? 'disabled' : ''}>Assign selected units</button></div></form>
+        </section></div>`;
+    };
+
     const render = () => {
         root.innerHTML = `
             <div class="ia-event-shell ${state.expanded ? 'is-open' : 'is-collapsed'}">
@@ -363,6 +457,7 @@
                     </div>
                 </div>
             </div>
+            ${renderEventDialog()}
         `;
     };
 
@@ -386,6 +481,28 @@
         if (target.matches('[data-event-new]')) {
             state.editingId = null;
             render();
+            return;
+        }
+
+        if (target.matches('[data-event-dialog-close]')) {
+            state.detailId = null;
+            state.dispatchId = null;
+            state.assignments = [];
+            render();
+            return;
+        }
+
+        const detailId = target.getAttribute('data-event-details');
+        if (detailId) {
+            state.detailId = Number(detailId);
+            state.dispatchId = null;
+            render();
+            return;
+        }
+
+        const dispatchId = target.getAttribute('data-event-dispatch');
+        if (dispatchId) {
+            openDispatch(Number(dispatchId));
             return;
         }
 
@@ -425,6 +542,11 @@
         if (event.target.matches('[data-event-form]')) {
             event.preventDefault();
             saveEvent(event.target);
+            return;
+        }
+        if (event.target.matches('[data-event-dispatch-form]')) {
+            event.preventDefault();
+            submitDispatch(event.target);
         }
     });
 

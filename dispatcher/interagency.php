@@ -20,7 +20,7 @@ $pageTitle = 'Inter-Agency Coordination';
     <link rel="stylesheet" href="css/admin-header.css">
     <link rel="stylesheet" href="css/sidebar-footer.css">
     <link rel="stylesheet" href="css/interagency-command.css?v=<?php echo filemtime($rootDir . '/css/interagency-command.css'); ?>">
-    <link rel="stylesheet" href="css/interagency-events.css">
+    <link rel="stylesheet" href="css/interagency-events.css?v=<?php echo filemtime($rootDir . '/css/interagency-events.css'); ?>">
     <link rel="stylesheet" href="css/interagency-tips.css">
     <link rel="stylesheet" href="css/dispatcher-interagency-ux.css?v=<?php echo filemtime($rootDir . '/css/dispatcher-interagency-ux.css'); ?>">
     <style>
@@ -4445,7 +4445,7 @@ $pageTitle = 'Inter-Agency Coordination';
     </script>
     <script src="js/interagency-operations.js"></script>
     <script src="js/interagency-command.js"></script>
-    <script src="js/interagency-events.js"></script>
+    <script src="js/interagency-events.js?v=<?php echo filemtime($rootDir . '/js/interagency-events.js'); ?>"></script>
     <script src="js/interagency-tips.js?v=20260809-ph-time-v1"></script>
     <script src="js/interagency-external-inbox.js?v=<?php echo filemtime($rootDir . '/js/interagency-external-inbox.js'); ?>"></script>
     <script src="js/interagency-module-launcher.js?v=<?php echo filemtime($rootDir . '/js/interagency-module-launcher.js'); ?>"></script>
