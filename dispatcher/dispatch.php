@@ -1115,16 +1115,19 @@ function initFirebaseLiveTracking() {
             if (rawKey && rawKey !== key) {
                 removeUnitMarkerByIdentifier(rawKey);
             }
-            applyLiveResponderLocationToUnit(key, lat, lng);
             const status = String(r.status || 'available').trim().toLowerCase();
             if (['offline', 'logged_out', 'inactive'].includes(status)) {
                 removeUnitMarkerByIdentifier(key);
                 return;
             }
+            // Firebase GPS can retain a responder's last coordinate after the
+            // app closes. The API presence record is the source of truth for
+            // whether a responder is currently logged in.
             if (!canRenderLiveUnitMarker(key)) {
                 removeUnitMarkerByIdentifier(key);
                 return;
             }
+            applyLiveResponderLocationToUnit(key, lat, lng);
             seenKeys.add(key);
 
             const label = `${key} — ${r.responderName || 'Responder'}`;
@@ -1266,9 +1269,11 @@ function addIncidentMarker(id, lat, lng, label) {
 
 function removeUnitMarkerByIdentifier(identifier) {
     const id = String(identifier || '').trim();
-    if (!id || !markers[id] || markers[id].type !== 'unit') return;
-    try { map.removeLayer(markers[id].marker); } catch (e) {}
-    delete markers[id];
+    if (!id) return;
+    const markerKey = Object.keys(markers).find((key) => String(key).toUpperCase() === id.toUpperCase());
+    if (!markerKey || markers[markerKey].type !== 'unit') return;
+    try { map.removeLayer(markers[markerKey].marker); } catch (e) {}
+    delete markers[markerKey];
 }
 
 function hasLiveUnitLocation(identifier) {
@@ -1279,11 +1284,8 @@ function hasLiveUnitLocation(identifier) {
 }
 
 function removeUnitMarkerIfNotLive(identifier) {
-    const id = normalizeUnitIdentifier(identifier);
-    if (!id) return;
-    const entry = markers[id] || markers[Object.keys(markers).find((key) => String(key).toUpperCase() === id.toUpperCase())];
-    if (entry && entry.isLive && hasLiveUnitLocation(id)) return;
-    removeUnitMarkerByIdentifier(id);
+    // A cached live GPS point must never keep an offline responder visible.
+    removeUnitMarkerByIdentifier(normalizeUnitIdentifier(identifier));
 }
 
 function isResponderUnitOnline(unit) {
@@ -1345,7 +1347,6 @@ function pruneOfflineUnitMarkers() {
             Object.entries(markers).forEach(([key, entry]) => {
                 if (!entry || entry.type !== 'unit') return;
                 if (!onlineKeys.has(String(key)) && !onlineKeys.has(String(key).toUpperCase())) {
-                    if (entry.isLive && hasLiveUnitLocation(key)) return;
                     try { map.removeLayer(entry.marker); } catch (e) {}
                     delete markers[key];
                 }
@@ -1356,7 +1357,6 @@ function pruneOfflineUnitMarkers() {
 
 function canRenderLiveUnitMarker(identifier) {
     const id = String(identifier || '').trim();
-    if (hasLiveUnitLocation(id)) return true;
     return !!id
         && authoritativeOnlineUnitKeysReady
         && (authoritativeOnlineUnitKeys.has(id) || authoritativeOnlineUnitKeys.has(id.toUpperCase()));
