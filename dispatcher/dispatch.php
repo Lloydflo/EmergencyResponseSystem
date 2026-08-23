@@ -713,6 +713,34 @@ function cleanAnonymousTipDispatchDescription(value) {
         .replace(/\bDescription\s*:\s*/ig, '')
         .trim();
 }
+function cleanEmergencyReportDispatchDescription(value) {
+    const raw = String(value || '').trim();
+    if (!raw || !/emergency report conversation summary/i.test(raw)) {
+        return raw;
+    }
+
+    const compact = raw.replace(/\s+/g, ' ').trim();
+    const messages = [];
+    const messagePattern = /(?:^|\s)-\s*[^:(]+?\s*\([^)]*\)\s*:\s*([\s\S]*?)(?=\s+-\s*[^:(]+?\s*\([^)]*\)\s*:|$)/g;
+    let match;
+    while ((match = messagePattern.exec(compact)) !== null) {
+        const message = match[1]
+            .replace(/\s+\bIncident Type\s*:\s*[\s\S]*?(?=\s+\b(?:Needs Severity|Severity|Location|Map|Coordinates|Priority|Emergency type)\s*:|$)/i, '')
+            .replace(/\s+\b(?:Needs Severity|Severity|Location|Map|Coordinates|Priority|Emergency type)\s*:\s*[\s\S]*$/i, '')
+            .trim();
+        if (message) messages.push(message);
+    }
+
+    // Emergency-Com reports contain routing data (caller, location, map, and
+    // priority) before the chat transcript. The description area should show
+    // only what the caller actually said.
+    if (messages.length) {
+        return messages.join(' ');
+    }
+
+    const descriptionMatch = compact.match(/\bDescription\s*:\s*([\s\S]*?)(?=\s+\b(?:Incident Type|Emergency type|Location|Priority|Coordinates|Map)\s*:|$)/i);
+    return descriptionMatch && descriptionMatch[1] ? descriptionMatch[1].trim() : 'No description provided.';
+}
 function parseLatLngFromText(text) {
     const raw = String(text || '');
     const match = raw.match(/(?:lat(?:itude)?\s*[:=]?\s*)?(-?\d{1,3}(?:\.\d+)?)\s*[, ]\s*(?:lon(?:gitude)?|lng)?\s*[:=]?\s*(-?\d{1,3}(?:\.\d+)?)/i);
@@ -723,7 +751,9 @@ function renderIncidentDetails(inc) {
     const hasPoint = currentIncidentLat !== null && currentIncidentLng !== null;
     const callerName = inc.caller_name || 'N/A';
     const callerPhone = inc.caller_phone || 'N/A';
-    const description = cleanAnonymousTipDispatchDescription(inc.description) || 'No description provided.';
+    const description = cleanEmergencyReportDispatchDescription(
+        cleanAnonymousTipDispatchDescription(inc.description)
+    ) || 'No description provided.';
     document.getElementById('modal-incident-details').innerHTML =
         `<strong>Type:</strong> ${escapeHtml(formatIncidentTypeLabel(inc.type) || inc.type || '')}<br>` +
         `<strong>Title:</strong> ${escapeHtml(inc.title || '')}<br>` +
