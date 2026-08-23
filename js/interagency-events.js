@@ -500,8 +500,6 @@
                 <dt>Hazard level</dt><dd>${escapeHtml(item.on_site_safety_hazard_level)}</dd>
                 <dt>Standby responders</dt><dd>${Number(item.required_standby_responders || 0)}</dd>
                 <dt>Status</dt><dd>${escapeHtml(item.status)}</dd>
-                <dt>Source system</dt><dd>${escapeHtml(item.source_system || 'ERS')}</dd>
-                <dt>Emergency contacts</dt><dd>${escapeHtml(item.emergency_contact_persons || 'Not provided')}</dd>
             </dl>
             <button type="button" class="ia-event-primary" data-event-dispatch="${Number(item.id)}"><i class="fas fa-ambulance"></i> Dispatch</button>
         </aside>`;
