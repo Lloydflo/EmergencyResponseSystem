@@ -12,6 +12,7 @@
     const detailTitle = document.getElementById('incidentDetailModalTitle');
     const detailSubtitle = document.getElementById('incidentDetailModalSubtitle');
     const detailBody = document.getElementById('incidentDetailModalBody');
+    const dispatcherUx = document.body.classList.contains('dispatcher-interagency-page');
     const DISMISSED_KEY = 'ers.interagencyExternalInbox.dismissed.v1';
     const CLOSED_STATUSES = new Set(['resolved', 'cancelled', 'closed', 'rejected']);
     const state = {
@@ -69,7 +70,7 @@
     function normalizePriority(value) {
         const priority = String(value || 'medium').trim().toLowerCase();
         if (priority === 'critical') return 'critical';
-        if (priority === 'urgent') return 'urgent';
+        if (priority === 'urgent') return 'high';
         if (priority === 'high') return 'high';
         if (priority === 'low') return 'low';
         return 'medium';
@@ -78,6 +79,17 @@
     function isLiveCall(item) {
         const transferType = String(item.transfer_type || '').trim().toLowerCase();
         return transferType === 'live_call' || !!String(item.room || '').trim();
+    }
+
+    function callDeskUrl() {
+        const path = String(window.location.pathname || '').toLowerCase();
+        if (path.includes('/admin/')) {
+            return '../dispatcher/call.php';
+        }
+        if (path.includes('/dispatcher/')) {
+            return 'call.php';
+        }
+        return 'dispatcher/call.php';
     }
 
     function displayType(value) {
@@ -206,7 +218,10 @@
         `;
     }
 
+    let inboxLoadInFlight = false;
     async function loadInbox() {
+        if (inboxLoadInFlight) return;
+        inboxLoadInFlight = true;
         state.loading = true;
         render();
         if (refreshBtn) refreshBtn.disabled = true;
@@ -224,6 +239,7 @@
             }
         } finally {
             state.loading = false;
+            inboxLoadInFlight = false;
             if (refreshBtn) refreshBtn.disabled = false;
             render();
         }
@@ -232,13 +248,16 @@
     function closeDetailModal() {
         if (!detailModal) return;
         detailModal.classList.remove('show');
+        detailModal.classList.remove('is-external-incident-detail');
         detailModal.setAttribute('aria-hidden', 'true');
         detailModal.hidden = true;
-        document.body.style.overflow = '';
+        const moduleModal = document.getElementById('iaModuleModal');
+        document.body.style.overflow = moduleModal && moduleModal.classList.contains('show') ? 'hidden' : '';
     }
 
     function openDetailModal() {
         if (!detailModal) return;
+        detailModal.classList.toggle('is-external-incident-detail', dispatcherUx);
         detailModal.hidden = false;
         detailModal.setAttribute('aria-hidden', 'false');
         detailModal.classList.add('show');
@@ -247,6 +266,72 @@
 
     function renderIncidentDetail(incident) {
         if (!detailBody) return;
+
+        if (dispatcherUx) {
+            const reference = String(incident.reference_no || ('Incident #' + (incident.id || ''))).trim();
+            const incidentType = displayType(incident.type || 'Emergency');
+            const priority = normalizePriority(incident.priority);
+            const status = String(incident.status || 'pending').replace(/_/g, ' ').trim();
+            const title = String(incident.title || 'External incident').trim();
+            const location = String(incident.location_address || incident.location || 'Location not provided').trim();
+            const description = String(incident.description || 'No incident narrative was provided.').trim();
+            const caller = String(incident.caller_name || 'Not recorded').trim();
+            const assignedUnit = String(incident.assigned_unit_identifier || 'Not assigned').trim();
+            const createdAt = displayTime(incident.created_at);
+
+            detailBody.innerHTML = `
+                <section class="dispatcher-incident-detail" aria-label="External incident record">
+                    <header class="dispatcher-incident-detail-hero">
+                        <span class="dispatcher-incident-detail-icon" aria-hidden="true"><i class="fas fa-tower-broadcast"></i></span>
+                        <div class="dispatcher-incident-detail-heading">
+                            <span class="dispatcher-incident-detail-eyebrow">External incident</span>
+                            <h3>${escapeHtml(reference)}</h3>
+                            <p>${escapeHtml(title)}</p>
+                        </div>
+                        <div class="dispatcher-incident-detail-badges" aria-label="Incident classification">
+                            <span class="dispatcher-detail-badge priority-${escapeAttr(priority)}">${escapeHtml(priority)}</span>
+                            <span class="dispatcher-detail-badge">${escapeHtml(status || 'pending')}</span>
+                        </div>
+                    </header>
+
+                    <div class="dispatcher-incident-detail-facts">
+                        <div class="dispatcher-detail-fact">
+                            <span>Incident ID</span>
+                            <strong>#${escapeHtml(incident.id || 'N/A')}</strong>
+                        </div>
+                        <div class="dispatcher-detail-fact">
+                            <span>Type</span>
+                            <strong>${escapeHtml(incidentType)}</strong>
+                        </div>
+                        <div class="dispatcher-detail-fact">
+                            <span>Reported by</span>
+                            <strong>${escapeHtml(caller)}</strong>
+                        </div>
+                        <div class="dispatcher-detail-fact">
+                            <span>Assigned unit</span>
+                            <strong>${escapeHtml(assignedUnit)}</strong>
+                        </div>
+                    </div>
+
+                    <section class="dispatcher-detail-block dispatcher-detail-location">
+                        <div class="dispatcher-detail-block-title"><i class="fas fa-location-dot" aria-hidden="true"></i><span>Incident location</span></div>
+                        <p>${escapeHtml(location)}</p>
+                    </section>
+
+                    <section class="dispatcher-detail-block dispatcher-detail-narrative">
+                        <div class="dispatcher-detail-block-title"><i class="fas fa-file-lines" aria-hidden="true"></i><span>Incident narrative</span></div>
+                        <div class="dispatcher-detail-narrative-copy">${escapeHtml(description)}</div>
+                    </section>
+
+                    <footer class="dispatcher-incident-detail-footer">
+                        <span><i class="fas fa-clock" aria-hidden="true"></i> Created ${escapeHtml(createdAt)}</span>
+                        <span><i class="fas fa-clipboard-check" aria-hidden="true"></i> Operational record</span>
+                    </footer>
+                </section>
+            `;
+            return;
+        }
+
         const rows = [];
         const addRow = (label, value) => {
             if (value === null || value === undefined || String(value).trim() === '') return;
@@ -327,7 +412,7 @@
                     return;
                 }
                 if (action === 'call') {
-                    window.location.href = 'dispatcher/call.php';
+                    window.location.href = callDeskUrl();
                     return;
                 }
                 if (action === 'dismiss') {
@@ -351,6 +436,8 @@
         bindEvents();
         setExpanded(state.expanded);
         loadInbox();
-        window.setInterval(loadInbox, 30000);
+        window.setInterval(() => {
+            if (!document.hidden) loadInbox();
+        }, 30000);
     });
 })();

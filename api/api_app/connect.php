@@ -1,82 +1,35 @@
 <?php
+declare(strict_types=1);
 
-// api/api_app/connect.php
-
-date_default_timezone_set("Asia/Manila");
-
-/*
- * connect.php is inside api/api_app/.
- * The .env file is inside api/.
+/**
+ * Shared database connection for responder APIs.
+ *
+ * The parent application already owns environment loading and PDO creation.
+ * Reusing it prevents the mobile API from accidentally connecting to a
+ * different database when .env files are placed in different directories.
  */
-$envPath = dirname(__DIR__) . "/.env";
+require_once __DIR__ . '/../../includes/db.php';
 
-if (file_exists($envPath) && is_readable($envPath)) {
-    $lines = file(
-        $envPath,
-        FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES
-    );
-
-    foreach ($lines as $line) {
-        $line = trim($line);
-
-        if ($line === "" || str_starts_with($line, "#")) {
-            continue;
-        }
-
-        if (strpos($line, "=") === false) {
-            continue;
-        }
-
-        [$key, $value] = explode("=", $line, 2);
-
-        $key = trim($key);
-        $value = trim($value);
-
-        $value = preg_replace(
-            '/^["\'](.*)["\']$/',
-            '$1',
-            $value
-        );
-
-        $_ENV[$key] = $value;
-        $_SERVER[$key] = $value;
-
-        putenv("$key=$value");
-    }
-}
+date_default_timezone_set('Asia/Manila');
 
 function db(): PDO
 {
-    $host = $_ENV["DB_HOST"] ?? "127.0.0.1";
-    $db   = $_ENV["DB_NAME"] ?? "emergency_response_test";
-    $user = $_ENV["DB_USER"] ?? "root";
-    $pass = $_ENV["DB_PASS"] ?? "";
-    $port = $_ENV["DB_PORT"] ?? "3306";
+    $pdo = get_db_connection();
+    if (!$pdo instanceof PDO) {
+        throw new RuntimeException('Database connection unavailable.');
+    }
 
-    $dsn = sprintf(
-        "mysql:host=%s;port=%s;dbname=%s;charset=utf8mb4",
-        $host,
-        $port,
-        $db
-    );
-
-    $pdo = new PDO(
-        $dsn,
-        $user,
-        $pass,
-        [
-            PDO::ATTR_ERRMODE =>
-                PDO::ERRMODE_EXCEPTION,
-
-            PDO::ATTR_DEFAULT_FETCH_MODE =>
-                PDO::FETCH_ASSOC,
-
-            PDO::ATTR_EMULATE_PREPARES =>
-                false
-        ]
-    );
-
-    $pdo->exec("SET time_zone = '+08:00'");
+    static $timezoneConfigured = false;
+    if (!$timezoneConfigured) {
+        try {
+            $pdo->exec("SET time_zone = '+08:00'");
+        } catch (Throwable $error) {
+            // Keep the endpoint usable even when the DB account cannot change
+            // its session time zone. PHP still uses Asia/Manila.
+            error_log('[api_app] database time-zone setup skipped: ' . $error->getMessage());
+        }
+        $timezoneConfigured = true;
+    }
 
     return $pdo;
 }

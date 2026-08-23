@@ -501,6 +501,17 @@
     border-color: #334155 !important;
 }
 
+[data-theme="dark"] .ia-active-incident-wrap {
+    background: #0f172a !important;
+    border-top: 1px solid #334155 !important;
+}
+
+[data-theme="dark"] .ia-active-incident-card {
+    background: linear-gradient(180deg, #1f2937 0%, #111827 100%) !important;
+    border-color: #475569 !important;
+    box-shadow: 0 14px 28px rgba(2, 6, 23, 0.42) !important;
+}
+
 [data-theme="dark"] .ia-thread.active,
 [data-theme="dark"] .ia-tab.active,
 [data-theme="dark"] .ia-user-option.selected {
@@ -743,6 +754,76 @@
     background: #111827 !important;
     color: #e5eef9 !important;
     border-color: #334155 !important;
+}
+
+[data-theme="dark"] .ia-incident-card {
+    background: linear-gradient(135deg, #1f2937 0%, #111827 100%) !important;
+    border-color: #475569 !important;
+    color: #e5eef9 !important;
+}
+
+[data-theme="dark"] .ia-message.outgoing .ia-incident-card {
+    background: linear-gradient(135deg, #102a2b 0%, #111827 100%) !important;
+    border-color: rgba(20, 184, 166, 0.55) !important;
+}
+
+[data-theme="dark"] .ia-incident-card-head i,
+[data-theme="dark"] .ia-incident-card-head .ia-incident-card-label {
+    color: #fbbf24 !important;
+}
+
+[data-theme="dark"] .ia-incident-id {
+    color: #f8fafc !important;
+}
+
+[data-theme="dark"] .ia-incident-meta {
+    color: #cbd5e1 !important;
+}
+
+[data-theme="dark"] .ia-incident-btn {
+    background: #0f172a !important;
+    border-color: #475569 !important;
+    color: #e5eef9 !important;
+}
+
+[data-theme="dark"] .ia-incident-btn:hover:not(:disabled) {
+    background: #172033 !important;
+    border-color: #64748b !important;
+}
+
+[data-theme="dark"] .ia-incident-btn.accept {
+    border-color: rgba(34, 197, 94, 0.52) !important;
+    color: #bbf7d0 !important;
+}
+
+[data-theme="dark"] .ia-incident-btn.accept:hover:not(:disabled) {
+    background: rgba(34, 197, 94, 0.16) !important;
+    border-color: #22c55e !important;
+}
+
+[data-theme="dark"] .ia-incident-btn.decline {
+    border-color: rgba(248, 113, 113, 0.55) !important;
+    color: #fecaca !important;
+}
+
+[data-theme="dark"] .ia-incident-btn.decline:hover:not(:disabled) {
+    background: rgba(239, 68, 68, 0.16) !important;
+    border-color: #f87171 !important;
+}
+
+[data-theme="dark"] .ia-incident-status.status-pending {
+    background: rgba(245, 158, 11, 0.18) !important;
+    color: #fde68a !important;
+}
+
+[data-theme="dark"] .ia-incident-status.status-accepted {
+    background: rgba(34, 197, 94, 0.18) !important;
+    color: #bbf7d0 !important;
+}
+
+[data-theme="dark"] .ia-incident-status.status-declined {
+    background: rgba(239, 68, 68, 0.18) !important;
+    color: #fecaca !important;
 }
 
 [data-theme="dark"] .ia-file-chip {
@@ -1214,6 +1295,24 @@
 [data-theme="dark"] .ai-predictive-text li,
 [data-theme="dark"] .ai-recommendation-text li {
     color: #cbd5e1 !important;
+}
+
+[data-theme="dark"] .ai-text-item {
+    background: rgba(59, 130, 246, 0.1) !important;
+    border-left-color: #60a5fa !important;
+}
+
+[data-theme="dark"] .ai-text-item h3 {
+    color: #bfdbfe !important;
+}
+
+[data-theme="dark"] .ai-text-item p,
+[data-theme="dark"] .ai-formatted-text strong {
+    color: #f8fafc !important;
+}
+
+[data-theme="dark"] .ai-text-list {
+    background: rgba(148, 163, 184, 0.08) !important;
 }
 
 [data-theme="dark"] .status-badge.status-active,

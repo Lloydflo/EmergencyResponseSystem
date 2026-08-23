@@ -1,17 +1,6 @@
 <?php
 declare(strict_types=1);
 
-if (!defined('ERS_GEOCODE_QC_VIEWBOX')) {
-    define('ERS_GEOCODE_QC_VIEWBOX', '121.0000,14.7500,121.1000,14.6000');
-}
-
-if (!function_exists('ers_geocode_has_location_context')) {
-    function ers_geocode_has_location_context(string $text): bool
-    {
-        return (bool)preg_match('/(quezon city|qc|metro manila|philippines)\b/i', $text);
-    }
-}
-
 if (!function_exists('ers_geocode_plus_code_alphabet')) {
     function ers_geocode_plus_code_alphabet(): string
     {
@@ -226,14 +215,66 @@ if (!function_exists('ers_geocode_build_url')) {
             'addressdetails' => '1',
             'limit' => (string)$limit,
             'countrycodes' => 'ph',
+            'viewbox' => '120.9300,14.8000,121.1500,14.5200',
+            'bounded' => $strict ? '1' : '0',
+            'dedupe' => '1',
             'q' => $query,
-            'viewbox' => ERS_GEOCODE_QC_VIEWBOX,
         ];
-        if ($strict) {
-            $params['bounded'] = '1';
-        }
 
         return 'https://nominatim.openstreetmap.org/search?' . http_build_query($params, '', '&', PHP_QUERY_RFC3986);
+    }
+}
+
+if (!function_exists('ers_geocode_normalize_local_address')) {
+    function ers_geocode_normalize_local_address(string $query): string
+    {
+        $value = trim((string)preg_replace('/\s+/', ' ', $query));
+        $replacements = [
+            '/\bbrgy\.?\b/i' => 'Barangay',
+            '/\bbgy\.?\b/i' => 'Barangay',
+            '/\bbrg\.?\b/i' => 'Barangay',
+            '/\bbarangay\.?\b/i' => 'Barangay',
+            '/\bq\.?\s*c\.?\b/i' => 'Quezon City',
+            '/\bqc\b/i' => 'Quezon City',
+            '/\bst\.?\b/i' => 'Street',
+            '/\bave\.?\b/i' => 'Avenue',
+            '/\brd\.?\b/i' => 'Road',
+            '/\bdr\.?\b/i' => 'Drive',
+        ];
+
+        foreach ($replacements as $pattern => $replacement) {
+            $value = preg_replace($pattern, $replacement, $value) ?? $value;
+        }
+
+        $value = preg_replace('/\s*,\s*/', ', ', $value) ?? $value;
+        return trim((string)preg_replace('/\s+/', ' ', $value));
+    }
+}
+
+if (!function_exists('ers_geocode_local_context')) {
+    function ers_geocode_local_context(): string
+    {
+        return 'San Agustin, Novaliches, Quezon City, Metro Manila, Philippines';
+    }
+}
+
+if (!function_exists('ers_geocode_append_local_context')) {
+    function ers_geocode_append_local_context(string $query): string
+    {
+        $value = ers_geocode_normalize_local_address($query);
+        $lower = strtolower($value);
+
+        if ($lower === '' || strpos($lower, 'philippines') !== false) {
+            return $value;
+        }
+        if (strpos($lower, 'quezon city') !== false) {
+            return $value . ', Metro Manila, Philippines';
+        }
+        if (strpos($lower, 'novaliches') !== false || strpos($lower, 'san agustin') !== false) {
+            return $value . ', Quezon City, Metro Manila, Philippines';
+        }
+
+        return $value . ', ' . ers_geocode_local_context();
     }
 }
 
@@ -286,9 +327,6 @@ if (!function_exists('ers_geocode_score_item')) {
         $label = strtolower((string)($item['display_name'] ?? ''));
         $q = strtolower($query);
         $score = isset($item['importance']) ? (float)$item['importance'] : 0.0;
-        if (strpos($label, 'quezon city') !== false) {
-            $score += 2.0;
-        }
         if ($q !== '' && strpos($label, $q) !== false) {
             $score += 1.5;
         }
@@ -326,25 +364,42 @@ if (!function_exists('ers_geocode_location_to_coordinates')) {
             return null;
         }
 
+        if (preg_match('/^\s*(?:lat(?:itude)?\s*[:=]?\s*)?(-?\d{1,3}(?:\.\d+)?)\s*[, ]\s*(?:lon(?:gitude)?|lng)?\s*[:=]?\s*(-?\d{1,3}(?:\.\d+)?)\s*$/i', $input, $matches)) {
+            $lat = (float)$matches[1];
+            $lng = (float)$matches[2];
+            if ($lat >= -90 && $lat <= 90 && $lng >= -180 && $lng <= 180) {
+                return [$lat, $lng];
+            }
+        }
+
         $plusCodeCoordinates = ers_geocode_plus_code_to_coordinates($input);
         if ($plusCodeCoordinates !== null) {
             return $plusCodeCoordinates;
         }
 
-        $localized = ers_geocode_has_location_context($input)
-            ? $input
-            : $input . ', Quezon City, Metro Manila, Philippines';
+        $normalized = ers_geocode_normalize_local_address($input);
+        $withContext = ers_geocode_append_local_context($normalized);
+        $withoutBarangayKeyword = trim((string)preg_replace('/\bBarangay\s+/i', '', $withContext));
 
         $attempts = [
-            ['query' => $localized, 'strict' => true],
-            ['query' => $localized, 'strict' => false],
+            ['query' => $withContext, 'strict' => true],
+            ['query' => $withoutBarangayKeyword, 'strict' => true],
+            ['query' => $withContext, 'strict' => false],
+            ['query' => $normalized, 'strict' => false],
             ['query' => $input, 'strict' => false],
         ];
 
         $best = null;
         $bestScore = -INF;
+        $seenAttempts = [];
         foreach ($attempts as $attempt) {
-            $items = ers_geocode_fetch_candidates((string)$attempt['query'], 3, (bool)$attempt['strict']);
+            $query = trim((string)$attempt['query']);
+            $key = strtolower($query) . '|' . ((bool)$attempt['strict'] ? '1' : '0');
+            if ($query === '' || isset($seenAttempts[$key])) {
+                continue;
+            }
+            $seenAttempts[$key] = true;
+            $items = ers_geocode_fetch_candidates($query, 5, (bool)$attempt['strict']);
             foreach ($items as $item) {
                 if (!is_array($item)) {
                     continue;

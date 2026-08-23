@@ -22,6 +22,7 @@ $pageTitle = 'Inter-Agency Conversations';
     <link rel="stylesheet" href="css/interagency-command.css">
     <link rel="stylesheet" href="css/interagency-events.css">
     <link rel="stylesheet" href="css/interagency-tips.css">
+    <link rel="stylesheet" href="css/admin-anonymous-tip.css?v=20260808-admin-tip-details-v2">
     <style>
         :root {
             --ia-bg: #f4f7fb;
@@ -5460,19 +5461,31 @@ $pageTitle = 'Inter-Agency Conversations';
                     if (state.activeId) await selectThread(state.activeId);
                 } catch (_) {}
 
+                let interagencyPollInFlight = false;
                 state.poller = setInterval(async () => {
+                    if (document.hidden || interagencyPollInFlight) return;
+                    interagencyPollInFlight = true;
                     try {
                         await loadActiveIncidentBanner();
                         await loadThreads();
                         await loadMessages(false, false);
                         await loadTypingIndicator();
-                    } catch (_) {}
+                    } catch (_) {
+                    } finally {
+                        interagencyPollInFlight = false;
+                    }
                 }, 5000);
 
+                let presencePollInFlight = false;
                 state.presencePoller = setInterval(async () => {
+                    if (document.hidden || presencePollInFlight) return;
+                    presencePollInFlight = true;
                     try {
                         await loadUserStatuses();
-                    } catch (_) {}
+                    } catch (_) {
+                    } finally {
+                        presencePollInFlight = false;
+                    }
                 }, 2000);
             });
         })();
@@ -5480,7 +5493,8 @@ $pageTitle = 'Inter-Agency Conversations';
     <script src="js/interagency-operations.js"></script>
     <script src="js/interagency-command.js"></script>
     <script src="js/interagency-events.js"></script>
-    <script src="js/interagency-tips.js"></script>
+    <script src="js/interagency-tips.js?v=20260809-ph-time-v1"></script>
+    <script src="js/admin-anonymous-tip-details.js?v=20260808-admin-tip-details-v2"></script>
     <script src="js/interagency-external-inbox.js"></script>
     <script src="js/interagency-module-launcher.js"></script>
 </body>

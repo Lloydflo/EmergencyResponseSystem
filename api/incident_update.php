@@ -2,7 +2,11 @@
 // API endpoint: /api/incident_update.php
 header('Content-Type: application/json');
 require_once __DIR__ . '/../includes/db.php';
+require_once __DIR__ . '/../includes/auth.php';
+require_once __DIR__ . '/../includes/activity_log.php';
 require_once __DIR__ . '/../includes/incident_priority.php';
+require_once __DIR__ . '/../includes/emergency_com_status_sync.php';
+require_once __DIR__ . '/../includes/anonymous_tip_status_sync.php';
 
 if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
     http_response_code(405);
@@ -57,9 +61,10 @@ try {
         exit;
     }
 
-    $existsStmt = $pdo->prepare('SELECT id FROM incidents WHERE id = :id LIMIT 1');
+    $existsStmt = $pdo->prepare('SELECT id, reference_no, type, priority, status, location_address, description FROM incidents WHERE id = :id LIMIT 1');
     $existsStmt->execute([':id' => $id]);
-    if (!$existsStmt->fetchColumn()) {
+    $originalIncident = $existsStmt->fetch(PDO::FETCH_ASSOC);
+    if (!$originalIncident) {
         http_response_code(404);
         echo json_encode(['ok' => false, 'error' => 'Incident not found']);
         exit;
@@ -70,7 +75,7 @@ try {
     // Validate enums if provided
     if ($priority !== null) {
         $p = ers_normalize_priority_value($priority);
-        if (!in_array($p, ['critical','high','urgent','moderate','low'], true)) {
+        if (!in_array($p, ['critical','high','medium','low'], true)) {
             http_response_code(400);
             echo json_encode(['ok' => false, 'error' => 'Invalid priority']);
             exit;
@@ -92,7 +97,7 @@ try {
     }
     if ($status !== null) {
         $s = strtolower($status);
-        if (!in_array($s, ['pending','dispatched','resolved','cancelled'], true)) {
+        if (!in_array($s, ['pending','received','dispatching','dispatched','ongoing_dispatch','in_progress','resolved','completed','cancelled'], true)) {
             http_response_code(400);
             echo json_encode(['ok' => false, 'error' => 'Invalid status']);
             exit;
@@ -108,6 +113,61 @@ try {
     $sql = 'UPDATE incidents SET ' . implode(', ', $fields) . ' WHERE id = :id';
     $stmt = $pdo->prepare($sql);
     $stmt->execute($params);
+    if ($status !== null) {
+        ers_notify_emergency_com_status($pdo, $id);
+        ers_notify_anonymous_tip_status($pdo, $id, strtolower($status));
+    }
+
+    $updatedStmt = $pdo->prepare('SELECT reference_no, type, priority, status, location_address, description, updated_at FROM incidents WHERE id = ? LIMIT 1');
+    $updatedStmt->execute([$id]);
+    $updatedIncident = $updatedStmt->fetch(PDO::FETCH_ASSOC) ?: $originalIncident;
+    $changedFields = [];
+    $auditableChanges = [];
+    foreach (['type', 'priority', 'status'] as $field) {
+        $before = (string)($originalIncident[$field] ?? '');
+        $after = (string)($updatedIncident[$field] ?? '');
+        if ($before !== $after) {
+            $changedFields[] = $field;
+            $auditableChanges[$field] = ['from' => $before, 'to' => $after];
+        }
+    }
+    foreach (['description', 'location_address'] as $field) {
+        $before = (string)($originalIncident[$field] ?? '');
+        $after = (string)($updatedIncident[$field] ?? '');
+        if ($before !== $after) {
+            $changedFields[] = $field;
+            $auditableChanges[$field] = ['changed' => true];
+        }
+    }
+    $userId = isset($_SESSION['user_id']) && (int)$_SESSION['user_id'] > 0 ? (int)$_SESSION['user_id'] : null;
+    $role = strtolower(trim((string)($_SESSION['login_role'] ?? $_SESSION['user_role'] ?? '')));
+    if (!in_array($role, ['admin', 'dispatcher'], true)) {
+        $role = $userId ? 'dispatcher' : 'system';
+    }
+    $source = $role === 'admin' ? 'admin_web' : ($role === 'dispatcher' ? 'dispatcher_web' : 'server_api');
+    $referenceNo = trim((string)($updatedIncident['reference_no'] ?? ''));
+    record_operational_audit_event(
+        $pdo,
+        $userId,
+        'incident_updated',
+        'incident',
+        $id,
+        'Incident ' . ($referenceNo !== '' ? $referenceNo : ('#' . $id)) . ' was updated: ' . implode(', ', $changedFields) . '.',
+        [
+            'actor_role' => $role,
+            'source_channel' => $source,
+            'event_category' => 'incident',
+            'event_outcome' => 'success',
+            'reference_no' => $referenceNo,
+            'incident_id' => $id,
+            'occurred_at' => $updatedIncident['updated_at'] ?? null,
+            'metadata' => [
+                'changed_fields' => $changedFields,
+                'changes' => $auditableChanges,
+            ],
+        ]
+    );
+
     echo json_encode(['ok' => true]);
 } catch (Throwable $e) {
     http_response_code(500);

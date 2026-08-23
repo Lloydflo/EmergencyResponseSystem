@@ -1,6 +1,6 @@
 (function () {
-  const qs = (selector, ctx = document) => ctx.querySelector(selector);
-  const qsa = (selector, ctx = document) => Array.from(ctx.querySelectorAll(selector));
+  const qs = (selector, ctx = document) => ctx ? ctx.querySelector(selector) : null;
+  const qsa = (selector, ctx = document) => ctx ? Array.from(ctx.querySelectorAll(selector)) : [];
 
   const dashboard = qs('.review-dashboard');
   const reviewerName = dashboard?.dataset?.reviewerName || 'Dispatcher';
@@ -64,6 +64,8 @@
   let selectedRating = 0;
   let searchDebounceTimer = null;
   let loadRequestSeq = 0;
+  const REVIEW_PAGE_SIZE = 8;
+  let visibleReviewLimit = REVIEW_PAGE_SIZE;
   const PH_TIME_ZONE = 'Asia/Manila';
   const PH_DATE_FORMATTER = new Intl.DateTimeFormat('en-PH', {
     timeZone: PH_TIME_ZONE,
@@ -103,6 +105,7 @@
       if (!data.ok) throw new Error(data.error || 'Failed to load incidents');
 
       currentItems = sortItems(data.items || []);
+      visibleReviewLimit = REVIEW_PAGE_SIZE;
       renderStats(currentItems);
       renderIncidents(currentItems);
     } catch (error) {
@@ -155,7 +158,8 @@
       return;
     }
 
-    const rows = items.map(item => {
+    const visibleItems = items.slice(0, visibleReviewLimit);
+    const cards = visibleItems.map(item => {
       const status = normalizeStatus(item.status);
       const priority = normalizePriority(item.priority);
       const ratingText = toNumber(item.avg_rating) !== null
@@ -174,89 +178,63 @@
       const incidentId = escapeAttribute(item.id || '');
 
       return `
-        <tr class="priority-${priority}">
-          <td class="review-table-incident">
-            <strong>${escapeHtml(code)}</strong>
-            <span>${escapeHtml(item.type || 'Incident')}</span>
-            <small>${escapeHtml(item.description || 'No incident description provided.')}</small>
-          </td>
-          <td>
-            <div class="review-table-chips">
+        <article class="review-card priority-${priority}" data-review-incident="${incidentId}">
+          <header class="review-card-header">
+            <div>
+              <p class="review-card-ref">${escapeHtml(code)}</p>
+              <p class="review-card-type">${escapeHtml(item.type || 'Incident')}</p>
+            </div>
+            <div class="review-card-badges">
               <span class="status-chip status-${status}">${escapeHtml(statusLabel(status))}</span>
               <span class="priority-chip priority-${priority}">${escapeHtml(priorityLabel(priority))}</span>
             </div>
-          </td>
-          <td class="review-table-location">${escapeHtml(item.location || 'No location recorded')}</td>
-          <td>
-            <div class="review-table-stack">
-              <span><strong>Response:</strong> ${escapeHtml(formatMinutes(item.response_time_min))}</span>
-              <span><strong>Resolution:</strong> ${escapeHtml(formatMinutes(item.resolution_time_min))}</span>
+          </header>
+          <div class="review-card-body">
+            <div class="review-card-copy">
+              <span class="field-label"><i class="fas fa-location-dot"></i> Location</span>
+              <p class="review-card-description">${escapeHtml(item.location || 'No location recorded')}</p>
+              <div class="review-card-assignment">
+                <span class="field-label"><i class="fas fa-truck-medical"></i> Response assignment</span>
+                <strong>${escapeHtml(unit)}</strong>
+                <span>${escapeHtml(driver)} · ${escapeHtml(vehicle)} · ${escapeHtml(plate)}</span>
+              </div>
             </div>
-          </td>
-          <td>
-            <div class="review-table-stack">
-              <span><strong>Unit:</strong> ${escapeHtml(unit)}</span>
-              <span><strong>Vehicle:</strong> ${escapeHtml(vehicle)}</span>
-              <span><strong>Driver:</strong> ${escapeHtml(driver)}</span>
-              <span><strong>Plate:</strong> ${escapeHtml(plate)}</span>
+            <div class="review-card-metrics">
+              <div class="metric-pill"><span class="label">Response</span><strong>${escapeHtml(formatMinutes(item.response_time_min))}</strong></div>
+              <div class="metric-pill"><span class="label">Resolution</span><strong>${escapeHtml(formatMinutes(item.resolution_time_min))}</strong></div>
+              <div class="metric-pill"><span class="label">Rating</span><strong>${escapeHtml(ratingText)}</strong></div>
+              <div class="metric-pill ${adminReviewSent ? 'is-sent' : 'is-pending'}"><span class="label">Admin review</span><strong>${escapeHtml(adminReviewText)}</strong></div>
             </div>
-          </td>
-          <td>${escapeHtml(ratingText)}</td>
-          <td>
-            <div class="review-table-stack">
-              <span><strong>Reported:</strong> ${escapeHtml(formatDate(item.created_at))}</span>
-              <span><strong>Closed:</strong> ${escapeHtml(formatDate(closedAt))}</span>
-              <span><strong>Admin:</strong> ${escapeHtml(adminReviewText)}</span>
+          </div>
+          <footer class="review-card-footer">
+            <div class="review-card-times">
+              <span><i class="far fa-calendar-plus"></i> Reported ${escapeHtml(formatDate(item.created_at))}</span>
+              <span><i class="fas fa-circle-check"></i> Closed ${escapeHtml(formatDate(closedAt))}</span>
             </div>
-          </td>
-          <td class="review-table-actions">
-            <button type="button" class="btn-card-action" data-open-review="${incidentId}" data-review-mode="details">
-              <i class="fas fa-eye"></i> View
-            </button>
-            <button type="button" class="btn-card-action primary" data-open-review="${incidentId}" data-review-mode="feedback">
-              <i class="fas fa-star"></i> Feedback
-            </button>
-          </td>
-        </tr>
+            <div class="review-card-actions">
+              <button type="button" class="btn-card-action primary" data-open-review="${incidentId}" data-review-mode="details">
+                <i class="fas fa-eye"></i> View Review
+              </button>
+            </div>
+          </footer>
+        </article>
       `;
     }).join('');
 
-    container.innerHTML = `
-      <div class="review-table-shell">
-        <table class="review-incidents-table">
-          <thead>
-            <tr>
-              <th>Incident</th>
-              <th>Status</th>
-              <th>Location</th>
-              <th>Timeline</th>
-              <th>Responder / Vehicle</th>
-              <th>Rating</th>
-              <th>Dates</th>
-              <th>Action</th>
-            </tr>
-          </thead>
-          <tbody>${rows}</tbody>
-        </table>
-      </div>
-    `;
+    const remaining = Math.max(0, items.length - visibleItems.length);
+    const reveal = remaining > 0
+      ? `<div class="review-reveal"><span>Showing ${visibleItems.length} of ${items.length} incidents</span><button type="button" data-show-more-reviews><i class="fas fa-chevron-down"></i> Show ${Math.min(REVIEW_PAGE_SIZE, remaining)} more</button></div>`
+      : `<div class="review-reveal is-complete"><span>Showing all ${items.length} incidents</span></div>`;
 
-    qsa('[data-open-review]', container).forEach(button => {
-      button.addEventListener('click', event => {
-        event.preventDefault();
-        event.stopPropagation();
-        const incidentId = parseInt(button.getAttribute('data-open-review') || '', 10);
-        const mode = button.getAttribute('data-review-mode') || 'details';
-        if (Number.isInteger(incidentId)) {
-          openReviewModal(incidentId, mode);
-        }
-      });
-    });
+    container.innerHTML = cards + reveal;
+
   }
 
   async function openReviewModal(incidentId, mode = 'details') {
     resetModalState();
-    feedbackIncidentId.value = String(incidentId);
+    if (feedbackIncidentId) {
+      feedbackIncidentId.value = String(incidentId);
+    }
     showModal();
 
     try {
@@ -298,7 +276,7 @@
 
     summaryCode.textContent = incident.reference_no || `Incident #${incident.id || '--'}`;
     summaryType.textContent = incident.type || 'Incident';
-    summaryDescription.textContent = incident.description || 'No incident description provided.';
+    summaryDescription.textContent = displayNarrative(incident.description);
     summaryLocation.textContent = incident.location_address || 'No location recorded';
     summaryClosedTime.textContent = `Closed: ${formatDate(closedAt)}`;
 
@@ -336,7 +314,7 @@
       chips.push(`<span class="feedback-summary-chip"><i class="fas fa-star"></i> ${escapeHtml(formatRating(summary.avg_rating))} average</span>`);
     }
     if (Number(summary.rating_count || 0) > 0) {
-      chips.push(`<span class="feedback-summary-chip"><i class="fas fa-chart-simple"></i> ${Number(summary.rating_count)} rated</span>`);
+      chips.push(`<span class="feedback-summary-chip"><i class="fas fa-chart-bar"></i> ${Number(summary.rating_count)} rated</span>`);
     }
     feedbackSummary.innerHTML = chips.join('');
 
@@ -399,12 +377,17 @@
       return;
     }
 
-    proofGallery.innerHTML = items.map(item => `
-      <figure class="proof-card">
-        <img src="${escapeAttribute(normalizeProofUrl(item.url || ''))}" alt="Incident resolution proof">
-        <figcaption class="proof-meta">${escapeHtml(formatDate(item.created_at))}</figcaption>
-      </figure>
-    `).join('');
+    proofGallery.innerHTML = items.map(item => {
+      const proofUrl = escapeAttribute(normalizeProofUrl(item.url || ''));
+      return `
+        <figure class="proof-card">
+          <a href="${proofUrl}" target="_blank" rel="noopener" title="Open full proof image">
+            <img src="${proofUrl}" alt="Incident resolution proof">
+          </a>
+          <figcaption class="proof-meta">${escapeHtml(formatDate(item.created_at))}</figcaption>
+        </figure>
+      `;
+    }).join('');
   }
 
   async function submitReviewToAdmin() {
@@ -439,7 +422,9 @@
           throw new Error(data.error || 'Unable to save feedback');
         }
 
-        feedbackNoteInput.value = '';
+        if (feedbackNoteInput) {
+          feedbackNoteInput.value = '';
+        }
         setSelectedRating(0);
       }
 
@@ -510,7 +495,9 @@
     currentIncident = null;
     currentAdminSubmission = null;
     setSelectedRating(0);
-    feedbackNoteInput.value = '';
+    if (feedbackNoteInput) {
+      feedbackNoteInput.value = '';
+    }
     modalTitle.textContent = 'Closed Incident Details';
     summaryCode.textContent = '--';
     summaryType.textContent = '--';
@@ -574,9 +561,11 @@
       button.classList.toggle('is-active', starValue !== null && starValue <= selectedRating);
     });
 
-    ratingHelper.textContent = selectedRating > 0
-      ? `${selectedRating} out of 5 selected.`
-      : 'Select a rating from 1 to 5.';
+    if (ratingHelper) {
+      ratingHelper.textContent = selectedRating > 0
+        ? `${selectedRating} out of 5 selected.`
+        : 'Select a rating from 1 to 5.';
+    }
   }
 
   function sortItems(items) {
@@ -672,12 +661,24 @@
   function parseDateValue(value) {
     const raw = String(value || '').trim();
     if (!raw) return new Date(NaN);
-    if (/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/.test(raw)) {
-      return new Date(raw.replace(' ', 'T') + 'Z');
+
+    // MySQL DATETIME values in this system are Philippine wall-clock values.
+    // Treating a zone-less value as UTC (the previous trailing `Z`) adds eight
+    // hours and can move a record to the following day.
+    const localDateTime = raw.match(
+      /^(\d{4})-(\d{2})-(\d{2})[ T](\d{2}):(\d{2})(?::(\d{2})(?:\.(\d+))?)?$/
+    );
+    if (localDateTime) {
+      const [, year, month, day, hour, minute, second = '00', fraction = ''] = localDateTime;
+      const milliseconds = (fraction + '000').slice(0, 3);
+      return new Date(`${year}-${month}-${day}T${hour}:${minute}:${second}.${milliseconds}+08:00`);
     }
-    if (/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}$/.test(raw)) {
-      return new Date(raw + 'Z');
+    if (/^\d{4}-\d{2}-\d{2}$/.test(raw)) {
+      return new Date(`${raw}T00:00:00.000+08:00`);
     }
+
+    // Explicit Z/offset values keep their source timezone and are converted by
+    // PH_DATE_FORMATTER to Asia/Manila.
     return new Date(raw);
   }
 
@@ -716,6 +717,21 @@
 
   function clean(value) {
     return String(value || '').trim();
+  }
+
+  function displayNarrative(value) {
+    const raw = clean(value);
+    if (!raw) return 'No incident description provided.';
+
+    const withoutInlineImages = raw.replace(
+      /data:image\/[a-z0-9.+-]+;base64,[a-z0-9+/=]+/gi,
+      '[Image evidence attached]'
+    );
+
+    return withoutInlineImages
+      .replace(/(?:Evidence|Photo(?: of evidence)?):\s*\[Image evidence attached\]/gi, 'Evidence: Image attached')
+      .replace(/\n{3,}/g, '\n\n')
+      .trim();
   }
 
   function normalizeProofUrl(value) {
@@ -797,6 +813,7 @@
   dayFilter?.addEventListener('change', loadIncidents);
   sortSelect?.addEventListener('change', () => {
     currentItems = sortItems(currentItems);
+    visibleReviewLimit = REVIEW_PAGE_SIZE;
     renderStats(currentItems);
     renderIncidents(currentItems);
   });
@@ -808,6 +825,27 @@
     }
   });
   searchInput?.addEventListener('input', () => scheduleSearchLoad());
+
+  container?.addEventListener('click', event => {
+    const showMoreButton = event.target.closest('[data-show-more-reviews]');
+    if (showMoreButton && container.contains(showMoreButton)) {
+      visibleReviewLimit += REVIEW_PAGE_SIZE;
+      renderIncidents(currentItems);
+      return;
+    }
+
+    const button = event.target.closest('[data-open-review]');
+    if (!button || !container.contains(button)) return;
+
+    event.preventDefault();
+    event.stopPropagation();
+
+    const incidentId = parseInt(button.getAttribute('data-open-review') || '', 10);
+    const mode = button.getAttribute('data-review-mode') || 'details';
+    if (Number.isInteger(incidentId) && incidentId > 0) {
+      openReviewModal(incidentId, mode);
+    }
+  });
 
   modalOverlay?.addEventListener('click', hideModal);
   modalClose?.addEventListener('click', hideModal);

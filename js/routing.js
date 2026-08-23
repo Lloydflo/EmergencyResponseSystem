@@ -36,6 +36,9 @@ function addRouteToIncident(fromLat, fromLng, toLat, toLng, options) {
       addWaypoints: false,
       draggableWaypoints: false,
       showAlternatives: false,
+      createMarker: function() {
+        return null;
+      },
       fitSelectedRoutes: true,
       lineOptions: {
         styles: [

@@ -10,6 +10,37 @@
     overflow: hidden;
 }
 
+.ia-tip-toast-root {
+    position: fixed;
+    right: 1rem;
+    bottom: 1rem;
+    z-index: 1300;
+    display: grid;
+    gap: 0.5rem;
+}
+
+.ia-tip-toast,
+.ia-tip-new-toast {
+    border: 1px solid #bfdbfe;
+    border-left: 4px solid #2563eb;
+    border-radius: 8px;
+    background: #fff;
+    color: #122031;
+    padding: 0.75rem 0.85rem;
+    box-shadow: 0 14px 36px rgba(15, 23, 42, 0.2);
+    font: inherit;
+    font-size: 0.84rem;
+    font-weight: 800;
+    text-align: left;
+    cursor: pointer;
+}
+
+.ia-tip-toast:hover,
+.ia-tip-new-toast:hover {
+    border-left-color: #1d4ed8;
+    transform: translateY(-1px);
+}
+
 .ia-tip-list-head {
     display: flex;
     align-items: center;
@@ -136,6 +167,13 @@
 
 .ia-tip-primary:hover {
     background: #1d4ed8;
+}
+
+.ia-tip-icon:disabled,
+.ia-tip-primary:disabled,
+.ia-tip-secondary:disabled {
+    cursor: not-allowed;
+    opacity: 0.55;
 }
 
 .ia-tip-stats {
@@ -326,6 +364,12 @@
     background: #eff6ff;
 }
 
+.ia-tip-chip.status-pending {
+    border-color: #fed7aa;
+    color: #9a3412;
+    background: #fff7ed;
+}
+
 .ia-tip-chip.status-reviewing {
     border-color: #fde68a;
     color: #92400e;
@@ -350,9 +394,118 @@
     background: #f5f3ff;
 }
 
+.ia-tip-chip.status-dispatched {
+    border-color: #bae6fd;
+    color: #0369a1;
+    background: #f0f9ff;
+}
+
+.ia-tip-chip.status-resolved {
+    border-color: #bbf7d0;
+    color: #166534;
+    background: #f0fdf4;
+}
+
 .ia-tip-evidence {
     align-self: start;
     text-decoration: none;
+}
+
+.ia-tip-evidence-thumb {
+    display: block;
+    width: 68px;
+    height: 56px;
+    overflow: hidden;
+    border: 1px solid var(--ia-border, #dfe6ee);
+    border-radius: 8px;
+    background: #f8fafc;
+}
+
+.ia-tip-evidence-thumb img {
+    display: block;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+}
+
+.ia-tip-evidence-preview {
+    display: grid;
+    gap: 8px;
+    border: 1px solid var(--ia-border, #dfe6ee);
+    border-radius: 8px;
+    background: #ffffff;
+    color: var(--ia-text, #122031);
+    padding: 8px;
+}
+
+.ia-tip-evidence-preview span {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    color: var(--ia-muted, #5f7286);
+    font-size: 0.82rem;
+    font-weight: 800;
+}
+
+.ia-tip-evidence-image {
+    display: block;
+    width: 100%;
+    max-height: 260px;
+    border-radius: 6px;
+    background: #f8fafc;
+    object-fit: contain;
+}
+
+.ia-tip-viewer {
+    position: fixed;
+    inset: 0;
+    z-index: 12000;
+    display: grid;
+    place-items: center;
+    padding: 24px;
+}
+
+.ia-tip-viewer-backdrop {
+    position: absolute;
+    inset: 0;
+    background: rgba(15, 23, 42, 0.72);
+}
+
+.ia-tip-viewer-panel {
+    position: relative;
+    z-index: 1;
+    display: grid;
+    gap: 12px;
+    width: min(940px, 100%);
+    max-height: calc(100vh - 48px);
+    border: 1px solid var(--ia-border, #dfe6ee);
+    border-radius: 8px;
+    background: #ffffff;
+    padding: 12px;
+    box-shadow: 0 24px 70px rgba(15, 23, 42, 0.35);
+}
+
+.ia-tip-viewer-head,
+.ia-tip-viewer-actions {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+}
+
+.ia-tip-viewer-head strong {
+    color: var(--ia-text, #122031);
+    font-size: 0.95rem;
+    overflow-wrap: anywhere;
+}
+
+.ia-tip-viewer-image {
+    display: block;
+    width: 100%;
+    max-height: calc(100vh - 190px);
+    border-radius: 6px;
+    background: #f8fafc;
+    object-fit: contain;
 }
 
 .ia-tip-detail {
@@ -408,6 +561,24 @@
     overflow-wrap: anywhere;
 }
 
+.ia-tip-detail-note {
+    color: var(--ia-muted, #5f7286);
+    font-size: 0.78rem;
+    line-height: 1.35;
+}
+
+.ia-tip-lock-note {
+    margin: -4px 0 12px;
+    border: 1px solid #ddd6fe;
+    border-radius: 8px;
+    background: #f5f3ff;
+    color: #5b21b6;
+    padding: 9px 11px;
+    font-size: 0.8rem;
+    font-weight: 800;
+    line-height: 1.35;
+}
+
 .ia-tip-detail select {
     height: 38px;
     padding: 0 10px;
@@ -427,7 +598,8 @@
 
 .ia-tip-empty,
 .ia-tip-loading,
-.ia-tip-error {
+.ia-tip-error,
+.ia-tip-notice {
     padding: 32px 18px;
     text-align: center;
     color: var(--ia-muted, #5f7286);
@@ -435,6 +607,14 @@
 
 .ia-tip-error {
     color: var(--ia-danger, #b91c1c);
+}
+
+.ia-tip-notice {
+    padding: 12px 18px;
+    border-bottom: 1px solid var(--ia-border, #dfe6ee);
+    background: #ecfdf5;
+    color: #166534;
+    font-weight: 800;
 }
 
 html[data-theme="dark"] .ia-tip-section {
@@ -503,6 +683,7 @@ html[data-theme="dark"] .ia-tip-kicker,
 html[data-theme="dark"] .ia-tip-meta,
 html[data-theme="dark"] .ia-tip-description,
 html[data-theme="dark"] .ia-tip-detail-label,
+html[data-theme="dark"] .ia-tip-detail-note,
 html[data-theme="dark"] .ia-tip-empty,
 html[data-theme="dark"] .ia-tip-loading,
 html[data-theme="dark"] .ia-tip-flow span {
@@ -511,6 +692,8 @@ html[data-theme="dark"] .ia-tip-flow span {
 
 html[data-theme="dark"] .ia-tip-icon,
 html[data-theme="dark"] .ia-tip-secondary,
+html[data-theme="dark"] .ia-tip-evidence-thumb,
+html[data-theme="dark"] .ia-tip-evidence-preview,
 html[data-theme="dark"] .ia-tip-chevron,
 html[data-theme="dark"] .ia-tip-search input,
 html[data-theme="dark"] .ia-tip-filter,
@@ -519,6 +702,36 @@ html[data-theme="dark"] .ia-tip-detail textarea {
     background: var(--ia-tip-input);
     border-color: var(--ia-tip-input-border);
     color: var(--ia-text);
+}
+
+html[data-theme="dark"] .ia-tip-evidence-thumb,
+html[data-theme="dark"] .ia-tip-evidence-image {
+    background: #0b1220;
+}
+
+html[data-theme="dark"] .ia-tip-evidence-preview span {
+    color: var(--ia-muted);
+}
+
+html[data-theme="dark"] .ia-tip-viewer-panel {
+    background: var(--ia-tip-surface);
+    border-color: var(--ia-tip-border);
+}
+
+html[data-theme="dark"] .ia-tip-viewer-head strong {
+    color: var(--ia-text);
+}
+
+html[data-theme="dark"] .ia-tip-viewer-image {
+    background: #0b1220;
+}
+
+html[data-theme="dark"] .ia-tip-toast,
+html[data-theme="dark"] .ia-tip-new-toast {
+    background: #0f172a;
+    border-color: #1d4ed8;
+    border-left-color: #60a5fa;
+    color: #e5e7eb;
 }
 
 html[data-theme="dark"] .ia-tip-search input::placeholder,
@@ -558,6 +771,12 @@ html[data-theme="dark"] .ia-tip-chip.status-new {
     color: #bfdbfe;
 }
 
+html[data-theme="dark"] .ia-tip-chip.status-pending {
+    background: #431407;
+    border-color: #ea580c;
+    color: #fed7aa;
+}
+
 html[data-theme="dark"] .ia-tip-chip.status-reviewing {
     background: #422006;
     border-color: #b45309;
@@ -582,8 +801,32 @@ html[data-theme="dark"] .ia-tip-chip.status-converted_to_incident {
     color: #ddd6fe;
 }
 
+html[data-theme="dark"] .ia-tip-chip.status-dispatched {
+    background: #082f49;
+    border-color: #0284c7;
+    color: #bae6fd;
+}
+
+html[data-theme="dark"] .ia-tip-chip.status-resolved {
+    background: #052e16;
+    border-color: #15803d;
+    color: #bbf7d0;
+}
+
+html[data-theme="dark"] .ia-tip-lock-note {
+    background: #2e1065;
+    border-color: #7c3aed;
+    color: #ddd6fe;
+}
+
 html[data-theme="dark"] .ia-tip-error {
     color: #fca5a5;
+}
+
+html[data-theme="dark"] .ia-tip-notice {
+    background: #052e16;
+    border-color: #15803d;
+    color: #bbf7d0;
 }
 
 @media (max-width: 980px) {
@@ -644,5 +887,1041 @@ html[data-theme="dark"] .ia-tip-error {
 
     .ia-tip-stat:last-child {
         border-bottom: 0;
+    }
+}
+
+/* ================================================================
+   Anonymous Tip Inbox — Polished Review Workspace
+   Build: 20260808-anonymous-tip-ux-v1
+   This block is intentionally appended after interagency-tips.css.
+   ================================================================ */
+
+.ia-tip-section {
+    --tip-ux-bg: #f2f6fa;
+    --tip-ux-surface: #ffffff;
+    --tip-ux-surface-soft: #f8fafc;
+    --tip-ux-surface-accent: #eef7f6;
+    --tip-ux-text: #122031;
+    --tip-ux-muted: #64748b;
+    --tip-ux-border: #d7e2ec;
+    --tip-ux-border-strong: #c5d3df;
+    --tip-ux-primary: #0f766e;
+    --tip-ux-primary-dark: #115e59;
+    --tip-ux-primary-soft: #e7f5f3;
+    --tip-ux-blue: #2563eb;
+    --tip-ux-blue-soft: #eff6ff;
+    --tip-ux-green: #15803d;
+    --tip-ux-green-soft: #f0fdf4;
+    --tip-ux-amber: #b45309;
+    --tip-ux-amber-soft: #fffbeb;
+    --tip-ux-purple: #6d28d9;
+    --tip-ux-purple-soft: #f5f3ff;
+    --tip-ux-red: #b91c1c;
+    --tip-ux-red-soft: #fff1f2;
+    --tip-ux-shadow-sm: 0 4px 14px rgba(15, 23, 42, 0.06);
+    --tip-ux-shadow-md: 0 16px 38px rgba(15, 23, 42, 0.12);
+}
+
+/* Give the tip module a landscape review workspace inside the module modal. */
+.ia-module-modal-dialog:has(.ia-tip-section) {
+    width: min(1480px, calc(100vw - 1.5rem));
+    max-height: calc(100vh - 1.5rem);
+    border-radius: 18px;
+    border-color: var(--tip-ux-border, #d7e2ec);
+}
+
+.ia-module-modal-dialog:has(.ia-tip-section) .ia-module-modal-head {
+    flex: 0 0 auto;
+    padding: 1rem 1.2rem;
+    background:
+        radial-gradient(circle at 92% 0%, rgba(45, 212, 191, 0.14), transparent 16rem),
+        linear-gradient(135deg, #f8fbff, #eef7f6);
+}
+
+.ia-module-modal-dialog:has(.ia-tip-section) .ia-module-modal-title {
+    font-size: 1.12rem;
+    letter-spacing: -0.015em;
+}
+
+.ia-module-modal-dialog:has(.ia-tip-section) .ia-module-modal-body {
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow: auto;
+    padding: 0;
+    background: var(--tip-ux-bg);
+}
+
+.ia-module-modal-body .ia-tip-section {
+    height: 100%;
+    min-height: 0;
+    margin: 0;
+    overflow: hidden;
+}
+
+.ia-module-modal-body .ia-tip-shell {
+    height: 100%;
+    min-height: 0;
+    border: 0;
+    border-radius: 0;
+    box-shadow: none;
+}
+
+/* The modal already supplies the title and subtitle, so remove duplication. */
+.ia-module-modal-body .ia-tip-head {
+    display: none;
+}
+
+.ia-tip-shell {
+    border-radius: 18px;
+    border-color: var(--tip-ux-border);
+    background: var(--tip-ux-bg);
+    box-shadow: var(--tip-ux-shadow-sm);
+}
+
+.ia-tip-dropdown {
+    min-height: 0;
+    background: var(--tip-ux-bg);
+}
+
+.ia-module-modal-body .ia-tip-dropdown {
+    display: flex;
+    height: 100%;
+    min-height: 0;
+    flex-direction: column;
+}
+
+/* Compact command strip. */
+.ia-tip-toolbar {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-rows: auto auto;
+    align-items: center;
+    gap: 0.14rem 0.85rem;
+    min-height: 62px;
+    padding: 0.72rem 1.1rem;
+    border-bottom: 0;
+    background: linear-gradient(135deg, #ffffff, #f4faf9);
+}
+
+.ia-tip-toolbar::before {
+    grid-column: 1;
+    grid-row: 1;
+    content: "Tip operations";
+    color: var(--tip-ux-text);
+    font-size: 0.82rem;
+    font-weight: 850;
+    letter-spacing: 0.025em;
+    text-transform: uppercase;
+}
+
+.ia-tip-toolbar::after {
+    grid-column: 1;
+    grid-row: 2;
+    overflow: hidden;
+    color: var(--tip-ux-muted);
+    content: "Review incoming intelligence, verify evidence, and document the final outcome.";
+    font-size: 0.76rem;
+    line-height: 1.35;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.ia-tip-toolbar .ia-tip-icon {
+    grid-column: 2;
+    grid-row: 1 / span 2;
+    width: 40px;
+    height: 40px;
+    border-color: #b9d9d5;
+    border-radius: 12px;
+    background: var(--tip-ux-primary-soft);
+    color: var(--tip-ux-primary);
+}
+
+.ia-tip-toolbar .ia-tip-icon:hover {
+    border-color: var(--tip-ux-primary);
+    background: #d9efec;
+    transform: translateY(-1px);
+}
+
+/* Summary cards replace the plain spreadsheet-style metrics row. */
+.ia-tip-stats {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 0.72rem;
+    padding: 0 1.1rem 0.9rem;
+    border-bottom: 0;
+    background: linear-gradient(180deg, #f4faf9, var(--tip-ux-bg));
+}
+
+.ia-tip-stat {
+    position: relative;
+    min-width: 0;
+    overflow: hidden;
+    padding: 0.8rem 0.9rem 0.8rem 3.35rem;
+    border: 1px solid var(--tip-ux-border);
+    border-radius: 14px;
+    background: var(--tip-ux-surface);
+    box-shadow: var(--tip-ux-shadow-sm);
+}
+
+.ia-tip-stat::before {
+    position: absolute;
+    top: 50%;
+    left: 0.85rem;
+    display: inline-flex;
+    width: 2rem;
+    height: 2rem;
+    align-items: center;
+    justify-content: center;
+    border-radius: 10px;
+    background: var(--tip-ux-blue-soft);
+    color: var(--tip-ux-blue);
+    content: "N";
+    font-size: 0.72rem;
+    font-weight: 900;
+    transform: translateY(-50%);
+}
+
+.ia-tip-stat:nth-child(2)::before {
+    background: var(--tip-ux-amber-soft);
+    color: var(--tip-ux-amber);
+    content: "R";
+}
+
+.ia-tip-stat:nth-child(3)::before {
+    background: var(--tip-ux-green-soft);
+    color: var(--tip-ux-green);
+    content: "V";
+}
+
+.ia-tip-stat:nth-child(4)::before {
+    background: var(--tip-ux-purple-soft);
+    color: var(--tip-ux-purple);
+    content: "E";
+}
+
+.ia-tip-stat::after {
+    position: absolute;
+    right: -1.2rem;
+    bottom: -1.45rem;
+    width: 4rem;
+    height: 4rem;
+    border-radius: 50%;
+    background: rgba(37, 99, 235, 0.055);
+    content: "";
+}
+
+.ia-tip-stat:nth-child(2)::after { background: rgba(180, 83, 9, 0.055); }
+.ia-tip-stat:nth-child(3)::after { background: rgba(21, 128, 61, 0.055); }
+.ia-tip-stat:nth-child(4)::after { background: rgba(109, 40, 217, 0.055); }
+
+.ia-tip-stat-label {
+    position: relative;
+    z-index: 1;
+    overflow: hidden;
+    color: var(--tip-ux-muted);
+    font-size: 0.66rem;
+    letter-spacing: 0.055em;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.ia-tip-stat-value {
+    position: relative;
+    z-index: 1;
+    margin-top: 0.18rem;
+    color: var(--tip-ux-text);
+    font-size: 1.48rem;
+    font-weight: 850;
+}
+
+/* Main review workspace. */
+.ia-tip-body {
+    flex: 1 1 auto;
+    min-height: 0;
+    grid-template-columns: minmax(520px, 1.62fr) minmax(340px, 0.88fr);
+    gap: 0.9rem;
+    padding: 0 1.1rem 1.1rem;
+    background: var(--tip-ux-bg);
+}
+
+.ia-tip-list,
+.ia-tip-detail {
+    min-width: 0;
+    min-height: 0;
+    overflow: hidden;
+    border: 1px solid var(--tip-ux-border);
+    border-radius: 16px;
+    background: var(--tip-ux-surface);
+    box-shadow: var(--tip-ux-shadow-sm);
+}
+
+.ia-tip-list {
+    display: flex;
+    flex-direction: column;
+    border-right: 1px solid var(--tip-ux-border);
+}
+
+.ia-tip-list-head {
+    position: relative;
+    z-index: 4;
+    flex: 0 0 auto;
+    gap: 0.65rem;
+    padding: 0.72rem;
+    border-bottom-color: var(--tip-ux-border);
+    background: linear-gradient(180deg, #ffffff, #f8fbfd);
+}
+
+.ia-tip-search input,
+.ia-tip-filter,
+.ia-tip-detail select,
+.ia-tip-detail textarea {
+    border-color: var(--tip-ux-border-strong);
+    border-radius: 10px;
+    background: #ffffff;
+    transition: border-color 0.15s ease, box-shadow 0.15s ease, background-color 0.15s ease;
+}
+
+.ia-tip-search input,
+.ia-tip-filter {
+    height: 42px;
+}
+
+.ia-tip-search input:focus,
+.ia-tip-filter:focus,
+.ia-tip-detail select:focus,
+.ia-tip-detail textarea:focus {
+    border-color: var(--tip-ux-primary);
+    outline: 0;
+    box-shadow: 0 0 0 3px rgba(15, 118, 110, 0.14);
+}
+
+.ia-tip-filter {
+    max-width: 188px;
+    font-size: 0.82rem;
+    font-weight: 700;
+}
+
+.ia-tip-rows {
+    display: grid;
+    flex: 1 1 auto;
+    min-height: 0;
+    max-height: none;
+    align-content: start;
+    gap: 0.58rem;
+    padding: 0.65rem;
+    overflow-x: hidden;
+    overflow-y: auto;
+    background: #f7fafc;
+    scrollbar-gutter: stable;
+}
+
+.ia-tip-row {
+    position: relative;
+    align-items: start;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 0.75rem;
+    margin: 0;
+    padding: 0.82rem 0.86rem;
+    overflow: visible;
+    border: 1px solid var(--tip-ux-border);
+    border-left: 4px solid #94a3b8;
+    border-radius: 13px;
+    background: var(--tip-ux-surface);
+    box-shadow: 0 2px 8px rgba(15, 23, 42, 0.035);
+    transition: border-color 0.15s ease, box-shadow 0.15s ease, transform 0.15s ease, background-color 0.15s ease;
+}
+
+.ia-tip-row:has(.status-new),
+.ia-tip-row:has(.status-pending) {
+    border-left-color: var(--tip-ux-blue);
+}
+
+.ia-tip-row:has(.status-reviewing) {
+    border-left-color: var(--tip-ux-amber);
+}
+
+.ia-tip-row:has(.status-verified),
+.ia-tip-row:has(.status-resolved) {
+    border-left-color: var(--tip-ux-green);
+}
+
+.ia-tip-row:has(.status-converted_to_incident),
+.ia-tip-row:has(.status-dispatched) {
+    border-left-color: var(--tip-ux-purple);
+}
+
+.ia-tip-row:has(.status-dismissed) {
+    border-left-color: #64748b;
+}
+
+.ia-tip-row:hover {
+    border-color: #a9c8c4;
+    background: #fcfefd;
+    box-shadow: 0 8px 20px rgba(15, 118, 110, 0.09);
+    transform: translateY(-1px);
+}
+
+.ia-tip-row.is-active {
+    border-color: var(--tip-ux-primary);
+    background: linear-gradient(135deg, #ffffff, #effaf8);
+    box-shadow: 0 0 0 2px rgba(15, 118, 110, 0.12), 0 10px 24px rgba(15, 118, 110, 0.1);
+}
+
+.ia-tip-row:focus-visible {
+    outline: 3px solid rgba(15, 118, 110, 0.22);
+    outline-offset: 2px;
+}
+
+.ia-tip-kicker {
+    gap: 0.42rem;
+    font-size: 0.7rem;
+}
+
+.ia-tip-kicker > span:first-child {
+    display: inline-flex;
+    align-items: center;
+    min-height: 1.45rem;
+    padding: 0.18rem 0.48rem;
+    border-radius: 999px;
+    background: #eef2f6;
+    color: #475569;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+    font-size: 0.65rem;
+    font-weight: 800;
+}
+
+.ia-tip-chip {
+    min-height: 1.45rem;
+    padding: 0.18rem 0.5rem;
+    border-width: 1px;
+    font-size: 0.65rem;
+    letter-spacing: 0.015em;
+}
+
+.ia-tip-location {
+    margin-top: 0.38rem;
+    color: var(--tip-ux-text);
+    font-size: 0.9rem;
+    font-weight: 850;
+    line-height: 1.3;
+}
+
+.ia-tip-description {
+    margin-top: 0.3rem;
+    color: #53687b;
+    font-size: 0.76rem;
+    line-height: 1.45;
+    display: block;
+    overflow: visible;
+    overflow-wrap: anywhere;
+    -webkit-line-clamp: unset;
+    -webkit-box-orient: initial;
+}
+
+.ia-tip-meta {
+    gap: 0.55rem;
+    margin-top: 0.42rem;
+    font-size: 0.7rem;
+}
+
+.ia-tip-meta > span {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.28rem;
+}
+
+.ia-tip-meta i {
+    color: var(--tip-ux-primary);
+}
+
+/* Workflow stepper inside each row. */
+.ia-tip-flow {
+    gap: 0.3rem;
+    margin-top: 0.55rem;
+}
+
+.ia-tip-flow span {
+    position: relative;
+    min-height: 1.4rem;
+    padding: 0.2rem 0.5rem 0.2rem 1.18rem;
+    border: 0;
+    background: #eef2f6;
+    color: #64748b;
+    font-size: 0.62rem;
+    letter-spacing: 0.01em;
+}
+
+.ia-tip-flow span::before {
+    position: absolute;
+    top: 50%;
+    left: 0.42rem;
+    width: 0.42rem;
+    height: 0.42rem;
+    border: 1.5px solid currentColor;
+    border-radius: 50%;
+    content: "";
+    transform: translateY(-50%);
+}
+
+.ia-tip-flow span.is-done {
+    border: 0;
+    background: #e4f4f1;
+    color: var(--tip-ux-primary-dark);
+}
+
+.ia-tip-flow span.is-done::before {
+    border-color: var(--tip-ux-primary);
+    background: var(--tip-ux-primary);
+    box-shadow: 0 0 0 2px rgba(15, 118, 110, 0.12);
+}
+
+.ia-tip-evidence-thumb {
+    width: 82px;
+    height: 64px;
+    border-radius: 10px;
+    border-color: var(--tip-ux-border-strong);
+    box-shadow: 0 4px 10px rgba(15, 23, 42, 0.08);
+    transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+
+.ia-tip-evidence-thumb:hover {
+    box-shadow: 0 9px 20px rgba(15, 23, 42, 0.14);
+    transform: scale(1.025);
+}
+
+/* Detail/review panel. */
+.ia-tip-detail {
+    display: flex;
+    flex-direction: column;
+    padding: 0;
+    overflow: auto;
+    background: var(--tip-ux-surface);
+    scrollbar-gutter: stable;
+}
+
+.ia-tip-detail > h3 {
+    position: sticky;
+    top: 0;
+    z-index: 4;
+    display: flex;
+    min-height: 52px;
+    align-items: center;
+    gap: 0.55rem;
+    margin: 0;
+    padding: 0.82rem 0.95rem;
+    border-bottom: 1px solid var(--tip-ux-border);
+    background: linear-gradient(135deg, #f8fbff, #eef7f6);
+    color: var(--tip-ux-text);
+    font-size: 0.92rem;
+    font-weight: 850;
+}
+
+.ia-tip-detail > h3::before {
+    display: inline-flex;
+    width: 1.75rem;
+    height: 1.75rem;
+    align-items: center;
+    justify-content: center;
+    border-radius: 9px;
+    background: var(--tip-ux-primary-soft);
+    color: var(--tip-ux-primary);
+    content: "i";
+    font-family: Georgia, serif;
+    font-size: 0.9rem;
+    font-style: italic;
+    font-weight: 800;
+}
+
+.ia-tip-detail > .ia-tip-detail-grid:not(.ia-tip-detail-form-grid) {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0.58rem;
+    padding: 0.78rem 0.85rem 0;
+}
+
+.ia-tip-detail > .ia-tip-detail-grid:not(.ia-tip-detail-form-grid) > .ia-tip-detail-item {
+    min-width: 0;
+    padding: 0.65rem 0.7rem;
+    border: 1px solid #e1e9f0;
+    border-radius: 11px;
+    background: var(--tip-ux-surface-soft);
+}
+
+.ia-tip-detail > .ia-tip-detail-grid:not(.ia-tip-detail-form-grid) > .ia-tip-detail-item:nth-child(n + 3) {
+    grid-column: 1 / -1;
+}
+
+.ia-tip-detail-label {
+    color: #708197;
+    font-size: 0.64rem;
+    letter-spacing: 0.05em;
+}
+
+.ia-tip-detail-value {
+    color: var(--tip-ux-text);
+    font-size: 0.78rem;
+    line-height: 1.52;
+}
+
+.ia-tip-detail-note {
+    margin-top: 0.28rem;
+    font-size: 0.68rem;
+}
+
+.ia-tip-evidence-preview {
+    gap: 0.5rem;
+    padding: 0.5rem;
+    border-radius: 10px;
+    background: #ffffff;
+}
+
+.ia-tip-evidence-image {
+    max-height: 178px;
+    border-radius: 8px;
+}
+
+.ia-tip-evidence-preview span {
+    justify-content: center;
+    font-size: 0.7rem;
+}
+
+/* Clear hierarchy and action intent. */
+.ia-tip-quick-actions {
+    margin: 0.75rem 0.85rem 0;
+    padding: 0.68rem;
+    border: 1px solid var(--tip-ux-border);
+    border-radius: 12px;
+    background: #f8fafc;
+}
+
+.ia-tip-quick-actions .ia-tip-secondary {
+    min-height: 38px;
+    border-radius: 9px;
+    font-size: 0.72rem;
+    font-weight: 800;
+}
+
+.ia-tip-quick-actions [data-tip-quick-status="reviewing"] {
+    border-color: #bfdbfe;
+    background: var(--tip-ux-blue-soft);
+    color: #1d4ed8;
+}
+
+.ia-tip-quick-actions [data-tip-quick-status="verified"] {
+    border-color: #bbf7d0;
+    background: var(--tip-ux-green-soft);
+    color: #166534;
+}
+
+.ia-tip-quick-actions [data-tip-convert],
+.ia-tip-quick-actions a[href*="incident.php"] {
+    border-color: #ddd6fe;
+    background: var(--tip-ux-purple-soft);
+    color: var(--tip-ux-purple);
+}
+
+.ia-tip-quick-actions [data-tip-quick-status="dismissed"] {
+    border-color: #fecdd3;
+    background: var(--tip-ux-red-soft);
+    color: var(--tip-ux-red);
+}
+
+.ia-tip-quick-actions .ia-tip-secondary:hover:not(:disabled) {
+    filter: brightness(0.98);
+    box-shadow: 0 4px 10px rgba(15, 23, 42, 0.08);
+    transform: translateY(-1px);
+}
+
+.ia-tip-lock-note {
+    margin: 0.65rem 0.85rem 0;
+    border-radius: 11px;
+    padding: 0.68rem 0.75rem;
+    font-size: 0.7rem;
+}
+
+.ia-tip-detail form {
+    margin: 0.75rem 0.85rem 0.85rem;
+    padding: 0.72rem;
+    border: 1px solid var(--tip-ux-border);
+    border-radius: 12px;
+    background: linear-gradient(180deg, #ffffff, #f8fbfd);
+}
+
+.ia-tip-detail-form-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0.58rem;
+    margin-top: 0;
+}
+
+.ia-tip-detail-form-grid > .ia-tip-detail-item {
+    min-width: 0;
+}
+
+.ia-tip-detail-form-grid > .ia-tip-detail-item:nth-child(4) {
+    grid-column: 1 / -1;
+}
+
+.ia-tip-detail select {
+    height: 40px;
+    font-size: 0.78rem;
+}
+
+.ia-tip-detail textarea {
+    min-height: 76px;
+    font-size: 0.78rem;
+    line-height: 1.45;
+}
+
+.ia-tip-detail-actions {
+    margin-top: 0.65rem;
+}
+
+.ia-tip-detail-actions .ia-tip-primary {
+    width: 100%;
+    min-height: 40px;
+    border-color: var(--tip-ux-primary);
+    border-radius: 10px;
+    background: var(--tip-ux-primary);
+    font-size: 0.76rem;
+}
+
+.ia-tip-detail-actions .ia-tip-primary:hover:not(:disabled) {
+    background: var(--tip-ux-primary-dark);
+    box-shadow: 0 6px 14px rgba(15, 118, 110, 0.2);
+}
+
+/* Better feedback states. */
+.ia-tip-notice,
+.ia-tip-error {
+    margin: 0 1.1rem 0.8rem;
+    padding: 0.65rem 0.8rem;
+    border: 1px solid #bbf7d0;
+    border-radius: 11px;
+    background: #f0fdf4;
+    color: #166534;
+    font-size: 0.76rem;
+    font-weight: 750;
+    text-align: left;
+}
+
+.ia-tip-error {
+    border-color: #fecaca;
+    background: #fef2f2;
+    color: #991b1b;
+}
+
+.ia-tip-loading,
+.ia-tip-empty {
+    position: relative;
+    min-height: 190px;
+    display: grid;
+    place-items: center;
+    padding: 2rem;
+    color: var(--tip-ux-muted);
+    font-size: 0.8rem;
+}
+
+.ia-tip-loading::before {
+    position: absolute;
+    top: calc(50% - 2.2rem);
+    width: 1.35rem;
+    height: 1.35rem;
+    border: 3px solid #cbd5e1;
+    border-top-color: var(--tip-ux-primary);
+    border-radius: 50%;
+    content: "";
+    animation: tipUxSpin 0.75s linear infinite;
+}
+
+@keyframes tipUxSpin {
+    to { transform: rotate(360deg); }
+}
+
+/* Evidence viewer polish. */
+.ia-tip-viewer-panel {
+    width: min(1040px, 100%);
+    border-radius: 16px;
+    padding: 0.8rem;
+    box-shadow: 0 30px 80px rgba(2, 6, 23, 0.42);
+}
+
+.ia-tip-viewer-head {
+    padding: 0.15rem 0.15rem 0.55rem;
+}
+
+.ia-tip-viewer-image {
+    border-radius: 12px;
+}
+
+/* Dark theme */
+html[data-theme="dark"] .ia-tip-section {
+    --tip-ux-bg: #08111f;
+    --tip-ux-surface: #111827;
+    --tip-ux-surface-soft: #0f172a;
+    --tip-ux-surface-accent: #102522;
+    --tip-ux-text: #f8fafc;
+    --tip-ux-muted: #9cafc2;
+    --tip-ux-border: #334155;
+    --tip-ux-border-strong: #475569;
+    --tip-ux-primary: #2dd4bf;
+    --tip-ux-primary-dark: #14b8a6;
+    --tip-ux-primary-soft: rgba(45, 212, 191, 0.13);
+    --tip-ux-blue-soft: rgba(37, 99, 235, 0.16);
+    --tip-ux-green-soft: rgba(21, 128, 61, 0.17);
+    --tip-ux-amber-soft: rgba(180, 83, 9, 0.17);
+    --tip-ux-purple-soft: rgba(109, 40, 217, 0.18);
+    --tip-ux-red-soft: rgba(185, 28, 28, 0.16);
+    --tip-ux-shadow-sm: 0 5px 18px rgba(0, 0, 0, 0.22);
+}
+
+html[data-theme="dark"] .ia-module-modal-dialog:has(.ia-tip-section) .ia-module-modal-head,
+html[data-theme="dark"] .ia-tip-toolbar,
+html[data-theme="dark"] .ia-tip-detail > h3 {
+    background: linear-gradient(135deg, #111827, #102522);
+    border-color: var(--tip-ux-border);
+}
+
+html[data-theme="dark"] .ia-module-modal-dialog:has(.ia-tip-section) .ia-module-modal-body,
+html[data-theme="dark"] .ia-tip-dropdown,
+html[data-theme="dark"] .ia-tip-body,
+html[data-theme="dark"] .ia-tip-stats {
+    background: var(--tip-ux-bg);
+}
+
+html[data-theme="dark"] .ia-tip-stat,
+html[data-theme="dark"] .ia-tip-list,
+html[data-theme="dark"] .ia-tip-detail,
+html[data-theme="dark"] .ia-tip-row,
+html[data-theme="dark"] .ia-tip-evidence-preview,
+html[data-theme="dark"] .ia-tip-detail form {
+    background: var(--tip-ux-surface);
+    border-color: var(--tip-ux-border);
+    color: var(--tip-ux-text);
+}
+
+html[data-theme="dark"] .ia-tip-list-head,
+html[data-theme="dark"] .ia-tip-rows,
+html[data-theme="dark"] .ia-tip-quick-actions {
+    background: var(--tip-ux-surface-soft);
+    border-color: var(--tip-ux-border);
+}
+
+html[data-theme="dark"] .ia-tip-row:hover,
+html[data-theme="dark"] .ia-tip-row.is-active {
+    background: #13201f;
+    border-color: #2dd4bf;
+}
+
+html[data-theme="dark"] .ia-tip-kicker > span:first-child,
+html[data-theme="dark"] .ia-tip-flow span {
+    background: #1e293b;
+    color: #aebed0;
+}
+
+html[data-theme="dark"] .ia-tip-flow span.is-done {
+    background: rgba(45, 212, 191, 0.13);
+    color: #99f6e4;
+}
+
+html[data-theme="dark"] .ia-tip-description,
+html[data-theme="dark"] .ia-tip-detail-note {
+    color: var(--tip-ux-muted);
+}
+
+html[data-theme="dark"] .ia-tip-detail > .ia-tip-detail-grid:not(.ia-tip-detail-form-grid) > .ia-tip-detail-item {
+    border-color: var(--tip-ux-border);
+    background: var(--tip-ux-surface-soft);
+}
+
+html[data-theme="dark"] .ia-tip-search input,
+html[data-theme="dark"] .ia-tip-filter,
+html[data-theme="dark"] .ia-tip-detail select,
+html[data-theme="dark"] .ia-tip-detail textarea {
+    border-color: var(--tip-ux-border-strong);
+    background: #0b1220;
+    color: var(--tip-ux-text);
+}
+
+html[data-theme="dark"] .ia-tip-quick-actions [data-tip-quick-status="reviewing"] {
+    border-color: #1d4ed8;
+    background: rgba(37, 99, 235, 0.18);
+    color: #bfdbfe;
+}
+
+html[data-theme="dark"] .ia-tip-quick-actions [data-tip-quick-status="verified"] {
+    border-color: #15803d;
+    background: rgba(21, 128, 61, 0.2);
+    color: #bbf7d0;
+}
+
+html[data-theme="dark"] .ia-tip-quick-actions [data-tip-convert],
+html[data-theme="dark"] .ia-tip-quick-actions a[href*="incident.php"] {
+    border-color: #7c3aed;
+    background: rgba(109, 40, 217, 0.2);
+    color: #ddd6fe;
+}
+
+html[data-theme="dark"] .ia-tip-quick-actions [data-tip-quick-status="dismissed"] {
+    border-color: #be123c;
+    background: rgba(190, 18, 60, 0.18);
+    color: #fecdd3;
+}
+
+/* Responsive behavior */
+@media (max-width: 1160px) {
+    .ia-tip-body {
+        grid-template-columns: minmax(470px, 1.45fr) minmax(320px, 0.9fr);
+    }
+
+    .ia-tip-stat {
+        padding-left: 3rem;
+    }
+}
+
+@media (max-width: 900px) {
+    .ia-module-modal-dialog:has(.ia-tip-section) .ia-module-modal-body {
+        overflow: auto;
+    }
+
+    .ia-module-modal-body .ia-tip-dropdown {
+        height: auto;
+    }
+
+    .ia-tip-body {
+        grid-template-columns: 1fr;
+    }
+
+    .ia-tip-list {
+        min-height: 480px;
+        border-right: 1px solid var(--tip-ux-border);
+        border-bottom: 1px solid var(--tip-ux-border);
+    }
+
+    .ia-tip-rows {
+        max-height: 520px;
+    }
+
+    .ia-tip-detail {
+        overflow: visible;
+    }
+
+    .ia-tip-detail > h3 {
+        position: static;
+    }
+}
+
+@media (max-width: 680px) {
+    .ia-module-modal {
+        padding: 0.35rem;
+    }
+
+    .ia-module-modal-dialog:has(.ia-tip-section) {
+        width: 100%;
+        max-height: calc(100vh - 0.7rem);
+        border-radius: 13px;
+    }
+
+    .ia-tip-toolbar {
+        grid-template-columns: minmax(0, 1fr) auto;
+        grid-template-rows: auto;
+    }
+
+    .ia-tip-toolbar::before {
+        grid-column: 1;
+        grid-row: 1;
+    }
+
+    .ia-tip-toolbar::after {
+        display: none;
+    }
+
+    .ia-tip-toolbar .ia-tip-icon {
+        grid-column: 2;
+        grid-row: 1;
+    }
+
+    .ia-tip-stats {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        padding-right: 0.72rem;
+        padding-left: 0.72rem;
+    }
+
+    .ia-tip-stat {
+        padding: 0.7rem 0.72rem 0.7rem 2.85rem;
+    }
+
+    .ia-tip-stat::before {
+        left: 0.65rem;
+        width: 1.75rem;
+        height: 1.75rem;
+    }
+
+    .ia-tip-body {
+        padding-right: 0.72rem;
+        padding-left: 0.72rem;
+    }
+
+    .ia-tip-list-head {
+        align-items: stretch;
+        flex-direction: column;
+    }
+
+    .ia-tip-filter {
+        max-width: none;
+    }
+
+    .ia-tip-row {
+        grid-template-columns: minmax(0, 1fr) auto;
+    }
+
+    .ia-tip-evidence-thumb {
+        width: 68px;
+        height: 56px;
+    }
+
+    .ia-tip-detail > .ia-tip-detail-grid:not(.ia-tip-detail-form-grid),
+    .ia-tip-detail-form-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .ia-tip-detail > .ia-tip-detail-grid:not(.ia-tip-detail-form-grid) > .ia-tip-detail-item,
+    .ia-tip-detail-form-grid > .ia-tip-detail-item:nth-child(4) {
+        grid-column: 1;
+    }
+}
+
+@media (max-width: 430px) {
+    .ia-tip-stats {
+        grid-template-columns: 1fr;
+    }
+
+    .ia-tip-row {
+        grid-template-columns: 1fr;
+    }
+
+    .ia-tip-row > span:last-child {
+        justify-self: start;
+    }
+
+    .ia-tip-evidence-thumb {
+        width: 96px;
+        height: 72px;
+    }
+
+    .ia-tip-quick-actions {
+        grid-template-columns: 1fr;
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .ia-tip-row,
+    .ia-tip-evidence-thumb,
+    .ia-tip-toolbar .ia-tip-icon,
+    .ia-tip-quick-actions .ia-tip-secondary {
+        transition: none;
+    }
+
+    .ia-tip-loading::before {
+        animation-duration: 1.5s;
     }
 }

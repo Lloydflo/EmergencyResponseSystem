@@ -3,6 +3,8 @@ declare(strict_types=1);
 
 require_once __DIR__ . '/_bootstrap.php';
 require_once __DIR__ . '/../includes/activity_log.php';
+require_once __DIR__ . '/../includes/emergency_com_status_sync.php';
+require_once __DIR__ . '/../includes/anonymous_tip_status_sync.php';
 
 $auth = ers_external_authenticate();
 $pdo = ers_external_db();
@@ -50,6 +52,9 @@ try {
         if ($action === 'conversations') {
             ers_external_json(200, ['success' => true, 'conversations' => ers_api_conversations($pdo)]);
         }
+        if (in_array($action, ['transfer_status', 'status_lookup'], true)) {
+            ers_external_json(200, ers_api_get_transfer_status($pdo));
+        }
         ers_external_json(404, ['success' => false, 'error' => 'Unknown action']);
     }
 
@@ -66,6 +71,9 @@ try {
 
     if (in_array($method, ['POST', 'PATCH'], true) && in_array($action, ['status', 'incident_status'], true)) {
         ers_external_json(200, ers_api_update_incident_status($pdo));
+    }
+    if ($method === 'POST' && in_array($action, ['transfer_status', 'status_lookup'], true)) {
+        ers_external_json(200, ers_api_get_transfer_status($pdo));
     }
 
     ers_external_json(405, ['success' => false, 'error' => 'Method not allowed']);
@@ -151,10 +159,10 @@ function ers_api_alerts(PDO $pdo): array
              ORDER BY CASE LOWER(priority)
                 WHEN 'critical' THEN 1
                 WHEN 'high' THEN 2
-                WHEN 'urgent' THEN 3
-                WHEN 'moderate' THEN 4
-                WHEN 'medium' THEN 4
-                WHEN 'low' THEN 5
+                WHEN 'urgent' THEN 2
+                WHEN 'medium' THEN 3
+                WHEN 'moderate' THEN 3
+                WHEN 'low' THEN 4
                 ELSE 6
              END, created_at DESC
              LIMIT 10"
@@ -508,6 +516,30 @@ function ers_api_create_incoming_transfer(PDO $pdo, array $auth): array
     }
     $call = isset($input['call']) && is_array($input['call']) ? $input['call'] : $input;
     $incident = isset($input['incident']) && is_array($input['incident']) ? $input['incident'] : [];
+
+    // This endpoint records a concrete Emergency-Com transfer. Calling it
+    // with only an API key used to fall through into database work and return
+    // a misleading generic 500. A live call must carry the private Socket.IO
+    // room and call id that ERS will join; reports need a transfer/conversation
+    // reference at minimum.
+    if ($call === []) {
+        ers_external_json(422, [
+            'success' => false,
+            'error' => 'Incoming transfer payload is required',
+            'required_for_live_call' => ['callId', 'room', 'socketUrl'],
+        ]);
+    }
+    $incomingCallId = ers_external_clean($call['callId'] ?? $call['call_id'] ?? $input['callId'] ?? $input['call_id'] ?? '', 120);
+    $incomingRoom = ers_external_clean($call['room'] ?? $input['room'] ?? '', 150);
+    $incomingTransferType = strtolower(ers_external_clean($call['transfer_type'] ?? $call['transferType'] ?? $input['transfer_type'] ?? $input['transferType'] ?? '', 40));
+    $looksLikeLiveCall = $incomingTransferType === 'live_call'
+        || ($incomingCallId !== '' && $incomingRoom !== '');
+    if ($looksLikeLiveCall && ($incomingCallId === '' || $incomingRoom === '')) {
+        ers_external_json(422, [
+            'success' => false,
+            'error' => 'A live call transfer requires both callId and room',
+        ]);
+    }
     $details = array_replace($incident, $call);
     $caller = isset($call['caller']) && is_array($call['caller'])
         ? $call['caller']
@@ -576,7 +608,22 @@ function ers_api_create_incoming_transfer(PDO $pdo, array $auth): array
     $roomForDuplicate = ers_external_clean($call['room'] ?? $input['room'] ?? $details['room'] ?? '', 150);
     $socketUrlForDuplicate = ers_external_clean($call['socketUrl'] ?? $call['socket_url'] ?? $input['socketUrl'] ?? $input['socket_url'] ?? $details['socketUrl'] ?? $details['socket_url'] ?? 'https://emergency-comm.alertaraqc.com', 255);
     $socketPathForDuplicate = ers_external_clean($call['socketPath'] ?? $call['socket_path'] ?? $input['socketPath'] ?? $input['socket_path'] ?? $details['socketPath'] ?? $details['socket_path'] ?? '/socket.io', 100);
-    $conversationIdForDuplicate = ers_external_clean($call['conversationId'] ?? $call['conversation_id'] ?? $input['conversationId'] ?? $input['conversation_id'] ?? $details['conversationId'] ?? $details['conversation_id'] ?? '', 80);
+    $conversationIdForDuplicate = ers_external_clean(
+        $call['emergencyComConversationId']
+        ?? $call['emergency_com_conversation_id']
+        ?? $call['conversationId']
+        ?? $call['conversation_id']
+        ?? $input['emergencyComConversationId']
+        ?? $input['emergency_com_conversation_id']
+        ?? $input['conversationId']
+        ?? $input['conversation_id']
+        ?? $details['emergencyComConversationId']
+        ?? $details['emergency_com_conversation_id']
+        ?? $details['conversationId']
+        ?? $details['conversation_id']
+        ?? '',
+        80
+    );
     $externalCallIdForDuplicate = ers_external_clean($call['callId'] ?? $call['call_id'] ?? $input['callId'] ?? $input['call_id'] ?? $details['callId'] ?? $details['call_id'] ?? '', 120);
     if ($transferId === '') {
         $transferId = $externalCallIdForDuplicate !== ''
@@ -627,7 +674,22 @@ function ers_api_create_incoming_transfer(PDO $pdo, array $auth): array
     $room = ers_external_clean($call['room'] ?? $input['room'] ?? $details['room'] ?? '', 150);
     $socketUrl = ers_external_clean($call['socketUrl'] ?? $call['socket_url'] ?? $input['socketUrl'] ?? $input['socket_url'] ?? $details['socketUrl'] ?? $details['socket_url'] ?? 'https://emergency-comm.alertaraqc.com', 255);
     $socketPath = ers_external_clean($call['socketPath'] ?? $call['socket_path'] ?? $input['socketPath'] ?? $input['socket_path'] ?? $details['socketPath'] ?? $details['socket_path'] ?? '/socket.io', 100);
-    $conversationId = ers_external_clean($call['conversationId'] ?? $call['conversation_id'] ?? $input['conversationId'] ?? $input['conversation_id'] ?? $details['conversationId'] ?? $details['conversation_id'] ?? '', 80);
+    $conversationId = ers_external_clean(
+        $call['emergencyComConversationId']
+        ?? $call['emergency_com_conversation_id']
+        ?? $call['conversationId']
+        ?? $call['conversation_id']
+        ?? $input['emergencyComConversationId']
+        ?? $input['emergency_com_conversation_id']
+        ?? $input['conversationId']
+        ?? $input['conversation_id']
+        ?? $details['emergencyComConversationId']
+        ?? $details['emergency_com_conversation_id']
+        ?? $details['conversationId']
+        ?? $details['conversation_id']
+        ?? '',
+        80
+    );
     $externalCallId = ers_external_clean($call['callId'] ?? $call['call_id'] ?? $input['callId'] ?? $input['call_id'] ?? $details['callId'] ?? $details['call_id'] ?? '', 120);
     $requestedTransferType = strtolower(ers_external_clean($call['transfer_type'] ?? $call['transferType'] ?? $input['transfer_type'] ?? $input['transferType'] ?? $details['transfer_type'] ?? $details['transferType'] ?? '', 40));
     $isLiveCallTransfer = $requestedTransferType === 'live_call'
@@ -944,6 +1006,8 @@ function ers_api_update_incident_status(PDO $pdo): array
     $resolvedSql = $status === 'resolved' ? ', resolved_at = COALESCE(resolved_at, NOW())' : '';
     $update = $pdo->prepare("UPDATE incidents SET status = ?, updated_at = NOW() {$resolvedSql} WHERE id = ?");
     $update->execute([$status, (int)$incident['id']]);
+    ers_notify_emergency_com_status($pdo, (int)$incident['id'], trim((string)($input['note'] ?? '')));
+    ers_notify_anonymous_tip_status($pdo, (int)$incident['id'], $status, trim((string)($input['note'] ?? '')));
 
     return [
         'success' => true,
@@ -952,5 +1016,39 @@ function ers_api_update_incident_status(PDO $pdo): array
         'reference_no' => $incident['reference_no'],
         'status' => $status,
     ];
+}
+
+function ers_api_get_transfer_status(PDO $pdo): array
+{
+    $input = ers_external_input();
+    $incidentId = (int)($input['incidentId'] ?? $input['incident_id'] ?? $_GET['incident_id'] ?? 0);
+    $transferId = trim((string)($input['transferId'] ?? $input['transfer_id'] ?? $_GET['transfer_id'] ?? ''));
+    $conversationId = trim((string)($input['conversationId'] ?? $input['conversation_id'] ?? $_GET['conversation_id'] ?? ''));
+
+    if ($incidentId <= 0) {
+        $where = [];
+        $params = [];
+        if ($transferId !== '') {
+            $where[] = 'l.external_incident_id = ?';
+            $params[] = $transferId;
+        }
+        if ($conversationId !== '') {
+            $where[] = "JSON_UNQUOTE(JSON_EXTRACT(l.payload_json, '$.conversationId')) = ?";
+            $params[] = $conversationId;
+            $where[] = "JSON_UNQUOTE(JSON_EXTRACT(l.payload_json, '$.conversation_id')) = ?";
+            $params[] = $conversationId;
+        }
+        if ($where) {
+            $stmt = $pdo->prepare('SELECT l.incident_id FROM external_incident_links l WHERE ' . implode(' OR ', $where) . ' ORDER BY l.id DESC LIMIT 1');
+            $stmt->execute($params);
+            $incidentId = (int)$stmt->fetchColumn();
+        }
+    }
+
+    $status = ers_emergency_com_status($pdo, $incidentId);
+    if (!$status) {
+        ers_external_json(404, ['success' => false, 'error' => 'Transferred incident not found']);
+    }
+    return ['success' => true] + $status;
 }
 ?>

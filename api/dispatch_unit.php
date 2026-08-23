@@ -24,10 +24,62 @@ if ($incident_id === null || $unit_ids === []) {
     exit;
 }
 require_once __DIR__ . '/../includes/db.php';
+require_once __DIR__ . '/../includes/auth.php';
+require_once __DIR__ . '/../includes/activity_log.php';
 require_once __DIR__ . '/../includes/vehicle_resource_units.php';
+require_once __DIR__ . '/../includes/emergency_com_status_sync.php';
+require_once __DIR__ . '/../includes/anonymous_tip_status_sync.php';
+require_once __DIR__ . '/../includes/dispatch_attempt_log.php';
 $pdo = get_db_connection();
 if (!$pdo) {
     echo json_encode(['ok'=>false,'error'=>'DB error']);
+    exit;
+}
+
+function dispatch_record_failed_audit(PDO $pdo, ?int $incidentId, array $unitIds, string $message, array $context = []): void
+{
+    $userId = isset($_SESSION['user_id']) && (int)$_SESSION['user_id'] > 0
+        ? (int)$_SESSION['user_id']
+        : null;
+    $role = strtolower(trim((string)($_SESSION['login_role'] ?? $_SESSION['user_role'] ?? 'dispatcher')));
+    if (!in_array($role, ['admin', 'dispatcher'], true)) {
+        $role = $userId ? 'dispatcher' : 'system';
+    }
+    $source = $role === 'admin' ? 'admin_web' : ($role === 'dispatcher' ? 'dispatcher_web' : 'server_api');
+
+    record_operational_audit_event(
+        $pdo,
+        $userId,
+        'dispatch_failed',
+        'incident',
+        $incidentId,
+        $message,
+        [
+            'actor_role' => $role,
+            'source_channel' => $source,
+            'event_category' => 'dispatch',
+            'event_outcome' => 'failed',
+            'incident_id' => $incidentId,
+            'metadata' => array_merge([
+                'unit_ids' => array_values(array_map('intval', $unitIds)),
+                'failure_reason' => $message,
+            ], $context),
+        ]
+    );
+}
+
+function dispatch_fail_response(PDO $pdo, ?int $incidentId, array $unitIds, string $message, array $context = [], int $statusCode = 200): void
+{
+    if ($pdo->inTransaction()) {
+        $pdo->rollBack();
+    }
+
+    ers_dispatch_attempt_log_failed($pdo, $incidentId, $unitIds, $message, 'dispatch_unit', $context);
+    dispatch_record_failed_audit($pdo, $incidentId, $unitIds, $message, $context);
+    if ($statusCode !== 200) {
+        http_response_code($statusCode);
+    }
+    echo json_encode(['ok' => false, 'error' => $message]);
     exit;
 }
 
@@ -88,6 +140,27 @@ function ensure_dispatch_operator_records_table(PDO $pdo): void
         if (!dispatch_index_exists($pdo, 'dispatch_operator_records', $indexName)) {
             $pdo->exec("ALTER TABLE `dispatch_operator_records` ADD KEY `{$indexName}` {$indexColumns}");
         }
+    }
+}
+
+function ensure_dispatches_assignment_schema(PDO $pdo): void
+{
+    if (!dispatch_table_exists($pdo, 'dispatches')) {
+        return;
+    }
+
+    if (!dispatch_column_exists($pdo, 'dispatches', 'reference_no')) {
+        $pdo->exec("ALTER TABLE `dispatches` ADD COLUMN `reference_no` VARCHAR(50) DEFAULT NULL AFTER `id`");
+    }
+    if (!dispatch_column_exists($pdo, 'dispatches', 'incident_id')) {
+        $afterColumn = dispatch_column_exists($pdo, 'dispatches', 'reference_no') ? 'reference_no' : 'id';
+        $pdo->exec("ALTER TABLE `dispatches` ADD COLUMN `incident_id` BIGINT(20) UNSIGNED DEFAULT NULL AFTER `{$afterColumn}`");
+    }
+    if (!dispatch_index_exists($pdo, 'dispatches', 'idx_dispatches_reference_no')) {
+        $pdo->exec("ALTER TABLE `dispatches` ADD KEY `idx_dispatches_reference_no` (`reference_no`)");
+    }
+    if (!dispatch_index_exists($pdo, 'dispatches', 'idx_dispatches_incident_id')) {
+        $pdo->exec("ALTER TABLE `dispatches` ADD KEY `idx_dispatches_incident_id` (`incident_id`)");
     }
 }
 
@@ -171,6 +244,113 @@ function dispatch_index_exists(PDO $pdo, string $tableName, string $indexName): 
     }
 }
 
+function dispatch_responder_is_available(PDO $pdo, int $responderId): bool
+{
+    if ($responderId <= 0 || !dispatch_table_exists($pdo, 'users')) {
+        return false;
+    }
+
+    $select = ['u.id'];
+    $join = '';
+    if (dispatch_column_exists($pdo, 'users', 'status')) {
+        $select[] = 'u.status AS account_status';
+    } else {
+        $select[] = "'active' AS account_status";
+    }
+    if (dispatch_column_exists($pdo, 'users', 'unit_status')) {
+        $select[] = 'u.unit_status';
+    } else {
+        $select[] = "'available' AS unit_status";
+    }
+
+    $hasPresence = dispatch_table_exists($pdo, 'user_presence')
+        && dispatch_column_exists($pdo, 'user_presence', 'user_id')
+        && dispatch_column_exists($pdo, 'user_presence', 'is_online')
+        && dispatch_column_exists($pdo, 'user_presence', 'last_seen_at');
+    if ($hasPresence) {
+        $select[] = 'up.is_online';
+        $select[] = 'up.last_seen_at';
+        $join = ' LEFT JOIN user_presence up ON up.user_id = u.id';
+    } else {
+        $select[] = '1 AS is_online';
+        $select[] = 'NOW() AS last_seen_at';
+    }
+
+    $roleWhere = dispatch_column_exists($pdo, 'users', 'role')
+        ? " AND LOWER(COALESCE(u.role, '')) = 'responder'"
+        : '';
+    $stmt = $pdo->prepare(
+        'SELECT ' . implode(', ', $select) . "
+         FROM users u
+         {$join}
+         WHERE u.id = ?{$roleWhere}
+         LIMIT 1"
+    );
+    $stmt->execute([$responderId]);
+    $row = $stmt->fetch(PDO::FETCH_ASSOC);
+    if (!$row) {
+        return false;
+    }
+
+    $accountStatus = strtolower(trim((string)($row['account_status'] ?? 'active')));
+    if ($accountStatus !== '' && $accountStatus !== 'active') {
+        return false;
+    }
+
+    $unitStatus = strtolower(trim((string)($row['unit_status'] ?? 'available')));
+    if (!in_array($unitStatus, ['', 'available', 'ready', 'on_duty'], true)) {
+        return false;
+    }
+
+    if (!$hasPresence) {
+        return true;
+    }
+
+    $lastSeen = strtotime((string)($row['last_seen_at'] ?? ''));
+    return (int)($row['is_online'] ?? 0) === 1
+        && $lastSeen !== false
+        && $lastSeen >= time() - 180;
+}
+
+function insert_dispatch_assignment(PDO $pdo, int $incidentId, string $referenceNo, int $unitId, string $dispatchTime): int
+{
+    $stmt = $pdo->prepare("
+        INSERT INTO dispatches (incident_id, reference_no, unit_id, status, assigned_at)
+        VALUES (?, ?, ?, 'assigned', ?)
+    ");
+    $stmt->execute([$incidentId, $referenceNo, $unitId, $dispatchTime]);
+    return (int)$pdo->lastInsertId();
+}
+
+function dispatch_clean_anonymous_tip_description($value): ?string
+{
+    $raw = trim((string)($value ?? ''));
+    if ($raw === '') {
+        return null;
+    }
+    if (!preg_match('/anonymous tip converted to (?:an )?incident|tip id\s*:|date and time\s*:|evidence\s*:/i', $raw)) {
+        return $raw;
+    }
+
+    $compact = trim((string)preg_replace('/\s+/', ' ', $raw));
+    if (preg_match('/\bDescription\s*:\s*(.*?)(?:\s+\bEvidence\s*:|$)/is', $compact, $matches)) {
+        $description = trim((string)$matches[1]);
+        if ($description !== '') {
+            return $description;
+        }
+    }
+
+    $cleaned = preg_replace('/anonymous tip converted to (?:an )?incident\.?/i', '', $compact);
+    $cleaned = preg_replace('/\bTip ID\s*:\s*.*?(?=\s+\b(?:Date and time|Location|Description|Evidence)\s*:|$)/i', '', (string)$cleaned);
+    $cleaned = preg_replace('/\bDate and time\s*:\s*.*?(?=\s+\b(?:Location|Description|Evidence)\s*:|$)/i', '', (string)$cleaned);
+    $cleaned = preg_replace('/\bLocation\s*:\s*.*?(?=\s+\b(?:Description|Evidence)\s*:|$)/i', '', (string)$cleaned);
+    $cleaned = preg_replace('/\bEvidence\s*:\s*.*$/is', '', (string)$cleaned);
+    $cleaned = preg_replace('/\bDescription\s*:\s*/i', '', (string)$cleaned);
+    $cleaned = trim((string)$cleaned);
+
+    return $cleaned !== '' ? $cleaned : null;
+}
+
 try {
     $dispatchIds = [];
     $dispatchedUnits = [];
@@ -178,11 +358,12 @@ try {
     $notificationLogged = false;
 
     ensure_dispatch_operator_records_table($pdo);
+    ensure_dispatches_assignment_schema($pdo);
 
     $pdo->beginTransaction();
 
     $incidentStmt = $pdo->prepare("
-        SELECT id, priority, description, location_address, latitude, longitude
+        SELECT id, reference_no, priority, description, location_address, latitude, longitude
         FROM incidents
         WHERE id = ?
         LIMIT 1
@@ -190,9 +371,10 @@ try {
     $incidentStmt->execute([$incident_id]);
     $incidentRow = $incidentStmt->fetch(PDO::FETCH_ASSOC);
     if (!$incidentRow) {
-        $pdo->rollBack();
-        echo json_encode(['ok' => false, 'error' => 'Incident not found']);
-        exit;
+        dispatch_fail_response($pdo, $incident_id, $unit_ids, 'Incident not found', [
+            'incident_id' => $incident_id,
+            'unit_ids' => $unit_ids,
+        ]);
     }
 
     $placeholders = implode(',', array_fill(0, count($unit_ids), '?'));
@@ -246,34 +428,54 @@ try {
     $availableUnits = [];
     foreach ($unitStmt->fetchAll(PDO::FETCH_ASSOC) as $unitRow) {
         if ((string)($unitRow['status'] ?? '') !== 'available') {
-            $pdo->rollBack();
-            echo json_encode([
-                'ok' => false,
-                'error' => 'Unit ' . (string)($unitRow['identifier'] ?? $unitRow['id']) . ' is no longer available'
+            $unitLabel = (string)($unitRow['identifier'] ?? $unitRow['id']);
+            dispatch_fail_response($pdo, $incident_id, $unit_ids, 'Unit ' . $unitLabel . ' is no longer available', [
+                'incident_id' => $incident_id,
+                'unit_ids' => $unit_ids,
+                'unit_identifier' => $unitLabel,
+                'unit_status' => (string)($unitRow['status'] ?? ''),
             ]);
-            exit;
         }
         if ((int)($unitRow['assigned_user_id'] ?? 0) <= 0) {
-            $pdo->rollBack();
-            echo json_encode([
-                'ok' => false,
-                'error' => 'Unit ' . (string)($unitRow['identifier'] ?? $unitRow['id']) . ' has no assigned responder'
+            $unitLabel = (string)($unitRow['identifier'] ?? $unitRow['id']);
+            dispatch_fail_response($pdo, $incident_id, $unit_ids, 'Unit ' . $unitLabel . ' has no assigned responder', [
+                'incident_id' => $incident_id,
+                'unit_ids' => $unit_ids,
+                'unit_identifier' => $unitLabel,
             ]);
-            exit;
+        }
+        if (!dispatch_responder_is_available($pdo, (int)$unitRow['assigned_user_id'])) {
+            $unitLabel = (string)($unitRow['identifier'] ?? $unitRow['id']);
+            dispatch_fail_response($pdo, $incident_id, $unit_ids, 'Unit ' . $unitLabel . ' responder is not online and available', [
+                'incident_id' => $incident_id,
+                'unit_ids' => $unit_ids,
+                'unit_identifier' => $unitLabel,
+                'assigned_user_id' => (int)($unitRow['assigned_user_id'] ?? 0),
+            ]);
         }
         $availableUnits[(int)$unitRow['id']] = $unitRow;
     }
 
     foreach ($unit_ids as $unit_id) {
         if (!isset($availableUnits[$unit_id])) {
-            $pdo->rollBack();
-            echo json_encode(['ok' => false, 'error' => 'One or more selected units were not found']);
-            exit;
+            dispatch_fail_response($pdo, $incident_id, $unit_ids, 'One or more selected units were not found', [
+                'incident_id' => $incident_id,
+                'unit_ids' => $unit_ids,
+                'missing_unit_id' => $unit_id,
+            ]);
         }
     }
 
     $dispatchTime = dispatch_philippine_timestamp();
-    $stmtIns = $pdo->prepare("INSERT INTO dispatches (incident_id, unit_id, status, assigned_at) VALUES (?, ?, 'assigned', ?)");
+    $incidentReferenceNo = trim((string)($incidentRow['reference_no'] ?? ''));
+    $dispatchDescription = dispatch_clean_anonymous_tip_description($incidentRow['description'] ?? null);
+    if ($incidentReferenceNo === '') {
+        dispatch_fail_response($pdo, $incident_id, $unit_ids, 'Incident reference number is missing', [
+            'incident_id' => $incident_id,
+            'unit_ids' => $unit_ids,
+        ]);
+    }
+
     $stmtUnit = $pdo->prepare("UPDATE units SET status='assigned', current_incident_id=?, last_status_at=CURRENT_TIMESTAMP WHERE id=?");
     $stmtOperatorRecord = $pdo->prepare("
         INSERT INTO dispatch_operator_records
@@ -281,8 +483,7 @@ try {
         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?, ?, ?, ?, ?)
     ");
     foreach ($unit_ids as $unit_id) {
-        $stmtIns->execute([$incident_id, $unit_id, $dispatchTime]);
-        $dispatchId = (int)$pdo->lastInsertId();
+        $dispatchId = insert_dispatch_assignment($pdo, $incident_id, $incidentReferenceNo, $unit_id, $dispatchTime);
         $dispatchIds[] = $dispatchId;
 
         $stmtUnit->execute([$incident_id, $unit_id]);
@@ -306,7 +507,7 @@ try {
             $incidentRow['latitude'] ?? null,
             $incidentRow['longitude'] ?? null,
             $incidentRow['priority'] ?? null,
-            $incidentRow['description'] ?? null,
+            $dispatchDescription,
             $dispatchTime,
             $assignedResponderId,
             $responderName,
@@ -330,6 +531,8 @@ try {
     $stmtInc->execute([$incident_id]);
 
     $pdo->commit();
+    ers_notify_emergency_com_status($pdo, $incident_id, 'Response units are being dispatched.');
+    $anonymousTipStatusSync = ers_notify_anonymous_tip_status_result($pdo, $incident_id, 'dispatched', 'Response units are being dispatched.');
 
     // Build payload for app notification feed (best-effort; does not block dispatch success).
     try {
@@ -337,7 +540,7 @@ try {
         $stmtMeta = $pdo->prepare("
             SELECT
                 d.id AS dispatch_id,
-                d.incident_id,
+                i.id AS incident_id,
                 d.unit_id,
                 d.status AS dispatch_status,
                 d.assigned_at,
@@ -348,7 +551,7 @@ try {
                 u.identifier AS unit_identifier,
                 u.unit_type
             FROM dispatches d
-            LEFT JOIN incidents i ON i.id = d.incident_id
+            LEFT JOIN incidents i ON i.reference_no = d.reference_no
             LEFT JOIN units u ON u.id = d.unit_id
             WHERE d.id IN ($metaPlaceholders)
             ORDER BY d.id ASC
@@ -374,23 +577,49 @@ try {
             }, $dispatchedUnits);
         }
 
-        if (session_status() === PHP_SESSION_NONE) {
-            @session_start();
+        $userId = isset($_SESSION['user_id']) && (int)$_SESSION['user_id'] > 0
+            ? (int)$_SESSION['user_id']
+            : null;
+        $role = strtolower(trim((string)($_SESSION['login_role'] ?? $_SESSION['user_role'] ?? 'dispatcher')));
+        if (!in_array($role, ['admin', 'dispatcher'], true)) {
+            $role = $userId ? 'dispatcher' : 'system';
         }
-        $userId = isset($_SESSION['user_id']) ? (int)$_SESSION['user_id'] : null;
+        $source = $role === 'admin' ? 'admin_web' : ($role === 'dispatcher' ? 'dispatcher_web' : 'server_api');
 
         $notificationText = 'Dispatch confirmed for incident #' . (string)$incident_id . ' with ' . count($dispatchIds) . ' unit' . (count($dispatchIds) === 1 ? '' : 's');
         $notificationDetails = [
             'message' => $notificationText,
             'dispatch' => $notificationPayload
         ];
+        $detailsJson = json_encode($notificationDetails, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
 
-        $stmtLog = $pdo->prepare("
-            INSERT INTO activity_log (user_id, action, entity_type, entity_id, details, created_at)
-            VALUES (?, 'dispatch_confirmed', 'dispatch', ?, ?, ?)
-        ");
-        $stmtLog->execute([$userId, $dispatchIds[0] ?? null, json_encode($notificationDetails, JSON_UNESCAPED_UNICODE), $dispatchTime]);
-        $notificationLogged = true;
+        $auditId = record_operational_audit_event(
+            $pdo,
+            $userId,
+            'dispatch_confirmed',
+            'dispatch',
+            $dispatchIds[0] ?? null,
+            is_string($detailsJson) ? $detailsJson : $notificationText,
+            [
+                'actor_role' => $role,
+                'source_channel' => $source,
+                'event_category' => 'dispatch',
+                'event_outcome' => 'success',
+                'reference_no' => $incidentReferenceNo,
+                'incident_id' => $incident_id,
+                'dispatch_id' => $dispatchIds[0] ?? null,
+                'occurred_at' => $dispatchTime,
+                'event_key' => 'incident:' . $incident_id . ':dispatch:' . (string)($dispatchIds[0] ?? 0) . ':confirmed',
+                'metadata' => [
+                    'dispatch_ids' => $dispatchIds,
+                    'unit_ids' => array_map(static fn(array $unit): int => (int)$unit['id'], $dispatchedUnits),
+                    'unit_identifiers' => array_map(static fn(array $unit): string => (string)$unit['identifier'], $dispatchedUnits),
+                    'responder_ids' => array_map(static fn(array $unit): int => (int)$unit['responder_id'], $dispatchedUnits),
+                    'dispatched_count' => count($dispatchIds),
+                ],
+            ]
+        );
+        $notificationLogged = $auditId !== null;
     } catch (Throwable $logError) {
         // Dispatch already committed; keep success response even if logging fails.
     }
@@ -401,10 +630,22 @@ try {
         'dispatch_ids' => $dispatchIds,
         'dispatched_count' => count($dispatchIds),
         'dispatched_units' => $dispatchedUnits,
+        'anonymous_tip_status_sync' => $anonymousTipStatusSync,
         'notification_logged' => $notificationLogged,
         'notification' => $notificationPayload
     ]);
 } catch (Throwable $e) {
-    try { $pdo->rollBack(); } catch (Throwable $e2) {}
+    try {
+        if ($pdo->inTransaction()) {
+            $pdo->rollBack();
+        }
+    } catch (Throwable $e2) {}
+    $failureContext = [
+        'incident_id' => $incident_id,
+        'unit_ids' => $unit_ids,
+        'exception' => $e->getMessage(),
+    ];
+    ers_dispatch_attempt_log_failed($pdo, $incident_id, $unit_ids, 'Dispatch failed: ' . $e->getMessage(), 'dispatch_unit', $failureContext);
+    dispatch_record_failed_audit($pdo, $incident_id, $unit_ids, 'Dispatch failed: ' . $e->getMessage(), $failureContext);
     echo json_encode(['ok'=>false,'error'=>'Dispatch failed: ' . $e->getMessage()]);
 }

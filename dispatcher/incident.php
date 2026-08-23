@@ -4,14 +4,81 @@ require_once $rootDir . '/includes/auth.php';
 // Require full login (including OTP verification) before loading page
 require_role('dispatcher', 'dispatcher/incident.php');
 require_once $rootDir . '/includes/db.php';
+header('Cache-Control: private, no-store, max-age=0');
+header('Pragma: no-cache');
 
 $pageTitle = 'Incident Priority Management';
+$assetUrl = static function (string $relativePath) use ($rootDir): string {
+    $fullPath = $rootDir . DIRECTORY_SEPARATOR . str_replace(['/', '\\'], DIRECTORY_SEPARATOR, $relativePath);
+    $version = @filemtime($fullPath) ?: time();
+    return htmlspecialchars($relativePath . '?v=' . $version, ENT_QUOTES, 'UTF-8');
+};
 $aiIncidentData = [
     'type' => 'Unknown',
     'location' => 'Unknown',
     'description' => 'No active incident data',
     'severity' => 'Unknown',
 ];
+
+function incident_ai_inline_html(string $text): string
+{
+    $safe = htmlspecialchars(trim($text), ENT_QUOTES, 'UTF-8');
+    return preg_replace('/\*\*(.+?)\*\*/s', '<strong>$1</strong>', $safe) ?? $safe;
+}
+
+function incident_ai_analysis_html(string $text): string
+{
+    $lines = preg_split('/\R/u', trim($text)) ?: [];
+    $html = '<div class="ai-analysis-text">';
+    $listOpen = false;
+
+    foreach ($lines as $line) {
+        $line = trim((string)$line);
+        if ($line === '') {
+            if ($listOpen) {
+                $html .= '</ul>';
+                $listOpen = false;
+            }
+            continue;
+        }
+
+        if (preg_match('/^\*\*([^*:\n]+):\*\*\s*(.*)$/u', $line, $match)) {
+            if ($listOpen) {
+                $html .= '</ul>';
+                $listOpen = false;
+            }
+            $label = htmlspecialchars(trim($match[1]), ENT_QUOTES, 'UTF-8');
+            $value = incident_ai_inline_html((string)($match[2] ?? ''));
+            $html .= '<section class="ai-analysis-item"><h3>' . $label . '</h3>';
+            if ($value !== '') {
+                $html .= '<p>' . $value . '</p>';
+            }
+            $html .= '</section>';
+            continue;
+        }
+
+        if (preg_match('/^[*-]\s+(.*)$/u', $line, $match)) {
+            if (!$listOpen) {
+                $html .= '<ul class="ai-analysis-list">';
+                $listOpen = true;
+            }
+            $html .= '<li>' . incident_ai_inline_html((string)$match[1]) . '</li>';
+            continue;
+        }
+
+        if ($listOpen) {
+            $html .= '</ul>';
+            $listOpen = false;
+        }
+        $html .= '<p>' . incident_ai_inline_html($line) . '</p>';
+    }
+
+    if ($listOpen) {
+        $html .= '</ul>';
+    }
+
+    return $html . '</div>';
+}
 
 try {
     $pdo = get_db_connection();
@@ -22,10 +89,10 @@ try {
                                  ORDER BY CASE LOWER(priority)
                                      WHEN 'critical' THEN 1
                                      WHEN 'high' THEN 2
-                                     WHEN 'urgent' THEN 3
-                                     WHEN 'moderate' THEN 4
-                                     WHEN 'medium' THEN 4
-                                     WHEN 'low' THEN 5
+                                     WHEN 'urgent' THEN 2
+                                     WHEN 'medium' THEN 3
+                                     WHEN 'moderate' THEN 3
+                                     WHEN 'low' THEN 4
                                      ELSE 6
                                  END, created_at DESC
                                  LIMIT 1")->fetch();
@@ -58,16 +125,16 @@ try {
     <?php include $rootDir . '/includes/theme-init.php'; ?>
     <base href="../">
     <link rel="icon" type="image/x-icon" href="images/favicon.ico">
-    <link rel="stylesheet" href="css/global.css">
+    <link rel="stylesheet" href="<?php echo $assetUrl('css/global.css'); ?>">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
-    <link rel="stylesheet" href="css/sidebar.css">
-    <link rel="stylesheet" href="css/admin-header.css">
-    <link rel="stylesheet" href="css/sidebar-footer.css">
-    <link rel="stylesheet" href="css/cards.css">
-    <link rel="stylesheet" href="css/incident.css">
+    <link rel="stylesheet" href="<?php echo $assetUrl('css/sidebar.css'); ?>">
+    <link rel="stylesheet" href="<?php echo $assetUrl('css/admin-header.css'); ?>">
+    <link rel="stylesheet" href="<?php echo $assetUrl('css/sidebar-footer.css'); ?>">
+    <link rel="stylesheet" href="<?php echo $assetUrl('css/cards.css'); ?>">
+    <link rel="stylesheet" href="<?php echo $assetUrl('css/incident.css'); ?>">
 
 </head>
-<body>
+<body class="dispatcher-incident-page">
     <!-- Include Sidebar Component -->
     <?php include $rootDir . '/includes/sidebar.php'; ?>
 
@@ -90,8 +157,6 @@ try {
 
                     <div class="incident-hero-chips">
                         <span class="incident-chip incident-chip-live"><span class="incident-chip-dot"></span> Priority Queue Live</span>
-                        <span class="incident-chip">Dispatcher Review Ready</span>
-                        <span class="incident-chip">AI Analysis Enabled</span>
                     </div>
                 </div>
 
@@ -101,7 +166,7 @@ try {
                         <div class="incident-focus-value"><?php echo htmlspecialchars($aiIncidentData['type']); ?></div>
                         <div class="incident-focus-meta"><?php echo htmlspecialchars($aiIncidentData['location']); ?></div>
                         <div class="incident-focus-severity">Priority: <?php echo htmlspecialchars($aiIncidentData['severity']); ?></div>
-                        <div class="incident-focus-desc"><?php echo htmlspecialchars($aiIncidentData['description']); ?></div>
+                        <div class="incident-focus-desc" title="<?php echo htmlspecialchars($aiIncidentData['description']); ?>"><?php echo htmlspecialchars($aiIncidentData['description']); ?></div>
                     </div>
                 </div>
             </section>
@@ -113,7 +178,7 @@ try {
                     </div>
                     <div class="stats-content">
                         <h3>0</h3>
-                        <p>High Priority Incidents</p>
+                        <p>Critical / High Priority Incidents</p>
                     </div>
                 </div>
                 <div class="stats-card priority-medium-card">
@@ -163,6 +228,7 @@ try {
                         <label for="priority-filter">Priority Level</label>
                         <select id="priority-filter">
                             <option value="">All Priorities</option>
+                            <option value="critical">Critical Priority</option>
                             <option value="high">High Priority</option>
                             <option value="medium">Medium Priority</option>
                             <option value="low">Low Priority</option>
@@ -203,11 +269,20 @@ try {
                                 <i class="fas fa-list"></i>
                                 Logged Incidents
                             </h2>
+                            <p id="incident-result-count" class="incident-result-count" aria-live="polite">Loading incidents...</p>
                         </div>
                         <button id="btn-view-resolved" class="btn-action" title="Show all resolved incidents">View Resolved</button>
                     </div>
                     <div class="incident-list-panel">
-                        <div id="incident-list-dynamic"></div>
+                        <div id="incident-list-dynamic" aria-busy="true">
+                            <div class="incident-queue-state is-loading" role="status">
+                                <i class="fas fa-spinner fa-spin" aria-hidden="true"></i>
+                                <div>
+                                    <strong>Loading incident queue</strong>
+                                    <span>Retrieving the latest operational records...</span>
+                                </div>
+                            </div>
+                        </div>
                     </div>
                 </section>
 
@@ -222,7 +297,7 @@ try {
                             include $rootDir . '/includes/gemini_helper.php';
                             $analysis = analyzeIncident($aiIncidentData);
                             if ($analysis) {
-                                echo '<div class="ai-analysis-text">' . nl2br(htmlspecialchars($analysis)) . '</div>';
+                                echo incident_ai_analysis_html((string)$analysis);
                             } else {
                                 $aiError = function_exists('getGeminiLastError') ? trim((string) getGeminiLastError()) : '';
                                 if ($aiError === '') {
@@ -253,51 +328,31 @@ try {
         let REFRESH_TIMER = null;
         let RESOLVED_REFRESH_TIMER = null;
         let RESOLVED_LIST_RELOAD = null;
+        let INCIDENTS_FETCH_ERROR = '';
         let LAST_RESOLVED_NOTIFICATION_ID = Number(sessionStorage.getItem('ers_last_resolved_notice_id') || '0') || 0;
         const API_LIST_URL = 'api/incidents_list.php';
         const API_UPDATE_URL = 'api/incident_update.php';
         const API_RESOLVE_URL = 'api/incident_resolve.php';
         const API_RESOLVED_NOTIFICATIONS_URL = 'api/resolved_incident_notifications.php';
 
-        // Priority change functionality
-        document.querySelectorAll('.btn-priority').forEach(button => {
-            button.addEventListener('click', function() {
-                const incidentCard = this.closest('.incident-card');
-                const priorityCycle = ['critical', 'high', 'urgent', 'moderate', 'low'];
-                const currentPriority = priorityCycle.find((priority) => incidentCard.classList.contains(`priority-${priority}`)) || 'low';
-
-                const currentIndex = priorityCycle.indexOf(currentPriority);
-                const newPriority = priorityCycle[(currentIndex + 1) % priorityCycle.length];
-
-                // Update card styling
-                incidentCard.classList.remove('priority-critical', 'priority-high', 'priority-urgent', 'priority-moderate', 'priority-medium', 'priority-low');
-                incidentCard.classList.add(`priority-${newPriority}`);
-
-                // Update button styling and text
-                this.className = `btn-priority btn-${newPriority}`;
-                this.textContent = `${newPriority.charAt(0).toUpperCase() + newPriority.slice(1)} Priority`;
-
-                // Show confirmation
-                showNotification(`Incident priority changed to ${newPriority.toUpperCase()}`, 'success');
-            });
-        });
-
-        // Resolve incident functionality
-
-        // Event delegation for all action buttons in the table
+        // Event delegation for all actions in the dynamic incident queue.
         document.addEventListener('click', function(e) {
-            // Find the button and row
             const btn = e.target.closest('button');
             if (!btn) return;
-            const tr = btn.closest('tr');
-            if (!tr) return;
-            const rowIncidentId = Number(tr.getAttribute('data-id') || '0');
-            const rowRef = (tr.getAttribute('data-ref') || '').trim();
+            const action = btn.getAttribute('data-action') || '';
+
+            if (action === 'retry-incidents') {
+                fetchIncidents();
+                return;
+            }
+
+            const incidentRow = btn.closest('[data-incident-row]');
+            if (!incidentRow) return;
+            const rowIncidentId = Number(incidentRow.getAttribute('data-id') || '0');
+            const rowRef = (incidentRow.getAttribute('data-ref') || '').trim();
             const incident = INCIDENTS.find(i => Number(i.id || 0) === rowIncidentId)
                 || INCIDENTS.find(i => String(i.incident_code || i.reference_no || '') === rowRef);
             if (!incident) return;
-
-            const action = btn.getAttribute('data-action') || '';
 
             // Priority button
             if (action === 'priority' || btn.classList.contains('btn-priority')) {
@@ -435,10 +490,10 @@ try {
             .then(r => r.json())
             .then(json => {
                 if (json.ok && json.text) {
-                    container.innerHTML = '<div class="ai-analysis-text">' + String(json.text).replace(/\n/g,'<br>') + '</div>';
+                    container.innerHTML = renderAiAnalysisText(json.text);
                 } else {
                     const msg = (json && json.error) ? String(json.error) : 'Unable to generate AI analysis at this time.';
-                    container.innerHTML = '<div class="ai-error"><i class="fas fa-exclamation-triangle"></i> ' + msg.replace(/\n/g,'<br>') + '</div>';
+                    container.innerHTML = '<div class="ai-error"><i class="fas fa-exclamation-triangle"></i> ' + escapeHtml(msg).replace(/\n/g,'<br>') + '</div>';
                 }
             })
             .catch(() => {
@@ -500,7 +555,10 @@ try {
             return !!(modal && modal.style.display !== 'none');
         }
 
+        let resolvedNoticePollInFlight = false;
         async function pollResolvedIncidentNotifications() {
+            if (document.hidden || resolvedNoticePollInFlight) return;
+            resolvedNoticePollInFlight = true;
             try {
                 const res = await fetch(API_RESOLVED_NOTIFICATIONS_URL + '?limit=5', {
                     cache: 'no-store',
@@ -533,7 +591,10 @@ try {
                     const label = incident.label || incident.reference_no || (incident.id ? ('#' + incident.id) : 'Incident');
                     showNotification(`${label} moved to View Resolved.`, 'success');
                 }
-            } catch (e) {}
+            } catch (e) {
+            } finally {
+                resolvedNoticePollInFlight = false;
+            }
         }
 
         // Update statistics
@@ -543,7 +604,7 @@ try {
             let highCount = 0, mediumCount = 0, lowCount = 0;
             filtered.forEach(i => {
                 const p = normalizePriority(i.priority);
-                if (p === 'high') highCount++;
+                if (p === 'critical' || p === 'high') highCount++;
                 else if (p === 'medium') mediumCount++;
                 else lowCount++;
             });
@@ -570,8 +631,9 @@ try {
 
         function normalizePriority(priority) {
             const value = String(priority || 'low').trim().toLowerCase();
-            if (value === 'critical' || value === 'high') return 'high';
-            if (value === 'medium') return 'medium';
+            if (value === 'critical') return 'critical';
+            if (value === 'high' || value === 'urgent') return 'high';
+            if (value === 'medium' || value === 'moderate') return 'medium';
             return 'low';
         }
 
@@ -593,6 +655,23 @@ try {
             return match ? String(match[1]).trim() : '';
         }
 
+        function incidentDisplaySummary(incident) {
+            const raw = String(incident && incident.description ? incident.description : '').replace(/\s+/g, ' ').trim();
+            if (!raw) return 'No description recorded.';
+            if (/emergency report conversation summary/i.test(raw)) {
+                const caller = raw.match(/Citizen:\s*([^]+?)\s+Phone:/i);
+                const reportedType = raw.match(/Incident Type:\s*([^]+?)\s+Location:/i)
+                    || raw.match(/Emergency type:\s*([^]+?)\s+Location:/i);
+                const typeLabel = reportedType && reportedType[1]
+                    ? reportedType[1].trim()
+                    : String(incident.type || 'Emergency').trim();
+                const callerLabel = caller && caller[1] ? ` reported by ${caller[1].trim()}` : '';
+                return `${typeLabel}${callerLabel}. Open details for the complete call narrative.`;
+            }
+            const withoutLinks = raw.replace(/https?:\/\/\S+/gi, '').replace(/\s+/g, ' ').trim();
+            return withoutLinks.length > 220 ? `${withoutLinks.slice(0, 217).trim()}…` : withoutLinks;
+        }
+
         function escapeHtml(value) {
             return String(value === null || value === undefined ? '' : value)
                 .replace(/&/g, '&amp;')
@@ -600,6 +679,57 @@ try {
                 .replace(/>/g, '&gt;')
                 .replace(/"/g, '&quot;')
                 .replace(/'/g, '&#39;');
+        }
+
+        function aiInlineHtml(value) {
+            return escapeHtml(value).replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
+        }
+
+        function renderAiAnalysisText(value) {
+            const lines = String(value || '').trim().split(/\r?\n/);
+            let html = '<div class="ai-analysis-text">';
+            let listOpen = false;
+            const closeList = () => {
+                if (listOpen) {
+                    html += '</ul>';
+                    listOpen = false;
+                }
+            };
+
+            lines.forEach((rawLine) => {
+                const line = rawLine.trim();
+                if (!line) {
+                    closeList();
+                    return;
+                }
+
+                const headingMatch = line.match(/^\*\*([^*:\n]+):\*\*\s*(.*)$/);
+                if (headingMatch) {
+                    closeList();
+                    html += `<section class="ai-analysis-item"><h3>${escapeHtml(headingMatch[1])}</h3>`;
+                    if (headingMatch[2]) {
+                        html += `<p>${aiInlineHtml(headingMatch[2])}</p>`;
+                    }
+                    html += '</section>';
+                    return;
+                }
+
+                const bulletMatch = line.match(/^[*-]\s+(.*)$/);
+                if (bulletMatch) {
+                    if (!listOpen) {
+                        html += '<ul class="ai-analysis-list">';
+                        listOpen = true;
+                    }
+                    html += `<li>${aiInlineHtml(bulletMatch[1])}</li>`;
+                    return;
+                }
+
+                closeList();
+                html += `<p>${aiInlineHtml(line)}</p>`;
+            });
+
+            closeList();
+            return html + '</div>';
         }
 
         function incidentCardHtml(i) {
@@ -610,39 +740,59 @@ try {
             const ref = i.incident_code || i.reference_no || '';
             const type = capitalize(i.type || 'Unknown');
             const priorityLabel = capitalize(priority);
-            const description = (i.description || '').trim();
-            const shortDescription = description.length > 88 ? `${description.substring(0, 88)}...` : description;
+            const description = incidentDisplaySummary(i);
             const id = Number(i.id || 0);
+            const phone = getIncidentPhone(i);
+            const phoneDisabled = phone ? '' : ' disabled aria-disabled="true"';
+            const phoneTitle = phone ? `Call ${phone}` : 'No contact number available';
             return `
-                <tr class="priority-${priority}" data-id="${id}" data-ref="${escapeHtml(ref)}">
-                    <td class="incident-ref-cell">${escapeHtml(ref || 'N/A')}</td>
-                    <td>${escapeHtml(type)}</td>
-                    <td>
-                        <span class="priority-badge priority-${escapeHtml(priority)}">${escapeHtml(priorityLabel)}</span>
-                    </td>
-                    <td class="incident-description-cell" title="${escapeHtml(description || 'No description')}">
-                        ${escapeHtml(shortDescription || 'No description')}
-                    </td>
-                    <td><span class="status-badge ${escapeHtml(statusInfo.cls)}">${escapeHtml(statusInfo.label)}</span></td>
-                    <td class="incident-location-cell" title="${escapeHtml(location)}">${escapeHtml(location)}</td>
-                    <td class="incident-date-cell">${escapeHtml(created.toLocaleString())}</td>
-                    <td>
-                        <div class="table-actions">
-                            <button class="btn-table-action btn-priority priority-${escapeHtml(priority)}" type="button" data-action="priority" title="Change priority" aria-label="Change priority for ${escapeHtml(ref || type)}">
-                                <i class="fas fa-flag"></i>
-                            </button>
-                            <button class="btn-table-action" type="button" data-action="edit" title="Edit incident" aria-label="Edit incident ${escapeHtml(ref || type)}">
-                                <i class="fas fa-edit"></i>
-                            </button>
-                            <button class="btn-table-action" type="button" data-action="call" title="Call contact" aria-label="Call contact for incident ${escapeHtml(ref || type)}">
-                                <i class="fas fa-phone"></i>
-                            </button>
-                            <button class="btn-table-action" type="button" data-action="resolve" title="Resolve incident" aria-label="Resolve incident ${escapeHtml(ref || type)}">
-                                <i class="fas fa-check"></i>
-                            </button>
+                <article class="incident-queue-card priority-${escapeHtml(priority)}" data-incident-row data-id="${id}" data-ref="${escapeHtml(ref)}" role="listitem">
+                    <div class="incident-card-header">
+                        <div class="incident-card-identity">
+                            <span class="incident-card-label">Reference number</span>
+                            <h3 class="incident-card-reference">${escapeHtml(ref || 'N/A')}</h3>
+                            <span class="incident-type-label"><i class="fas fa-triangle-exclamation" aria-hidden="true"></i> ${escapeHtml(type)}</span>
                         </div>
-                    </td>
-                </tr>
+                        <div class="incident-card-badges" aria-label="Incident priority and status">
+                            <span class="priority-badge priority-${escapeHtml(priority)}">${escapeHtml(priorityLabel)}</span>
+                            <span class="status-badge ${escapeHtml(statusInfo.cls)}">${escapeHtml(statusInfo.label)}</span>
+                        </div>
+                    </div>
+
+                    <p class="incident-card-description" title="${escapeHtml(description || 'No description')}">
+                        ${escapeHtml(description || 'No description')}
+                    </p>
+
+                    <div class="incident-card-meta">
+                        <div class="incident-meta-item">
+                            <i class="fas fa-location-dot" aria-hidden="true"></i>
+                            <div><span>Location</span><strong title="${escapeHtml(location)}">${escapeHtml(location)}</strong></div>
+                        </div>
+                        <div class="incident-meta-item">
+                            <i class="fas fa-clock" aria-hidden="true"></i>
+                            <div><span>Date and time</span><strong>${escapeHtml(created.toLocaleString())}</strong></div>
+                        </div>
+                    </div>
+
+                    <div class="incident-card-actions" aria-label="Actions for incident ${escapeHtml(ref || type)}">
+                        <button class="btn-incident-action action-priority btn-priority priority-${escapeHtml(priority)}" type="button" data-action="priority" title="Change the current ${escapeHtml(priorityLabel)} priority" aria-label="Change priority for ${escapeHtml(ref || type)}">
+                            <i class="fas fa-flag" aria-hidden="true"></i>
+                            <span>Set Priority</span>
+                        </button>
+                        <button class="btn-incident-action action-edit" type="button" data-action="edit" title="Edit incident details" aria-label="Edit incident ${escapeHtml(ref || type)}">
+                            <i class="fas fa-pen-to-square" aria-hidden="true"></i>
+                            <span>Edit</span>
+                        </button>
+                        <button class="btn-incident-action action-call" type="button" data-action="call" title="${escapeHtml(phoneTitle)}" aria-label="Call contact for incident ${escapeHtml(ref || type)}"${phoneDisabled}>
+                            <i class="fas fa-phone" aria-hidden="true"></i>
+                            <span>${phone ? 'Call' : 'No Phone'}</span>
+                        </button>
+                        <button class="btn-incident-action action-resolve" type="button" data-action="resolve" title="Resolve incident" aria-label="Resolve incident ${escapeHtml(ref || type)}">
+                            <i class="fas fa-circle-check" aria-hidden="true"></i>
+                            <span>Resolve</span>
+                        </button>
+                    </div>
+                </article>
             `;
         }
 
@@ -675,35 +825,52 @@ try {
         function renderDynamicIncidents() {
             const container = document.getElementById('incident-list-dynamic');
             if (!container) return;
+            container.setAttribute('aria-busy', 'false');
+            const countEl = document.getElementById('incident-result-count');
+
+            if (INCIDENTS_FETCH_ERROR) {
+                container.innerHTML = `
+                    <div class="incident-queue-state is-error" role="alert">
+                        <i class="fas fa-cloud-arrow-down" aria-hidden="true"></i>
+                        <div>
+                            <strong>Could not load incidents</strong>
+                            <span>${escapeHtml(INCIDENTS_FETCH_ERROR)}</span>
+                        </div>
+                        <button type="button" data-action="retry-incidents"><i class="fas fa-rotate-right" aria-hidden="true"></i> Retry</button>
+                    </div>`;
+                if (countEl) countEl.textContent = 'Queue unavailable';
+                updateStats();
+                return;
+            }
+
             const filtered = INCIDENTS.filter(passFilters);
             if (!filtered.length) {
-                container.innerHTML = '<div class="incident-card empty">No incidents yet. Logged calls will appear here.</div>';
+                container.innerHTML = `
+                    <div class="incident-queue-state is-empty" role="status">
+                        <i class="fas fa-inbox" aria-hidden="true"></i>
+                        <div>
+                            <strong>No matching incidents</strong>
+                            <span>Try adjusting the priority, status, type, or search filters.</span>
+                        </div>
+                    </div>`;
             } else {
-                let table = `<div class="incidents-table-wrapper logged-incidents-table">
-                  <table class="incidents-table">
-                    <thead>
-                        <tr>
-                            <th>Reference No</th>
-                            <th>Type</th>
-                            <th>Priority</th>
-                            <th>Description</th>
-                            <th>Status</th>
-                            <th>Location</th>
-                            <th>Date/Time</th>
-                            <th>Actions</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        ${filtered.map(incidentCardHtml).join('')}
-                    </tbody>
-                  </table>
-                </div>`;
-                container.innerHTML = table;
+                container.innerHTML = `<div class="incident-queue-list" role="list">${filtered.map(incidentCardHtml).join('')}</div>`;
             }
+            if (countEl) countEl.textContent = `${filtered.length} ${filtered.length === 1 ? 'incident' : 'incidents'} shown`;
             updateStats();
         }
 
+        let fetchIncidentsInFlight = false;
+        let fetchIncidentsQueued = false;
         async function fetchIncidents() {
+            if (document.hidden) return;
+            if (fetchIncidentsInFlight) {
+                fetchIncidentsQueued = true;
+                return;
+            }
+            fetchIncidentsInFlight = true;
+            const listContainer = document.getElementById('incident-list-dynamic');
+            if (listContainer) listContainer.setAttribute('aria-busy', 'true');
             // Gather filter values
             const params = new URLSearchParams();
             const priorityValue = (priorityFilter.value || '').toLowerCase();
@@ -719,14 +886,23 @@ try {
                 const data = await res.json();
                 if (data && data.ok) {
                     INCIDENTS = data.items || [];
+                    INCIDENTS_FETCH_ERROR = '';
                 } else {
                     INCIDENTS = [];
+                    INCIDENTS_FETCH_ERROR = (data && data.error) ? String(data.error) : 'The incident service returned an unexpected response.';
                 }
             } catch (e) {
                 console.warn('Failed to fetch incidents', e);
                 INCIDENTS = [];
+                INCIDENTS_FETCH_ERROR = 'Check the network connection, then try again.';
+            } finally {
+                fetchIncidentsInFlight = false;
             }
             renderDynamicIncidents();
+            if (fetchIncidentsQueued) {
+                fetchIncidentsQueued = false;
+                fetchIncidents();
+            }
         }
 
         // Notification system
@@ -1074,7 +1250,7 @@ try {
         } catch (e) {}
     });
     </script>
-    
+
     <script>
         // Resolved incidents modal: list + per-incident details
         function openResolvedModal() {

@@ -267,9 +267,9 @@ try {
     <link rel="stylesheet" href="css/admin-header.css">
     <link rel="stylesheet" href="css/sidebar-footer.css">
     <link rel="stylesheet" href="css/cards.css">
-    <link rel="stylesheet" href="css/resources.css">
+    <link rel="stylesheet" href="css/resources.css?v=<?php echo rawurlencode((string)filemtime($rootDir . '/css/resources.css')); ?>">
 </head>
-<body>
+<body class="dispatcher-resources-shell">
     <!-- Include Sidebar Component -->
     <?php include $rootDir . '/includes/sidebar.php'; ?>
 
@@ -364,13 +364,16 @@ try {
             <div class="resources-table-section resources-panel" style="margin-top:2rem;">
                 <div class="panel-heading-row">
                     <h2 class="section-heading">
-                        <i class="fas fa-table"></i>
-                        All Resources
+                        <i class="fas fa-layer-group"></i>
+                        Resource Roster
                     </h2>
-                    <p class="section-heading-note">Unified live table for vehicles, personnel, and equipment.</p>
+                    <div class="section-heading-summary">
+                        <span id="resource-results-count" class="resource-results-count" aria-live="polite">Loading resources...</span>
+                        <p class="section-heading-note">Live vehicle, personnel, and equipment availability.</p>
+                    </div>
                 </div>
                 <div class="table-shell">
-                <div style="overflow-x:auto;">
+                <div class="resource-roster-scroll">
                 <style>
                 .resource-table {
                     width: 100%;
@@ -529,7 +532,7 @@ try {
                         </tr>
                     </thead>
                     <tbody id="resource-list-dynamic">
-                        <tr><td colspan="7" style="text-align:center;color:#888;">Loading resources...</td></tr>
+                        <tr class="resource-roster-state"><td colspan="7">Loading resources...</td></tr>
                     </tbody>
                 </table>
                 </div>
@@ -585,10 +588,13 @@ try {
                     if (equipmentEl) equipmentEl.textContent = String(counts.equipment);
                 }
 
+                let resourcesLoadInFlight = false;
                 async function loadResources(showLoading = false) {
+                    if (resourcesLoadInFlight) return;
+                    resourcesLoadInFlight = true;
                     const container = document.getElementById('resource-list-dynamic');
                     if (showLoading && container) {
-                        container.innerHTML = '<tr><td colspan="7" style="text-align:center;color:#888;">Loading resources...</td></tr>';
+                        container.innerHTML = '<tr class="resource-roster-state"><td colspan="7">Loading resources...</td></tr>';
                     }
                     try {
                         const url = 'api/resources_combined.php?_=' + encodeURIComponent(String(Date.now()));
@@ -610,6 +616,8 @@ try {
                         RESOURCES = [];
                         updateOverviewCounts();
                         renderDynamicResources();
+                    } finally {
+                        resourcesLoadInFlight = false;
                     }
                 }
 
@@ -713,24 +721,24 @@ try {
                     const btns = [];
                     const resourceActions = Array.isArray(r.actions) ? r.actions.slice() : [];
                     const actionSet = new Set(resourceActions);
-                    if (actionSet.has('track')) btns.push(`<button class=\"resource-action-btn track\" title=\"Track\" aria-label=\"Track\" onclick=\"trackResource(this)\"><i class=\"fas fa-location-arrow\"></i></button>`);
-                    if (actionSet.has('service')) btns.push(`<button class=\"resource-action-btn service\" title=\"Service\" aria-label=\"Service\" onclick=\"serviceResource(this)\"><i class=\"fas fa-wrench\"></i></button>`);
-                    if (actionSet.has('details')) btns.push(`<button class=\"resource-action-btn details\" title=\"Details\" aria-label=\"Details\" onclick=\"resourceDetails(this)\"><i class=\"fas fa-info-circle\"></i></button>`);
-                    if (actionSet.has('contact')) btns.push(`<button class=\"resource-action-btn contact\" title=\"Contact\" aria-label=\"Contact\" onclick=\"contactPersonnel(this)\"><i class=\"fas fa-phone\"></i></button>`);
-                    if (actionSet.has('schedule')) btns.push(`<button class=\"resource-action-btn schedule\" title=\"Schedule\" aria-label=\"Schedule\" onclick=\"scheduleResource(this)\"><i class=\"fas fa-calendar\"></i></button>`);
-                    if (actionSet.has('assign')) btns.push(`<button class=\"resource-action-btn assign\" title=\"Assign\" aria-label=\"Assign\" onclick=\"assignEquipment(this)\"><i class=\"fas fa-link\"></i></button>`);
-                    if (actionSet.has('check')) btns.push(`<button class=\"resource-action-btn check\" title=\"Check\" aria-label=\"Check\" onclick=\"checkEquipment(this)\"><i class=\"fas fa-check-circle\"></i></button>`);
-                    if (actionSet.has('calibrate')) btns.push(`<button class=\"resource-action-btn calibrate\" title=\"Calibrate\" aria-label=\"Calibrate\" onclick=\"calibrateEquipment(this)\"><i class=\"fas fa-tools\"></i></button>`);
+                    if (actionSet.has('track')) btns.push(`<button class=\"resource-action-btn track\" title=\"Track resource\" onclick=\"trackResource(this)\"><i class=\"fas fa-location-arrow\"></i><span>Track</span></button>`);
+                    if (actionSet.has('service')) btns.push(`<button class=\"resource-action-btn service\" title=\"Service resource\" onclick=\"serviceResource(this)\"><i class=\"fas fa-wrench\"></i><span>Service</span></button>`);
+                    if (actionSet.has('details')) btns.push(`<button class=\"resource-action-btn details\" title=\"View resource details\" onclick=\"resourceDetails(this)\"><i class=\"fas fa-circle-info\"></i><span>Details</span></button>`);
+                    if (actionSet.has('contact')) btns.push(`<button class=\"resource-action-btn contact\" title=\"Contact personnel\" onclick=\"contactPersonnel(this)\"><i class=\"fas fa-phone\"></i><span>Contact</span></button>`);
+                    if (actionSet.has('schedule')) btns.push(`<button class=\"resource-action-btn schedule\" title=\"Schedule personnel\" onclick=\"scheduleResource(this)\"><i class=\"fas fa-calendar\"></i><span>Schedule</span></button>`);
+                    if (actionSet.has('assign')) btns.push(`<button class=\"resource-action-btn assign\" title=\"Assign equipment\" onclick=\"assignEquipment(this)\"><i class=\"fas fa-link\"></i><span>Assign</span></button>`);
+                    if (actionSet.has('check')) btns.push(`<button class=\"resource-action-btn check\" title=\"Check equipment\" onclick=\"checkEquipment(this)\"><i class=\"fas fa-circle-check\"></i><span>Check</span></button>`);
+                    if (actionSet.has('calibrate')) btns.push(`<button class=\"resource-action-btn calibrate\" title=\"Calibrate equipment\" onclick=\"calibrateEquipment(this)\"><i class=\"fas fa-screwdriver-wrench\"></i><span>Calibrate</span></button>`);
                     const visibleBtns = btns.slice(0, Math.min(btns.length, 4));
                     const actionsHtml = `<div class=\"actions-inline\">${visibleBtns.join('')}</div>`;
-                    return `<tr data-type=\"${r.type}\" data-status=\"${r.status}\" data-location=\"${escapeAttrValue(r.location || '')}\" data-resource-id=\"${escapeAttrValue(r.id)}\" data-resource-name=\"${escapeAttrValue(resourceName)}\" data-resource-code=\"${escapeAttrValue(resourceCode)}\" data-unit-identifier=\"${escapeAttrValue(unitIdentifier)}\" data-resource-source=\"${escapeAttrValue(r.source || '')}\" data-resource-details=\"${escapeAttrValue(r.details || '')}\" data-resource-role=\"${escapeAttrValue(r.role || '')}\" data-resource-updated=\"${escapeAttrValue(r.updatedAt || '')}\" data-resource-assignment=\"${escapeAttrValue(r.assignment || '')}\" data-resource-notes=\"${escapeAttrValue(r.notes || '')}\" data-resource-phone=\"${escapeAttrValue(r.phone || '')}\" data-resource-email=\"${escapeAttrValue(r.email || '')}\" data-resource-quantity=\"${safeQuantity}\">\n`+
-                        `<td>${safeResourceCode}</td>`+
-                        `<td class=\"name-cell resource-title\"><strong>${safeResourceName}</strong><span>${safeSubtitle}</span></td>`+
-                        `<td>${safeTypeLabel}</td>`+
-                        `<td><span class=\"${statusClass}\">${safeStatusLabel}</span></td>`+
-                        `<td class=\"detail-value\">${safeAssignmentLine}</td>`+
-                        `<td>${safeUpdatedAt}</td>`+
-                        `<td>${actionsHtml}</td>`+
+                    return `<tr class=\"resource-roster-card resource-row-${escapeAttrValue(r.type.replace(/s$/, ''))}\" data-type=\"${r.type}\" data-status=\"${r.status}\" data-location=\"${escapeAttrValue(r.location || '')}\" data-resource-id=\"${escapeAttrValue(r.id)}\" data-resource-name=\"${escapeAttrValue(resourceName)}\" data-resource-code=\"${escapeAttrValue(resourceCode)}\" data-unit-identifier=\"${escapeAttrValue(unitIdentifier)}\" data-resource-source=\"${escapeAttrValue(r.source || '')}\" data-resource-details=\"${escapeAttrValue(r.details || '')}\" data-resource-role=\"${escapeAttrValue(r.role || '')}\" data-resource-updated=\"${escapeAttrValue(r.updatedAt || '')}\" data-resource-assignment=\"${escapeAttrValue(r.assignment || '')}\" data-resource-notes=\"${escapeAttrValue(r.notes || '')}\" data-resource-phone=\"${escapeAttrValue(r.phone || '')}\" data-resource-email=\"${escapeAttrValue(r.email || '')}\" data-resource-quantity=\"${safeQuantity}\">\n`+
+                        `<td class=\"resource-cell-code\"><span class=\"resource-field-label\">Resource ID</span><strong>${safeResourceCode}</strong></td>`+
+                        `<td class=\"name-cell resource-title resource-cell-identity\"><strong>${safeResourceName}</strong><span>${safeSubtitle}</span></td>`+
+                        `<td class=\"resource-cell-category\"><span class=\"resource-field-label\">Category</span><strong>${safeTypeLabel}</strong></td>`+
+                        `<td class=\"resource-cell-status\"><span class=\"${statusClass}\">${safeStatusLabel}</span></td>`+
+                        `<td class=\"detail-value resource-cell-assignment\"><span class=\"resource-field-label\">Current assignment</span><strong>${safeAssignmentLine || 'Not currently assigned'}</strong></td>`+
+                        `<td class=\"resource-cell-updated\"><span class=\"resource-field-label\">Last updated</span><span>${safeUpdatedAt}</span></td>`+
+                        `<td class=\"resource-cell-actions\">${actionsHtml}</td>`+
                     `</tr>`;
                 }
 
@@ -738,8 +746,12 @@ try {
                     const container = document.getElementById('resource-list-dynamic');
                     if (!container) return;
                     const filtered = RESOURCES.filter(passFilters);
+                    const count = document.getElementById('resource-results-count');
+                    if (count) {
+                        count.textContent = `${filtered.length} of ${RESOURCES.length} resources shown`;
+                    }
                     if (!filtered.length) {
-                        container.innerHTML = '<tr><td colspan="7" style="text-align:center;color:#888;">No resources found.</td></tr>';
+                        container.innerHTML = '<tr class="resource-roster-state"><td colspan="7"><i class="fas fa-box-open"></i><strong>No resources match the current filters.</strong><span>Try changing the resource type, status, or search.</span></td></tr>';
                     } else {
                         container.innerHTML = filtered.map(resourceRowHtml).join('');
                     }
@@ -772,7 +784,7 @@ try {
                     <p class="section-heading-note">Review responder requests and approve or reject without changing the workflow.</p>
                 </div>
                 <div class="table-shell">
-                <div style="overflow-x:auto;">
+                <div class="request-roster-scroll">
                 <style>
                 .request-table {
                     width: 100%;
@@ -1171,7 +1183,7 @@ try {
                 .then(data => {
                     if (!container) return;
                     if (data && data.ok && data.text) {
-                        container.innerHTML = '<div class="ai-predictive-text">' + String(data.text).replace(/\n/g, '<br>') + '</div>';
+                        container.innerHTML = renderAiText(data.text, 'ai-predictive-text');
                         if (data.snapshot) {
                             const snap = document.getElementById('ai-resource-snapshot');
                             if (snap) {
@@ -1187,7 +1199,7 @@ try {
                         }
                     } else {
                         const msg = (data && data.error) ? String(data.error) : 'Unable to generate AI resource recommendations at this time.';
-                        container.innerHTML = '<div class="ai-error"><i class="fas fa-exclamation-triangle"></i> ' + msg.replace(/\n/g, '<br>') + '</div>';
+                        container.innerHTML = '<div class="ai-error"><i class="fas fa-exclamation-triangle"></i> ' + escapeHtml(msg).replace(/\n/g, '<br>') + '</div>';
                         if (!silent) {
                             showNotification(msg, 'error');
                         }
@@ -1582,6 +1594,45 @@ try {
             };
         }
 
+        function normalizeUnitCode(value) {
+            return String(value || '').trim().toUpperCase();
+        }
+
+        function requestedVehicleUnitCodes(request) {
+            const codes = new Set();
+            const selectedResources = request && Array.isArray(request.selected_resources)
+                ? request.selected_resources
+                : [];
+
+            selectedResources.forEach((item) => {
+                const category = String(item && item.category ? item.category : '').trim().toLowerCase();
+                if (category !== 'vehicles' && category !== 'vehicle') {
+                    return;
+                }
+                const code = normalizeUnitCode(item.code || item.identifier || item.unit_code);
+                if (code) {
+                    codes.add(code);
+                }
+            });
+
+            return codes;
+        }
+
+        function autoSelectRequestedVehicleUnits() {
+            const requestedCodes = requestedVehicleUnitCodes(selectedDispatcherRequest);
+            if (!requestedCodes.size || !Array.isArray(dispatcherAvailableUnitsData)) {
+                return;
+            }
+
+            dispatcherAvailableUnitsData.forEach((unit) => {
+                const unitCode = normalizeUnitCode(unit && unit.identifier);
+                if (unitCode && requestedCodes.has(unitCode)) {
+                    selectedDispatcherUnitIds.add(Number(unit.id) || 0);
+                }
+            });
+            selectedDispatcherUnitIds.delete(0);
+        }
+
         function findDispatcherRequestPayload(requestId) {
             return dispatcherBackupRequestsData.find((item) => item && Number(item.id) === Number(requestId)) || null;
         }
@@ -1818,6 +1869,7 @@ try {
         function selectDispatcherRequest(requestId) {
             selectedDispatcherRequest = findDispatcherRequestPayload(requestId);
             selectedDispatcherUnitIds.clear();
+            autoSelectRequestedVehicleUnits();
 
             getDispatcherRequestRows().forEach((row) => {
                 row.classList.toggle('dispatcher-request-row-active', Number(row.getAttribute('data-request-id') || '0') === Number(requestId));
@@ -2128,6 +2180,51 @@ try {
                 .replace(/'/g, '&#039;');
         }
 
+        function aiInlineHtml(value) {
+            return escapeHtml(value).replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
+        }
+
+        function renderAiText(value, wrapperClass) {
+            const lines = String(value || '').trim().split(/\r?\n/);
+            let html = `<div class="${escapeHtml(wrapperClass)} ai-formatted-text">`;
+            let listOpen = false;
+            const closeList = () => {
+                if (listOpen) {
+                    html += '</ul>';
+                    listOpen = false;
+                }
+            };
+
+            lines.forEach((rawLine) => {
+                const line = rawLine.trim();
+                if (!line) {
+                    closeList();
+                    return;
+                }
+                const headingMatch = line.match(/^\*\*([^*:\n]+):\*\*\s*(.*)$/);
+                if (headingMatch) {
+                    closeList();
+                    html += `<section class="ai-text-item"><h3>${escapeHtml(headingMatch[1])}</h3>`;
+                    if (headingMatch[2]) html += `<p>${aiInlineHtml(headingMatch[2])}</p>`;
+                    html += '</section>';
+                    return;
+                }
+                const bulletMatch = line.match(/^[*-]\s+(.*)$/);
+                if (bulletMatch) {
+                    if (!listOpen) {
+                        html += '<ul class="ai-text-list">';
+                        listOpen = true;
+                    }
+                    html += `<li>${aiInlineHtml(bulletMatch[1])}</li>`;
+                    return;
+                }
+                closeList();
+                html += `<p>${aiInlineHtml(line)}</p>`;
+            });
+            closeList();
+            return html + '</div>';
+        }
+
         function escapeAttrValue(str) {
             return String(str)
                 .replace(/&/g, '&amp;')
@@ -2197,19 +2294,29 @@ try {
 
         function resourceReport() {
             showNotification('Generating resource report, please wait...', 'info');
+            const reportWindow = window.open('', '_blank');
+            if (!reportWindow) {
+                showNotification('Please allow pop-ups for this site to open the resource report.', 'error');
+                return;
+            }
+
+            reportWindow.document.write('<!DOCTYPE html><html><head><title>Resource Report</title></head><body style="font-family: system-ui, sans-serif; padding: 24px;">Generating resource report...</body></html>');
+            reportWindow.document.close();
+
             fetch('api/reports_resources.php')
                 .then(response => {
                     if (!response.ok) throw new Error('Network response was not ok');
                     return response.text();
                 })
                 .then(html => {
-                    const reportWindow = window.open('', '_blank');
+                    reportWindow.document.open();
                     reportWindow.document.write(html);
                     reportWindow.document.close();
                     showNotification('Resource report generated and opened in new window', 'success');
                 })
                 .catch(error => {
                     console.error('Error generating report:', error);
+                    reportWindow.close();
                     showNotification('Failed to generate resource report. Please try again.', 'error');
                 });
         }

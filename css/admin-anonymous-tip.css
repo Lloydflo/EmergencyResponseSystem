@@ -1,0 +1,788 @@
+/* =====================================================================
+   Admin Anonymous Tip Inbox — metadata visibility + read-only incident
+   Build: 20260808-admin-tip-details-v2
+   ===================================================================== */
+
+/*
+ * Keep long descriptions from pushing the date/source and workflow row
+ * outside a clipped queue card. The queue remains scrollable; each record
+ * keeps its natural height instead of being compressed by the CSS grid.
+ */
+.ia-tip-rows {
+    grid-auto-rows: max-content;
+}
+
+.ia-tip-row {
+    height: auto;
+    min-height: max-content;
+    align-self: start;
+}
+
+.ia-tip-main {
+    display: grid;
+    min-width: 0;
+    min-height: max-content;
+    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-areas:
+        "kicker kicker"
+        "location location"
+        "description description"
+        "meta flow";
+    column-gap: 0.7rem;
+    row-gap: 0;
+}
+
+.ia-tip-kicker { grid-area: kicker; }
+.ia-tip-location { display: block; grid-area: location; }
+.ia-tip-description {
+    grid-area: description;
+    max-height: calc(1.45em * 2);
+}
+.ia-tip-meta {
+    grid-area: meta;
+    min-width: 0;
+    align-self: center;
+}
+.ia-tip-flow {
+    grid-area: flow;
+    align-self: center;
+    justify-content: flex-end;
+}
+
+.ia-tip-kicker,
+.ia-tip-location,
+.ia-tip-description,
+.ia-tip-meta,
+.ia-tip-flow {
+    min-width: 0;
+    flex: 0 0 auto;
+}
+
+/* Admin-only wording for the read-only incident action. */
+#iaAnonymousTipInbox [data-admin-tip-incident-details="true"] {
+    text-decoration: none;
+}
+
+/* Read-only incident viewer */
+html.admin-tip-incident-open,
+html.admin-tip-incident-open body {
+    overflow: hidden;
+}
+
+.admin-tip-incident-viewer[hidden] {
+    display: none !important;
+}
+
+.admin-tip-incident-viewer {
+    position: fixed;
+    inset: 0;
+    z-index: 15000;
+    display: grid;
+    place-items: center;
+    padding: clamp(0.55rem, 2vw, 1.25rem);
+}
+
+.admin-tip-incident-backdrop {
+    position: absolute;
+    inset: 0;
+    border: 0;
+    background: rgba(2, 6, 23, 0.72);
+    backdrop-filter: blur(5px);
+    cursor: default;
+}
+
+.admin-tip-incident-dialog {
+    position: relative;
+    z-index: 1;
+    display: flex;
+    width: min(1080px, 100%);
+    max-height: calc(100vh - clamp(1.1rem, 4vw, 2.5rem));
+    flex-direction: column;
+    overflow: hidden;
+    border: 1px solid #cbd8e4;
+    border-radius: 20px;
+    background: #f8fbff;
+    color: #122031;
+    box-shadow: 0 32px 90px rgba(2, 6, 23, 0.42);
+}
+
+.admin-tip-incident-head {
+    display: flex;
+    flex: 0 0 auto;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 1rem;
+    padding: 1rem 1.15rem;
+    border-bottom: 1px solid #dbe5ee;
+    background:
+        radial-gradient(circle at 92% 0%, rgba(45, 212, 191, 0.17), transparent 15rem),
+        linear-gradient(135deg, #ffffff, #edf7f6);
+}
+
+.admin-tip-incident-heading {
+    min-width: 0;
+}
+
+.admin-tip-incident-eyebrow {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.42rem;
+    color: #0f766e;
+    font-size: 0.68rem;
+    font-weight: 850;
+    letter-spacing: 0.065em;
+    text-transform: uppercase;
+}
+
+.admin-tip-incident-head h2 {
+    margin: 0.3rem 0 0;
+    color: #0f172a;
+    font-size: clamp(1.05rem, 2vw, 1.35rem);
+    line-height: 1.2;
+}
+
+.admin-tip-incident-head p {
+    margin: 0.26rem 0 0;
+    color: #64748b;
+    font-size: 0.8rem;
+    overflow-wrap: anywhere;
+}
+
+.admin-tip-incident-close {
+    display: inline-flex;
+    width: 40px;
+    height: 40px;
+    flex: 0 0 40px;
+    align-items: center;
+    justify-content: center;
+    border: 1px solid #cbd8e4;
+    border-radius: 12px;
+    background: #ffffff;
+    color: #334155;
+    cursor: pointer;
+}
+
+.admin-tip-incident-close:hover,
+.admin-tip-incident-close:focus-visible {
+    border-color: #0f766e;
+    background: #ecfdf5;
+    color: #0f766e;
+    outline: none;
+}
+
+.admin-tip-incident-body {
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow: auto;
+    padding: 1rem;
+    scrollbar-gutter: stable;
+}
+
+.admin-tip-incident-summary {
+    display: grid;
+    grid-template-columns: minmax(0, 1.35fr) minmax(260px, 0.65fr);
+    gap: 0.85rem;
+    padding: 0.9rem;
+    border: 1px solid #d7e2ec;
+    border-radius: 16px;
+    background: #ffffff;
+}
+
+.admin-tip-incident-summary-main {
+    min-width: 0;
+}
+
+.admin-tip-badges {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.4rem;
+    margin-bottom: 0.55rem;
+}
+
+.admin-tip-badge {
+    display: inline-flex;
+    align-items: center;
+    min-height: 1.55rem;
+    padding: 0.2rem 0.55rem;
+    border: 1px solid #d7e2ec;
+    border-radius: 999px;
+    font-size: 0.67rem;
+    font-weight: 850;
+    text-transform: capitalize;
+}
+
+.admin-tip-badge.status.success { border-color: #bbf7d0; background: #f0fdf4; color: #166534; }
+.admin-tip-badge.status.active { border-color: #bfdbfe; background: #eff6ff; color: #1d4ed8; }
+.admin-tip-badge.status.pending { border-color: #fde68a; background: #fffbeb; color: #92400e; }
+.admin-tip-badge.status.danger { border-color: #fecaca; background: #fef2f2; color: #991b1b; }
+.admin-tip-badge.status.neutral { border-color: #e2e8f0; background: #f8fafc; color: #475569; }
+.admin-tip-badge.priority.danger,
+.admin-tip-badge.priority.high { border-color: #fecaca; background: #fff1f2; color: #be123c; }
+.admin-tip-badge.priority.medium { border-color: #fde68a; background: #fffbeb; color: #92400e; }
+.admin-tip-badge.priority.low { border-color: #bbf7d0; background: #f0fdf4; color: #166534; }
+
+.admin-tip-incident-summary h3 {
+    margin: 0;
+    color: #0f172a;
+    font-size: clamp(1.05rem, 2vw, 1.35rem);
+    overflow-wrap: anywhere;
+}
+
+.admin-tip-incident-type {
+    margin: 0.28rem 0 0;
+    color: #475569;
+    font-size: 0.82rem;
+    font-weight: 750;
+}
+
+.admin-tip-incident-description {
+    margin: 0.65rem 0 0;
+    color: #334155;
+    font-size: 0.82rem;
+    line-height: 1.58;
+    white-space: pre-wrap;
+}
+
+.admin-tip-location-card {
+    display: flex;
+    min-width: 0;
+    flex-direction: column;
+    justify-content: center;
+    padding: 0.85rem;
+    border: 1px solid #dbe5ee;
+    border-radius: 13px;
+    background: #f8fafc;
+}
+
+.admin-tip-location-card span {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.38rem;
+    color: #64748b;
+    font-size: 0.68rem;
+    font-weight: 850;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+}
+
+.admin-tip-location-card span i { color: #0f766e; }
+.admin-tip-location-card strong {
+    margin-top: 0.45rem;
+    color: #0f172a;
+    font-size: 0.84rem;
+    line-height: 1.5;
+    overflow-wrap: anywhere;
+}
+
+.admin-tip-incident-grid {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 0.7rem;
+    margin-top: 0.8rem;
+}
+
+.admin-tip-info-card {
+    min-width: 0;
+    padding: 0.72rem;
+    border: 1px solid #d7e2ec;
+    border-radius: 13px;
+    background: #ffffff;
+}
+
+.admin-tip-info-card.wide { grid-column: span 2; }
+.admin-tip-info-label {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    color: #708197;
+    font-size: 0.64rem;
+    font-weight: 850;
+    letter-spacing: 0.045em;
+    text-transform: uppercase;
+}
+.admin-tip-info-label i { color: #0f766e; }
+.admin-tip-info-value {
+    margin-top: 0.38rem;
+    color: #172033;
+    font-size: 0.78rem;
+    font-weight: 720;
+    line-height: 1.45;
+    overflow-wrap: anywhere;
+}
+
+.admin-tip-units-section {
+    margin-top: 0.8rem;
+    padding: 0.85rem;
+    border: 1px solid #d7e2ec;
+    border-radius: 16px;
+    background: #ffffff;
+}
+
+.admin-tip-section-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.8rem;
+}
+.admin-tip-section-head span:first-child {
+    color: #64748b;
+    font-size: 0.65rem;
+    font-weight: 850;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+}
+.admin-tip-section-head h3 {
+    margin: 0.2rem 0 0;
+    color: #0f172a;
+    font-size: 0.95rem;
+}
+.admin-tip-readonly-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    padding: 0.3rem 0.55rem;
+    border-radius: 999px;
+    background: #eef2f6;
+    color: #475569;
+    font-size: 0.66rem;
+    font-weight: 800;
+    white-space: nowrap;
+}
+
+.admin-tip-unit-list {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
+    gap: 0.6rem;
+    margin-top: 0.7rem;
+}
+
+.admin-tip-unit-card {
+    display: flex;
+    min-width: 0;
+    align-items: center;
+    gap: 0.65rem;
+    padding: 0.65rem;
+    border: 1px solid #e1e9f0;
+    border-radius: 12px;
+    background: #f8fafc;
+}
+.admin-tip-unit-icon {
+    display: inline-flex;
+    width: 34px;
+    height: 34px;
+    flex: 0 0 34px;
+    align-items: center;
+    justify-content: center;
+    border-radius: 10px;
+    background: #e7f5f3;
+    color: #0f766e;
+}
+.admin-tip-unit-copy { min-width: 0; }
+.admin-tip-unit-copy strong {
+    display: block;
+    color: #0f172a;
+    font-size: 0.8rem;
+    overflow-wrap: anywhere;
+}
+.admin-tip-unit-copy span {
+    display: block;
+    margin-top: 0.14rem;
+    color: #64748b;
+    font-size: 0.7rem;
+    overflow-wrap: anywhere;
+}
+.admin-tip-empty-inline {
+    padding: 0.8rem;
+    border: 1px dashed #cbd8e4;
+    border-radius: 11px;
+    color: #64748b;
+    font-size: 0.76rem;
+    text-align: center;
+}
+
+.admin-tip-incident-state {
+    display: grid;
+    min-height: 320px;
+    place-items: center;
+    align-content: center;
+    gap: 0.55rem;
+    padding: 2rem;
+    color: #64748b;
+    text-align: center;
+}
+.admin-tip-incident-state i {
+    color: #b91c1c;
+    font-size: 1.7rem;
+}
+.admin-tip-incident-state strong {
+    color: #0f172a;
+    font-size: 0.95rem;
+}
+.admin-tip-incident-state span:last-child {
+    max-width: 460px;
+    font-size: 0.78rem;
+    line-height: 1.5;
+}
+.admin-tip-spinner {
+    width: 28px;
+    height: 28px;
+    border: 3px solid #cbd5e1;
+    border-top-color: #0f766e;
+    border-radius: 50%;
+    animation: adminTipSpin 0.75s linear infinite;
+}
+@keyframes adminTipSpin { to { transform: rotate(360deg); } }
+
+.admin-tip-incident-foot {
+    display: flex;
+    flex: 0 0 auto;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+    padding: 0.8rem 1rem;
+    border-top: 1px solid #dbe5ee;
+    background: #ffffff;
+}
+.admin-tip-incident-foot > span {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+    color: #64748b;
+    font-size: 0.7rem;
+}
+.admin-tip-incident-foot > span i { color: #0f766e; }
+.admin-tip-incident-done {
+    min-height: 38px;
+    padding: 0.55rem 0.9rem;
+    border: 0;
+    border-radius: 10px;
+    background: #0f766e;
+    color: #ffffff;
+    font-size: 0.76rem;
+    font-weight: 800;
+    cursor: pointer;
+}
+.admin-tip-incident-done:hover,
+.admin-tip-incident-done:focus-visible {
+    background: #115e59;
+    outline: 3px solid rgba(15, 118, 110, 0.18);
+    outline-offset: 2px;
+}
+
+/* Dark theme */
+html[data-theme="dark"] .admin-tip-incident-dialog,
+html[data-theme="dark"] .admin-tip-incident-body {
+    border-color: #334155;
+    background: #08111f;
+    color: #f8fafc;
+}
+html[data-theme="dark"] .admin-tip-incident-head {
+    border-color: #334155;
+    background: linear-gradient(135deg, #111827, #102522);
+}
+html[data-theme="dark"] .admin-tip-incident-head h2,
+html[data-theme="dark"] .admin-tip-incident-summary h3,
+html[data-theme="dark"] .admin-tip-location-card strong,
+html[data-theme="dark"] .admin-tip-info-value,
+html[data-theme="dark"] .admin-tip-section-head h3,
+html[data-theme="dark"] .admin-tip-unit-copy strong,
+html[data-theme="dark"] .admin-tip-incident-state strong {
+    color: #f8fafc;
+}
+html[data-theme="dark"] .admin-tip-incident-head p,
+html[data-theme="dark"] .admin-tip-incident-type,
+html[data-theme="dark"] .admin-tip-incident-description,
+html[data-theme="dark"] .admin-tip-location-card span,
+html[data-theme="dark"] .admin-tip-info-label,
+html[data-theme="dark"] .admin-tip-unit-copy span,
+html[data-theme="dark"] .admin-tip-incident-state,
+html[data-theme="dark"] .admin-tip-incident-foot > span {
+    color: #aebed0;
+}
+html[data-theme="dark"] .admin-tip-incident-summary,
+html[data-theme="dark"] .admin-tip-info-card,
+html[data-theme="dark"] .admin-tip-units-section,
+html[data-theme="dark"] .admin-tip-incident-foot {
+    border-color: #334155;
+    background: #111827;
+}
+html[data-theme="dark"] .admin-tip-location-card,
+html[data-theme="dark"] .admin-tip-unit-card {
+    border-color: #334155;
+    background: #0f172a;
+}
+html[data-theme="dark"] .admin-tip-incident-close {
+    border-color: #475569;
+    background: #0f172a;
+    color: #e2e8f0;
+}
+
+@media (max-width: 860px) {
+    .admin-tip-incident-summary {
+        grid-template-columns: 1fr;
+    }
+    .admin-tip-incident-grid {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+}
+
+@media (max-width: 760px) {
+    .ia-tip-main {
+        grid-template-columns: 1fr;
+        grid-template-areas:
+            "kicker"
+            "location"
+            "description"
+            "meta"
+            "flow";
+    }
+    .ia-tip-flow { justify-content: flex-start; }
+}
+
+@media (max-width: 560px) {
+    .admin-tip-incident-viewer { padding: 0.35rem; }
+    .admin-tip-incident-dialog {
+        max-height: calc(100vh - 0.7rem);
+        border-radius: 14px;
+    }
+    .admin-tip-incident-head { padding: 0.8rem; }
+    .admin-tip-incident-body { padding: 0.7rem; }
+    .admin-tip-incident-grid { grid-template-columns: 1fr; }
+    .admin-tip-info-card.wide { grid-column: auto; }
+    .admin-tip-incident-foot {
+        align-items: stretch;
+        flex-direction: column;
+    }
+    .admin-tip-incident-done { width: 100%; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .admin-tip-spinner { animation-duration: 1.5s; }
+}
+
+/* =====================================================================
+   Admin Anonymous Tip Inbox — single incident action + detail polish
+   Build: 20260808-admin-tip-details-v2
+   ===================================================================== */
+
+/* Keep the row footer readable even when the report description is long. */
+.ia-tip-description {
+    display: -webkit-box;
+    min-height: calc(1.45em * 2);
+    max-height: calc(1.45em * 2);
+    overflow: hidden;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
+}
+
+.ia-tip-meta,
+.ia-tip-flow {
+    margin-top: 0.48rem;
+    padding-top: 0.44rem;
+    border-top: 1px dashed #dbe5ee;
+}
+
+.ia-tip-meta {
+    align-items: center;
+    align-self: stretch;
+}
+
+.ia-tip-flow {
+    align-items: center;
+    align-self: stretch;
+}
+
+/*
+ * The linked reference and the former “Open Incident” button opened the same
+ * read-only viewer. Keep one explicit, full-width incident control in the
+ * Linked Incident card and remove the duplicate quick-action control.
+ */
+.admin-tip-linked-incident-card {
+    gap: 0.52rem !important;
+    padding: 0.72rem !important;
+    border-color: #cbdde8 !important;
+    background:
+        radial-gradient(circle at 100% 0%, rgba(45, 212, 191, 0.12), transparent 8rem),
+        linear-gradient(135deg, #f8fbff, #eef8f6) !important;
+}
+
+.admin-tip-linked-incident-trigger {
+    display: flex !important;
+    width: 100% !important;
+    min-height: 52px !important;
+    align-items: center !important;
+    justify-content: space-between !important;
+    gap: 0.7rem !important;
+    padding: 0.58rem 0.65rem !important;
+    border: 1px solid #b8d7d2 !important;
+    border-radius: 11px !important;
+    background: #ffffff !important;
+    color: #0f4f4a !important;
+    text-align: left !important;
+    text-decoration: none !important;
+    cursor: pointer !important;
+    box-shadow: 0 3px 10px rgba(15, 118, 110, 0.06);
+    transition:
+        border-color 0.15s ease,
+        background-color 0.15s ease,
+        box-shadow 0.15s ease,
+        transform 0.15s ease;
+}
+
+.admin-tip-linked-incident-trigger:hover,
+.admin-tip-linked-incident-trigger:focus-visible {
+    border-color: #0f766e !important;
+    background: #f3fcfa !important;
+    color: #0f766e !important;
+    box-shadow: 0 8px 18px rgba(15, 118, 110, 0.12);
+    outline: none;
+    transform: translateY(-1px);
+}
+
+.admin-tip-linked-incident-main {
+    display: flex;
+    min-width: 0;
+    align-items: center;
+    gap: 0.6rem;
+}
+
+.admin-tip-linked-incident-icon {
+    display: inline-flex;
+    width: 34px;
+    height: 34px;
+    flex: 0 0 34px;
+    align-items: center;
+    justify-content: center;
+    border-radius: 10px;
+    background: #e7f5f3;
+    color: #0f766e;
+}
+
+.admin-tip-linked-incident-copy {
+    display: grid;
+    min-width: 0;
+    gap: 0.12rem;
+}
+
+.admin-tip-linked-incident-copy strong {
+    overflow: hidden;
+    color: #0f3f3b;
+    font-size: 0.79rem;
+    font-weight: 850;
+    line-height: 1.25;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.admin-tip-linked-incident-copy span {
+    color: #64748b;
+    font-size: 0.66rem;
+    font-weight: 700;
+    line-height: 1.25;
+}
+
+.admin-tip-linked-incident-arrow {
+    display: inline-flex;
+    width: 30px;
+    height: 30px;
+    flex: 0 0 30px;
+    align-items: center;
+    justify-content: center;
+    border-radius: 9px;
+    background: #eef7f6;
+    color: #0f766e;
+    font-size: 0.7rem;
+}
+
+/* All remaining buttons are locked after conversion, so do not show a dead
+   action grid below the one incident-details control. */
+.admin-tip-has-linked-incident .ia-tip-quick-actions {
+    display: none !important;
+}
+
+.admin-tip-has-linked-incident .ia-tip-lock-note {
+    margin-top: 0.72rem;
+}
+
+/* Give the details rail clearer vertical rhythm. */
+.ia-tip-detail > .ia-tip-detail-grid:not(.ia-tip-detail-form-grid) {
+    padding-top: 0.85rem;
+}
+
+.ia-tip-detail form {
+    margin-top: 0.72rem;
+}
+
+/* In the common laptop-size modal, stack the metadata and workflow rather
+   than squeezing them into one line. This guarantees that the date remains
+   visible below the two-line description preview. */
+@media (max-width: 1280px) {
+    .ia-tip-main {
+        grid-template-columns: minmax(0, 1fr);
+        grid-template-areas:
+            "kicker"
+            "location"
+            "description"
+            "meta"
+            "flow";
+    }
+
+    .ia-tip-meta {
+        margin-top: 0.5rem;
+    }
+
+    .ia-tip-flow {
+        justify-content: flex-start;
+        margin-top: 0.18rem;
+        padding-top: 0;
+        border-top: 0;
+    }
+}
+
+@media (max-width: 680px) {
+    .admin-tip-linked-incident-trigger {
+        min-height: 48px !important;
+    }
+
+    .admin-tip-linked-incident-copy strong {
+        white-space: normal;
+        overflow-wrap: anywhere;
+    }
+}
+
+html[data-theme="dark"] .admin-tip-linked-incident-card {
+    border-color: #334155 !important;
+    background: linear-gradient(135deg, #0f172a, #102522) !important;
+}
+
+html[data-theme="dark"] .admin-tip-linked-incident-trigger {
+    border-color: #3c645f !important;
+    background: #0b1220 !important;
+    color: #99f6e4 !important;
+}
+
+html[data-theme="dark"] .admin-tip-linked-incident-trigger:hover,
+html[data-theme="dark"] .admin-tip-linked-incident-trigger:focus-visible {
+    border-color: #2dd4bf !important;
+    background: #102522 !important;
+    color: #ccfbf1 !important;
+}
+
+html[data-theme="dark"] .admin-tip-linked-incident-icon,
+html[data-theme="dark"] .admin-tip-linked-incident-arrow {
+    background: rgba(45, 212, 191, 0.13);
+    color: #5eead4;
+}
+
+html[data-theme="dark"] .admin-tip-linked-incident-copy strong {
+    color: #f0fdfa;
+}
+
+html[data-theme="dark"] .admin-tip-linked-incident-copy span {
+    color: #94a3b8;
+}
+
+html[data-theme="dark"] .ia-tip-meta,
+html[data-theme="dark"] .ia-tip-flow {
+    border-top-color: #334155;
+}

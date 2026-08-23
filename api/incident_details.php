@@ -49,16 +49,26 @@ if (!$pdo) {
     echo json_encode($out);
     exit;
 }
+$isAnonymousTipIncident = false;
 
 $resourceRecordsTable = ers_vehicle_resource_units_table($pdo);
 if ($resourceRecordsTable !== null) {
     ers_sync_all_vehicle_resource_units($pdo, $resourceRecordsTable);
 }
+$responderPresenceMap = ers_vehicle_resource_responder_presence_map($pdo);
 
 try {
     if ($hasId) {
         $stmt = $pdo->prepare(
-            "SELECT i.*, c.latitude AS call_latitude, c.longitude AS call_longitude
+            "SELECT i.*,
+                    c.caller_name AS call_caller_name,
+                    c.caller_phone AS call_caller_phone,
+                    c.location_address AS call_location_address,
+                    c.incident_type AS call_incident_type,
+                    c.priority AS call_priority,
+                    c.description AS call_description,
+                    c.latitude AS call_latitude,
+                    c.longitude AS call_longitude
              FROM incidents i
              LEFT JOIN calls c ON c.id = i.reported_by_call_id
              WHERE i.id = ?
@@ -67,7 +77,15 @@ try {
         $stmt->execute([$id]);
     } elseif ($code !== '') {
         $stmt = $pdo->prepare(
-            "SELECT i.*, c.latitude AS call_latitude, c.longitude AS call_longitude
+            "SELECT i.*,
+                    c.caller_name AS call_caller_name,
+                    c.caller_phone AS call_caller_phone,
+                    c.location_address AS call_location_address,
+                    c.incident_type AS call_incident_type,
+                    c.priority AS call_priority,
+                    c.description AS call_description,
+                    c.latitude AS call_latitude,
+                    c.longitude AS call_longitude
              FROM incidents i
              LEFT JOIN calls c ON c.id = i.reported_by_call_id
              WHERE i.reference_no = ?
@@ -81,15 +99,64 @@ try {
     if ($stmt) {
         $incident = $stmt->fetch(PDO::FETCH_ASSOC);
         if ($incident) {
+            if ((!isset($incident['type']) || trim((string)$incident['type']) === '' || strtolower(trim((string)$incident['type'])) === 'other') && isset($incident['call_incident_type']) && trim((string)$incident['call_incident_type']) !== '') {
+                $incident['type'] = $incident['call_incident_type'];
+            }
+            if ((!isset($incident['priority']) || trim((string)$incident['priority']) === '') && isset($incident['call_priority']) && trim((string)$incident['call_priority']) !== '') {
+                $incident['priority'] = $incident['call_priority'];
+            }
+            if ((!isset($incident['description']) || trim((string)$incident['description']) === '') && isset($incident['call_description']) && trim((string)$incident['call_description']) !== '') {
+                $incident['description'] = $incident['call_description'];
+            }
+            if (
+                (!isset($incident['location_address']) || trim((string)$incident['location_address']) === '' || stripos((string)$incident['location_address'], 'Location pending') !== false)
+                && isset($incident['call_location_address'])
+                && trim((string)$incident['call_location_address']) !== ''
+            ) {
+                $incident['location_address'] = $incident['call_location_address'];
+            }
+            $incident['caller_name'] = trim((string)($incident['caller_name'] ?? '')) !== ''
+                ? $incident['caller_name']
+                : ($incident['call_caller_name'] ?? null);
+            $incident['caller_phone'] = trim((string)($incident['caller_phone'] ?? '')) !== ''
+                ? $incident['caller_phone']
+                : ($incident['call_caller_phone'] ?? null);
             if ((!isset($incident['latitude']) || $incident['latitude'] === null || $incident['latitude'] === '') && isset($incident['call_latitude']) && $incident['call_latitude'] !== null && $incident['call_latitude'] !== '') {
                 $incident['latitude'] = $incident['call_latitude'];
             }
             if ((!isset($incident['longitude']) || $incident['longitude'] === null || $incident['longitude'] === '') && isset($incident['call_longitude']) && $incident['call_longitude'] !== null && $incident['call_longitude'] !== '') {
                 $incident['longitude'] = $incident['call_longitude'];
             }
-            unset($incident['call_latitude'], $incident['call_longitude']);
+            unset(
+                $incident['call_caller_name'],
+                $incident['call_caller_phone'],
+                $incident['call_location_address'],
+                $incident['call_incident_type'],
+                $incident['call_priority'],
+                $incident['call_description'],
+                $incident['call_latitude'],
+                $incident['call_longitude']
+            );
 
             $incidentId = (int)$incident['id'];
+            if (
+                ers_table_exists($pdo, 'external_incident_links')
+                && ers_column_exists($pdo, 'external_incident_links', 'incident_id')
+                && ers_column_exists($pdo, 'external_incident_links', 'source_system')
+            ) {
+                $sourceStmt = $pdo->prepare(
+                    "SELECT 1
+                     FROM external_incident_links
+                     WHERE incident_id = ?
+                       AND source_system = 'Anonymous Tip Inbox'
+                     LIMIT 1"
+                );
+                $sourceStmt->execute([$incidentId]);
+                $isAnonymousTipIncident = (bool)$sourceStmt->fetchColumn();
+                if ($isAnonymousTipIncident) {
+                    $incident['type'] = 'medical, police, fire';
+                }
+            }
             $hasIncidentNotes = ers_table_exists($pdo, 'incident_notes');
             $hasRatingColumn = $hasIncidentNotes && ers_column_exists($pdo, 'incident_notes', 'rating');
             $hasIncidentSurveys = ers_table_exists($pdo, 'incident_surveys')
@@ -244,7 +311,9 @@ try {
     }
 
     $desiredTypes = [];
-    if (!empty($out['incident']) && !empty($out['incident']['type'])) {
+    if ($isAnonymousTipIncident) {
+        $desiredTypes = [];
+    } elseif (!empty($out['incident']) && !empty($out['incident']['type'])) {
         $typeValue = strtolower(trim((string)$out['incident']['type']));
         $typeParts = preg_split('/[,|]+/', $typeValue) ?: [$typeValue];
         foreach ($typeParts as $typePart) {
@@ -365,7 +434,7 @@ try {
     $assignedDriverWhere = " AND TRIM(COALESCE(" . $driverNameExpr . ", '')) <> ''";
 
     if (!empty($desiredTypes)) {
-        if (!in_array('other', $desiredTypes, true)) {
+        if (!$isAnonymousTipIncident && !in_array('other', $desiredTypes, true)) {
             $desiredTypes[] = 'other';
         }
         $placeholders = implode(',', array_fill(0, count($desiredTypes), '?'));
@@ -387,6 +456,28 @@ try {
              WHERE {$unitAlias}status = 'available'
              {$assignedDriverWhere}"
         )->fetchAll(PDO::FETCH_ASSOC);
+    }
+
+    if ($responderPresenceMap !== []) {
+        $units = array_values(array_filter($units, static function (array $unit) use ($responderPresenceMap): bool {
+            $unitCode = strtoupper(trim((string)($unit['identifier'] ?? '')));
+            if ($unitCode === '' || !isset($responderPresenceMap[$unitCode])) {
+                return false;
+            }
+            return ers_vehicle_resource_status_from_responder_state($responderPresenceMap[$unitCode]) === 'available';
+        }));
+
+        foreach ($units as &$unit) {
+            $unitCode = strtoupper(trim((string)($unit['identifier'] ?? '')));
+            $presence = $responderPresenceMap[$unitCode] ?? [];
+            $unit['responder_user_id'] = (int)($presence['responder_id'] ?? 0);
+            $unit['presence_status'] = (string)($presence['presence_status'] ?? '');
+            $unit['responder_unit_status'] = (string)($presence['unit_status'] ?? '');
+            if (trim((string)($unit['driver_name'] ?? '')) === '' && trim((string)($presence['responder_name'] ?? '')) !== '') {
+                $unit['driver_name'] = trim((string)$presence['responder_name']);
+            }
+        }
+        unset($unit);
     }
 
     foreach ($units as &$unit) {

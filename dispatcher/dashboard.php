@@ -37,9 +37,6 @@ try {
 
     if ($pdo) {
         $vehicleResourceTable = ers_vehicle_resource_units_table($pdo);
-        if ($vehicleResourceTable !== null) {
-            ers_sync_all_vehicle_resource_units($pdo, $vehicleResourceTable);
-        }
 
         $pending_incidents = (int)$pdo->query("SELECT COUNT(*) AS c FROM incidents WHERE status = 'pending'")->fetch()['c'];
         $active_dispatches = (int)$pdo->query("SELECT COUNT(*) AS c FROM incidents WHERE status IN ('dispatched', 'active', 'in_progress')")->fetch()['c'];
@@ -82,10 +79,10 @@ try {
             ORDER BY CASE LOWER(i.priority)
                 WHEN 'critical' THEN 1
                 WHEN 'high' THEN 2
-                WHEN 'urgent' THEN 3
-                WHEN 'moderate' THEN 4
-                WHEN 'medium' THEN 4
-                WHEN 'low' THEN 5
+                WHEN 'urgent' THEN 2
+                WHEN 'medium' THEN 3
+                WHEN 'moderate' THEN 3
+                WHEN 'low' THEN 4
                 ELSE 6
             END, i.created_at ASC
             LIMIT 10
@@ -178,7 +175,7 @@ function dispatcher_priority_class(string $priority): string {
         return 'priority-high';
     }
     if ($p === 'urgent') {
-        return 'priority-urgent';
+        return 'priority-high';
     }
     if ($p === 'moderate' || $p === 'medium') {
         return 'priority-medium';
@@ -450,7 +447,7 @@ $type_total = array_sum($type_counts);
         const p = String(priority || '').trim().toLowerCase();
         if (p === 'critical') return 'priority-critical';
         if (p === 'high') return 'priority-high';
-        if (p === 'urgent') return 'priority-urgent';
+        if (p === 'urgent') return 'priority-high';
         if (p === 'moderate' || p === 'medium') return 'priority-medium';
         return 'priority-low';
     }
@@ -600,7 +597,10 @@ $type_total = array_sum($type_counts);
         }).join('');
     }
 
+    let dispatcherDashboardInFlight = false;
     async function refreshDispatcherDashboard() {
+        if (dispatcherDashboardInFlight) return;
+        dispatcherDashboardInFlight = true;
         try {
             const response = await fetch('api/dispatcher_dashboard_summary.php', { cache: 'no-store' });
             const data = await response.json();
@@ -627,6 +627,8 @@ $type_total = array_sum($type_counts);
             renderDispatcherActivity(data.activity_items || []);
         } catch (e) {
             console.error('refreshDispatcherDashboard failed', e);
+        } finally {
+            dispatcherDashboardInFlight = false;
         }
     }
 
@@ -650,7 +652,9 @@ $type_total = array_sum($type_counts);
 
         refreshDispatcherDashboard();
         setInterval(function () {
-            try { refreshDispatcherDashboard(); } catch (e) {}
+            if (!document.hidden) {
+                try { refreshDispatcherDashboard(); } catch (e) {}
+            }
         }, 10000);
     });
     </script>

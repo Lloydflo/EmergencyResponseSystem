@@ -4,6 +4,7 @@ header("Content-Type: application/json");
 require_once __DIR__ . '/../../includes/db.php';
 require_once __DIR__ . '/../../includes/user_presence.php';
 require_once __DIR__ . '/../../includes/unit_location_tracking.php';
+require_once __DIR__ . '/../../includes/activity_log.php';
 
 $input = json_decode(file_get_contents("php://input"), true);
 if (!is_array($input)) {
@@ -40,7 +41,12 @@ try {
     $vehiclePlateSelect = ers_unit_location_column_exists($pdo, 'users', 'vehicle_plate') ? 'vehicle_plate' : 'NULL AS vehicle_plate';
 
      $stmt = $pdo->prepare("
-        SELECT id, email, password, name, role, status, department, profile_image_path,
+        SELECT
+            id,
+            email,
+            password,
+            name,
+            username, role, status, department, profile_image_path,
                {$unitCodeSelect}, {$unitTypeSelect}, {$unitStatusSelect}, {$vehiclePlateSelect}
         FROM users
         WHERE email = ?
@@ -109,6 +115,11 @@ try {
             error_log('responder login location update skipped: ' . $e->getMessage());
             $locationUpdate = ['ok' => false, 'error' => 'Location update skipped'];
         }
+    } else {
+        $locationUpdate = [
+            'ok' => false,
+            'error' => 'Responder GPS is required on login to place the assigned vehicle on the dispatch map'
+        ];
     }
 
     $unit = ers_unit_location_resolve_unit($pdo, [
@@ -116,12 +127,36 @@ try {
         'unit_code' => (string)($user['unit_code'] ?? ''),
     ]);
 
+    record_operational_audit_event(
+        $pdo,
+        (int)$user['id'],
+        'responder_login',
+        'authentication',
+        (int)$user['id'],
+        'Responder signed in to the mobile application.',
+        [
+            'actor_name' => (string)($user['name'] ?? ''),
+            'actor_email' => (string)($user['email'] ?? ''),
+            'actor_role' => 'responder',
+            'source_channel' => 'responder_app',
+            'event_category' => 'authentication',
+            'event_outcome' => 'success',
+            'metadata' => [
+                'department' => (string)($user['department'] ?? ''),
+                'unit_code' => (string)($user['unit_code'] ?? ($unit['identifier'] ?? '')),
+                'unit_type' => (string)($user['unit_type'] ?? ($unit['unit_type'] ?? '')),
+                'location_sync_succeeded' => (bool)($locationUpdate['ok'] ?? false),
+            ],
+        ]
+    );
+
     echo json_encode([
         "success" => true,
         "message" => "Login successful",
         "user" => [
             "id" => (int)$user["id"],
             "name" => (string)$user["name"],
+            "username" => (string)($user["username"] ?? ""),
             "email" => (string)$user["email"],
             "role" => (string)$user["role"],
             "department" => (string)($user["department"] ?? ""),
@@ -135,6 +170,8 @@ try {
         "location_update" => $locationUpdate,
         "location_tracking" => [
             "enabled" => $unit !== null,
+            "location_required" => true,
+            "syncs_vehicle_location" => true,
             "endpoint" => "api/unit_location_update.php",
             "api_app_endpoint" => "api/api_app/update-location.php"
         ]

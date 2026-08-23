@@ -8,6 +8,13 @@
     const launcher = document.querySelector('.ia-module-launcher');
     if (!stage || !modal || !modalBody || !launcher) return;
 
+    // Dispatcher module dialogs should use the full viewport instead of the
+    // transformed page content area. Moving the existing element does not
+    // change any module state, handlers, or API workflow.
+    if (document.body.classList.contains('dispatcher-interagency-page') && modal.parentElement !== document.body) {
+        document.body.appendChild(modal);
+    }
+
     const moduleLabels = {
         iaCommandCenter: 'active command incident',
         iaEventCoordination: 'high-risk event',
@@ -53,7 +60,7 @@
                 const status = String(item.incident_status || '').trim().toLowerCase();
                 return !['resolved', 'cancelled', 'closed', 'rejected'].includes(status);
             }).length,
-            iaAnonymousTipInbox: tipItems.filter((item) => String(item.status || 'new').toLowerCase() === 'new').length,
+            iaAnonymousTipInbox: tipItems.filter((item) => ['pending', 'new'].includes(String(item.status || 'new').trim().toLowerCase())).length,
             iaEventCoordination: eventItems.filter((item) => {
                 const status = String(item.status || '').toLowerCase();
                 const hazard = String(item.on_site_safety_hazard_level || '').toLowerCase();
@@ -84,7 +91,7 @@
             const next = Number(nextCounts[id] || 0);
             const previous = Number(state.counts[id] || 0);
             setBadge(id, next);
-            if (state.initialized && next > previous) {
+            if (state.initialized && next > previous && id !== 'iaAnonymousTipInbox') {
                 const added = next - previous;
                 const label = moduleLabels[id] || 'inter-agency item';
                 showToast(`${added} new ${label}${added > 1 ? 's' : ''} received.`);
@@ -118,6 +125,7 @@
         returnActiveToStage();
         modalBody.appendChild(section);
         state.activeId = targetId;
+        modal.dataset.activeModule = targetId;
 
         if (modalTitle) modalTitle.textContent = button.getAttribute('data-module-title') || 'Inter-Agency Module';
         if (modalSub) modalSub.textContent = button.getAttribute('data-module-subtitle') || 'Operational tools and inboxes.';
@@ -131,6 +139,7 @@
 
     const closeModule = () => {
         returnActiveToStage();
+        modal.removeAttribute('data-active-module');
         modal.classList.remove('show');
         modal.setAttribute('aria-hidden', 'true');
         modal.hidden = true;
@@ -151,12 +160,26 @@
 
     document.addEventListener('keydown', (event) => {
         if (event.key === 'Escape' && modal.classList.contains('show')) {
+            const incidentDetailModal = document.getElementById('incidentDetailModal');
+            if (incidentDetailModal && incidentDetailModal.classList.contains('show')) return;
             closeModule();
         }
     });
 
-    refreshCounts();
+    let refreshCountsInFlight = false;
+    const guardedRefreshCounts = async () => {
+        if (refreshCountsInFlight) return;
+        refreshCountsInFlight = true;
+        try {
+            await refreshCounts();
+        } finally {
+            refreshCountsInFlight = false;
+        }
+    };
+
+    guardedRefreshCounts();
+    window.addEventListener('ers:anonymous-tips-updated', guardedRefreshCounts);
     window.setInterval(() => {
-        if (document.visibilityState === 'visible') refreshCounts();
+        if (document.visibilityState === 'visible') guardedRefreshCounts();
     }, 12000);
 })();

@@ -7,6 +7,9 @@ require_once __DIR__ . '/../includes/db.php';
 require_once __DIR__ . '/../includes/auth.php';
 require_once __DIR__ . '/../includes/activity_log.php';
 require_once __DIR__ . '/../includes/vehicle_resource_units.php';
+require_once __DIR__ . '/../includes/emergency_com_status_sync.php';
+require_once __DIR__ . '/../includes/anonymous_tip_status_sync.php';
+require_once __DIR__ . '/../includes/incident_priority.php';
 
 if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
     http_response_code(405);
@@ -77,6 +80,27 @@ function emergency_index_exists(PDO $pdo, string $tableName, string $indexName):
         return (bool)$stmt->fetchColumn();
     } catch (Throwable $e) {
         return false;
+    }
+}
+
+function emergency_ensure_dispatches_assignment_schema(PDO $pdo): void
+{
+    if (!emergency_table_exists($pdo, 'dispatches')) {
+        return;
+    }
+
+    if (!emergency_column_exists($pdo, 'dispatches', 'reference_no')) {
+        $pdo->exec("ALTER TABLE `dispatches` ADD COLUMN `reference_no` VARCHAR(50) DEFAULT NULL AFTER `id`");
+    }
+    if (!emergency_column_exists($pdo, 'dispatches', 'incident_id')) {
+        $afterColumn = emergency_column_exists($pdo, 'dispatches', 'reference_no') ? 'reference_no' : 'id';
+        $pdo->exec("ALTER TABLE `dispatches` ADD COLUMN `incident_id` BIGINT(20) UNSIGNED DEFAULT NULL AFTER `{$afterColumn}`");
+    }
+    if (!emergency_index_exists($pdo, 'dispatches', 'idx_dispatches_reference_no')) {
+        $pdo->exec("ALTER TABLE `dispatches` ADD KEY `idx_dispatches_reference_no` (`reference_no`)");
+    }
+    if (!emergency_index_exists($pdo, 'dispatches', 'idx_dispatches_incident_id')) {
+        $pdo->exec("ALTER TABLE `dispatches` ADD KEY `idx_dispatches_incident_id` (`incident_id`)");
     }
 }
 
@@ -162,19 +186,27 @@ function emergency_priority_weight(string $priority): int
 {
     $priority = strtolower(trim($priority));
     if ($priority === 'critical') return 5;
-    if ($priority === 'high') return 4;
-    if ($priority === 'urgent') return 3;
+    if ($priority === 'high' || $priority === 'urgent') return 4;
     if ($priority === 'moderate' || $priority === 'medium') return 2;
     return 1;
 }
 
 function emergency_desired_units(array $incident): int
 {
+    if (isset($incident['priority_score']) && $incident['priority_score'] !== null) {
+        return (int)$incident['priority_score'] >= 50 ? 2 : 1;
+    }
     return emergency_priority_weight((string)($incident['priority'] ?? '')) >= 3 ? 2 : 1;
 }
 
 function emergency_max_units(array $incident): int
 {
+    if (isset($incident['priority_score']) && $incident['priority_score'] !== null) {
+        $score = (int)$incident['priority_score'];
+        if ($score >= 50) return 3;
+        if ($score >= 25) return 2;
+        return 1;
+    }
     $weight = emergency_priority_weight((string)($incident['priority'] ?? ''));
     if ($weight >= 3) return 3;
     if ($weight === 2) return 2;
@@ -227,12 +259,28 @@ function emergency_take_unit(array &$units, string $preferredType = ''): ?array
 
 function emergency_load_active_incidents(PDO $pdo): array
 {
+    $hasPriorityScore = emergency_column_exists($pdo, 'incidents', 'priority_score');
+    $priorityScoreSelect = $hasPriorityScore ? 'i.priority_score' : 'NULL AS priority_score';
+    $labelRank = "CASE LOWER(COALESCE(i.priority, ''))
+                WHEN 'critical' THEN 1
+                WHEN 'high' THEN 2
+                WHEN 'urgent' THEN 2
+                WHEN 'medium' THEN 3
+                WHEN 'moderate' THEN 3
+                WHEN 'low' THEN 4
+                ELSE 6
+            END";
+    $priorityOrder = $hasPriorityScore
+        ? "COALESCE(i.priority_score, 0) DESC, {$labelRank}"
+        : $labelRank;
+
     $stmt = $pdo->query("
         SELECT
             i.id,
             i.reference_no,
             i.type,
             i.priority,
+            {$priorityScoreSelect},
             i.status,
             i.title,
             i.description,
@@ -243,21 +291,13 @@ function emergency_load_active_incidents(PDO $pdo): array
             (
                 SELECT COUNT(*)
                 FROM dispatches d
-                WHERE d.incident_id = i.id
+                WHERE d.reference_no = i.reference_no
                   AND d.status IN ('assigned','acknowledged','enroute','on_scene')
             ) AS active_dispatch_count
         FROM incidents i
         WHERE i.status IN ('pending','dispatched','active','in_progress')
         ORDER BY
-            CASE LOWER(COALESCE(i.priority, ''))
-                WHEN 'critical' THEN 1
-                WHEN 'high' THEN 2
-                WHEN 'urgent' THEN 3
-                WHEN 'moderate' THEN 4
-                WHEN 'medium' THEN 4
-                WHEN 'low' THEN 5
-                ELSE 6
-            END,
+            {$priorityOrder},
             i.created_at ASC,
             i.id ASC
     ");
@@ -335,7 +375,9 @@ function emergency_log_dispatch_notification(?int $userId, int $dispatchId, arra
 }
 
 try {
+    ers_ensure_incident_priority_schema($pdo);
     emergency_ensure_operator_records_table($pdo);
+    emergency_ensure_dispatches_assignment_schema($pdo);
 
     $userId = isset($_SESSION['user_id']) ? (int)$_SESSION['user_id'] : null;
     $dispatchTime = emergency_timestamp();
@@ -348,7 +390,7 @@ try {
     $initialAvailableUnits = count($availableUnits);
 
     if ($incidents !== [] && $availableUnits !== []) {
-        $dispatchInsert = $pdo->prepare("INSERT INTO dispatches (incident_id, unit_id, status, assigned_at) VALUES (?, ?, 'assigned', ?)");
+        $dispatchInsert = $pdo->prepare("INSERT INTO dispatches (incident_id, reference_no, unit_id, status, assigned_at) VALUES (?, ?, ?, 'assigned', ?)");
         $unitUpdate = $pdo->prepare("UPDATE units SET status = 'assigned', current_incident_id = ?, last_status_at = CURRENT_TIMESTAMP WHERE id = ?");
         $incidentUpdate = $pdo->prepare("UPDATE incidents SET status = 'dispatched', updated_at = CURRENT_TIMESTAMP WHERE id = ? AND status IN ('pending','dispatched','active','in_progress')");
         $operatorInsert = $pdo->prepare("
@@ -366,7 +408,7 @@ try {
                 $unit = emergency_take_unit($availableUnits, $preferredType);
                 if ($unit === null) break;
 
-                $dispatchInsert->execute([(int)$incident['id'], (int)$unit['id'], $dispatchTime]);
+                $dispatchInsert->execute([(int)$incident['id'], (string)$incident['reference_no'], (int)$unit['id'], $dispatchTime]);
                 $dispatchId = (int)$pdo->lastInsertId();
                 $unitUpdate->execute([(int)$incident['id'], (int)$unit['id']]);
                 ers_sync_vehicle_resource_status_by_unit_id($pdo, (int)$unit['id'], 'in_use');
@@ -433,7 +475,7 @@ try {
                 $unit = emergency_take_unit($availableUnits, $preferredType);
                 if ($unit === null) break;
 
-                $dispatchInsert->execute([(int)$incident['id'], (int)$unit['id'], $dispatchTime]);
+                $dispatchInsert->execute([(int)$incident['id'], (string)$incident['reference_no'], (int)$unit['id'], $dispatchTime]);
                 $dispatchId = (int)$pdo->lastInsertId();
                 $unitUpdate->execute([(int)$incident['id'], (int)$unit['id']]);
                 ers_sync_vehicle_resource_status_by_unit_id($pdo, (int)$unit['id'], 'in_use');
@@ -490,6 +532,27 @@ try {
 
     $pdo->commit();
 
+    $notifiedIncidentIds = [];
+    $anonymousTipStatusSync = [];
+    foreach ($allocations as $allocation) {
+        $incidentId = (int)($allocation['incident_id'] ?? 0);
+        if ($incidentId <= 0 || isset($notifiedIncidentIds[$incidentId])) {
+            continue;
+        }
+        $notifiedIncidentIds[$incidentId] = true;
+        ers_notify_emergency_com_status(
+            $pdo,
+            $incidentId,
+            'Response units are being dispatched.'
+        );
+        $anonymousTipStatusSync[] = ers_notify_anonymous_tip_status_result(
+            $pdo,
+            $incidentId,
+            'dispatched',
+            'Response units are being dispatched.'
+        );
+    }
+
     foreach ($allocations as $allocation) {
         emergency_log_dispatch_notification($userId, (int)$allocation['dispatch_id'], $allocation);
     }
@@ -516,6 +579,7 @@ try {
         'available_units_before' => $initialAvailableUnits,
         'available_units_after' => count($availableUnits),
         'allocations' => $allocations,
+        'anonymous_tip_status_sync' => $anonymousTipStatusSync,
         'summary' => [
             'units_allocated' => count($allocations),
             'active_incidents' => count($incidents),

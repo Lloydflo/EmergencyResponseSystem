@@ -8,6 +8,13 @@ $requestorName = $currentUser
     : 'Admin Resource Desk';
 
 $pageTitle = 'Resources Status';
+$resourceUiBuild = '20260807-admin-resource-cleanup-v2';
+if (!headers_sent()) {
+    header('Cache-Control: no-store, no-cache, must-revalidate, max-age=0');
+    header('Pragma: no-cache');
+    header('Expires: 0');
+    header('X-Resource-UI-Build: ' . $resourceUiBuild);
+}
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -1151,18 +1158,22 @@ $pageTitle = 'Resources Status';
                 grid-template-columns: 1fr;
             }
         }
+
+
     </style>
+    <link rel="stylesheet" href="css/admin-resources.css?v=<?php echo rawurlencode($resourceUiBuild); ?>">
 </head>
-<body>
+<body data-resource-ui-build="<?php echo htmlspecialchars($resourceUiBuild); ?>">
     <?php include $rootDir . '/includes/sidebar.php'; ?>
     <?php include $rootDir . '/includes/admin-header.php'; ?>
 
     <div class="main-content">
         <div class="main-container resource-shell">
-            <section class="resource-head">
-                <div>
-                    <h1>Resources Status</h1>
-                    <p>Admin panel for managing vehicles, personnel, and equipment in emergency operations.</p>
+            <section class="resource-head" aria-labelledby="resourcePageTitle">
+                <div class="resource-head-copy">
+                    <span class="resource-eyebrow"><i class="fas fa-clipboard-check" aria-hidden="true"></i> Operational readiness</span>
+                    <h1 id="resourcePageTitle">Resources Status</h1>
+                    <p>Monitor vehicle readiness, personnel availability, and equipment condition in an operations-focused roster.</p>
                 </div>
                 <div class="resource-head-actions">
                     <div class="archive-btn-wrap">
@@ -1179,15 +1190,6 @@ $pageTitle = 'Resources Status';
                     </div>
                     <button
                         type="button"
-                        class="btn-secondary"
-                        id="requestBackupBtn"
-                        aria-haspopup="dialog"
-                        aria-controls="requestBackupModal"
-                    >
-                        <i class="fas fa-truck-medical"></i> Request
-                    </button>
-                    <button
-                        type="button"
                         class="btn-primary"
                         id="addResourceBtn"
                         data-open-resource-modal
@@ -1195,67 +1197,105 @@ $pageTitle = 'Resources Status';
                         aria-controls="resourceModal"
                         onclick="document.getElementById('resourceModal').classList.add('show');document.getElementById('resourceModal').setAttribute('aria-hidden','false');document.body.style.overflow='hidden';if(document.getElementById('modalTitle')){document.getElementById('modalTitle').textContent='Add Resource';}if(document.getElementById('modalHelperText')){document.getElementById('modalHelperText').textContent='Fill out the details below to register a new resource entry.';}if(document.getElementById('saveResourceBtn')){document.getElementById('saveResourceBtn').textContent='Save Resource';}if(document.getElementById('resourceForm')){document.getElementById('resourceForm').reset();}if(document.getElementById('resourceIdHidden')){document.getElementById('resourceIdHidden').value='';}if(document.getElementById('categoryInput')){document.getElementById('categoryInput').value='vehicles';}if(document.getElementById('statusInput')){document.getElementById('statusInput').value='available';}if(document.getElementById('resourceCodeInput')){document.getElementById('resourceCodeInput').focus();}if (typeof window.openAdminResourceModal === 'function') { window.openAdminResourceModal(); }"
                     >
-                        <i class="fas fa-plus"></i> Add Resource
+                        <i class="fas fa-plus"></i> Register Resource
                     </button>
                 </div>
             </section>
 
-            <section class="overview-grid">
-                <article class="overview-item">
-                    <div class="overview-label">Total Resources</div>
-                    <div class="overview-value" id="ovTotal">0</div>
+            <section class="overview-grid" aria-label="Resource readiness summary">
+                <article class="overview-item total">
+                    <span class="overview-icon"><i class="fas fa-layer-group" aria-hidden="true"></i></span>
+                    <div class="overview-copy">
+                        <div class="overview-label">Total Registered</div>
+                        <div class="overview-value" id="ovTotal">0</div>
+                        <span class="overview-note">All active resource records</span>
+                    </div>
                 </article>
-                <article class="overview-item">
-                    <div class="overview-label">Vehicles</div>
-                    <div class="overview-value" id="ovVehicles">0</div>
+                <article class="overview-item vehicles">
+                    <span class="overview-icon"><i class="fas fa-truck-medical" aria-hidden="true"></i></span>
+                    <div class="overview-copy">
+                        <div class="overview-label">Vehicles</div>
+                        <div class="overview-value" id="ovVehicles">0</div>
+                        <span class="overview-note">Fleet and response units</span>
+                    </div>
                 </article>
-                <article class="overview-item">
-                    <div class="overview-label">Personnel</div>
-                    <div class="overview-value" id="ovPersonnel">0</div>
+                <article class="overview-item personnel">
+                    <span class="overview-icon"><i class="fas fa-user-shield" aria-hidden="true"></i></span>
+                    <div class="overview-copy">
+                        <div class="overview-label">Personnel</div>
+                        <div class="overview-value" id="ovPersonnel">0</div>
+                        <span class="overview-note">Registered operations staff</span>
+                    </div>
                 </article>
-                <article class="overview-item">
-                    <div class="overview-label">Equipment</div>
-                    <div class="overview-value" id="ovEquipment">0</div>
+                <article class="overview-item equipment">
+                    <span class="overview-icon"><i class="fas fa-toolbox" aria-hidden="true"></i></span>
+                    <div class="overview-copy">
+                        <div class="overview-label">Equipment</div>
+                        <div class="overview-value" id="ovEquipment">0</div>
+                        <span class="overview-note">Operational assets and supplies</span>
+                    </div>
                 </article>
-                <article class="overview-item">
-                    <div class="overview-label">Available</div>
-                    <div class="overview-value" id="ovAvailable">0</div>
+                <article class="overview-item available">
+                    <span class="overview-icon"><i class="fas fa-circle-check" aria-hidden="true"></i></span>
+                    <div class="overview-copy">
+                        <div class="overview-label">Available Now</div>
+                        <div class="overview-value" id="ovAvailable">0</div>
+                        <span class="overview-note">Ready for assignment</span>
+                    </div>
                 </article>
             </section>
 
-            <section class="resource-controls">
-                <input type="text" id="searchInput" class="control-input" placeholder="Search resource name or id...">
-                <select id="categoryFilter" class="control-select">
+            <section class="resource-controls" aria-label="Resource filters">
+                <div class="resource-search-field">
+                    <i class="fas fa-magnifying-glass" aria-hidden="true"></i>
+                    <label class="resource-visually-hidden" for="searchInput">Search resources</label>
+                    <input type="search" id="searchInput" class="control-input" placeholder="Search vehicle no., plate, name, location, or assignment...">
+                </div>
+
+                <div class="resource-category-tabs" role="tablist" aria-label="Resource categories">
+                    <button type="button" class="resource-category-tab active" role="tab" aria-selected="true" data-resource-category="">
+                        All <span class="resource-tab-count" id="tabCountAll">0</span>
+                    </button>
+                    <button type="button" class="resource-category-tab" role="tab" aria-selected="false" data-resource-category="vehicles">
+                        Vehicles <span class="resource-tab-count" id="tabCountVehicles">0</span>
+                    </button>
+                    <button type="button" class="resource-category-tab" role="tab" aria-selected="false" data-resource-category="personnel">
+                        Personnel <span class="resource-tab-count" id="tabCountPersonnel">0</span>
+                    </button>
+                    <button type="button" class="resource-category-tab" role="tab" aria-selected="false" data-resource-category="equipment">
+                        Equipment <span class="resource-tab-count" id="tabCountEquipment">0</span>
+                    </button>
+                </div>
+
+                <div class="resource-filter-actions">
+                    <select id="statusFilter" class="control-select" aria-label="Filter resources by status">
+                        <option value="">All Status</option>
+                        <option value="available">Available</option>
+                        <option value="in_use">In Use</option>
+                        <option value="maintenance">Maintenance</option>
+                        <option value="offline">Unavailable</option>
+                    </select>
+                    <button type="button" class="btn-outline" id="resetFiltersBtn"><i class="fas fa-rotate-left" aria-hidden="true"></i> Reset</button>
+                </div>
+
+                <select id="categoryFilter" hidden aria-hidden="true" tabindex="-1">
                     <option value="">All Categories</option>
                     <option value="vehicles">Vehicles</option>
                     <option value="personnel">Personnel</option>
                     <option value="equipment">Equipment</option>
                 </select>
-                <select id="statusFilter" class="control-select">
-                    <option value="">All Status</option>
-                    <option value="available">Available</option>
-                    <option value="in_use">In Use</option>
-                    <option value="maintenance">Maintenance</option>
-                    <option value="offline">Offline</option>
-                </select>
-                <button type="button" class="btn-outline" id="resetFiltersBtn">Reset</button>
             </section>
 
-            <section class="table-wrap">
-                <table class="resource-table">
-                    <thead>
-                        <tr>
-                            <th>ID</th>
-                            <th>Resource</th>
-                            <th>Category</th>
-                            <th>Status</th>
-                            <th>Assignment</th>
-                            <th>Last Updated</th>
-                            <th>Actions</th>
-                        </tr>
-                    </thead>
-                    <tbody id="resourceTableBody"></tbody>
-                </table>
+            <section class="resource-roster" aria-labelledby="resourceRosterTitle">
+                <header class="resource-roster-head">
+                    <div>
+                        <span class="resource-section-kicker"><i class="fas fa-list-check" aria-hidden="true"></i> Operational roster</span>
+                        <h2 id="resourceRosterTitle">Registered Resources</h2>
+                        <p id="resourceResultSummary">Loading the current resource roster…</p>
+                    </div>
+                    <span class="resource-view-label"><i class="fas fa-table-cells-large" aria-hidden="true"></i> Readiness card view</span>
+                </header>
+                <div class="resource-card-grid" id="resourceTableBody" aria-live="polite"></div>
             </section>
         </div>
     </div>
@@ -1284,10 +1324,11 @@ $pageTitle = 'Resources Status';
                     <div class="form-grid">
                         <div class="form-group">
                             <label for="resourceCodeInput">
-                                <span>Resource ID</span>
+                                <span class="resource-code-label-text" id="resourceCodeLabel">Vehicle No.</span>
                                 <button type="button" class="label-inline-btn" id="generateCodeBtn">Generate</button>
                             </label>
-                            <input id="resourceCodeInput" class="form-input" required maxlength="20" placeholder="e.g. VEH-010">
+                            <input id="resourceCodeInput" class="form-input" required maxlength="20" placeholder="e.g. VEH-010" aria-describedby="resourceCodeHint">
+                            <div class="form-hint" id="resourceCodeHint">Operational number shown on cards and reports; use the assigned fleet or asset number.</div>
                         </div>
                         <div class="form-group">
                             <label for="resourceNameInput" id="resourceNameLabel">Resource Name</label>
@@ -1457,7 +1498,7 @@ $pageTitle = 'Resources Status';
                                 <table class="request-resource-table">
                                     <thead>
                                         <tr>
-                                            <th>ID</th>
+                                            <th>Operational No.</th>
                                             <th>Resource</th>
                                             <th>Category</th>
                                             <th>Location</th>
@@ -1549,7 +1590,13 @@ $pageTitle = 'Resources Status';
         const tableBody = document.getElementById('resourceTableBody');
         const searchInput = document.getElementById('searchInput');
         const categoryFilter = document.getElementById('categoryFilter');
+        const categoryTabs = Array.from(document.querySelectorAll('[data-resource-category]'));
         const statusFilter = document.getElementById('statusFilter');
+        const resourceResultSummary = document.getElementById('resourceResultSummary');
+        const tabCountAll = document.getElementById('tabCountAll');
+        const tabCountVehicles = document.getElementById('tabCountVehicles');
+        const tabCountPersonnel = document.getElementById('tabCountPersonnel');
+        const tabCountEquipment = document.getElementById('tabCountEquipment');
         const resetFiltersBtn = document.getElementById('resetFiltersBtn');
         const resourceModal = document.getElementById('resourceModal');
         const archiveModal = document.getElementById('archiveModal');
@@ -1557,6 +1604,7 @@ $pageTitle = 'Resources Status';
         const resourceForm = document.getElementById('resourceForm');
         const resourceIdHidden = document.getElementById('resourceIdHidden');
         const resourceCodeInput = document.getElementById('resourceCodeInput');
+        const resourceCodeLabel = document.getElementById('resourceCodeLabel');
         const resourceNameLabel = document.getElementById('resourceNameLabel');
         const resourceNameInput = document.getElementById('resourceNameInput');
         const categoryInput = document.getElementById('categoryInput');
@@ -1735,7 +1783,7 @@ $pageTitle = 'Resources Status';
                 strictViewbox: false,
                 preferViewbox: true,
                 minChars: 2,
-                limit: 6
+                limit: 10
             });
         }
 
@@ -1878,6 +1926,113 @@ $pageTitle = 'Resources Status';
             setLocationSuggestionOptions(backupIncidents.map((incident) => incident.location));
             renderBackupIncidentOptions();
             updateBackupIncidentMeta();
+        }
+
+        function resourceIdentifierLabel(category) {
+            if (category === 'vehicles') return 'Vehicle No.';
+            if (category === 'personnel') return 'Personnel No.';
+            if (category === 'equipment') return 'Equipment No.';
+            return 'Resource No.';
+        }
+
+        function resourceIdentifierPlaceholder(category) {
+            if (category === 'vehicles') return 'e.g. VEH-010';
+            if (category === 'personnel') return 'e.g. PER-010';
+            if (category === 'equipment') return 'e.g. EQP-010';
+            return 'e.g. RES-010';
+        }
+
+        function resourceCategoryIcon(item) {
+            const category = item && item.category ? item.category : 'equipment';
+            const name = String(item && item.name ? item.name : '')
+                .trim()
+                .toLowerCase()
+                .replace(/[_-]+/g, ' ')
+                .replace(/\s+/g, ' ');
+            if (category === 'personnel') return 'fa-user-shield';
+            if (category === 'equipment') return 'fa-toolbox';
+            if (name.includes('ambulance')) return 'fa-truck-medical';
+            if (name.includes('fire')) return 'fa-fire-extinguisher';
+            // Reuse the vehicle icon already loaded for card facts, so
+            // police/patrol aliases always render instead of showing a blank tile.
+            if (/\b(police|patrol|cruiser|squad car|law enforcement)\b/.test(name)) return 'fa-car-side';
+            return 'fa-truck';
+        }
+
+        function resourceCategoryTone(category) {
+            if (category === 'personnel') return 'personnel';
+            if (category === 'equipment') return 'equipment';
+            return 'vehicles';
+        }
+
+        function getResourceFacts(item) {
+            if (item.category === 'vehicles') {
+                return [
+                    {
+                        icon: 'fa-car-side',
+                        label: 'Plate Number',
+                        value: item.plateNumber || 'Not recorded'
+                    },
+                    {
+                        icon: 'fa-route',
+                        label: 'Current Assignment',
+                        value: item.assignmentDetails || item.assignment || 'Not currently assigned'
+                    },
+                    {
+                        icon: 'fa-location-crosshairs',
+                        label: 'Tracking Source',
+                        value: 'Responder GPS'
+                    }
+                ];
+            }
+
+            if (item.category === 'personnel') {
+                return [
+                    {
+                        icon: 'fa-id-badge',
+                        label: 'Position',
+                        value: item.positionTitle || 'Not recorded'
+                    },
+                    {
+                        icon: 'fa-location-dot',
+                        label: 'Current Location',
+                        value: item.location || 'Not recorded'
+                    },
+                    {
+                        icon: 'fa-clipboard-check',
+                        label: 'Availability Note',
+                        value: item.notes || 'No note recorded'
+                    }
+                ];
+            }
+
+            return [
+                {
+                    icon: 'fa-boxes-stacked',
+                    label: 'Quantity',
+                    value: String(Math.max(1, Number(item.quantity) || 1))
+                },
+                {
+                    icon: 'fa-location-dot',
+                    label: 'Storage Location',
+                    value: item.location || 'Not recorded'
+                },
+                {
+                    icon: 'fa-clipboard-check',
+                    label: 'Operational Use',
+                    value: item.assignment || item.notes || 'No use recorded'
+                }
+            ];
+        }
+
+        function syncCategoryTabs() {
+            const selected = categoryFilter ? categoryFilter.value : '';
+            categoryTabs.forEach((tab) => {
+                const isActive = (tab.getAttribute('data-resource-category') || '') === selected;
+                tab.classList.toggle('active', isActive);
+                tab.setAttribute('aria-selected', isActive ? 'true' : 'false');
+                tab.tabIndex = isActive ? 0 : -1;
+            });
         }
 
         function formatStatus(status) {
@@ -2086,7 +2241,10 @@ $pageTitle = 'Resources Status';
                 const isSelected = selectedBackupResourceIds.has(item.id);
                 return `
                     <tr>
-                        <td>${escapeHtml(item.code)}</td>
+                        <td class="request-number-cell">
+                            <span>${escapeHtml(resourceIdentifierLabel(item.category))}</span>
+                            <strong>${escapeHtml(item.code)}</strong>
+                        </td>
                         <td class="name-cell">
                             <strong>${escapeHtml(item.name)}</strong>
                             <span>${escapeHtml(detailLine)}</span>
@@ -2180,6 +2338,11 @@ $pageTitle = 'Resources Status';
             const isVehicle = currentCategory === 'vehicles';
             const isPersonnel = currentCategory === 'personnel';
             const isEquipment = currentCategory === 'equipment';
+
+            if (resourceCodeLabel) {
+                resourceCodeLabel.textContent = resourceIdentifierLabel(currentCategory);
+            }
+            resourceCodeInput.placeholder = resourceIdentifierPlaceholder(currentCategory);
 
             resourceNameLabel.textContent = isVehicle
                 ? 'Vehicle Name'
@@ -2280,6 +2443,9 @@ $pageTitle = 'Resources Status';
                     item.category,
                     item.status,
                     item.quantity,
+                    item.plateNumber,
+                    item.positionTitle,
+                    item.location,
                     item.assignment,
                     item.assignmentDetails,
                     item.notes
@@ -2301,40 +2467,92 @@ $pageTitle = 'Resources Status';
             ovPersonnel.textContent = personnel;
             ovEquipment.textContent = equipment;
             ovAvailable.textContent = available;
+
+            if (tabCountAll) tabCountAll.textContent = String(total);
+            if (tabCountVehicles) tabCountVehicles.textContent = String(vehicles);
+            if (tabCountPersonnel) tabCountPersonnel.textContent = String(personnel);
+            if (tabCountEquipment) tabCountEquipment.textContent = String(equipment);
+            syncCategoryTabs();
         }
 
         function renderTable() {
             const items = getFilteredResources();
+            const categoryValue = categoryFilter.value;
+            const categoryLabel = categoryValue ? formatCategory(categoryValue) : 'all categories';
+            const resourceWord = items.length === 1 ? 'resource' : 'resources';
+
+            if (resourceResultSummary) {
+                resourceResultSummary.textContent = `Showing ${items.length} of ${resources.length} ${resourceWord} in ${categoryLabel}.`;
+            }
+            syncCategoryTabs();
 
             if (items.length === 0) {
-                tableBody.innerHTML = '<tr class="empty-row"><td colspan="7">No resources found for the current filters.</td></tr>';
+                tableBody.innerHTML = `
+                    <div class="resource-empty-state">
+                        <div>
+                            <span class="resource-empty-icon"><i class="fas fa-magnifying-glass" aria-hidden="true"></i></span>
+                            <h3>No matching resources</h3>
+                            <p>Try a different vehicle number, name, plate number, status, or category.</p>
+                        </div>
+                    </div>
+                `;
                 return;
             }
 
             tableBody.innerHTML = items.map((item) => {
-                const detailLine = formatResourceMeta(item);
+                const facts = getResourceFacts(item);
+                const detailLine = formatResourceMeta(item) || item.notes || 'No supporting details recorded';
+                const identifierLabel = resourceIdentifierLabel(item.category);
+                const categoryTone = resourceCategoryTone(item.category);
+                const categoryIcon = resourceCategoryIcon(item);
+                const factHtml = facts.map((fact) => `
+                    <div class="resource-fact">
+                        <i class="fas ${escapeHtml(fact.icon)}" aria-hidden="true"></i>
+                        <dl class="resource-fact-copy">
+                            <dt>${escapeHtml(fact.label)}</dt>
+                            <dd title="${escapeHtml(fact.value)}">${escapeHtml(fact.value)}</dd>
+                        </dl>
+                    </div>
+                `).join('');
+
                 return `
-                    <tr>
-                        <td>${escapeHtml(item.code)}</td>
-                        <td class="name-cell">
-                            <strong>${escapeHtml(item.name)}</strong>
-                            <span>${escapeHtml(detailLine || item.notes || 'No details')}</span>
-                        </td>
-                        <td>${escapeHtml(formatCategory(item.category))}</td>
-                        <td>
+                    <article class="resource-card resource-status-${escapeHtml(item.status)}" data-resource-id="${item.id}">
+                        <header class="resource-card-head">
+                            <div class="resource-card-identity">
+                                <span class="resource-card-icon ${escapeHtml(categoryTone)}"><i class="fas ${escapeHtml(categoryIcon)}" aria-hidden="true"></i></span>
+                                <div class="resource-number-block">
+                                    <span class="resource-number-label">${escapeHtml(identifierLabel)}</span>
+                                    <strong class="resource-number">${escapeHtml(item.code)}</strong>
+                                </div>
+                            </div>
                             <span class="status-chip status-${escapeHtml(item.status)}">${escapeHtml(formatStatus(item.status))}</span>
-                        </td>
-                        <td>${escapeHtml(formatAssignmentDisplay(item))}</td>
-                        <td>${escapeHtml(formatDate(item.updatedAt))}</td>
-                        <td class="actions-cell">
-                            <button type="button" class="action-btn" title="Edit" data-action="edit" data-id="${item.id}">
-                                <i class="fas fa-pen"></i>
-                            </button>
-                            <button type="button" class="action-btn delete" title="Delete" data-action="delete" data-id="${item.id}">
-                                <i class="fas fa-trash"></i>
-                            </button>
-                        </td>
-                    </tr>
+                        </header>
+
+                        <div class="resource-card-body">
+                            <div class="resource-card-title-row">
+                                <h3>${escapeHtml(item.name)}</h3>
+                                <span class="resource-category-chip">${escapeHtml(formatCategory(item.category))}</span>
+                            </div>
+                            <p class="resource-card-subline">${escapeHtml(detailLine)}</p>
+
+                            <div class="resource-facts">${factHtml}</div>
+
+                            <footer class="resource-card-footer">
+                                <span class="resource-updated" title="${escapeHtml(formatDate(item.updatedAt))}">
+                                    <i class="far fa-clock" aria-hidden="true"></i>
+                                    <span>Updated ${escapeHtml(formatDate(item.updatedAt))}</span>
+                                </span>
+                                <div class="resource-card-actions">
+                                    <button type="button" class="resource-card-action" title="Edit resource details" data-action="edit" data-id="${item.id}">
+                                        <i class="fas fa-pen" aria-hidden="true"></i><span>Edit</span>
+                                    </button>
+                                    <button type="button" class="resource-card-action archive" title="Move resource to archive" data-action="delete" data-id="${item.id}">
+                                        <i class="fas fa-box-archive" aria-hidden="true"></i><span>Archive</span>
+                                    </button>
+                                </div>
+                            </footer>
+                        </div>
+                    </article>
                 `;
             }).join('');
         }
@@ -2669,7 +2887,7 @@ $pageTitle = 'Resources Status';
 
             const codeExists = resources.some((item) => item.code.toLowerCase() === payload.code.toLowerCase() && item.id !== selectedId);
             if (codeExists) {
-                showToast('Resource ID already exists.');
+                showToast(`${resourceIdentifierLabel(payload.category)} already exists.`);
                 return;
             }
 
@@ -2746,13 +2964,17 @@ $pageTitle = 'Resources Status';
                 showToast((err && err.message) ? String(err.message) : 'Unable to load archive.');
             }
         });
-        requestBackupBtn.addEventListener('click', async () => {
-            try {
-                await openRequestBackupModal();
-            } catch (err) {
-                showToast((err && err.message) ? String(err.message) : 'Unable to load request data.');
-            }
-        });
+        // The admin resource roster does not expose backup requests.
+        // That operational workflow belongs to the dispatcher interface.
+        if (requestBackupBtn) {
+            requestBackupBtn.addEventListener('click', async () => {
+                try {
+                    await openRequestBackupModal();
+                } catch (err) {
+                    showToast((err && err.message) ? String(err.message) : 'Unable to load request data.');
+                }
+            });
+        }
         document.querySelectorAll('[data-open-resource-modal]').forEach((trigger) => {
             if (trigger === addResourceBtn) return;
             trigger.addEventListener('click', openAddResourceModal);
@@ -2819,6 +3041,26 @@ $pageTitle = 'Resources Status';
             }
         });
 
+        categoryTabs.forEach((tab, index) => {
+            tab.addEventListener('click', () => {
+                categoryFilter.value = tab.getAttribute('data-resource-category') || '';
+                syncCategoryTabs();
+                renderTable();
+            });
+
+            tab.addEventListener('keydown', (event) => {
+                if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) return;
+                event.preventDefault();
+                let nextIndex = index;
+                if (event.key === 'ArrowRight') nextIndex = (index + 1) % categoryTabs.length;
+                if (event.key === 'ArrowLeft') nextIndex = (index - 1 + categoryTabs.length) % categoryTabs.length;
+                if (event.key === 'Home') nextIndex = 0;
+                if (event.key === 'End') nextIndex = categoryTabs.length - 1;
+                categoryTabs[nextIndex].click();
+                categoryTabs[nextIndex].focus();
+            });
+        });
+
         searchInput.addEventListener('input', renderTable);
         categoryFilter.addEventListener('change', renderTable);
         statusFilter.addEventListener('change', renderTable);
@@ -2827,6 +3069,7 @@ $pageTitle = 'Resources Status';
             searchInput.value = '';
             categoryFilter.value = '';
             statusFilter.value = '';
+            syncCategoryTabs();
             renderTable();
             showToast('Filters reset.');
         });
@@ -2838,7 +3081,7 @@ $pageTitle = 'Resources Status';
                 await loadResources();
                 await loadArchivedResources();
             } catch (err) {
-                tableBody.innerHTML = '<tr class="empty-row"><td colspan="7">Unable to load resources from database.</td></tr>';
+                tableBody.innerHTML = '<div class="resource-empty-state"><div><span class="resource-empty-icon"><i class="fas fa-triangle-exclamation" aria-hidden="true"></i></span><h3>Resource roster unavailable</h3><p>The current resource list could not be loaded. Refresh the page or try again shortly.</p></div></div>';
                 showToast((err && err.message) ? String(err.message) : 'Unable to load resources.');
             }
         })();

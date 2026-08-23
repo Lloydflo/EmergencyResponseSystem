@@ -13,20 +13,21 @@
 .call-hero {
     display: grid;
     grid-template-columns: minmax(0, 1.65fr) minmax(280px, 0.95fr);
-    gap: 1.5rem;
-    margin-top: 1rem;
-    margin-bottom: 1.25rem;
+    gap: 0.9rem;
+    margin-top: 0.75rem;
+    margin-bottom: 0.85rem;
 }
 
 .call-hero-main,
 .call-hero-side,
 .stat-card,
 .incoming-call-alert,
+.create-incident-panel,
 .active-call-panel,
 .recent-incidents {
     position: relative;
     overflow: hidden;
-    border-radius: 28px;
+    border-radius: 20px;
     border: 1px solid rgba(15, 23, 42, 0.08);
     box-shadow: 0 18px 45px rgba(15, 23, 42, 0.08);
 }
@@ -36,7 +37,7 @@
 }
 
 .call-hero-main {
-    padding: 2rem;
+    padding: 1.35rem 1.5rem;
     color: #eff6ff;
     background:
         linear-gradient(135deg, rgba(10, 37, 64, 0.98), rgba(12, 74, 110, 0.96)),
@@ -74,8 +75,8 @@
 }
 
 .call-hero-title {
-    margin: 1rem 0 0.6rem;
-    font-size: clamp(2rem, 3vw, 3rem);
+    margin: 0.7rem 0 0.4rem;
+    font-size: clamp(1.8rem, 2.6vw, 2.35rem);
     line-height: 1.05;
     font-weight: 800;
     letter-spacing: -0.04em;
@@ -85,26 +86,26 @@
     max-width: 60rem;
     margin: 0;
     color: rgba(219, 234, 254, 0.84);
-    font-size: 1rem;
-    line-height: 1.62;
+    font-size: 0.9rem;
+    line-height: 1.48;
 }
 
 .call-hero-chips {
     display: flex;
     flex-wrap: wrap;
-    gap: 0.75rem;
-    margin-top: 1.5rem;
+    gap: 0.5rem;
+    margin-top: 0.85rem;
 }
 
 .call-chip {
     display: inline-flex;
     align-items: center;
     gap: 0.45rem;
-    padding: 0.65rem 0.9rem;
+    padding: 0.48rem 0.72rem;
     border-radius: 999px;
     background: rgba(255, 255, 255, 0.1);
     color: #e0f2fe;
-    font-size: 0.84rem;
+    font-size: 0.76rem;
     font-weight: 700;
     border: 1px solid rgba(255, 255, 255, 0.08);
 }
@@ -136,17 +137,17 @@
 }
 
 .call-hero-side {
-    padding: 1.5rem;
+    padding: 0.85rem;
     background: linear-gradient(180deg, #fff7ed 0%, #ffedd5 100%);
 }
 
 .call-focus-card {
     display: flex;
     flex-direction: column;
-    gap: 0.8rem;
+    gap: 0.5rem;
     height: 100%;
-    padding: 1.25rem;
-    border-radius: 22px;
+    padding: 0.95rem;
+    border-radius: 14px;
     background: rgba(255, 255, 255, 0.76);
     border: 1px solid rgba(234, 88, 12, 0.14);
 }
@@ -161,17 +162,17 @@
 
 .call-focus-value {
     color: #111827;
-    font-size: 1.3rem;
+    font-size: 1.05rem;
     line-height: 1.35;
     font-weight: 800;
 }
 
 .call-focus-note {
     color: #334155;
-    font-size: 0.95rem;
-    line-height: 1.6;
-    padding: 0.95rem 1rem;
-    border-radius: 16px;
+    font-size: 0.78rem;
+    line-height: 1.42;
+    padding: 0.65rem 0.75rem;
+    border-radius: 10px;
     background: rgba(15, 23, 42, 0.04);
     border: 1px dashed rgba(148, 163, 184, 0.55);
 }
@@ -179,12 +180,12 @@
 .stats-bar {
     display: grid;
     grid-template-columns: repeat(4, minmax(0, 1fr));
-    gap: 1rem;
-    margin-bottom: 1.5rem;
+    gap: 0.65rem;
+    margin-bottom: 0.85rem;
 }
 
 .stat-card {
-    padding: 1.2rem;
+    padding: 0.82rem 0.9rem;
     background: rgba(255, 255, 255, 0.86);
     backdrop-filter: blur(12px);
 }
@@ -196,13 +197,13 @@
 }
 
 .stat-icon-box {
-    width: 54px;
-    height: 54px;
-    border-radius: 18px;
+    width: 42px;
+    height: 42px;
+    border-radius: 12px;
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    font-size: 1.3rem;
+    font-size: 1rem;
     flex-shrink: 0;
 }
 
@@ -228,7 +229,7 @@
 
 .stat-value {
     color: #0f172a;
-    font-size: 2rem;
+    font-size: 1.5rem;
     line-height: 1;
     font-weight: 800;
     margin-bottom: 0.25rem;
@@ -236,15 +237,15 @@
 
 .stat-label {
     color: #475569;
-    font-size: 0.9rem;
+    font-size: 0.78rem;
     line-height: 1.45;
     font-weight: 700;
 }
 
 .call-center-grid {
     display: grid;
-    grid-template-columns: minmax(0, 1.7fr) minmax(320px, 0.95fr);
-    gap: 1.5rem;
+    grid-template-columns: minmax(0, 1fr);
+    gap: 0.9rem;
     align-items: start;
 }
 
@@ -490,6 +491,14 @@ body.incoming-call-modal-open {
     font-size: 1.05rem;
 }
 
+.transfer-source-glyph {
+    display: block;
+    width: 1.15rem;
+    height: 1.15rem;
+    flex: 0 0 auto;
+    overflow: visible;
+}
+
 .transfer-report-eyebrow {
     margin-bottom: 0.15rem;
     color: #64748b;
@@ -654,8 +663,9 @@ body.incoming-call-modal-open {
 .transfer-queue-list {
     display: grid;
     gap: 0.75rem;
-    max-height: 420px;
-    overflow: auto;
+    max-height: 500px;
+    overflow-x: hidden;
+    overflow-y: auto;
     padding-right: 0.25rem;
 }
 
@@ -692,23 +702,23 @@ body.incoming-call-modal-open {
 
 .transfer-queue-card-head {
     display: grid;
-    grid-template-columns: auto minmax(0, 1fr) auto;
+    grid-template-columns: 2.2rem minmax(0, 1fr) 1.85rem;
     gap: 0.7rem;
-    align-items: start;
+    align-items: center;
 }
 
-.transfer-queue-card-head strong,
-.transfer-queue-card-head span {
+.transfer-queue-copy strong,
+.transfer-queue-copy > span {
     display: block;
 }
 
-.transfer-queue-card-head strong {
+.transfer-queue-copy strong {
     color: #0f172a;
     font-size: 0.95rem;
     line-height: 1.3;
 }
 
-.transfer-queue-card-head span {
+.transfer-queue-copy > span {
     color: #64748b;
     font-size: 0.78rem;
     font-weight: 700;
@@ -718,11 +728,14 @@ body.incoming-call-modal-open {
 .transfer-queue-icon {
     width: 2.2rem;
     height: 2.2rem;
+    min-width: 2.2rem;
     border-radius: 12px;
-    display: inline-flex;
+    display: flex;
     align-items: center;
     justify-content: center;
-    color: #ecfeff;
+    align-self: center;
+    margin: 0;
+    color: #ffffff;
     background: #155e75;
 }
 
@@ -788,10 +801,15 @@ body.incoming-call-modal-open {
 }
 
 .transfer-queue-card p {
+    display: -webkit-box;
     margin: 0.75rem 0 0;
+    overflow: hidden;
     color: #334155;
     font-size: 0.86rem;
     line-height: 1.45;
+    overflow-wrap: anywhere;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 3;
 }
 
 .transfer-queue-warning {
@@ -816,6 +834,7 @@ body.incoming-call-modal-open {
     color: #475569;
     font-size: 0.82rem;
     line-height: 1.4;
+    overflow-wrap: anywhere;
 }
 
 .transfer-queue-action {
@@ -839,11 +858,97 @@ body.incoming-call-modal-open {
     transform: translateY(-1px);
 }
 
+.create-incident-panel,
 .active-call-panel,
 .recent-incidents {
-    padding: 1.3rem;
+    padding: 1rem;
     background: rgba(255, 255, 255, 0.88);
     backdrop-filter: blur(12px);
+}
+
+/* Keep the queue useful even while no call form is open. The call process and
+   its DOM remain unchanged; only the workspace is reorganized. */
+.recent-incidents {
+    display: grid;
+    grid-template-columns: minmax(280px, 0.78fr) minmax(0, 1.55fr);
+    grid-template-areas:
+        "recent-head recent-head"
+        "transfer-queue recent-controls"
+        "transfer-queue recent-filters"
+        "transfer-queue recent-list";
+    align-items: start;
+    gap: 0.75rem 1rem;
+}
+
+.recent-incidents .sidebar-header {
+    grid-area: recent-head;
+    margin-bottom: 0;
+}
+
+.recent-incidents .transfer-queue-panel {
+    grid-area: transfer-queue;
+    min-width: 0;
+}
+
+.recent-incidents .sidebar-controls {
+    grid-area: recent-controls;
+    margin-bottom: 0;
+}
+
+.recent-incidents .filter-tabs {
+    grid-area: recent-filters;
+    margin-bottom: 0;
+}
+
+.recent-incidents .incident-list {
+    grid-area: recent-list;
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0.65rem;
+    max-height: 520px;
+    min-width: 0;
+}
+
+.recent-incidents .incident-card {
+    min-width: 0;
+    margin-bottom: 0;
+}
+
+.create-incident-panel {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+}
+
+.create-incident-panel strong {
+    display: block;
+    color: #0f172a;
+    font-size: 1rem;
+    font-weight: 900;
+}
+
+.create-incident-btn {
+    min-height: 44px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+    padding: 0.75rem 1rem;
+    border: 0;
+    border-radius: 14px;
+    background: linear-gradient(135deg, #0f766e, #14b8a6);
+    color: #ffffff;
+    font-size: 0.9rem;
+    font-weight: 900;
+    cursor: pointer;
+    box-shadow: 0 12px 22px rgba(20, 184, 166, 0.18);
+    transition: transform 0.18s ease, box-shadow 0.18s ease;
+}
+
+.create-incident-btn:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 16px 26px rgba(20, 184, 166, 0.24);
 }
 
 .active-call-panel {
@@ -852,6 +957,12 @@ body.incoming-call-modal-open {
 
 .active-call-panel.active {
     display: block;
+}
+
+.active-call-panel.manual-create .call-header,
+.active-call-panel.manual-create .voice-call-console,
+.active-call-panel.manual-create .call-chat-panel {
+    display: none;
 }
 
 .call-header {
@@ -1077,10 +1188,178 @@ body.incoming-call-modal-open {
     line-height: 1.5;
 }
 
+.call-chat-panel {
+    display: grid;
+    gap: 0.8rem;
+    margin-bottom: 1rem;
+    padding: 1rem;
+    border-radius: 20px;
+    background: rgba(241, 245, 249, 0.88);
+    border: 1px solid rgba(148, 163, 184, 0.22);
+}
+
+.call-chat-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+}
+
+.call-chat-head strong {
+    color: #0f172a;
+    font-size: 1rem;
+}
+
+.call-chat-head span {
+    padding: 0.32rem 0.58rem;
+    border-radius: 999px;
+    color: #0f766e;
+    background: rgba(20, 184, 166, 0.14);
+    font-size: 0.72rem;
+    font-weight: 850;
+    white-space: nowrap;
+}
+
+.call-chat-messages {
+    display: flex;
+    flex-direction: column;
+    gap: 0.65rem;
+    min-height: 150px;
+    max-height: 260px;
+    overflow-y: auto;
+    padding: 0.85rem;
+    border-radius: 16px;
+    background: #ffffff;
+    border: 1px solid rgba(148, 163, 184, 0.22);
+}
+
+.call-chat-empty {
+    margin: auto;
+    color: #64748b;
+    font-size: 0.85rem;
+    font-weight: 700;
+    text-align: center;
+}
+
+.call-chat-bubble {
+    width: fit-content;
+    max-width: min(82%, 520px);
+    padding: 0.72rem 0.85rem;
+    border-radius: 14px;
+    color: #0f172a;
+    background: #e2e8f0;
+    border-left: 4px solid #64748b;
+    line-height: 1.45;
+    overflow-wrap: anywhere;
+}
+
+.call-chat-bubble.is-dispatcher {
+    align-self: flex-end;
+    color: #ecfeff;
+    background: #0f766e;
+    border-left-color: #5eead4;
+}
+
+.call-chat-bubble.is-caller {
+    align-self: flex-start;
+    background: #dbeafe;
+    border-left-color: #2563eb;
+}
+
+.call-chat-meta {
+    margin-bottom: 0.25rem;
+    font-size: 0.7rem;
+    font-weight: 900;
+    opacity: 0.76;
+}
+
+.call-chat-input-row {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 0.7rem;
+    align-items: center;
+}
+
+.call-chat-input-row input {
+    min-width: 0;
+    min-height: 46px;
+    padding: 0.78rem 0.9rem;
+    border: 1px solid rgba(148, 163, 184, 0.45);
+    border-radius: 14px;
+    background: #ffffff;
+    color: #0f172a;
+    outline: none;
+}
+
+.call-chat-input-row input:focus {
+    border-color: #0f766e;
+    box-shadow: 0 0 0 3px rgba(15, 118, 110, 0.14);
+}
+
+.call-chat-input-row button {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.45rem;
+    min-height: 46px;
+    padding: 0.78rem 1rem;
+    border: 0;
+    border-radius: 14px;
+    color: #ffffff;
+    background: #0f766e;
+    font-weight: 900;
+    cursor: pointer;
+}
+
+.call-chat-input-row button:hover {
+    background: #115e59;
+}
+
 .incident-form {
     display: flex;
     flex-direction: column;
     gap: 1rem;
+}
+
+.manual-form-head {
+    display: none;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 1rem;
+    padding-bottom: 0.95rem;
+    border-bottom: 1px solid rgba(148, 163, 184, 0.18);
+}
+
+.active-call-panel.manual-create .manual-form-head {
+    display: flex;
+}
+
+.manual-form-head strong {
+    display: block;
+    color: #0f172a;
+    font-size: 1.1rem;
+    font-weight: 900;
+}
+
+.manual-form-close {
+    width: 38px;
+    height: 38px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex: 0 0 38px;
+    border: 1px solid rgba(148, 163, 184, 0.28);
+    border-radius: 8px;
+    background: #f8fafc;
+    color: #0f172a;
+    cursor: pointer;
+    transition: background-color 0.18s ease, color 0.18s ease, transform 0.18s ease;
+}
+
+.manual-form-close:hover {
+    color: #991b1b;
+    background: #fee2e2;
+    transform: translateY(-1px);
 }
 
 .form-section {
@@ -1266,16 +1545,43 @@ body.incoming-call-modal-open {
     font-weight: 700;
 }
 
+.priority-ai-suggestion {
+    margin-top: 0.8rem;
+    padding: 0.75rem 0.85rem;
+    border-radius: 8px;
+    border: 1px solid #dbeafe;
+    background: #eff6ff;
+    color: #1e3a8a;
+    font-size: 0.84rem;
+    line-height: 1.45;
+    font-weight: 700;
+}
+
+.priority-ai-suggestion[data-state="loading"] {
+    border-color: #fde68a;
+    background: #fffbeb;
+    color: #92400e;
+}
+
+.priority-ai-suggestion[data-state="fallback"],
+.priority-ai-suggestion[data-state="manual"] {
+    border-color: #e2e8f0;
+    background: #f8fafc;
+    color: #475569;
+}
+
 .priority-select {
     display: flex;
     gap: 0.6rem;
     flex-wrap: wrap;
 }
 
+.priority-section,
 .indicator-section {
     margin-top: 1rem;
 }
 
+.priority-title,
 .indicator-title {
     margin-bottom: 0.85rem;
 }
@@ -1284,74 +1590,6 @@ body.incoming-call-modal-open {
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
     gap: 0.85rem;
-}
-
-.priority-score-card {
-    min-height: 88px;
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 1rem;
-    padding: 1rem;
-    border-radius: 12px;
-    border: 1px solid #d7dee8;
-    background: #f8fafc;
-}
-
-.priority-score-card span {
-    display: block;
-    color: #64748b;
-    font-size: 0.76rem;
-    font-weight: 800;
-    text-transform: uppercase;
-}
-
-.priority-score-card strong {
-    display: block;
-    color: #0f172a;
-    font-size: 2rem;
-    line-height: 1;
-}
-
-.priority-score-meta {
-    display: flex;
-    flex-direction: column;
-    align-items: flex-end;
-    gap: 0.4rem;
-    text-align: right;
-}
-
-.priority-score-meta small {
-    max-width: 220px;
-    color: #64748b;
-    font-size: 0.78rem;
-    font-weight: 700;
-    line-height: 1.35;
-}
-
-.priority-score-card.priority-critical {
-    border-color: #fecaca;
-    background: #fef2f2;
-}
-
-.priority-score-card.priority-high {
-    border-color: #fed7aa;
-    background: #fff7ed;
-}
-
-.priority-score-card.priority-urgent {
-    border-color: #fde68a;
-    background: #fefce8;
-}
-
-.priority-score-card.priority-moderate {
-    border-color: #bfdbfe;
-    background: #eff6ff;
-}
-
-.priority-score-card.priority-low {
-    border-color: #bbf7d0;
-    background: #f0fdf4;
 }
 
 .priority-option {
@@ -1382,20 +1620,21 @@ body.incoming-call-modal-open {
     border-color: transparent;
 }
 
-.priority-option.high.active {
+.priority-option.critical.active {
     background: #dc2626;
 }
 
-.priority-option.medium.active {
+.priority-option.high.active {
     background: #ea580c;
+}
+
+.priority-option.medium.active,
+.priority-option.moderate.active {
+    background: #2563eb;
 }
 
 .priority-option.urgent.active {
     background: #ca8a04;
-}
-
-.priority-option.moderate.active {
-    background: #2563eb;
 }
 
 .priority-option.low.active {
@@ -1767,6 +2006,7 @@ body.incident-details-modal-open {
 
 [data-theme="dark"] .call-hero-side,
 [data-theme="dark"] .stat-card,
+[data-theme="dark"] .create-incident-panel,
 [data-theme="dark"] .active-call-panel,
 [data-theme="dark"] .recent-incidents {
     background: rgba(15, 23, 42, 0.86) !important;
@@ -1774,12 +2014,56 @@ body.incident-details-modal-open {
     color: #e2e8f0 !important;
 }
 
+[data-theme="dark"] .create-incident-panel strong {
+    color: #f8fafc;
+}
+
+[data-theme="dark"] .manual-form-head {
+    border-color: rgba(148, 163, 184, 0.16);
+}
+
+[data-theme="dark"] .manual-form-head strong {
+    color: #f8fafc;
+}
+
+[data-theme="dark"] .manual-form-close {
+    background: #111c2f;
+    border-color: rgba(148, 163, 184, 0.18);
+    color: #e2e8f0;
+}
+
+[data-theme="dark"] .manual-form-close:hover {
+    color: #fecaca;
+    background: rgba(239, 68, 68, 0.16);
+}
+
 [data-theme="dark"] .call-focus-card,
 [data-theme="dark"] .form-section,
+[data-theme="dark"] .call-chat-panel,
 [data-theme="dark"] .incident-card {
     background: rgba(15, 23, 42, 0.74) !important;
     border-color: rgba(148, 163, 184, 0.14) !important;
     color: #e2e8f0 !important;
+}
+
+[data-theme="dark"] .call-chat-head strong {
+    color: #f8fafc;
+}
+
+[data-theme="dark"] .call-chat-messages,
+[data-theme="dark"] .call-chat-input-row input {
+    background: #111c2f;
+    border-color: rgba(148, 163, 184, 0.18);
+    color: #e2e8f0;
+}
+
+[data-theme="dark"] .call-chat-empty {
+    color: #94a3b8;
+}
+
+[data-theme="dark"] .call-chat-bubble.is-caller {
+    color: #dbeafe;
+    background: rgba(37, 99, 235, 0.24);
 }
 
 [data-theme="dark"] .incident-details-dialog {
@@ -1876,7 +2160,7 @@ body.incident-details-modal-open {
 }
 
 [data-theme="dark"] .transfer-queue-head h4,
-[data-theme="dark"] .transfer-queue-card-head strong {
+[data-theme="dark"] .transfer-queue-copy strong {
     color: #f8fafc;
 }
 
@@ -1885,7 +2169,7 @@ body.incident-details-modal-open {
     background: rgba(15, 23, 42, 0.86);
 }
 
-[data-theme="dark"] .transfer-queue-card-head span,
+[data-theme="dark"] .transfer-queue-copy > span,
 [data-theme="dark"] .transfer-queue-card p,
 [data-theme="dark"] .transfer-queue-location {
     color: #cbd5e1;
@@ -1931,6 +2215,25 @@ body.incident-details-modal-open {
     color: #cbd5e1;
 }
 
+[data-theme="dark"] .priority-ai-suggestion {
+    border-color: rgba(96, 165, 250, 0.28);
+    background: rgba(30, 58, 138, 0.24);
+    color: #bfdbfe;
+}
+
+[data-theme="dark"] .priority-ai-suggestion[data-state="loading"] {
+    border-color: rgba(245, 158, 11, 0.38);
+    background: rgba(120, 53, 15, 0.22);
+    color: #fde68a;
+}
+
+[data-theme="dark"] .priority-ai-suggestion[data-state="fallback"],
+[data-theme="dark"] .priority-ai-suggestion[data-state="manual"] {
+    border-color: rgba(148, 163, 184, 0.25);
+    background: rgba(15, 23, 42, 0.62);
+    color: #cbd5e1;
+}
+
 [data-theme="dark"] .incident-type-trigger,
 [data-theme="dark"] .incident-type-menu {
     background: #0f172a;
@@ -1965,8 +2268,7 @@ body.incident-details-modal-open {
 }
 
 [data-theme="dark"] .priority-option,
-[data-theme="dark"] .filter-tab,
-[data-theme="dark"] .priority-score-card {
+[data-theme="dark"] .filter-tab {
     background: #1e293b;
     color: #e2e8f0;
 }
@@ -1976,22 +2278,13 @@ body.incident-details-modal-open {
     background: #334155;
 }
 
-[data-theme="dark"] .priority-score-card strong {
-    color: #f8fafc;
-}
-
-[data-theme="dark"] .priority-score-card span,
-[data-theme="dark"] .priority-score-meta small {
-    color: #cbd5e1;
-}
-
 @media (max-width: 1320px) {
     .stats-bar {
         grid-template-columns: repeat(2, minmax(0, 1fr));
     }
 
     .call-center-grid {
-        grid-template-columns: minmax(0, 1.45fr) minmax(300px, 0.95fr);
+        grid-template-columns: minmax(0, 1fr);
     }
 }
 
@@ -2007,10 +2300,25 @@ body.incident-details-modal-open {
 }
 
 @media (max-width: 767px) {
+    .recent-incidents {
+        grid-template-columns: minmax(0, 1fr);
+        grid-template-areas:
+            "recent-head"
+            "transfer-queue"
+            "recent-controls"
+            "recent-filters"
+            "recent-list";
+    }
+
+    .recent-incidents .incident-list {
+        grid-template-columns: minmax(0, 1fr);
+    }
+
     .call-hero-main,
     .call-hero-side,
     .stat-card,
     .incoming-call-alert,
+    .create-incident-panel,
     .active-call-panel,
     .recent-incidents {
         border-radius: 22px;
@@ -2018,9 +2326,15 @@ body.incident-details-modal-open {
 
     .call-hero-main,
     .call-hero-side,
+    .create-incident-panel,
     .active-call-panel,
     .recent-incidents {
         padding: 1.1rem;
+    }
+
+    .create-incident-panel {
+        align-items: stretch;
+        flex-direction: column;
     }
 
     .stats-bar,
@@ -2054,23 +2368,18 @@ body.incident-details-modal-open {
     .call-btn,
     .end-call-btn,
     .submit-incident-btn,
+    .call-chat-input-row button,
     .filter-tab {
         width: 100%;
         justify-content: center;
     }
 
+    .call-chat-input-row {
+        grid-template-columns: 1fr;
+    }
+
     .priority-select {
         flex-direction: column;
-    }
-
-    .priority-score-card {
-        align-items: flex-start;
-        flex-direction: column;
-    }
-
-    .priority-score-meta {
-        align-items: flex-start;
-        text-align: left;
     }
 
     .date-controls {

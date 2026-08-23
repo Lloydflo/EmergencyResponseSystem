@@ -3,12 +3,66 @@ $rootDir = dirname(__DIR__);
 require_once $rootDir . '/includes/auth.php';
 // Require full login (including OTP verification) before loading page
 require_role('dispatcher', 'dispatcher/dispatch.php');
+header('Cache-Control: private, no-store, max-age=0');
+header('Pragma: no-cache');
 $pageTitle = 'Emergency Dispatch Center';
 $assetUrl = static function (string $relativePath) use ($rootDir): string {
     $fullPath = $rootDir . DIRECTORY_SEPARATOR . str_replace(['/', '\\'], DIRECTORY_SEPARATOR, $relativePath);
     $version = @filemtime($fullPath) ?: time();
     return htmlspecialchars($relativePath . '?v=' . $version, ENT_QUOTES, 'UTF-8');
 };
+
+function dispatch_ai_inline_html(string $text): string
+{
+    $safe = htmlspecialchars(trim($text), ENT_QUOTES, 'UTF-8');
+    return preg_replace('/\*\*(.+?)\*\*/s', '<strong>$1</strong>', $safe) ?? $safe;
+}
+
+function dispatch_ai_text_html(string $text, string $wrapperClass): string
+{
+    $lines = preg_split('/\R/u', trim($text)) ?: [];
+    $html = '<div class="' . htmlspecialchars($wrapperClass, ENT_QUOTES, 'UTF-8') . ' ai-formatted-text">';
+    $listOpen = false;
+    foreach ($lines as $line) {
+        $line = trim((string)$line);
+        if ($line === '') {
+            if ($listOpen) {
+                $html .= '</ul>';
+                $listOpen = false;
+            }
+            continue;
+        }
+        if (preg_match('/^\*\*([^*:\n]+):\*\*\s*(.*)$/u', $line, $match)) {
+            if ($listOpen) {
+                $html .= '</ul>';
+                $listOpen = false;
+            }
+            $html .= '<section class="ai-text-item"><h3>' . htmlspecialchars(trim($match[1]), ENT_QUOTES, 'UTF-8') . '</h3>';
+            if (trim((string)($match[2] ?? '')) !== '') {
+                $html .= '<p>' . dispatch_ai_inline_html((string)$match[2]) . '</p>';
+            }
+            $html .= '</section>';
+            continue;
+        }
+        if (preg_match('/^[*-]\s+(.*)$/u', $line, $match)) {
+            if (!$listOpen) {
+                $html .= '<ul class="ai-text-list">';
+                $listOpen = true;
+            }
+            $html .= '<li>' . dispatch_ai_inline_html((string)$match[1]) . '</li>';
+            continue;
+        }
+        if ($listOpen) {
+            $html .= '</ul>';
+            $listOpen = false;
+        }
+        $html .= '<p>' . dispatch_ai_inline_html($line) . '</p>';
+    }
+    if ($listOpen) {
+        $html .= '</ul>';
+    }
+    return $html . '</div>';
+}
 
 // Initialize default values
 $activeIncidents = 0;
@@ -22,22 +76,21 @@ try {
     require_once $rootDir . '/includes/db.php';
     require_once $rootDir . '/includes/vehicle_resource_units.php';
     $pdo = get_db_connection();
-    
+
     if ($pdo) {
         $vehicleResourceTable = ers_vehicle_resource_units_table($pdo);
         if ($vehicleResourceTable !== null) {
             ers_sync_responder_vehicle_resources($pdo);
-            ers_sync_all_vehicle_resource_units($pdo, $vehicleResourceTable);
         }
 
         // Get active incidents (pending or dispatched)
-        $activeIncidents = (int)$pdo->query("SELECT COUNT(*) AS c FROM incidents WHERE status IN ('pending','dispatched')")->fetch()['c'];
-        
+        $activeIncidents = (int)$pdo->query("SELECT COUNT(*) AS c FROM incidents WHERE status IN ('pending','new','dispatched')")->fetch()['c'];
+
         // Get available units
         $availableUnits = ers_count_available_vehicle_resource_units($pdo, $vehicleResourceTable ?? null);
-        
+
         // Get pending calls that do not already have responders assigned.
-        $pendingCallsSql = "SELECT COUNT(*) AS c FROM incidents i WHERE i.status='pending'";
+        $pendingCallsSql = "SELECT COUNT(*) AS c FROM incidents i WHERE i.status IN ('pending','new')";
         if (function_exists('ers_vehicle_resource_table_exists') && ers_vehicle_resource_table_exists($pdo, 'dispatches')) {
             $pendingCallsSql .= " AND NOT EXISTS (
                 SELECT 1
@@ -50,14 +103,14 @@ try {
 
         $topIncident = $pdo->query("SELECT reference_no, type, location_address, priority
                                     FROM incidents
-                                    WHERE status IN ('pending','dispatched','active','in_progress')
+                                    WHERE status IN ('pending','new','dispatched','active','in_progress')
                                     ORDER BY CASE LOWER(priority)
                                         WHEN 'critical' THEN 1
                                         WHEN 'high' THEN 2
-                                        WHEN 'urgent' THEN 3
-                                        WHEN 'moderate' THEN 4
-                                        WHEN 'medium' THEN 4
-                                        WHEN 'low' THEN 5
+                                        WHEN 'urgent' THEN 2
+                                        WHEN 'medium' THEN 3
+                                        WHEN 'moderate' THEN 3
+                                        WHEN 'low' THEN 4
                                         ELSE 6
                                     END, created_at DESC
                                     LIMIT 1")->fetch();
@@ -69,7 +122,7 @@ try {
                 strtoupper((string)($topIncident['priority'] ?? ''))
             );
         }
-        
+
         // Determine system status based on available units and active incidents
         if ($availableUnits === 0 && $activeIncidents > 0) {
             $systemStatus = 'Warning: No available units';
@@ -106,7 +159,7 @@ try {
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
     <link rel="stylesheet" href="https://unpkg.com/leaflet-routing-machine@latest/dist/leaflet-routing-machine.css"/>
 </head>
-<body>
+<body class="dispatcher-dispatch-page">
     <!-- Include Sidebar Component -->
     <?php include $rootDir . '/includes/sidebar.php'; ?>
 
@@ -138,7 +191,7 @@ try {
                             <strong class="dispatch-stat-value"><?php echo $availableUnits; ?></strong>
                         </div>
                         <div class="dispatch-stat-card queue">
-                            <span class="dispatch-stat-label">Pending Calls</span>
+                            <span class="dispatch-stat-label">Pending Intake</span>
                             <strong class="dispatch-stat-value"><?php echo $pendingCalls; ?></strong>
                         </div>
                     </div>
@@ -189,17 +242,41 @@ try {
                 <section class="dispatch-panel dispatch-panel-calls">
                     <div class="panel-header">
                         <div>
-                            <div class="panel-eyebrow">Incident Queue</div>
+                            <div class="panel-eyebrow">Incident Intake</div>
                             <h2 class="panel-title">
-                                <i class="fas fa-phone"></i>
-                                Active Emergency Calls
+                                <i class="fas fa-inbox"></i>
+                                Incident Intake Queue
                             </h2>
                         </div>
                         <span id="active-calls-badge" class="panel-badge panel-badge-danger"><?php echo $pendingCalls; ?> Pending</span>
                     </div>
-                    <div id="active-calls-container" class="dispatch-scroll-list">
+                    <p class="intake-queue-guidance">Keep the complete queue in All, or focus on calls, manual logs, and converted TIPs.</p>
+                    <div class="intake-source-filters" role="group" aria-label="Filter pending incidents by source">
+                        <button type="button" class="intake-source-filter is-active intake-source-filter-all" data-intake-filter="all" aria-pressed="true">
+                            <i class="fas fa-list" aria-hidden="true"></i>
+                            <span>All</span>
+                            <strong data-intake-count="all">0</strong>
+                        </button>
+                        <button type="button" class="intake-source-filter" data-intake-filter="call" aria-pressed="false">
+                            <i class="fas fa-phone" aria-hidden="true"></i>
+                            <span>Call</span>
+                            <strong data-intake-count="call">0</strong>
+                        </button>
+                        <button type="button" class="intake-source-filter" data-intake-filter="manual" aria-pressed="false">
+                            <i class="fas fa-edit" aria-hidden="true"></i>
+                            <span>Manual</span>
+                            <strong data-intake-count="manual">0</strong>
+                        </button>
+                        <button type="button" class="intake-source-filter" data-intake-filter="tip" aria-pressed="false">
+                            <i class="fas fa-lightbulb" aria-hidden="true"></i>
+                            <span>TIP</span>
+                            <strong data-intake-count="tip">0</strong>
+                        </button>
+                    </div>
+                    <div id="intake-queue-summary" class="intake-queue-summary" aria-live="polite">Loading pending incidents…</div>
+                    <div id="active-calls-container" class="dispatch-scroll-list incident-intake-list" role="list" aria-live="polite" aria-busy="true">
                     <?php
-                    // ...existing code for active calls...
+                    // Source-aware pending incidents are rendered by the canonical client queue.
                     ?>
                     </div>
                 </section>
@@ -270,7 +347,7 @@ try {
 
                         $recommendations = getDispatchRecommendations($dispatchData);
                         if ($recommendations) {
-                            echo '<div class="ai-recommendation-text">' . nl2br(htmlspecialchars($recommendations)) . '</div>';
+                            echo dispatch_ai_text_html((string)$recommendations, 'ai-recommendation-text');
                         } else {
                             $aiError = function_exists('getGeminiLastError') ? trim((string) getGeminiLastError()) : '';
                             if ($aiError === '') {
@@ -412,28 +489,59 @@ function numberOrNull(value) {
     const number = Number(value);
     return Number.isFinite(number) ? number : null;
 }
+function normalizeLatLngPair(latValue, lngValue) {
+    let lat = numberOrNull(latValue);
+    let lng = numberOrNull(lngValue);
+    if (lat === null || lng === null) return null;
+
+    const inPhilippines = (candidateLat, candidateLng) => {
+        return candidateLat >= 4 && candidateLat <= 22 && candidateLng >= 116 && candidateLng <= 127;
+    };
+
+    if (!inPhilippines(lat, lng) && inPhilippines(lng, lat)) {
+        [lat, lng] = [lng, lat];
+    }
+
+    if (!inPhilippines(lat, lng)) return null;
+    return { lat, lng };
+}
+function isInvalidResponderCoordinate(lat, lng) {
+    if (lat === null || lng === null) return true;
+    if (Math.abs(lat) < 0.000001 && Math.abs(lng) < 0.000001) return true;
+    const ignoredPoints = [
+        [14.7338, 121.0368],
+        [14.7295, 121.0342],
+        [14.7351, 121.0380],
+        [14.7320, 121.0351]
+    ];
+    return ignoredPoints.some(([ignoredLat, ignoredLng]) => {
+        return Math.abs(lat - ignoredLat) < 0.000001 && Math.abs(lng - ignoredLng) < 0.000001;
+    });
+}
 function unitResponderLatLng(unit) {
+    const identifier = normalizeUnitIdentifier(unit && unit.identifier);
+    const livePoint = identifier
+        ? (liveUnitLocationsByIdentifier[identifier] || liveUnitLocationsByIdentifier[identifier.toUpperCase()] || null)
+        : null;
     const candidates = [
+        [livePoint && livePoint.lat, livePoint && livePoint.lng],
         [unit && unit.latest_latitude, unit && unit.latest_longitude],
-        [unit && unit.latitude, unit && unit.longitude]
+        [unit && unit.latitude, unit && unit.longitude],
+        [unit && unit.stored_latitude, unit && unit.stored_longitude]
     ];
     for (const pair of candidates) {
-        const lat = numberOrNull(pair[0]);
-        const lng = numberOrNull(pair[1]);
-        if (lat !== null && lng !== null && !(Math.abs(lat) < 0.000001 && Math.abs(lng) < 0.000001)) {
-            return { lat, lng };
+        const point = normalizeLatLngPair(pair[0], pair[1]);
+        if (point && !isInvalidResponderCoordinate(point.lat, point.lng)) {
+            return point;
         }
     }
     return null;
 }
 function selectedUnitDistanceKm(unit) {
-    const apiDistance = numberOrNull(unit && unit.distance_km);
-    if (apiDistance !== null) return apiDistance;
-    const incidentLat = numberOrNull(currentIncidentLat);
-    const incidentLng = numberOrNull(currentIncidentLng);
+    const incidentPoint = normalizeLatLngPair(currentIncidentLat, currentIncidentLng);
     const unitPoint = unitResponderLatLng(unit);
-    if (incidentLat === null || incidentLng === null || !unitPoint) return null;
-    return haversine(unitPoint.lat, unitPoint.lng, incidentLat, incidentLng);
+    if (!incidentPoint || !unitPoint) return null;
+    return haversine(unitPoint.lat, unitPoint.lng, incidentPoint.lat, incidentPoint.lng);
 }
 function formatDistanceKm(distanceKm) {
     if (!Number.isFinite(distanceKm)) return '';
@@ -441,12 +549,72 @@ function formatDistanceKm(distanceKm) {
         ? `${Math.round(distanceKm * 1000)} m`
         : `${distanceKm.toFixed(2)} km`;
 }
+const routeDistanceCache = {};
+function selectedUnitDistanceKey(unit) {
+    return String((unit && (unit.id || unit.identifier)) || '').replace(/[^A-Za-z0-9_-]/g, '_');
+}
+function routeDistanceKm(fromPoint, toPoint) {
+    if (!fromPoint || !toPoint) return Promise.resolve(null);
+    const cacheKey = [
+        fromPoint.lat.toFixed(6), fromPoint.lng.toFixed(6),
+        toPoint.lat.toFixed(6), toPoint.lng.toFixed(6)
+    ].join(',');
+    if (Object.prototype.hasOwnProperty.call(routeDistanceCache, cacheKey)) {
+        return Promise.resolve(routeDistanceCache[cacheKey]);
+    }
+    const url = `https://router.project-osrm.org/route/v1/driving/${fromPoint.lng},${fromPoint.lat};${toPoint.lng},${toPoint.lat}?overview=false&alternatives=false&steps=false`;
+    return fetch(url)
+        .then(r => r.ok ? r.json() : null)
+        .then(data => {
+            const meters = data && data.routes && data.routes[0] && Number(data.routes[0].distance);
+            const km = Number.isFinite(meters) ? meters / 1000 : null;
+            routeDistanceCache[cacheKey] = km;
+            return km;
+        })
+        .catch(() => null);
+}
+function readJsonResponse(response) {
+    return response.text().then(text => {
+        let data = null;
+        if (text.trim() !== '') {
+            try {
+                data = JSON.parse(text);
+            } catch (error) {
+                throw new Error(text.replace(/\s+/g, ' ').trim() || 'Invalid server response');
+            }
+        }
+        if (!response.ok) {
+            throw new Error((data && data.error) || `Request failed (${response.status})`);
+        }
+        return data || {};
+    });
+}
+function updateSelectedUnitRouteDistances(units) {
+    const incidentPoint = normalizeLatLngPair(currentIncidentLat, currentIncidentLng);
+    if (!incidentPoint) return;
+    (units || []).forEach(unit => {
+        const unitPoint = unitResponderLatLng(unit);
+        const key = selectedUnitDistanceKey(unit);
+        if (!unitPoint || !key) return;
+        routeDistanceKm(unitPoint, incidentPoint).then(distanceKm => {
+            if (distanceKm === null) return;
+            document.querySelectorAll(`[data-distance-key="${key}"]`).forEach(el => {
+                el.textContent = formatDistanceKm(distanceKm);
+            });
+        });
+    });
+}
 function formatSelectedUnitDetails(unit) {
     const sampleProfile = getSampleUnitProfile(unit.unit_type);
     const vehicleName = getUnitVehicleName(unit) || 'Selected Vehicle';
     const unitCode = String(unit.identifier || '').trim();
     const unitPoint = unitResponderLatLng(unit);
     const distanceKm = selectedUnitDistanceKm(unit);
+    const distanceKey = selectedUnitDistanceKey(unit);
+    const incidentPoint = normalizeLatLngPair(currentIncidentLat, currentIncidentLng);
+    const distanceUnavailableText = !incidentPoint
+        ? 'Incident coordinates are not available'
+        : 'Responder GPS is not available';
     const lines = [
         `<strong>${escapeHtml(vehicleName)}</strong>`,
         unitCode && unitCode !== vehicleName ? `<strong>Unit Code:</strong> ${escapeHtml(unitCode)}` : '',
@@ -456,10 +624,23 @@ function formatSelectedUnitDetails(unit) {
         `<strong>Status:</strong> ${escapeHtml(unit.status || '')}`,
         unitPoint ? `<strong>Responder GPS:</strong> ${unitPoint.lat.toFixed(6)}, ${unitPoint.lng.toFixed(6)}` : '<strong>Responder GPS:</strong> Pending',
         distanceKm !== null
-            ? `<strong>Distance to Incident:</strong> ${escapeHtml(formatDistanceKm(distanceKm))}`
-            : '<strong>Distance to Incident:</strong> Unavailable until responder GPS and incident coordinates are available'
+            ? `<strong>Distance to Incident:</strong> <span data-distance-key="${escapeAttr(distanceKey)}">${escapeHtml(formatDistanceKm(distanceKm))}</span>`
+            : `<strong>Distance to Incident:</strong> ${escapeHtml(distanceUnavailableText)}`
     ].filter(Boolean);
     return `<div style="padding:0.55rem 0; border-bottom:1px solid #dbe3ea;">${lines.join('<br>')}</div>`;
+}
+function isDispatchableModalUnit(unit) {
+    if (!unit) return false;
+    const vehicleStatus = normalizedUnitStatus(unit.status);
+    const responderStatus = normalizedUnitStatus(unit.responder_unit_status);
+    const presenceStatus = normalizedUnitStatus(unit.presence_status);
+    const hasPresenceField = Object.prototype.hasOwnProperty.call(unit, 'presence_status');
+    const hasResponder = String(unit.driver_name || unit.responder_user_id || '').trim() !== '';
+    const responderReady = responderStatus === '' || responderStatus === 'available' || responderStatus === 'ready' || responderStatus === 'on_duty';
+    return vehicleStatus === 'available'
+        && hasResponder
+        && responderReady
+        && (!hasPresenceField || presenceStatus === 'online');
 }
 function renderSelectedUnitDetails(select) {
     const detailsEl = document.getElementById('unit-details');
@@ -487,6 +668,7 @@ function renderSelectedUnitDetails(select) {
             : `${selectedOptions.length} units selected`;
     }
     detailsEl.innerHTML = selectedUnits.map(formatSelectedUnitDetails).join('');
+    updateSelectedUnitRouteDistances(selectedUnits);
     if (btn) btn.disabled = false;
 }
 function formatIncidentTypeLabel(value) {
@@ -504,15 +686,75 @@ function formatIncidentTypeLabel(value) {
         .map((part) => part.trim().toLowerCase())
         .filter(Boolean);
     if (!parts.length) return '';
+    if (parts.includes('medical') && parts.includes('police') && parts.includes('fire')) {
+        return 'Emergency, Police, Fire';
+    }
     return parts.map((part) => labels[part] || part.replace(/\b\w/g, (c) => c.toUpperCase())).join(', ');
+}
+function cleanAnonymousTipDispatchDescription(value) {
+    const raw = String(value || '').trim();
+    if (!raw) return '';
+    if (!/(anonymous tip converted to (?:an )?incident|tip id\s*:|date and time\s*:|evidence\s*:)/i.test(raw)) {
+        return raw;
+    }
+
+    const compact = raw.replace(/\s+/g, ' ').trim();
+    const descriptionMatch = compact.match(/\bDescription\s*:\s*([\s\S]*?)(?:\s+\bEvidence\s*:|$)/i);
+    if (descriptionMatch && descriptionMatch[1]) {
+        return descriptionMatch[1].trim();
+    }
+
+    return compact
+        .replace(/anonymous tip converted to (?:an )?incident\.?/ig, '')
+        .replace(/\bTip ID\s*:\s*.*?(?=\s+\b(?:Date and time|Location|Description|Evidence)\s*:|$)/ig, '')
+        .replace(/\bDate and time\s*:\s*.*?(?=\s+\b(?:Location|Description|Evidence)\s*:|$)/ig, '')
+        .replace(/\bLocation\s*:\s*.*?(?=\s+\b(?:Description|Evidence)\s*:|$)/ig, '')
+        .replace(/\bEvidence\s*:\s*[\s\S]*$/ig, '')
+        .replace(/\bDescription\s*:\s*/ig, '')
+        .trim();
+}
+function parseLatLngFromText(text) {
+    const raw = String(text || '');
+    const match = raw.match(/(?:lat(?:itude)?\s*[:=]?\s*)?(-?\d{1,3}(?:\.\d+)?)\s*[, ]\s*(?:lon(?:gitude)?|lng)?\s*[:=]?\s*(-?\d{1,3}(?:\.\d+)?)/i);
+    if (!match) return null;
+    return normalizeLatLngPair(match[1], match[2]);
+}
+function renderIncidentDetails(inc) {
+    const hasPoint = currentIncidentLat !== null && currentIncidentLng !== null;
+    const callerName = inc.caller_name || 'N/A';
+    const callerPhone = inc.caller_phone || 'N/A';
+    const description = cleanAnonymousTipDispatchDescription(inc.description) || 'No description provided.';
+    document.getElementById('modal-incident-details').innerHTML =
+        `<strong>Type:</strong> ${escapeHtml(formatIncidentTypeLabel(inc.type) || inc.type || '')}<br>` +
+        `<strong>Title:</strong> ${escapeHtml(inc.title || '')}<br>` +
+        `<strong>Location:</strong> ${escapeHtml(inc.location_address || 'N/A')}<br>` +
+        (hasPoint ? `<strong>Coordinates:</strong> ${escapeHtml(currentIncidentLat + ', ' + currentIncidentLng)}<br>` : '<strong>Coordinates:</strong> Not available<br>') +
+        `<strong>Priority:</strong> ${escapeHtml(inc.priority || '')}<br>` +
+        `<strong>Caller:</strong> ${escapeHtml(callerName)}<br>` +
+        `<strong>Phone:</strong> ${escapeHtml(callerPhone)}<br>` +
+        `<strong>Description:</strong> ${escapeHtml(description)}`;
+}
+function resolveIncidentPoint(inc) {
+    const savedPoint = normalizeLatLngPair(inc && inc.latitude, inc && inc.longitude);
+    if (savedPoint) return Promise.resolve(savedPoint);
+
+    const textPoint = parseLatLngFromText((inc && inc.location_address) || '');
+    if (textPoint) return Promise.resolve(textPoint);
+
+    return Promise.resolve(null);
 }
 function openDispatchModal(incidentId) {
     currentIncidentId = toIncidentId(incidentId);
     document.getElementById('dispatch-modal').style.display = 'flex';
     const unitDropdownLabel = document.getElementById('unit-dropdown-label');
     const unitDropdownMenu = document.getElementById('unit-select');
+    const confirmDispatchBtn = document.getElementById('confirm-dispatch-btn');
     if (unitDropdownLabel) unitDropdownLabel.textContent = 'Select available units';
     if (unitDropdownMenu) unitDropdownMenu.style.display = 'none';
+    if (confirmDispatchBtn) {
+        confirmDispatchBtn.disabled = false;
+        confirmDispatchBtn.textContent = 'Confirm Dispatch';
+    }
     if (currentIncidentId === null) {
         document.getElementById('modal-incident-details').innerHTML = '<span style="color:red">Incident not found.</span>';
         return;
@@ -521,16 +763,15 @@ function openDispatchModal(incidentId) {
     fetch('api/incident_details.php?id=' + encodeURIComponent(currentIncidentId))
         .then(r => r.json())
         .then(data => {
+            const incidentReady = data.incident
+                ? resolveIncidentPoint(data.incident)
+                : Promise.resolve(null);
+            return incidentReady.then(incidentPoint => {
             if (data.incident) {
                 const inc = data.incident;
-                currentIncidentLat = inc && inc.latitude ? Number(inc.latitude) : null;
-                currentIncidentLng = inc && inc.longitude ? Number(inc.longitude) : null;
-                document.getElementById('modal-incident-details').innerHTML =
-                    `<strong>Type:</strong> ${formatIncidentTypeLabel(inc.type) || inc.type || ''}<br>` +
-                    `<strong>Title:</strong> ${inc.title || ''}<br>` +
-                    `<strong>Location:</strong> ${inc.location_address || 'N/A'}<br>` +
-                    (inc.latitude && inc.longitude ? `<strong>Coordinates:</strong> ${inc.latitude}, ${inc.longitude}<br>` : '') +
-                    `<strong>Priority:</strong> ${inc.priority || ''}`;
+                currentIncidentLat = incidentPoint ? incidentPoint.lat : null;
+                currentIncidentLng = incidentPoint ? incidentPoint.lng : null;
+                renderIncidentDetails(inc);
             } else {
                 document.getElementById('modal-incident-details').innerHTML = '<span style="color:red">Incident not found.</span>';
             }
@@ -538,11 +779,15 @@ function openDispatchModal(incidentId) {
             const select = document.getElementById('unit-select');
             select.innerHTML = '';
             currentAvailableUnitsById = {};
-            if (data.units && data.units.length) {
-                data.units.forEach(u => {
+            const dispatchableUnits = Array.isArray(data.units) ? data.units.filter(isDispatchableModalUnit) : [];
+            if (dispatchableUnits.length) {
+                dispatchableUnits.forEach(u => {
                     currentAvailableUnitsById[String(u.id)] = u;
                     const distKm = selectedUnitDistanceKm(u);
-                    const dist = distKm !== null ? `Distance: ${formatDistanceKm(distKm)}` : 'Distance pending';
+                    const incidentPoint = normalizeLatLngPair(currentIncidentLat, currentIncidentLng);
+                    const dist = distKm !== null
+                        ? `Distance: ${formatDistanceKm(distKm)}`
+                        : (incidentPoint ? 'Responder GPS pending' : 'Incident coordinates missing');
                     const vehicleName = getUnitVehicleName(u);
                     const unitCode = String(u.identifier || '').trim();
                     const detailParts = [];
@@ -564,9 +809,10 @@ function openDispatchModal(incidentId) {
                 select.innerHTML = '<div style="padding:0.55rem 0.65rem; color:#64748b;">No available units</div>';
                 const label = document.getElementById('unit-dropdown-label');
                 if (label) label.textContent = 'No available units';
-                document.getElementById('unit-details').innerHTML = 'No real available vehicles ready for dispatch.';
+                document.getElementById('unit-details').innerHTML = 'No online available responder vehicles are ready for dispatch.';
                 document.getElementById('confirm-dispatch-btn').disabled = true;
             }
+            });
         });
 }
 function closeDispatchModal() {
@@ -630,13 +876,13 @@ document.addEventListener('DOMContentLoaded', function() {
     function getUnitRoutePoint(unit, selectedOption) {
         const candidates = [
             [unit.latest_latitude, unit.latest_longitude],
-            [unit.latitude, unit.longitude]
+            [unit.latitude, unit.longitude],
+            [unit.stored_latitude, unit.stored_longitude]
         ];
         for (const pair of candidates) {
-            const lat = Number(pair[0]);
-            const lng = Number(pair[1]);
-            if (Number.isFinite(lat) && Number.isFinite(lng) && !(Math.abs(lat) < 0.000001 && Math.abs(lng) < 0.000001)) {
-                return { lat, lng };
+            const point = normalizeLatLngPair(pair[0], pair[1]);
+            if (point && !isInvalidResponderCoordinate(point.lat, point.lng)) {
+                return point;
             }
         }
         return null;
@@ -656,18 +902,20 @@ document.addEventListener('DOMContentLoaded', function() {
         }
 
         Promise.all([
-            fetch('api/incident_details.php?id=' + encodeURIComponent(currentIncidentId)).then(r => r.json()),
-            Promise.all(unitIds.map(unitId => fetch('api/unit_details.php?id=' + encodeURIComponent(unitId)).then(r => r.json())))
+            fetch('api/incident_details.php?id=' + encodeURIComponent(currentIncidentId)).then(readJsonResponse),
+            Promise.all(unitIds.map(unitId => fetch('api/unit_details.php?id=' + encodeURIComponent(unitId)).then(readJsonResponse)))
         ]).then(([incRes, unitResponses]) => {
             const inc = incRes.incident || {};
             let toLat = null, toLng = null;
-            if (inc.latitude && inc.longitude) {
-                toLat = Number(inc.latitude);
-                toLng = Number(inc.longitude);
+            const incidentPoint = normalizeLatLngPair(inc.latitude, inc.longitude);
+            if (incidentPoint) {
+                toLat = incidentPoint.lat;
+                toLng = incidentPoint.lng;
             } else if (inc.location_address && inc.location_address.match(/\d+\.\d+,[ ]*\d+\.\d+/)) {
                 const parts = inc.location_address.split(',').map(Number);
-                toLat = parts[0];
-                toLng = parts[1];
+                const addressPoint = normalizeLatLngPair(parts[0], parts[1]);
+                toLat = addressPoint ? addressPoint.lat : null;
+                toLng = addressPoint ? addressPoint.lng : null;
             }
 
             const routeUnits = unitResponses.map((unitRes, index) => {
@@ -686,7 +934,7 @@ document.addEventListener('DOMContentLoaded', function() {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ incident_id: currentIncidentId, unit_ids: unitIds })
-                }).then(r => r.json()).then(data => {
+                }).then(readJsonResponse).then(data => {
                     if (data.ok) {
                         if (typeof addRouteToIncident === 'function' && toLat && toLng) {
                             routeUnits.forEach(routeUnit => {
@@ -696,6 +944,12 @@ document.addEventListener('DOMContentLoaded', function() {
                             });
                         }
                         closeDispatchModal();
+                        window.dispatchEvent(new CustomEvent('ers:anonymous-tips-updated', {
+                            detail: {
+                                incidentId: currentIncidentId,
+                                changedAt: Date.now()
+                            }
+                        }));
                         const firstRouteUnit = routeUnits[0] || {};
                         const routeContext = {
                             dispatchId: data.dispatch_id || '',
@@ -721,15 +975,14 @@ document.addEventListener('DOMContentLoaded', function() {
                         btn.textContent = 'Confirm Dispatch';
                     }
                 });
-        }).catch(() => {
-            alert('Network error.');
+        }).catch(error => {
+            alert(error && error.message ? error.message : 'Network error.');
             btn.disabled = false;
             btn.textContent = 'Confirm Dispatch';
         });
     };
 });
 </script>
-        </script>
 
         <!-- Uncomment if already have content -->
         <?php include $rootDir . '/includes/admin-footer.php'; ?>
@@ -758,6 +1011,9 @@ let markers = {};
 let authoritativeOnlineUnitKeys = new Set();
 let authoritativeOnlineUnitKeysReady = false;
 let availableUnitsByIdentifier = {};
+let liveUnitLocationsByIdentifier = {};
+let unitIdentifierById = {};
+let unitIdentifierByResponderId = {};
 let incidentMarkers = {};
 let QC_BOUNDS_GLOBAL;
 let pendingDispatchTrackUnit = '';
@@ -831,7 +1087,7 @@ function getIcon(type) {
     return L.divIcon({
         className: 'ers-unit-div-icon',
         html: `
-            <div style="width:38px;height:38px;border-radius:50% 50% 50% 8px;transform:rotate(-45deg);background:${meta.color};border:2px solid #fff;box-shadow:0 8px 18px rgba(15,23,42,.35);display:flex;align-items:center;justify-content:center;">
+            <div style="width:38px;height:38px;border-radius:50% 50% 50% 8px;transform:rotate(-45deg);background:${meta.color};border:2px solid #fff;display:flex;align-items:center;justify-content:center;">
                 <i class="fas ${meta.icon}" style="transform:rotate(45deg);color:#fff;font-size:17px;line-height:1;"></i>
             </div>
         `,
@@ -850,10 +1106,16 @@ function initFirebaseLiveTracking() {
             const lat = parseFloat(r.lat);
             const lng = parseFloat(r.lng);
             if (isNaN(lat) || isNaN(lng)) return;
+            if (isInvalidResponderCoordinate(lat, lng)) return;
             const accuracyM = parseFiniteNumber(r.accuracy ?? r.accuracy_m);
 
-            const key = String(r.unitCode || r.responderId || '').trim();
+            const rawKey = String(r.unitCode || r.responderId || '').trim();
+            const key = resolveLiveUnitMarkerKey(rawKey);
             if (!key) return;
+            if (rawKey && rawKey !== key) {
+                removeUnitMarkerByIdentifier(rawKey);
+            }
+            applyLiveResponderLocationToUnit(key, lat, lng);
             const status = String(r.status || 'available').trim().toLowerCase();
             if (['offline', 'logged_out', 'inactive'].includes(status)) {
                 removeUnitMarkerByIdentifier(key);
@@ -866,33 +1128,40 @@ function initFirebaseLiveTracking() {
             seenKeys.add(key);
 
             const label = `${key} — ${r.responderName || 'Responder'}`;
-            const speedKph = typeof r.speed === 'number' ? r.speed * 3.6 : null;
+            const rawSpeedKph = parseFiniteNumber(r.speed_kph ?? r.speedKph);
+            const speedMetersPerSecond = parseFiniteNumber(r.speed);
+            const speedKph = rawSpeedKph !== null ? rawSpeedKph : (speedMetersPerSecond !== null ? speedMetersPerSecond * 3.6 : null);
 
             const isEnRoute = status === 'en_route';
             const dept = String(r.department || r.unitType || 'other').toLowerCase();
             const type = isEnRoute ? dept : `idle_${dept}`;
+            const cachedUnitPoint = unitResponderLatLng(findCachedUnitByReference(key, ''));
+            const markerLat = cachedUnitPoint ? cachedUnitPoint.lat : lat;
+            const markerLng = cachedUnitPoint ? cachedUnitPoint.lng : lng;
+            const livePopupHtml = `
+                <strong>${label}</strong><br>
+                Status: ${r.status || 'unknown'}<br>
+                ${accuracyM !== null ? `Accuracy: ${accuracyM.toFixed(0)} m<br>` : ''}
+                Speed: ${speedKph !== null ? speedKph.toFixed(1) + ' km/h' : 'pending'}<br>
+                Coords: ${markerLat.toFixed(5)}, ${markerLng.toFixed(5)}<br>
+                <em>${cachedUnitPoint ? 'Responder GPS' : 'Live GPS'}</em>
+            `;
 
             if (markers[key]) {
-                const accepted = moveUnitMarker(key, lat, lng, { speedKph, accuracyM, animate: true });
+                const accepted = moveUnitMarker(key, markerLat, markerLng, { speedKph, accuracyM, animate: true });
                 if (!accepted) return;
                 markers[key].marker.setIcon(getIcon(type));
-                markers[key].marker.bindPopup(`
-                    <strong>${label}</strong><br>
-                    Status: ${r.status || 'unknown'}<br>
-                    ${accuracyM !== null ? `Accuracy: ${accuracyM.toFixed(0)} m<br>` : ''}
-                    ${speedKph !== null ? `Speed: ${speedKph.toFixed(1)} km/h<br>` : ''}
-                    Coords: ${lat.toFixed(5)}, ${lng.toFixed(5)}<br>
-                    <em>Live GPS</em>
-                `);
+                markers[key].marker.bindPopup(livePopupHtml);
                 markers[key].isLive = true;
             } else {
-                addUnitMarker(key, lat, lng, label, type, speedKph);
+                addUnitMarker(key, markerLat, markerLng, label, type, speedKph);
+                markers[key].marker.bindPopup(livePopupHtml);
                 markers[key].isLive = true;
             }
         });
 
         Object.keys(markers).forEach((key) => {
-            if (markers[key].isLive && !seenKeys.has(key)) {
+            if (markers[key].isLive && !seenKeys.has(key) && !hasLiveUnitLocation(key)) {
                 map.removeLayer(markers[key].marker);
                 delete markers[key];
             }
@@ -968,7 +1237,7 @@ function addLegendControl() {
 // ===============================
 // MARKERS (sync with gps.php)
 // ===============================
-function addUnitMarker(id, lat, lng, label, type, speedKph) {
+function addUnitMarker(id, lat, lng, label, type, speedKph, unitDbId) {
         const marker = L.marker([lat, lng], { icon: getIcon(type) })
                 .addTo(map)
                 .bindPopup(`
@@ -983,7 +1252,8 @@ function addUnitMarker(id, lat, lng, label, type, speedKph) {
             speedKph: speedKph,
             lastAcceptedLatLng: L.latLng(lat, lng),
             lastLocationAt: Date.now(),
-            ignoredGpsSpikes: 0
+            ignoredGpsSpikes: 0,
+            unitDbId: unitDbId !== undefined && unitDbId !== null ? String(unitDbId) : ''
         };
 }
 
@@ -999,6 +1269,21 @@ function removeUnitMarkerByIdentifier(identifier) {
     if (!id || !markers[id] || markers[id].type !== 'unit') return;
     try { map.removeLayer(markers[id].marker); } catch (e) {}
     delete markers[id];
+}
+
+function hasLiveUnitLocation(identifier) {
+    const id = normalizeUnitIdentifier(identifier);
+    if (!id) return false;
+    const livePoint = liveUnitLocationsByIdentifier[id] || liveUnitLocationsByIdentifier[id.toUpperCase()] || null;
+    return !!livePoint && !isInvalidResponderCoordinate(livePoint.lat, livePoint.lng);
+}
+
+function removeUnitMarkerIfNotLive(identifier) {
+    const id = normalizeUnitIdentifier(identifier);
+    if (!id) return;
+    const entry = markers[id] || markers[Object.keys(markers).find((key) => String(key).toUpperCase() === id.toUpperCase())];
+    if (entry && entry.isLive && hasLiveUnitLocation(id)) return;
+    removeUnitMarkerByIdentifier(id);
 }
 
 function isResponderUnitOnline(unit) {
@@ -1027,7 +1312,7 @@ function isRenderableResponderUnit(unit) {
 function onlineResponderUnits(items) {
     return (items || []).filter(u => {
         if (isResponderUnitOnline(u)) return true;
-        removeUnitMarkerByIdentifier(u && u.identifier);
+        removeUnitMarkerIfNotLive(u && u.identifier);
         return false;
     });
 }
@@ -1035,7 +1320,10 @@ function onlineResponderUnits(items) {
 function addAuthoritativeOnlineUnitKeys(unit, keys) {
     ['identifier', 'id', 'responder_user_id'].forEach(field => {
         const value = String(unit && unit[field] !== undefined && unit[field] !== null ? unit[field] : '').trim();
-        if (value) keys.add(value);
+        if (value) {
+            keys.add(value);
+            keys.add(value.toUpperCase());
+        }
     });
 }
 
@@ -1056,7 +1344,8 @@ function pruneOfflineUnitMarkers() {
             authoritativeOnlineUnitKeysReady = true;
             Object.entries(markers).forEach(([key, entry]) => {
                 if (!entry || entry.type !== 'unit') return;
-                if (!onlineKeys.has(String(key))) {
+                if (!onlineKeys.has(String(key)) && !onlineKeys.has(String(key).toUpperCase())) {
+                    if (entry.isLive && hasLiveUnitLocation(key)) return;
                     try { map.removeLayer(entry.marker); } catch (e) {}
                     delete markers[key];
                 }
@@ -1067,7 +1356,10 @@ function pruneOfflineUnitMarkers() {
 
 function canRenderLiveUnitMarker(identifier) {
     const id = String(identifier || '').trim();
-    return !!id && authoritativeOnlineUnitKeysReady && authoritativeOnlineUnitKeys.has(id);
+    if (hasLiveUnitLocation(id)) return true;
+    return !!id
+        && authoritativeOnlineUnitKeysReady
+        && (authoritativeOnlineUnitKeys.has(id) || authoritativeOnlineUnitKeys.has(id.toUpperCase()));
 }
 
 function parseFiniteNumber(value) {
@@ -1180,31 +1472,37 @@ function loadDispatchedUnits() {
 function syncUnitMarkers(items) {
     items.forEach(u => {
         const id = u.identifier;
+        rememberUnitIdentity(u);
         if (!isResponderUnitOnline(u)) {
-            removeUnitMarkerByIdentifier(id);
+            removeUnitMarkerIfNotLive(id);
             return;
         }
-        if (markers[id] && markers[id].isLive) return;
         const type = u.unit_type || 'other';
-        const lat = parseFloat(u.latitude);
-        const lng = parseFloat(u.longitude);
+        const point = unitResponderLatLng(u);
         const speed = (u.speed_kph !== undefined && u.speed_kph !== null) ? parseFloat(u.speed_kph) : null;
-        if (!isNaN(lat) && !isNaN(lng)) {
+        if (point) {
+            const lat = point.lat;
+            const lng = point.lng;
             const label = `${id}`;
             if (markers[id]) {
                 moveUnitMarker(id, lat, lng, { speedKph: speed, animate: true });
                 markers[id].marker.setIcon(getIcon(type));
-                const popupHtml = `
-                    <strong>${label}</strong><br>
-                    ${typeof speed === 'number' && isFinite(speed) ? `Speed: ${speed.toFixed(1)} km/h<br>` : ''}
-                    Coords: ${lat.toFixed(5)}, ${lng.toFixed(5)}
-                `;
-                markers[id].marker.bindPopup(popupHtml);
+                if (!markers[id].isLive) {
+                    const popupHtml = `
+                        <strong>${label}</strong><br>
+                        ${typeof speed === 'number' && isFinite(speed) ? `Speed: ${speed.toFixed(1)} km/h<br>` : ''}
+                        Coords: ${lat.toFixed(5)}, ${lng.toFixed(5)}
+                    `;
+                    markers[id].marker.bindPopup(popupHtml);
+                }
                 markers[id].speedKph = speed;
                 markers[id].unitType = String(type || '').toLowerCase();
+                markers[id].unitDbId = u.id !== undefined && u.id !== null ? String(u.id) : markers[id].unitDbId;
             } else {
-                addUnitMarker(id, lat, lng, label, type, speed);
+                addUnitMarker(id, lat, lng, label, type, speed, u.id);
             }
+        } else {
+            removeUnitMarkerIfNotLive(id);
         }
     });
 }
@@ -1218,29 +1516,35 @@ function fetchAvailableUnitsData() {
 function syncAvailableUnitMarkers(items) {
     (items || []).forEach(u => {
         const id = u.identifier;
+        rememberUnitIdentity(u);
         if (!isResponderUnitOnline(u)) {
-            removeUnitMarkerByIdentifier(id);
+            removeUnitMarkerIfNotLive(id);
             return;
         }
-        if (markers[id] && markers[id].isLive) return;
         const type = u.unit_type || 'other';
-        const lat = parseFloat(u.latitude);
-        const lng = parseFloat(u.longitude);
+        const point = unitResponderLatLng(u);
         const speed = (u.speed_kph !== undefined && u.speed_kph !== null) ? parseFloat(u.speed_kph) : null;
-        if (!isNaN(lat) && !isNaN(lng)) {
+        if (point) {
+            const lat = point.lat;
+            const lng = point.lng;
             if (markers[id]) {
                 moveUnitMarker(id, lat, lng, { speedKph: speed, animate: true });
                 markers[id].marker.setIcon(getIcon(type));
-                markers[id].marker.bindPopup(`
-                    <strong>${id}</strong><br>
-                    ${typeof speed === 'number' && isFinite(speed) ? `Speed: ${speed.toFixed(1)} km/h<br>` : ''}
-                    Coords: ${lat.toFixed(5)}, ${lng.toFixed(5)}
-                `);
+                if (!markers[id].isLive) {
+                    markers[id].marker.bindPopup(`
+                        <strong>${id}</strong><br>
+                        ${typeof speed === 'number' && isFinite(speed) ? `Speed: ${speed.toFixed(1)} km/h<br>` : ''}
+                        Coords: ${lat.toFixed(5)}, ${lng.toFixed(5)}
+                    `);
+                }
                 markers[id].speedKph = speed;
                 markers[id].unitType = String(type || '').toLowerCase();
+                markers[id].unitDbId = u.id !== undefined && u.id !== null ? String(u.id) : markers[id].unitDbId;
             } else {
-                addUnitMarker(id, lat, lng, `${id}`, type, speed);
+                addUnitMarker(id, lat, lng, `${id}`, type, speed, u.id);
             }
+        } else {
+            removeUnitMarkerIfNotLive(id);
         }
     });
 }
@@ -1255,7 +1559,7 @@ function loadAvailableUnits() {
 }
 
 function loadIncidentMarkers() {
-    fetch('api/incidents_list.php?status=active')
+    return fetch('api/incidents_list.php?status=active')
         .then(r => r.json())
         .then(res => {
             if (!res.ok) return;
@@ -1276,11 +1580,19 @@ function loadIncidentMarkers() {
 
 function startLivePolling() {
     pruneOfflineUnitMarkers();
+    let livePollInFlight = false;
     setInterval(() => {
-        pruneOfflineUnitMarkers();
-        loadDispatchedUnits();
-        refreshAvailableUnits();
-        loadIncidentMarkers();
+        if (document.hidden || livePollInFlight) return;
+        livePollInFlight = true;
+        Promise.all([
+            pruneOfflineUnitMarkers(),
+            loadDispatchedUnits(),
+            refreshActiveCalls(),
+            refreshAvailableUnits(),
+            loadIncidentMarkers()
+        ]).finally(() => {
+            livePollInFlight = false;
+        });
     }, 10000); // 10 seconds
 }
 
@@ -1328,18 +1640,19 @@ function renderAvailableUnits(items) {
 
     container.innerHTML = '';
     items.forEach(u => {
+        u = mergeLiveLocationIntoUnit(u);
         const meta = [];
         if (u.unit_type) meta.push(u.unit_type.charAt(0).toUpperCase() + u.unit_type.slice(1));
         const displayName = u.resource_name || u.identifier;
-        const latestLat = Number(u.latest_latitude ?? u.latitude);
-        const latestLng = Number(u.latest_longitude ?? u.longitude);
-        const gpsLocationText = Number.isFinite(latestLat) && Number.isFinite(latestLng)
-            ? `Responder GPS: ${latestLat.toFixed(6)}, ${latestLng.toFixed(6)}`
+        const unitPoint = unitResponderLatLng(u);
+        const gpsLocationText = unitPoint
+            ? `Responder GPS: ${unitPoint.lat.toFixed(6)}, ${unitPoint.lng.toFixed(6)}`
             : '';
         const locationText = gpsLocationText || 'Responder GPS pending';
         const assignmentText = u.assignment || u.plate_number || u.driver_name || '';
         const card = document.createElement('div');
         card.className = 'unit-card available';
+        card.setAttribute('data-unit-identifier', u.identifier || '');
         card.innerHTML = `
             <div class="unit-info">
                 <div class="unit-details">
@@ -1352,7 +1665,7 @@ function renderAvailableUnits(items) {
                 </div>
             </div>
             <div class="unit-actions">
-                <button class="btn-action-small" onclick="focusUnitOnMap('${escapeJs(u.identifier)}')" data-unit-id="${u.id}" data-identifier="${escapeAttr(u.identifier)}"><i class="fas fa-location-arrow"></i> Track</button>
+                <button class="btn-action-small" onclick="focusUnitOnMap('${escapeJs(u.identifier)}', '${escapeJs(u.id)}')" data-unit-id="${escapeAttr(u.id)}" data-identifier="${escapeAttr(u.identifier)}"><i class="fas fa-location-arrow"></i> Track</button>
             </div>
         `;
         container.appendChild(card);
@@ -1364,13 +1677,7 @@ function refreshAvailableUnits() {
     return fetchAvailableUnitsData()
         .then(items => {
             availableUnitsByIdentifier = {};
-            (items || []).forEach(u => {
-                if (u && u.identifier) {
-                    const id = String(u.identifier);
-                    availableUnitsByIdentifier[id] = u;
-                    availableUnitsByIdentifier[id.toUpperCase()] = u;
-                }
-            });
+            indexUnitsByIdentifier(items);
             syncAvailableUnitMarkers(items);
             if (container) {
                 renderAvailableUnits(items);
@@ -1390,6 +1697,51 @@ function escapeHtml(s) {
     return String(s || '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','\"':'&quot;','\'':'&#39;'})[c] || c);
 }
 
+function aiInlineHtml(value) {
+    return escapeHtml(value).replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
+}
+
+function renderAiText(value, wrapperClass) {
+    const lines = String(value || '').trim().split(/\r?\n/);
+    let html = `<div class="${escapeHtml(wrapperClass)} ai-formatted-text">`;
+    let listOpen = false;
+    const closeList = () => {
+        if (listOpen) {
+            html += '</ul>';
+            listOpen = false;
+        }
+    };
+
+    lines.forEach((rawLine) => {
+        const line = rawLine.trim();
+        if (!line) {
+            closeList();
+            return;
+        }
+        const headingMatch = line.match(/^\*\*([^*:\n]+):\*\*\s*(.*)$/);
+        if (headingMatch) {
+            closeList();
+            html += `<section class="ai-text-item"><h3>${escapeHtml(headingMatch[1])}</h3>`;
+            if (headingMatch[2]) html += `<p>${aiInlineHtml(headingMatch[2])}</p>`;
+            html += '</section>';
+            return;
+        }
+        const bulletMatch = line.match(/^[*-]\s+(.*)$/);
+        if (bulletMatch) {
+            if (!listOpen) {
+                html += '<ul class="ai-text-list">';
+                listOpen = true;
+            }
+            html += `<li>${aiInlineHtml(bulletMatch[1])}</li>`;
+            return;
+        }
+        closeList();
+        html += `<p>${aiInlineHtml(line)}</p>`;
+    });
+    closeList();
+    return html + '</div>';
+}
+
 function escapeAttr(s) {
     return String(s || '').replace(/['"]/g, '_');
 }
@@ -1398,21 +1750,153 @@ function escapeJs(s) {
     return String(s || '').replace(/\\/g, '\\\\').replace(/'/g, "\\'").replace(/\r?\n/g, ' ');
 }
 
+function normalizeUnitIdentifier(value) {
+    const text = String(value || '').trim();
+    if (!text) return '';
+    return text.split(/\s+/)[0].trim();
+}
+
+function rememberUnitIdentity(unit) {
+    const identifier = normalizeUnitIdentifier(unit && unit.identifier);
+    const unitId = String(unit && unit.id !== undefined && unit.id !== null ? unit.id : '').trim();
+    const responderId = String(unit && unit.responder_user_id !== undefined && unit.responder_user_id !== null ? unit.responder_user_id : '').trim();
+    if (identifier) {
+        mergeLiveLocationIntoUnit(unit);
+        availableUnitsByIdentifier[identifier] = unit;
+        availableUnitsByIdentifier[identifier.toUpperCase()] = unit;
+    }
+    if (identifier && unitId) {
+        unitIdentifierById[unitId] = identifier;
+    }
+    if (identifier && responderId) {
+        unitIdentifierByResponderId[responderId] = identifier;
+    }
+}
+
+function resolveLiveUnitMarkerKey(rawKey) {
+    const key = normalizeUnitIdentifier(rawKey);
+    return unitIdentifierByResponderId[key] || unitIdentifierById[key] || key;
+}
+
+function mergeLiveLocationIntoUnit(unit) {
+    const identifier = normalizeUnitIdentifier(unit && unit.identifier);
+    if (!identifier || !unit) return unit;
+    const livePoint = liveUnitLocationsByIdentifier[identifier] || liveUnitLocationsByIdentifier[identifier.toUpperCase()] || null;
+    if (!livePoint || isInvalidResponderCoordinate(livePoint.lat, livePoint.lng)) return unit;
+    unit.latest_latitude = livePoint.lat;
+    unit.latest_longitude = livePoint.lng;
+    unit.latitude = livePoint.lat;
+    unit.longitude = livePoint.lng;
+    unit.location_current = '1';
+    return unit;
+}
+
+function updateUnitCardGpsText(unitIdentifier, lat, lng) {
+    const normalized = normalizeUnitIdentifier(unitIdentifier);
+    if (!normalized || isInvalidResponderCoordinate(lat, lng)) return;
+    const text = `Responder GPS: ${lat.toFixed(6)}, ${lng.toFixed(6)}`;
+    document.querySelectorAll('#available-units-container .unit-card').forEach(card => {
+        const cardIdentifier = normalizeUnitIdentifier(card.getAttribute('data-unit-identifier') || '');
+        if (cardIdentifier.toUpperCase() !== normalized.toUpperCase()) return;
+        const locationSpan = card.querySelector('.unit-meta span:first-child');
+        if (locationSpan) {
+            locationSpan.innerHTML = `<i class="fas fa-map-marker-alt"></i> ${escapeHtml(text)}`;
+        }
+    });
+}
+
+function applyLiveResponderLocationToUnit(unitIdentifier, lat, lng) {
+    const normalized = normalizeUnitIdentifier(unitIdentifier);
+    if (!normalized || isInvalidResponderCoordinate(lat, lng)) return;
+    const livePoint = { lat, lng, seenAt: Date.now() };
+    liveUnitLocationsByIdentifier[normalized] = livePoint;
+    liveUnitLocationsByIdentifier[normalized.toUpperCase()] = livePoint;
+    const unit = findCachedUnitByReference(normalized, '') || { identifier: normalized };
+    mergeLiveLocationIntoUnit(unit);
+    availableUnitsByIdentifier[normalized] = unit;
+    availableUnitsByIdentifier[normalized.toUpperCase()] = unit;
+    updateUnitCardGpsText(normalized, lat, lng);
+}
+
+function indexUnitsByIdentifier(items) {
+    (items || []).forEach(u => {
+        if (!u || !u.identifier) return;
+        const id = normalizeUnitIdentifier(u.identifier);
+        if (!id) return;
+        availableUnitsByIdentifier[id] = u;
+        availableUnitsByIdentifier[id.toUpperCase()] = u;
+        rememberUnitIdentity(u);
+    });
+}
+
+function findUnitMarkerByReference(unitIdentifier, unitId) {
+    const normalized = normalizeUnitIdentifier(unitIdentifier);
+    const explicitUnitId = String(unitId || '').trim();
+
+    if (normalized && markers[normalized]) {
+        return { key: normalized, markerObj: markers[normalized] };
+    }
+    if (normalized) {
+        const upperIdentifier = normalized.toUpperCase();
+        const matchedKey = Object.keys(markers).find((key) => String(key).toUpperCase() === upperIdentifier);
+        if (matchedKey) {
+            return { key: matchedKey, markerObj: markers[matchedKey] };
+        }
+    }
+    if (explicitUnitId) {
+        const mappedIdentifier = unitIdentifierById[explicitUnitId];
+        if (mappedIdentifier && markers[mappedIdentifier]) {
+            return { key: mappedIdentifier, markerObj: markers[mappedIdentifier] };
+        }
+        const markerByDbId = Object.keys(markers).find((key) => String(markers[key]?.unitDbId || '') === explicitUnitId);
+        if (markerByDbId) {
+            return { key: markerByDbId, markerObj: markers[markerByDbId] };
+        }
+    }
+
+    return { key: normalized, markerObj: null };
+}
+
+function findCachedUnitByReference(unitIdentifier, unitId) {
+    const normalized = normalizeUnitIdentifier(unitIdentifier);
+    const explicitUnitId = String(unitId || '').trim();
+    if (normalized) {
+        return availableUnitsByIdentifier[normalized]
+            || availableUnitsByIdentifier[normalized.toUpperCase()]
+            || null;
+    }
+    if (explicitUnitId && unitIdentifierById[explicitUnitId]) {
+        const mappedIdentifier = unitIdentifierById[explicitUnitId];
+        return availableUnitsByIdentifier[mappedIdentifier]
+            || availableUnitsByIdentifier[mappedIdentifier.toUpperCase()]
+            || null;
+    }
+    if (explicitUnitId) {
+        return Object.values(availableUnitsByIdentifier).find((unit) => {
+            return String(unit && unit.id !== undefined && unit.id !== null ? unit.id : '') === explicitUnitId;
+        }) || null;
+    }
+    return null;
+}
+
 function ensureUnitMarkerFromApiUnit(unit) {
     if (!unit || !unit.identifier || !isResponderUnitOnline(unit)) return null;
     const id = String(unit.identifier);
-    const lat = parseFloat(unit.latitude);
-    const lng = parseFloat(unit.longitude);
-    if (isNaN(lat) || isNaN(lng)) return null;
+    const point = unitResponderLatLng(unit);
+    if (!point) return null;
+    const lat = point.lat;
+    const lng = point.lng;
 
     const type = unit.unit_type || 'other';
     const speed = (unit.speed_kph !== undefined && unit.speed_kph !== null) ? parseFloat(unit.speed_kph) : null;
     if (markers[id] && markers[id].marker) {
         moveUnitMarker(id, lat, lng, { speedKph: speed, animate: true });
         markers[id].marker.setIcon(getIcon(type));
+        markers[id].unitDbId = unit.id !== undefined && unit.id !== null ? String(unit.id) : markers[id].unitDbId;
     } else {
-        addUnitMarker(id, lat, lng, id, type, speed);
+        addUnitMarker(id, lat, lng, id, type, speed, unit.id);
     }
+    rememberUnitIdentity(unit);
     return markers[id] || null;
 }
 
@@ -1435,6 +1919,24 @@ function postJSON(url, payload) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload || {})
     }).then(r => r.json());
+}
+
+function formatTimeAgo(createdAt) {
+    const timestamp = new Date(String(createdAt || '').replace(' ', 'T')).getTime();
+    if (!Number.isFinite(timestamp)) return '';
+    const minsAgo = Math.max(0, Math.floor((Date.now() - timestamp) / 60000));
+    if (minsAgo < 1) return 'Just now';
+    if (minsAgo < 60) return `${minsAgo} min ago`;
+
+    const hours = Math.floor(minsAgo / 60);
+    const minutes = minsAgo % 60;
+    if (hours < 24) {
+        return minutes > 0 ? `${hours} hr ${minutes} min ago` : `${hours} hr ago`;
+    }
+
+    const days = Math.floor(hours / 24);
+    const remHours = hours % 24;
+    return remHours > 0 ? `${days} day ${remHours} hr ago` : `${days} day ago`;
 }
 
 function resourceRequest() {
@@ -1483,32 +1985,39 @@ function viewDetails(btn) {
 }
 
 // Focus the map on the selected unit marker
-function focusUnitOnMap(unitIdentifier) {
-    if (!unitIdentifier) return;
-    let markerObj = markers[unitIdentifier];
+function focusUnitOnMap(unitIdentifier, unitId) {
+    const normalizedIdentifier = normalizeUnitIdentifier(unitIdentifier);
+    const explicitUnitId = String(unitId || '').trim();
+    if (!normalizedIdentifier && !explicitUnitId) return;
+
+    let found = findUnitMarkerByReference(normalizedIdentifier, explicitUnitId);
+    let markerObj = found.markerObj;
     if (!markerObj) {
-        const upperIdentifier = String(unitIdentifier).toUpperCase();
-        const matchedKey = Object.keys(markers).find((key) => String(key).toUpperCase() === upperIdentifier);
-        markerObj = matchedKey ? markers[matchedKey] : null;
-    }
-    if (!markerObj) {
-        const unit = availableUnitsByIdentifier[String(unitIdentifier)] || availableUnitsByIdentifier[String(unitIdentifier).toUpperCase()];
+        const unit = findCachedUnitByReference(normalizedIdentifier, explicitUnitId);
         markerObj = ensureUnitMarkerFromApiUnit(unit);
     }
     if (focusMarkerObject(markerObj)) {
         return;
     }
-    fetchAvailableUnitsData()
-        .then(items => {
-            availableUnitsByIdentifier = {};
-            (items || []).forEach(u => {
-                if (!u || !u.identifier) return;
-                const id = String(u.identifier);
-                availableUnitsByIdentifier[id] = u;
-                availableUnitsByIdentifier[id.toUpperCase()] = u;
+
+    Promise.allSettled([
+        fetchAvailableUnitsData(),
+        fetch('api/units_list.php?status=dispatched', { cache: 'no-store' })
+            .then(r => r.json())
+            .then(res => (res && res.ok && Array.isArray(res.items)) ? onlineResponderUnits(res.items) : [])
+    ])
+        .then(results => {
+            const refreshedItems = [];
+            results.forEach(result => {
+                if (result.status === 'fulfilled' && Array.isArray(result.value)) {
+                    refreshedItems.push(...result.value);
+                }
             });
-            syncAvailableUnitMarkers(items);
-            const unit = availableUnitsByIdentifier[String(unitIdentifier)] || availableUnitsByIdentifier[String(unitIdentifier).toUpperCase()];
+            availableUnitsByIdentifier = {};
+            indexUnitsByIdentifier(refreshedItems);
+            syncAvailableUnitMarkers(refreshedItems);
+            syncUnitMarkers(refreshedItems);
+            const unit = findCachedUnitByReference(normalizedIdentifier, explicitUnitId);
             const refreshedMarkerObj = ensureUnitMarkerFromApiUnit(unit);
             if (!focusMarkerObject(refreshedMarkerObj)) {
                 alert('Unit location not available on map.');
@@ -1524,16 +2033,11 @@ function tryFocusPendingDispatchUnit() {
         return;
     }
 
-    let markerObj = markers[pendingDispatchTrackUnit];
-    if (!markerObj) {
-        const target = String(pendingDispatchTrackUnit).toUpperCase();
-        const matchedKey = Object.keys(markers).find((key) => String(key).toUpperCase() === target);
-        markerObj = matchedKey ? markers[matchedKey] : null;
-        if (matchedKey) pendingDispatchTrackUnit = matchedKey;
-    }
+    const found = findUnitMarkerByReference(pendingDispatchTrackUnit, '');
+    const markerObj = found.markerObj;
 
     if (markerObj && markerObj.marker) {
-        const label = pendingDispatchTrackUnit;
+        const label = found.key || pendingDispatchTrackUnit;
         pendingDispatchTrackUnit = '';
         pendingDispatchTrackAttempts = 0;
         map.setView(markerObj.marker.getLatLng(), 17, { animate: true });
@@ -1554,10 +2058,14 @@ function tryFocusPendingDispatchUnit() {
 }
 
 function requestDispatchUnitTracking(unitIdentifier) {
-    pendingDispatchTrackUnit = String(unitIdentifier || '').trim();
+    pendingDispatchTrackUnit = normalizeUnitIdentifier(unitIdentifier);
     pendingDispatchTrackAttempts = 0;
     if (!pendingDispatchTrackUnit) return;
-    refreshAvailableUnits().finally(() => {
+    Promise.allSettled([
+        pruneOfflineUnitMarkers(),
+        loadDispatchedUnits(),
+        refreshAvailableUnits()
+    ]).finally(() => {
         tryFocusPendingDispatchUnit();
     });
 }
@@ -1568,12 +2076,11 @@ function refreshAIRecommendations() {
         .then(res => {
             const el = document.getElementById('ai-recommendations-content');
             if (res.ok && res.text) {
-                el.innerHTML = '<div class="ai-recommendation-text">' +
-                    res.text.replace(/\n/g, '<br>') + '</div>';
+                el.innerHTML = renderAiText(res.text, 'ai-recommendation-text');
                 showNotification('AI recommendations updated', 'success');
             } else {
                 const msg = (res && res.error) ? String(res.error) : 'AI service unavailable';
-                el.innerHTML = '<div class="ai-error"><i class="fas fa-exclamation-triangle"></i> ' + msg.replace(/\n/g, '<br>') + '</div>';
+                el.innerHTML = '<div class="ai-error"><i class="fas fa-exclamation-triangle"></i> ' + escapeHtml(msg).replace(/\n/g, '<br>') + '</div>';
                 showNotification(msg, 'error');
             }
         })
@@ -1594,6 +2101,12 @@ function deployUnitToIncident(unitId) {
         .then(res => {
             if (res && res.ok) {
                 showNotification('Unit dispatched to incident', 'success');
+                window.dispatchEvent(new CustomEvent('ers:anonymous-tips-updated', {
+                    detail: {
+                        incidentId,
+                        changedAt: Date.now()
+                    }
+                }));
                 refreshActiveCalls();
                 refreshAvailableUnits();
             } else {
@@ -1618,15 +2131,21 @@ document.addEventListener('DOMContentLoaded', () => {
         const incidentId = toIncidentId(params.get('incident_id'));
         const trackUnit = params.get('track_unit') || params.get('unit') || '';
         const fromCall = params.get('from_call') === '1';
+        const openDispatch = fromCall || params.get('open_dispatch') === '1';
         const period = params.get('period');
-        if (fromCall) {
+        if (openDispatch) {
             if (window.ersCallSession && typeof window.ersCallSession.update === 'function') {
                 window.ersCallSession.update({
                     incidentId: incidentId,
                     incidentReferenceNo: code || ''
                 });
             }
-            showNotification(code ? `Incident ${code} logged. Live call is still ongoing.` : 'Incident logged. Live call is still ongoing.', 'info');
+            showNotification(
+                code
+                    ? `Call incident ${code} is saved and highlighted in Call. Select a dispatch unit.`
+                    : 'Call incident is saved in Call. Select a dispatch unit.',
+                'success'
+            );
             refreshActiveCalls().finally(() => {
                 if (incidentId !== null) {
                     window.setTimeout(() => openDispatchModal(incidentId), 220);
@@ -1645,61 +2164,6 @@ document.addEventListener('DOMContentLoaded', () => {
 });
 </script>
 <script>
-// Fallback: populate Active Emergency Calls from API when server-side list is empty
-document.addEventListener('DOMContentLoaded', () => {
-    try {
-        const container = document.getElementById('active-calls-container');
-        if (!container) return;
-        const hasCards = container.querySelector('.call-card');
-        if (hasCards) return; // server-side rendered
-        fetch('api/incidents_list.php?status=pending', { cache: 'no-store' })
-            .then(r => r.json())
-            .then(res => {
-                if (!res.ok) return;
-                const items = res.items || [];
-                const badge = document.getElementById('active-calls-badge');
-                if (badge) badge.textContent = `${items.length} Pending`;
-                if (!items.length) {
-                    container.innerHTML = '<div class="call-card"><div class="call-info"><div class="call-details"><div class="call-title">No pending emergency calls.</div></div></div></div>';
-                    return;
-                }
-                container.innerHTML = '';
-                items.forEach(it => {
-                    const prio = (it.priority || 'moderate').toLowerCase();
-                    const prioClass = ['critical', 'high', 'urgent', 'moderate', 'low'].includes(prio)
-                        ? prio
-                        : (prio === 'medium' ? 'moderate' : 'low');
-                    const minsAgo = (() => { try { return Math.max(0, Math.floor((Date.now() - new Date(it.created_at).getTime()) / 60000)); } catch(e) { return 0; } })();
-                    const timeAgo = minsAgo < 1 ? 'Just now' : (minsAgo + ' min ago');
-                    const title = it.title || it.type || 'Incident';
-                    const caller = it.caller_name || 'Unknown';
-                    const card = document.createElement('div');
-                    card.className = 'call-card ' + prioClass;
-                    card.setAttribute('data-incident-id', String(it.id));
-                    card.innerHTML = `
-                        <div class="call-info">
-                            <div class="call-details">
-                                <div class="call-title">${escapeHtml(title)}</div>
-                                <div class="call-meta">
-                                    <span><i class="fas fa-clock"></i> ${escapeHtml(timeAgo)}</span>
-                                    <span><i class="fas fa-user"></i> ${escapeHtml(caller)}</span>
-                                    <span class="status-indicator status-${prioClass}"></span> ${prio.charAt(0).toUpperCase() + prio.slice(1)} Priority
-                                </div>
-                            </div>
-                        </div>
-                        <div class="call-actions">
-                            <button class="btn-dispatch" onclick="openDispatchModal(${it.id})">Dispatch Unit</button>
-                            <button class="btn-action-small" onclick="viewDetails(this)" data-incident-id="${it.id}"><i class="fas fa-eye"></i> Details</button>
-                        </div>`;
-                    container.appendChild(card);
-                });
-            })
-            .catch(() => {});
-    } catch (e) {}
-
-    function escapeHtml(s) { return String(s || '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','\"':'&quot;','\'':'&#39;'})[c] || c); }
-    function escapeAttr(s) { return String(s || '').replace(/['"]/g, '_'); }
-});
 // Quick Action Handlers
 function postJSON(url, payload) {
     return fetch(url, {
@@ -2062,10 +2526,10 @@ function refreshAIRecommendations() {
       .then(data => {
         const el = document.getElementById('ai-recommendations-content');
         if (data.ok && data.text) {
-            el.innerHTML = '<div class="ai-recommendation-text">' + (data.text || '').replace(/\n/g, '<br>') + '</div>';
+            el.innerHTML = renderAiText(data.text, 'ai-recommendation-text');
         } else {
             const msg = (data && data.error) ? String(data.error) : 'Unable to generate AI recommendations at this time.';
-            el.innerHTML = '<div class="ai-error"><i class="fas fa-exclamation-triangle"></i> ' + msg.replace(/\n/g, '<br>') + '</div>';
+            el.innerHTML = '<div class="ai-error"><i class="fas fa-exclamation-triangle"></i> ' + escapeHtml(msg).replace(/\n/g, '<br>') + '</div>';
         }
       })
       .catch(() => alert('Network error'));
@@ -2092,76 +2556,253 @@ function resolveIncident(btn) {
     }).catch(() => showNotification('Network error', 'error'));
 }
 
-function refreshActiveCalls() {
+const INCIDENT_INTAKE_SOURCES = Object.freeze({
+    all: { label: 'All sources', shortLabel: 'All', icon: 'fa-list' },
+    call: { label: 'Call incidents', shortLabel: 'Call', cardLabel: 'Emergency Call', icon: 'fa-phone' },
+    manual: { label: 'Manual Incidents', shortLabel: 'Manual', cardLabel: 'Manual Entry', icon: 'fa-edit' },
+    tip: { label: 'Converted TIPs', shortLabel: 'TIP', cardLabel: 'Converted TIP', icon: 'fa-lightbulb' }
+});
+const VISIBLE_INTAKE_FILTERS = new Set(['all', 'call', 'manual', 'tip']);
+
+let incidentIntakeItems = [];
+let activeIncidentIntakeFilter = 'all';
+let activeCallsRefreshPromise = null;
+let incidentIntakeInitialized = false;
+let recentlyLoggedIncidentId = null;
+let recentlyLoggedIncidentHighlighted = false;
+
+function normalizeIncidentIntakeSource(item) {
+    const source = String(item && item.intake_source ? item.intake_source : '').trim().toLowerCase();
+    return Object.prototype.hasOwnProperty.call(INCIDENT_INTAKE_SOURCES, source) && source !== 'all'
+        ? source
+        : 'manual';
+}
+
+function normalizeIncidentPriority(value) {
+    const priority = String(value || 'medium').trim().toLowerCase();
+    if (priority === 'critical') return 'critical';
+    if (priority === 'high' || priority === 'urgent') return 'high';
+    if (priority === 'low') return 'low';
+    return 'medium';
+}
+
+function incidentIntakeTitle(item) {
+    const rawTitle = String(item && item.title ? item.title : '').trim();
+    const type = String(item && item.type ? item.type : 'Incident').trim();
+    if (/^incident from call\b/i.test(rawTitle)) {
+        const readableType = type ? type.charAt(0).toUpperCase() + type.slice(1) : 'Emergency';
+        return `${readableType} incident`;
+    }
+    return rawTitle || `${type || 'Emergency'} incident`;
+}
+
+function renderIncidentIntakeState(kind, title, message) {
     const container = document.getElementById('active-calls-container');
-    if (!container) return Promise.resolve([]);
-    return fetch('api/incidents_list.php?status=pending', { cache: 'no-store' })
-      .then(r => r.json())
-      .then(res => {
-        if (!res.ok) return;
-        const items = res.items || [];
-        const badge = document.getElementById('active-calls-badge');
-        if (badge) badge.textContent = `${items.length} Pending`;
-        if (!items.length) {
-            container.innerHTML = '<div class="call-card"><div class="call-info"><div class="call-details"><div class="call-title">No pending emergency calls.</div></div></div></div>';
-            return items;
+    if (!container) return;
+    container.setAttribute('role', 'status');
+    const icons = {
+        loading: 'fa-spinner fa-spin',
+        empty: 'fa-inbox',
+        error: 'fa-exclamation-triangle'
+    };
+    const retry = kind === 'error'
+        ? '<button type="button" class="intake-state-retry" onclick="refreshActiveCalls()"><i class="fas fa-sync-alt" aria-hidden="true"></i> Retry</button>'
+        : '';
+    container.innerHTML = `
+        <div class="intake-queue-state intake-queue-state-${kind}" role="status">
+            <span class="intake-state-icon"><i class="fas ${icons[kind] || icons.empty}" aria-hidden="true"></i></span>
+            <strong>${escapeHtml(title)}</strong>
+            <p>${escapeHtml(message)}</p>
+            ${retry}
+        </div>`;
+}
+
+function updateIncidentIntakeControls() {
+    const counts = { all: incidentIntakeItems.length, call: 0, manual: 0, tip: 0 };
+    incidentIntakeItems.forEach(item => {
+        const source = normalizeIncidentIntakeSource(item);
+        if (Object.prototype.hasOwnProperty.call(counts, source)) {
+            counts[source] += 1;
         }
-        container.innerHTML = '';
-        items.forEach(it => {
-            const prio = (it.priority || 'moderate').toLowerCase();
-            const prioClass = ['critical', 'high', 'urgent', 'moderate', 'low'].includes(prio)
-                ? prio
-                : (prio === 'medium' ? 'moderate' : 'low');
-            const minsAgo = (() => { try { return Math.max(0, Math.floor((Date.now() - new Date(it.created_at).getTime()) / 60000)); } catch(e) { return 0; } })();
-            const timeAgo = minsAgo < 1 ? 'Just now' : (minsAgo + ' min ago');
-            const title = it.title || it.type || 'Incident';
-            const caller = it.caller_name || 'Unknown';
-            const card = document.createElement('div');
-            card.className = 'call-card ' + prioClass;
-            card.setAttribute('data-incident-id', String(it.id));
-            card.innerHTML = `
-                <div class=\"call-info\">
-                    <div class=\"call-details\">
-                        <div class=\"call-title\">${escapeHtml(title)}</div>
-                        <div class=\"call-meta\">
-                            <span><i class=\"fas fa-clock\"></i> ${escapeHtml(timeAgo)}</span>
-                            <span><i class=\"fas fa-user\"></i> ${escapeHtml(caller)}</span>
-                            <span class=\"status-indicator status-${prioClass}\"></span> ${prio.charAt(0).toUpperCase() + prio.slice(1)} Priority
+    });
+
+    document.querySelectorAll('[data-intake-filter]').forEach(button => {
+        const source = String(button.dataset.intakeFilter || 'all');
+        const isActive = source === activeIncidentIntakeFilter;
+        button.classList.toggle('is-active', isActive);
+        button.setAttribute('aria-pressed', isActive ? 'true' : 'false');
+    });
+    document.querySelectorAll('[data-intake-count]').forEach(counter => {
+        const source = String(counter.dataset.intakeCount || 'all');
+        counter.textContent = String(counts[source] || 0);
+    });
+
+    const badge = document.getElementById('active-calls-badge');
+    if (badge) badge.textContent = `${incidentIntakeItems.length} Pending`;
+    return counts;
+}
+
+function renderIncidentIntakeQueue() {
+    const container = document.getElementById('active-calls-container');
+    const summary = document.getElementById('intake-queue-summary');
+    if (!container) return;
+
+    updateIncidentIntakeControls();
+    const visibleItems = activeIncidentIntakeFilter === 'all'
+        ? incidentIntakeItems.slice()
+        : incidentIntakeItems.filter(item => normalizeIncidentIntakeSource(item) === activeIncidentIntakeFilter);
+    const sourceMeta = INCIDENT_INTAKE_SOURCES[activeIncidentIntakeFilter] || INCIDENT_INTAKE_SOURCES.all;
+
+    if (summary) {
+        summary.textContent = `Showing ${visibleItems.length} of ${incidentIntakeItems.length} pending · ${sourceMeta.label}`;
+    }
+    if (!visibleItems.length) {
+        const isAll = activeIncidentIntakeFilter === 'all';
+        renderIncidentIntakeState(
+            'empty',
+            isAll ? 'No pending incidents' : `No pending ${sourceMeta.shortLabel.toLowerCase()} incidents`,
+            isAll ? 'New reports will appear here when they need dispatch.' : 'Choose another source or return to All to view the complete queue.'
+        );
+        return;
+    }
+
+    container.setAttribute('role', 'list');
+    container.innerHTML = visibleItems.map(item => {
+        const incidentId = toIncidentId(item && item.id);
+        if (incidentId === null) return '';
+        const source = normalizeIncidentIntakeSource(item);
+        const sourceInfo = INCIDENT_INTAKE_SOURCES[source] || INCIDENT_INTAKE_SOURCES.manual;
+        const priority = normalizeIncidentPriority(item.priority);
+        const priorityLabel = priority.charAt(0).toUpperCase() + priority.slice(1);
+        const reference = String(item.incident_code || item.reference_no || `Incident ${incidentId}`).trim();
+        const location = String(item.location || item.location_address || 'Location not recorded').trim();
+        const timeAgo = formatTimeAgo(item.created_at) || 'Just now';
+        const sourceSystem = String(item.intake_source_system || '').trim();
+        const sourceLabel = String(item.intake_source_label || sourceInfo.cardLabel || sourceInfo.shortLabel).trim();
+        const sourceDetail = source === 'call' && sourceSystem
+            ? `<span class="intake-source-system" title="Call origin">Via ${escapeHtml(sourceSystem)}</span>`
+            : '';
+
+        return `
+            <article class="call-card incident-intake-card ${priority} source-${source}${incidentId === recentlyLoggedIncidentId ? ' is-recently-logged' : ''}" data-incident-id="${incidentId}" role="listitem" aria-label="${escapeHtml(reference)}, ${escapeHtml(sourceInfo.label)}">
+                <div class="intake-card-topline">
+                    <span class="intake-source-badge source-${source}"><i class="fas ${sourceInfo.icon}" aria-hidden="true"></i> ${escapeHtml(sourceLabel)}</span>
+                    <strong class="intake-reference">${escapeHtml(reference)}</strong>
+                </div>
+                <div class="call-info">
+                    <div class="call-details">
+                        <h3 class="call-title">${escapeHtml(incidentIntakeTitle(item))}</h3>
+                        <p class="intake-location"><i class="fas fa-map-marker-alt" aria-hidden="true"></i> ${escapeHtml(location)}</p>
+                        <div class="call-meta">
+                            <span><i class="fas fa-clock" aria-hidden="true"></i> ${escapeHtml(timeAgo)}</span>
+                            <span class="intake-priority priority-${priority}"><span class="status-indicator status-${priority}"></span>${priorityLabel} Priority</span>
+                            ${sourceDetail}
                         </div>
                     </div>
                 </div>
-                <div class=\"call-actions\">
-                    <button class=\"btn-dispatch\" onclick=\"openDispatchModal(${it.id})\">Dispatch Unit</button>
-                    <button class=\"btn-action-small\" onclick=\"viewDetails(this)\" data-incident-id=\"${it.id}\"><i class=\"fas fa-eye\"></i> Details</button>
-                </div>`;
-            container.appendChild(card);
-        });
-        return items;
-      }).catch(() => []);
+                <div class="call-actions intake-card-actions">
+                    <button type="button" class="btn-dispatch" onclick="openDispatchModal(${incidentId})"><svg class="dispatch-action-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" focusable="false" aria-hidden="true"><path d="M3 6h11v11H3Z"/><path d="M14 10h4l3 3v4h-2"/><circle cx="7" cy="18" r="2"/><circle cx="17" cy="18" r="2"/><path d="M8.5 8.5v5M6 11h5"/></svg><span>Dispatch Unit</span></button>
+                    <button type="button" class="btn-action-small" onclick="viewDetails(this)" data-incident-id="${incidentId}"><i class="fas fa-eye" aria-hidden="true"></i> View Details</button>
+                </div>
+            </article>`;
+    }).join('');
+
+    if (recentlyLoggedIncidentId !== null && !recentlyLoggedIncidentHighlighted) {
+        const loggedCard = container.querySelector(`[data-incident-id="${recentlyLoggedIncidentId}"]`);
+        if (loggedCard) {
+            recentlyLoggedIncidentHighlighted = true;
+            loggedCard.setAttribute('tabindex', '-1');
+            window.setTimeout(() => loggedCard.scrollIntoView({ behavior: 'smooth', block: 'nearest' }), 80);
+        }
+    }
+}
+
+function setIncidentIntakeFilter(source) {
+    if (!VISIBLE_INTAKE_FILTERS.has(source)) return;
+    activeIncidentIntakeFilter = source;
+    renderIncidentIntakeQueue();
+}
+
+function initializeIncidentIntakeQueue() {
+    if (incidentIntakeInitialized) return;
+    incidentIntakeInitialized = true;
+    try {
+        const params = new URLSearchParams(window.location.search);
+        const requestedFilter = String(
+            params.get('source') || (params.get('from_call') === '1' ? 'call' : '')
+        ).trim().toLowerCase();
+        if (VISIBLE_INTAKE_FILTERS.has(requestedFilter)) {
+            activeIncidentIntakeFilter = requestedFilter;
+        }
+        recentlyLoggedIncidentId = toIncidentId(params.get('incident_id'));
+    } catch (error) {}
+    document.querySelectorAll('[data-intake-filter]').forEach(button => {
+        button.addEventListener('click', () => setIncidentIntakeFilter(String(button.dataset.intakeFilter || 'all')));
+    });
+    renderIncidentIntakeState('loading', 'Loading incident queue', 'Checking all pending incident sources…');
+    refreshActiveCalls();
+}
+
+function refreshActiveCalls() {
+    const container = document.getElementById('active-calls-container');
+    if (!container) return Promise.resolve([]);
+    if (activeCallsRefreshPromise) return activeCallsRefreshPromise;
+
+    container.setAttribute('aria-busy', 'true');
+    activeCallsRefreshPromise = fetch('api/incidents_list.php?status=pending&include_intake_source=1', {
+        cache: 'no-store',
+        credentials: 'same-origin',
+        headers: { 'Accept': 'application/json' }
+    })
+      .then(async response => {
+        const payload = await response.json().catch(() => ({}));
+        if (!response.ok || !payload.ok) {
+            throw new Error(payload.error || 'Could not load the incident queue.');
+        }
+        incidentIntakeItems = Array.isArray(payload.items)
+            ? payload.items.filter(item => toIncidentId(item && item.id) !== null)
+            : [];
+        renderIncidentIntakeQueue();
+        return incidentIntakeItems;
+      })
+      .catch(error => {
+        const summary = document.getElementById('intake-queue-summary');
+        if (incidentIntakeItems.length) {
+            renderIncidentIntakeQueue();
+            if (summary) summary.textContent = 'Showing the last loaded queue · Refresh failed';
+        } else {
+            updateIncidentIntakeControls();
+            if (summary) summary.textContent = 'Incident queue unavailable';
+            renderIncidentIntakeState('error', 'Could not load the queue', error.message || 'Check the connection and try again.');
+        }
+        return incidentIntakeItems;
+      })
+      .finally(() => {
+        container.setAttribute('aria-busy', 'false');
+        activeCallsRefreshPromise = null;
+      });
+    return activeCallsRefreshPromise;
 }
 
 function removeIncidentFromActiveCalls(incidentId) {
     const id = toIncidentId(incidentId);
     if (id === null) return;
-    const container = document.getElementById('active-calls-container');
-    if (!container) return;
-    const card = container.querySelector(`[data-incident-id="${id}"]`);
-    if (card) {
-        card.remove();
-    }
-    const remaining = container.querySelectorAll('.call-card[data-incident-id]').length;
-    const badge = document.getElementById('active-calls-badge');
-    if (badge) badge.textContent = `${remaining} Pending`;
-    if (remaining === 0) {
-        container.innerHTML = '<div class="call-card"><div class="call-info"><div class="call-details"><div class="call-title">No pending emergency calls.</div></div></div></div>';
-    }
+    incidentIntakeItems = incidentIntakeItems.filter(item => toIncidentId(item && item.id) !== id);
+    renderIncidentIntakeQueue();
 }
+
+document.addEventListener('DOMContentLoaded', initializeIncidentIntakeQueue);
 
 window.addEventListener('storage', function(e) {
     if (e.key === 'ers_incidents' || e.key === 'ers_incidents_changed' || e.key === 'ers_last_logged_incident') {
         refreshActiveCalls();
         loadIncidentMarkers();
     }
+});
+
+window.addEventListener('ers:incident-queue-updated', function() {
+    refreshActiveCalls();
+    loadIncidentMarkers();
 });
 
 

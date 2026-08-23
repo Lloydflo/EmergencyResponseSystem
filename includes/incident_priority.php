@@ -1,151 +1,173 @@
 <?php
 declare(strict_types=1);
 
-if (!function_exists('ers_incident_priority_rules')) {
-    function ers_incident_priority_rules(): array
-    {
-        return [
-            'incident_type' => [
-                'bomb_threat' => ['label' => 'Bomb Threat', 'score' => 40],
-                'active_shooter' => ['label' => 'Active Shooter', 'score' => 40],
-                'major_structural_fire' => ['label' => 'Major Structural Fire', 'score' => 38],
-                'building_collapse' => ['label' => 'Building Collapse', 'score' => 38],
-                'chemical_spill_hazardous_material' => ['label' => 'Chemical Spill / Hazardous Material', 'score' => 35],
-                'earthquake' => ['label' => 'Earthquake', 'score' => 35],
-                'landslide' => ['label' => 'Landslide', 'score' => 33],
-                'flash_flood' => ['label' => 'Flash Flood', 'score' => 32],
-                'typhoon_damage' => ['label' => 'Typhoon Damage', 'score' => 30],
-                'gas_leak' => ['label' => 'Gas Leak', 'score' => 30],
-                'medical_emergency' => ['label' => 'Medical Emergency', 'score' => 28],
-                'vehicular_accident' => ['label' => 'Vehicular Accident', 'score' => 25],
-                'missing_person' => ['label' => 'Missing Person', 'score' => 20],
-                'animal_rescue' => ['label' => 'Animal Rescue', 'score' => 10],
-                'power_outage' => ['label' => 'Power Outage', 'score' => 8],
-                'noise_complaint_minor_disturbance' => ['label' => 'Noise Complaint / Minor Disturbance', 'score' => 3],
-            ],
-            'threat_to_life' => [
-                'multiple_lives_immediate_danger' => ['label' => 'Multiple lives are in immediate danger', 'score' => 30],
-                'trapped_or_seriously_injured' => ['label' => 'People are trapped or seriously injured', 'score' => 25],
-                'possible_danger_nearby_people' => ['label' => 'Possible danger to nearby people', 'score' => 15],
-                'no_immediate_danger' => ['label' => 'No immediate danger to life', 'score' => 5],
-                'false_alarm_hoax' => ['label' => 'False alarm / Hoax', 'score' => 0],
-            ],
-            'severity_level' => [
-                'catastrophic' => ['label' => 'Catastrophic', 'score' => 20],
-                'major' => ['label' => 'Major', 'score' => 15],
-                'moderate' => ['label' => 'Moderate', 'score' => 10],
-                'minor' => ['label' => 'Minor', 'score' => 5],
-                'very_minor' => ['label' => 'Very Minor', 'score' => 2],
-            ],
-            'population_affected' => [
-                'more_than_500' => ['label' => 'More than 500 people', 'score' => 10],
-                '100_500' => ['label' => '100-500 people', 'score' => 8],
-                '20_99' => ['label' => '20-99 people', 'score' => 6],
-                '5_19' => ['label' => '5-19 people', 'score' => 4],
-                '1_4' => ['label' => '1-4 people', 'score' => 2],
-            ],
-            'verification_status' => [
-                'verified_emergency_personnel_cctv_official' => ['label' => 'Verified by emergency personnel, CCTV, or official source', 'score' => 10],
-                'confirmed_multiple_witnesses' => ['label' => 'Confirmed by multiple witnesses', 'score' => 8],
-                'one_identified_witness' => ['label' => 'Reported by one identified witness', 'score' => 5],
-                'anonymous_unverified' => ['label' => 'Anonymous or unverified report', 'score' => 2],
-                'confirmed_false_report' => ['label' => 'Confirmed false report', 'score' => 0],
-            ],
-        ];
-    }
-}
-
-if (!function_exists('ers_priority_from_score')) {
-    function ers_priority_from_score(int $score): array
-    {
-        if ($score >= 90) {
-            return ['priority' => 'critical', 'label' => 'CRITICAL', 'color' => 'red', 'action' => 'Immediate dispatch and instant notifications.'];
-        }
-        if ($score >= 70) {
-            return ['priority' => 'high', 'label' => 'HIGH', 'color' => 'orange', 'action' => 'Dispatch as soon as possible with high priority notification.'];
-        }
-        if ($score >= 45) {
-            return ['priority' => 'urgent', 'label' => 'URGENT', 'color' => 'yellow', 'action' => 'Standard emergency response after Critical and High incidents.'];
-        }
-        if ($score >= 20) {
-            return ['priority' => 'moderate', 'label' => 'MODERATE', 'color' => 'blue', 'action' => 'Normal response assigned to available responders.'];
-        }
-        return ['priority' => 'low', 'label' => 'LOW', 'color' => 'green', 'action' => 'Routine handling and monitoring.'];
-    }
-}
-
 if (!function_exists('ers_normalize_priority_value')) {
     function ers_normalize_priority_value(string $priority): string
     {
         $priority = strtolower(trim($priority));
-        if ($priority === 'medium') {
-            return 'moderate';
+        if ($priority === 'moderate') {
+            return 'medium';
         }
-        return in_array($priority, ['critical', 'high', 'urgent', 'moderate', 'low'], true) ? $priority : 'moderate';
+        if ($priority === 'urgent') {
+            return 'high';
+        }
+        return in_array($priority, ['critical', 'high', 'medium', 'low'], true) ? $priority : 'medium';
     }
 }
 
 if (!function_exists('ers_build_incident_priority_assessment')) {
-    function ers_build_incident_priority_assessment(array $input, string $fallbackPriority = 'moderate'): array
+    function ers_build_incident_priority_assessment(array $input, string $fallbackPriority = 'medium'): array
     {
-        $source = $input['priority_indicator'] ?? $input;
-        if (!is_array($source)) {
-            $source = [];
-        }
+        $fallbackPriority = ers_normalize_priority_value($fallbackPriority);
+        $text = ers_priority_assessment_text($input);
+        $incidentTypes = ers_priority_assessment_types($input['incident_types'] ?? $input['type'] ?? []);
+        $score = 0;
+        $factors = [];
 
-        $rules = ers_incident_priority_rules();
-        $fieldMap = [
-            'incident_type' => 'indicator_incident_type',
-            'threat_to_life' => 'threat_to_life',
-            'severity_level' => 'severity_level',
-            'population_affected' => 'population_affected',
-            'verification_status' => 'verification_status',
-        ];
-
-        $values = [];
-        $breakdown = [];
-        $total = 0;
-        $hasIndicatorValue = false;
-
-        foreach ($fieldMap as $ruleKey => $columnKey) {
-            $raw = trim((string)($source[$ruleKey] ?? $source[$columnKey] ?? ''));
-            $values[$columnKey] = $raw;
-            $item = $rules[$ruleKey][$raw] ?? null;
-            $score = $item ? (int)$item['score'] : 0;
-            if ($raw !== '') {
-                $hasIndicatorValue = true;
+        $addFactor = static function (string $key, string $label, int $weight) use (&$score, &$factors): void {
+            if (isset($factors[$key])) {
+                return;
             }
-            $total += $score;
-            $breakdown[$ruleKey] = [
-                'value' => $raw,
-                'label' => $item['label'] ?? '',
-                'score' => $score,
+            $score += $weight;
+            $factors[$key] = [
+                'key' => $key,
+                'label' => $label,
+                'weight' => $weight,
             ];
+        };
+
+        if (preg_match('/\b(unconscious|non[\s-]?responsive|not breathing|no pulse|cardiac arrest|cpr|resuscitation|walang malay|hindi humihinga|di humihinga|tumigil ang puso|hinto ang puso)\b/u', $text)) {
+            $addFactor('life_threat', 'Immediate life threat indicator', 80);
+        }
+        if (preg_match('/\b(gunshot|shot|shooting|stab|stabbing|weapon|armed|hostage|barilan|binaril|saksak|sinaksak|may armas|holdap)\b/u', $text)) {
+            $addFactor('weapon_or_violence', 'Weapon or violent threat indicator', 55);
+        }
+        if (preg_match('/\b(fire|smoke|explosion|blast|collapse|collapsed|trapped|drowning|flood|sunog|usok|pagsabog|gumuho|guho|naipit|baha|nalulunod)\b/u', $text)) {
+            $addFactor('active_hazard', 'Active hazard or unsafe scene indicator', 45);
+        }
+        if (preg_match('/\b(severe bleeding|heavy bleeding|chest pain|stroke|seizure|burns|serious injury|critical injury|matinding pagdurugo|sakit sa dibdib|kombulsyon|malubha|grabe|seryoso)\b/u', $text)) {
+            $addFactor('severe_symptoms', 'Severe injury or symptom indicator', 42);
+        }
+        if (preg_match('/(\b\d+\b|multiple|many|several|marami|ilan|dalawa(?:ng)?|tatlo(?:ng)?|apat|lima(?:ng)?)\s+(victims?|patients?|people|persons?|injured|casualties|nasugatan|tao|biktima|pasiente|sasakyan|vehicles?)/u', $text)) {
+            $addFactor('multiple_victims', 'Multiple victims or vehicles indicator', 18);
+        }
+        if (preg_match('/\b(child|children|infant|baby|elderly|senior|pregnant|labor|bata|sanggol|matanda|buntis|manganganak)\b/u', $text)) {
+            $addFactor('vulnerable_person', 'Vulnerable person involved', 9);
+        }
+        if (preg_match('/\b(collision|accident|crash|road blocked|traffic hazard|banggaan|aksidente|nakaharang|trapiko)\b/u', $text)) {
+            $addFactor('traffic_hazard', 'Traffic or road hazard indicator', 11);
+        }
+        if (preg_match('/\b(minor|mild|stable|resolved|okay na|ok na|walang sugat|hindi seryoso|bahagya|stable na)\b/u', $text)) {
+            $addFactor('minor_or_stable', 'Minor, stable, or resolved indicator', -18);
         }
 
-        if (!$hasIndicatorValue) {
-            $fallback = ers_normalize_priority_value($fallbackPriority);
-            $fallbackScores = [
-                'critical' => 90,
-                'high' => 70,
-                'urgent' => 45,
-                'moderate' => 20,
-                'low' => 0,
-            ];
-            $total = $fallbackScores[$fallback] ?? 20;
+        if (in_array('fire', $incidentTypes, true) && isset($factors['active_hazard'])) {
+            $addFactor('fire_context', 'Fire incident context increases urgency', 8);
+        }
+        if ((in_array('medical', $incidentTypes, true) || in_array('ambulance', $incidentTypes, true)) && (isset($factors['life_threat']) || isset($factors['severe_symptoms']))) {
+            $addFactor('medical_context', 'Medical context with severe symptoms', 8);
+        }
+        if (in_array('police', $incidentTypes, true) && isset($factors['weapon_or_violence'])) {
+            $addFactor('police_context', 'Police context with active threat', 8);
         }
 
-        $meta = ers_priority_from_score($total);
+        $hasIndicator = count($factors) > 0;
+        if (!$hasIndicator) {
+            $score = [
+                'critical' => 86,
+                'high' => 62,
+                'medium' => 38,
+                'low' => 12,
+            ][$fallbackPriority] ?? 38;
+        }
+
+        $score = max(0, min(100, $score));
+        $metricPriority = ers_priority_from_score($score);
+        if (!$hasIndicator) {
+            $metricPriority = $fallbackPriority;
+        }
+
+        $confidence = 0.25;
+        if ($hasIndicator) {
+            $confidence = 0.42 + min(0.38, count($factors) * 0.07);
+            if (strlen($text) >= 80) {
+                $confidence += 0.08;
+            }
+            if (trim((string)($input['location'] ?? '')) !== '') {
+                $confidence += 0.04;
+            }
+        }
+        $confidence = max(0.2, min(0.95, $confidence));
+
         return [
-            'has_indicator' => $hasIndicatorValue,
-            'score' => $total,
-            'priority' => $meta['priority'],
-            'label' => $meta['label'],
-            'color' => $meta['color'],
-            'action' => $meta['action'],
-            'values' => $values,
-            'breakdown' => $breakdown,
+            'has_indicator' => $hasIndicator,
+            'priority' => $metricPriority,
+            'score' => $score,
+            'confidence' => round($confidence, 3),
+            'factors' => array_values($factors),
+            'model' => 'ers-rule-priority-v1',
+            'assessed_at' => (new DateTimeImmutable('now', new DateTimeZone('Asia/Manila')))->format('Y-m-d H:i:s'),
         ];
+    }
+}
+
+if (!function_exists('ers_priority_assessment_text')) {
+    function ers_priority_assessment_text(array $input): string
+    {
+        $parts = [];
+        foreach (['description', 'call_notes', 'callNotes', 'location', 'title'] as $key) {
+            if (isset($input[$key])) {
+                $parts[] = (string)$input[$key];
+            }
+        }
+        if (isset($input['type'])) {
+            $parts[] = is_array($input['type']) ? implode(' ', $input['type']) : (string)$input['type'];
+        }
+        if (isset($input['incident_types'])) {
+            $parts[] = is_array($input['incident_types']) ? implode(' ', $input['incident_types']) : (string)$input['incident_types'];
+        }
+
+        $text = strtolower(trim(implode(' ', $parts)));
+        $text = preg_replace('/[^\p{L}\p{N}\s-]+/u', ' ', $text) ?? $text;
+        return preg_replace('/\s+/u', ' ', $text) ?? $text;
+    }
+}
+
+if (!function_exists('ers_priority_assessment_types')) {
+    function ers_priority_assessment_types($value): array
+    {
+        $rawItems = is_array($value) ? $value : preg_split('/[,|]+/', (string)$value);
+        $items = [];
+        foreach ($rawItems ?: [] as $item) {
+            $normalized = strtolower(trim((string)$item));
+            if ($normalized === 'ambulance') {
+                $normalized = 'medical';
+            } elseif ($normalized === 'crime') {
+                $normalized = 'police';
+            } elseif ($normalized === 'accident') {
+                $normalized = 'traffic';
+            }
+            if ($normalized !== '' && !in_array($normalized, $items, true)) {
+                $items[] = $normalized;
+            }
+        }
+        return $items;
+    }
+}
+
+if (!function_exists('ers_priority_from_score')) {
+    function ers_priority_from_score(int $score): string
+    {
+        if ($score >= 80) {
+            return 'critical';
+        }
+        if ($score >= 50) {
+            return 'high';
+        }
+        if ($score >= 25) {
+            return 'medium';
+        }
+        return 'low';
     }
 }
 
@@ -165,38 +187,48 @@ if (!function_exists('ers_incident_priority_column_exists')) {
     }
 }
 
+if (!function_exists('ers_incident_priority_index_exists')) {
+    function ers_incident_priority_index_exists(PDO $pdo, string $table, string $index): bool
+    {
+        $stmt = $pdo->prepare(
+            "SELECT 1
+             FROM INFORMATION_SCHEMA.STATISTICS
+             WHERE TABLE_SCHEMA = DATABASE()
+               AND TABLE_NAME = ?
+               AND INDEX_NAME = ?
+             LIMIT 1"
+        );
+        $stmt->execute([$table, $index]);
+        return (bool)$stmt->fetchColumn();
+    }
+}
+
 if (!function_exists('ers_ensure_incident_priority_schema')) {
     function ers_ensure_incident_priority_schema(PDO $pdo): void
     {
         foreach (['calls', 'incidents'] as $table) {
-            if (!ers_incident_priority_column_exists($pdo, $table, 'priority_score')) {
-                $pdo->exec("ALTER TABLE `{$table}` ADD COLUMN `priority_score` TINYINT UNSIGNED DEFAULT NULL AFTER `priority`");
+            if (ers_incident_priority_column_exists($pdo, $table, 'priority')) {
+                $pdo->exec("ALTER TABLE `{$table}` MODIFY `priority` VARCHAR(20) NOT NULL DEFAULT 'medium'");
+                $pdo->exec("UPDATE `{$table}` SET `priority` = 'medium' WHERE LOWER(`priority`) = 'moderate'");
+                $pdo->exec("UPDATE `{$table}` SET `priority` = 'high' WHERE LOWER(`priority`) = 'urgent'");
+
+                $columns = [
+                    'priority_score' => "`priority_score` TINYINT UNSIGNED DEFAULT NULL AFTER `priority`",
+                    'priority_confidence' => "`priority_confidence` DECIMAL(4,3) DEFAULT NULL AFTER `priority_score`",
+                    'priority_factors_json' => "`priority_factors_json` LONGTEXT DEFAULT NULL AFTER `priority_confidence`",
+                    'priority_model' => "`priority_model` VARCHAR(60) DEFAULT NULL AFTER `priority_factors_json`",
+                    'priority_assessed_at' => "`priority_assessed_at` DATETIME DEFAULT NULL AFTER `priority_model`",
+                ];
+                foreach ($columns as $column => $definition) {
+                    if (!ers_incident_priority_column_exists($pdo, $table, $column)) {
+                        $pdo->exec("ALTER TABLE `{$table}` ADD COLUMN {$definition}");
+                    }
+                }
+                $indexName = "idx_{$table}_priority_score";
+                if (!ers_incident_priority_index_exists($pdo, $table, $indexName)) {
+                    $pdo->exec("ALTER TABLE `{$table}` ADD KEY `{$indexName}` (`priority_score`)");
+                }
             }
-            if (!ers_incident_priority_column_exists($pdo, $table, 'priority_label')) {
-                $pdo->exec("ALTER TABLE `{$table}` ADD COLUMN `priority_label` VARCHAR(20) DEFAULT NULL AFTER `priority_score`");
-            }
-            if (!ers_incident_priority_column_exists($pdo, $table, 'priority_color')) {
-                $pdo->exec("ALTER TABLE `{$table}` ADD COLUMN `priority_color` VARCHAR(20) DEFAULT NULL AFTER `priority_label`");
-            }
-            if (!ers_incident_priority_column_exists($pdo, $table, 'indicator_incident_type')) {
-                $pdo->exec("ALTER TABLE `{$table}` ADD COLUMN `indicator_incident_type` VARCHAR(80) DEFAULT NULL AFTER `priority_color`");
-            }
-            if (!ers_incident_priority_column_exists($pdo, $table, 'threat_to_life')) {
-                $pdo->exec("ALTER TABLE `{$table}` ADD COLUMN `threat_to_life` VARCHAR(80) DEFAULT NULL AFTER `indicator_incident_type`");
-            }
-            if (!ers_incident_priority_column_exists($pdo, $table, 'severity_level')) {
-                $pdo->exec("ALTER TABLE `{$table}` ADD COLUMN `severity_level` VARCHAR(80) DEFAULT NULL AFTER `threat_to_life`");
-            }
-            if (!ers_incident_priority_column_exists($pdo, $table, 'population_affected')) {
-                $pdo->exec("ALTER TABLE `{$table}` ADD COLUMN `population_affected` VARCHAR(80) DEFAULT NULL AFTER `severity_level`");
-            }
-            if (!ers_incident_priority_column_exists($pdo, $table, 'verification_status')) {
-                $pdo->exec("ALTER TABLE `{$table}` ADD COLUMN `verification_status` VARCHAR(80) DEFAULT NULL AFTER `population_affected`");
-            }
-            if (!ers_incident_priority_column_exists($pdo, $table, 'priority_breakdown')) {
-                $pdo->exec("ALTER TABLE `{$table}` ADD COLUMN `priority_breakdown` LONGTEXT DEFAULT NULL AFTER `verification_status`");
-            }
-            $pdo->exec("ALTER TABLE `{$table}` MODIFY `priority` VARCHAR(20) NOT NULL DEFAULT 'moderate'");
         }
     }
 }
@@ -204,17 +236,12 @@ if (!function_exists('ers_ensure_incident_priority_schema')) {
 if (!function_exists('ers_priority_assessment_db_params')) {
     function ers_priority_assessment_db_params(array $assessment): array
     {
-        $values = $assessment['values'] ?? [];
         return [
-            ':priority_score' => (int)($assessment['score'] ?? 0),
-            ':priority_label' => (string)($assessment['label'] ?? ''),
-            ':priority_color' => (string)($assessment['color'] ?? ''),
-            ':indicator_incident_type' => (string)($values['indicator_incident_type'] ?? ''),
-            ':threat_to_life' => (string)($values['threat_to_life'] ?? ''),
-            ':severity_level' => (string)($values['severity_level'] ?? ''),
-            ':population_affected' => (string)($values['population_affected'] ?? ''),
-            ':verification_status' => (string)($values['verification_status'] ?? ''),
-            ':priority_breakdown' => json_encode($assessment['breakdown'] ?? [], JSON_UNESCAPED_SLASHES),
+            ':priority_score' => isset($assessment['score']) ? (int)$assessment['score'] : null,
+            ':priority_confidence' => isset($assessment['confidence']) ? (float)$assessment['confidence'] : null,
+            ':priority_factors_json' => json_encode($assessment['factors'] ?? [], JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE),
+            ':priority_model' => substr((string)($assessment['model'] ?? 'ers-rule-priority-v1'), 0, 60),
+            ':priority_assessed_at' => $assessment['assessed_at'] ?? null,
         ];
     }
 }

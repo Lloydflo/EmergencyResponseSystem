@@ -142,6 +142,45 @@ function infer_feedback_rating_from_note(string $note): ?int
     return null;
 }
 
+function feedback_add_note(array &$notes, array &$seen, array $row): void
+{
+    $note = trim((string)($row['note'] ?? ''));
+    $rating = $row['rating'] ?? null;
+    if ($note === '' && ($rating === null || $rating === '')) {
+        return;
+    }
+
+    $author = trim((string)($row['author_name'] ?? ''));
+    if ($author === '') {
+        $author = 'Responder';
+    }
+
+    $createdAt = $row['created_at'] ?? null;
+    $key = strtolower($author . '|' . $note . '|' . (string)$createdAt);
+    if (isset($seen[$key])) {
+        return;
+    }
+
+    $seen[$key] = true;
+    $notes[] = [
+        'author_name' => $author,
+        'rating' => $rating,
+        'note' => $note,
+        'created_at' => $createdAt,
+        'source' => $row['source'] ?? 'feedback',
+    ];
+}
+
+function feedback_first_existing_column(PDO $pdo, string $table, array $columns): ?string
+{
+    foreach ($columns as $column) {
+        if (feedback_column_exists($pdo, $table, $column)) {
+            return $column;
+        }
+    }
+    return null;
+}
+
 $hasRatingColumn = ensure_feedback_rating_column($pdo);
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
@@ -238,6 +277,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET') {
 
     try {
         $notes = [];
+        $seenNotes = [];
         if ($hasRatingColumn) {
             $stmt = $pdo->prepare("SELECT author_name, rating, note, created_at FROM incident_notes WHERE incident_id = ? AND note NOT LIKE 'Resolution proof uploaded:%' ORDER BY created_at DESC");
             $stmt->execute([$incidentId]);
@@ -246,7 +286,155 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET') {
             $stmt->execute([$incidentId]);
         }
 
-        $notes = $stmt->fetchAll();
+        foreach ($stmt->fetchAll() as $row) {
+            feedback_add_note($notes, $seenNotes, array_merge($row, ['source' => 'dispatcher_feedback']));
+        }
+
+        if (
+            feedback_table_exists($pdo, 'incidents') &&
+            feedback_column_exists($pdo, 'incidents', 'completion_notes')
+        ) {
+            $completedAtColumn = feedback_first_existing_column($pdo, 'incidents', ['completed_at', 'resolved_at', 'updated_at', 'created_at']);
+            $completedAtExpr = $completedAtColumn !== null ? "i.`{$completedAtColumn}`" : 'NULL';
+            $responderNameExpr = "'Responder'";
+            $userJoin = '';
+            if (
+                feedback_table_exists($pdo, 'users') &&
+                feedback_column_exists($pdo, 'incidents', 'completed_by_responder_id') &&
+                feedback_column_exists($pdo, 'users', 'id') &&
+                feedback_column_exists($pdo, 'users', 'name')
+            ) {
+                $userJoin = ' LEFT JOIN users responder_user ON responder_user.id = i.completed_by_responder_id';
+                $responderNameExpr = "COALESCE(NULLIF(TRIM(responder_user.name), ''), 'Responder')";
+            }
+
+            $completionStmt = $pdo->prepare(
+                "SELECT CONCAT({$responderNameExpr}, ' (Responder completion)') AS author_name,
+                        NULL AS rating,
+                        i.completion_notes AS note,
+                        {$completedAtExpr} AS created_at
+                 FROM incidents i
+                 {$userJoin}
+                 WHERE i.id = ?
+                   AND i.completion_notes IS NOT NULL
+                   AND TRIM(i.completion_notes) <> ''
+                 LIMIT 1"
+            );
+            $completionStmt->execute([$incidentId]);
+            $completionRow = $completionStmt->fetch(PDO::FETCH_ASSOC);
+            if ($completionRow) {
+                feedback_add_note($notes, $seenNotes, array_merge($completionRow, ['source' => 'responder_completion']));
+            }
+        }
+
+        if (
+            feedback_table_exists($pdo, 'incident_reviews') &&
+            feedback_column_exists($pdo, 'incident_reviews', 'incident_id')
+        ) {
+            $reviewTextExpr = feedback_column_exists($pdo, 'incident_reviews', 'review_text')
+                ? "NULLIF(TRIM(ir.review_text), '')"
+                : 'NULL';
+            $outcomeExpr = feedback_column_exists($pdo, 'incident_reviews', 'outcome')
+                ? "NULLIF(TRIM(ir.outcome), '')"
+                : 'NULL';
+            $responseRatingExpr = feedback_column_exists($pdo, 'incident_reviews', 'response_rating') ? 'ir.response_rating' : 'NULL';
+            $communicationRatingExpr = feedback_column_exists($pdo, 'incident_reviews', 'communication_rating') ? 'ir.communication_rating' : 'NULL';
+            $professionalismRatingExpr = feedback_column_exists($pdo, 'incident_reviews', 'professionalism_rating') ? 'ir.professionalism_rating' : 'NULL';
+            $reviewCreatedColumn = feedback_first_existing_column($pdo, 'incident_reviews', ['created_at', 'submitted_at', 'updated_at']);
+            $reviewCreatedExpr = $reviewCreatedColumn !== null ? "ir.`{$reviewCreatedColumn}`" : 'NULL';
+            $reviewOrderClause = $reviewCreatedColumn !== null ? "ORDER BY {$reviewCreatedExpr} DESC" : '';
+            $reviewResponderJoin = '';
+            $reviewAuthorExpr = "'Responder review'";
+            if (
+                feedback_column_exists($pdo, 'incident_reviews', 'responder_id') &&
+                feedback_table_exists($pdo, 'users') &&
+                feedback_column_exists($pdo, 'users', 'id') &&
+                feedback_column_exists($pdo, 'users', 'name')
+            ) {
+                $reviewResponderJoin = ' LEFT JOIN users review_user ON review_user.id = ir.responder_id';
+                $reviewAuthorExpr = "COALESCE(NULLIF(TRIM(review_user.name), ''), 'Responder review')";
+            }
+
+            $reviewStmt = $pdo->prepare(
+                "SELECT CONCAT({$reviewAuthorExpr}, ' (Responder review)') AS author_name,
+                        {$responseRatingExpr} AS rating,
+                        CONCAT_WS(' | ',
+                            {$reviewTextExpr},
+                            IF({$outcomeExpr} IS NOT NULL, CONCAT('Outcome: ', {$outcomeExpr}), NULL),
+                            IF({$responseRatingExpr} IS NOT NULL, CONCAT('Response: ', {$responseRatingExpr}, '/5'), NULL),
+                            IF({$communicationRatingExpr} IS NOT NULL, CONCAT('Communication: ', {$communicationRatingExpr}, '/5'), NULL),
+                            IF({$professionalismRatingExpr} IS NOT NULL, CONCAT('Professionalism: ', {$professionalismRatingExpr}, '/5'), NULL)
+                        ) AS note,
+                        {$reviewCreatedExpr} AS created_at
+                 FROM incident_reviews ir
+                 {$reviewResponderJoin}
+                 WHERE ir.incident_id = ?
+                 {$reviewOrderClause}"
+            );
+            $reviewStmt->execute([$incidentId]);
+            foreach ($reviewStmt->fetchAll(PDO::FETCH_ASSOC) as $reviewRow) {
+                feedback_add_note($notes, $seenNotes, array_merge($reviewRow, ['source' => 'responder_review']));
+            }
+        }
+
+        if (
+            feedback_table_exists($pdo, 'responder_after_action_reports') &&
+            feedback_column_exists($pdo, 'responder_after_action_reports', 'incident_id')
+        ) {
+            $submittedAtColumn = feedback_first_existing_column($pdo, 'responder_after_action_reports', ['submitted_at', 'updated_at', 'created_at']);
+            $submittedAtExpr = $submittedAtColumn !== null ? "aar.`{$submittedAtColumn}`" : 'NULL';
+            $afterActionOrderClause = $submittedAtColumn !== null ? "ORDER BY {$submittedAtExpr} DESC" : '';
+            $afterActionResponderJoin = '';
+            $afterActionNameExpr = feedback_column_exists($pdo, 'responder_after_action_reports', 'responder_name')
+                ? "NULLIF(TRIM(aar.responder_name), '')"
+                : 'NULL';
+            $afterActionAuthorExpr = "COALESCE({$afterActionNameExpr}, 'Responder after-action')";
+            if (
+                feedback_column_exists($pdo, 'responder_after_action_reports', 'responder_id') &&
+                feedback_table_exists($pdo, 'users') &&
+                feedback_column_exists($pdo, 'users', 'id') &&
+                feedback_column_exists($pdo, 'users', 'name')
+            ) {
+                $afterActionResponderJoin = ' LEFT JOIN users aar_user ON aar_user.id = aar.responder_id';
+                $afterActionAuthorExpr = "COALESCE({$afterActionNameExpr}, NULLIF(TRIM(aar_user.name), ''), 'Responder after-action')";
+            }
+
+            $statusWhere = feedback_column_exists($pdo, 'responder_after_action_reports', 'status')
+                ? "AND LOWER(COALESCE(aar.status, '')) IN ('submitted', 'verified', 'approved')"
+                : '';
+            $incidentSummaryExpr = feedback_column_exists($pdo, 'responder_after_action_reports', 'incident_summary')
+                ? "NULLIF(TRIM(aar.incident_summary), '')"
+                : 'NULL';
+            $actionsTakenExpr = feedback_column_exists($pdo, 'responder_after_action_reports', 'actions_taken')
+                ? "NULLIF(TRIM(aar.actions_taken), '')"
+                : 'NULL';
+            $lessonsLearnedExpr = feedback_column_exists($pdo, 'responder_after_action_reports', 'lessons_learned')
+                ? "NULLIF(TRIM(aar.lessons_learned), '')"
+                : 'NULL';
+            $followUpExpr = feedback_column_exists($pdo, 'responder_after_action_reports', 'follow_up_details')
+                ? "NULLIF(TRIM(aar.follow_up_details), '')"
+                : 'NULL';
+            $afterActionStmt = $pdo->prepare(
+                "SELECT CONCAT({$afterActionAuthorExpr}, ' (After-action report)') AS author_name,
+                        NULL AS rating,
+                        CONCAT_WS('\n\n',
+                            IF({$incidentSummaryExpr} IS NOT NULL, CONCAT('Summary: ', {$incidentSummaryExpr}), NULL),
+                            IF({$actionsTakenExpr} IS NOT NULL, CONCAT('Actions taken: ', {$actionsTakenExpr}), NULL),
+                            IF({$lessonsLearnedExpr} IS NOT NULL, CONCAT('Lessons learned: ', {$lessonsLearnedExpr}), NULL),
+                            IF({$followUpExpr} IS NOT NULL, CONCAT('Follow-up: ', {$followUpExpr}), NULL)
+                        ) AS note,
+                        {$submittedAtExpr} AS created_at
+                 FROM responder_after_action_reports aar
+                 {$afterActionResponderJoin}
+                 WHERE aar.incident_id = ?
+                 {$statusWhere}
+                 {$afterActionOrderClause}"
+            );
+            $afterActionStmt->execute([$incidentId]);
+            foreach ($afterActionStmt->fetchAll(PDO::FETCH_ASSOC) as $afterActionRow) {
+                feedback_add_note($notes, $seenNotes, array_merge($afterActionRow, ['source' => 'after_action_report']));
+            }
+        }
 
         $hasIncidentSurveys = feedback_table_exists($pdo, 'incident_surveys')
             && feedback_column_exists($pdo, 'incident_surveys', 'incident_id')
@@ -269,7 +457,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET') {
             $surveyStmt->execute([$incidentId]);
             $surveyNotes = $surveyStmt->fetchAll();
             if ($surveyNotes) {
-                $notes = array_merge($notes, $surveyNotes);
+                foreach ($surveyNotes as $surveyRow) {
+                    feedback_add_note($notes, $seenNotes, array_merge($surveyRow, ['source' => 'survey']));
+                }
             }
         }
 

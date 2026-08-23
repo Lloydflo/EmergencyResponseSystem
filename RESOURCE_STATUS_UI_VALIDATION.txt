@@ -1,0 +1,32 @@
+RESOURCE STATUS UI VALIDATION
+Build: 20260807-resource-readiness-cards-v1
+
+SOURCE BASIS
+- admin/resources.php was based on the current GitHub main blob:
+  9979baf2e3176f4e7e1ec85bb0f998dc5a367aab
+
+STATIC VALIDATION
+- PHP syntax: PASS
+- Inline JavaScript syntax (Node.js --check): PASS
+- CSS parser errors: 0
+- Duplicate HTML IDs after PHP stripping: 0
+- Category filter buttons present: 4
+- Main operational card container present: PASS
+- Main database-style resource table removed: PASS
+- Vehicle No. label present in cards/form: PASS
+- Contextual Personnel No. and Equipment No. mappings present: PASS
+- Existing API endpoint remains api/admin_resources.php: PASS
+- Database/API files modified: NONE
+
+FUNCTIONAL LOGIC PRESERVED
+- Resource load/create/update/archive/restore
+- Backup request workflow
+- Search and status filters
+- Category filtering
+- Location autocomplete
+- Archive retention display
+
+LIMITATION
+- Static validation was completed without a live authenticated production
+  database/session. Complete the final acceptance check after deployment using
+  real resource records and all three categories.

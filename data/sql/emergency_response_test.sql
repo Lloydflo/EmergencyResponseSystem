@@ -30,10 +30,22 @@ SET time_zone = "+08:00";
 CREATE TABLE `activity_log` (
   `id` int(11) NOT NULL,
   `user_id` int(11) DEFAULT NULL,
-  `action` varchar(32) NOT NULL,
-  `entity_type` varchar(32) NOT NULL,
+  `action` varchar(64) NOT NULL,
+  `entity_type` varchar(64) NOT NULL,
   `entity_id` int(11) DEFAULT NULL,
   `details` text DEFAULT NULL,
+  `actor_name` varchar(150) DEFAULT NULL,
+  `actor_email` varchar(150) DEFAULT NULL,
+  `actor_role` varchar(32) DEFAULT NULL,
+  `source_channel` varchar(32) DEFAULT NULL,
+  `event_category` varchar(32) DEFAULT NULL,
+  `event_outcome` varchar(16) NOT NULL DEFAULT 'success',
+  `reference_no` varchar(64) DEFAULT NULL,
+  `metadata_json` longtext DEFAULT NULL,
+  `ip_address` varchar(45) DEFAULT NULL,
+  `user_agent` varchar(255) DEFAULT NULL,
+  `request_id` varchar(64) DEFAULT NULL,
+  `event_key` varchar(160) DEFAULT NULL,
   `created_at` datetime NOT NULL DEFAULT current_timestamp()
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
@@ -61,8 +73,8 @@ INSERT INTO `activity_log` (`id`, `user_id`, `action`, `entity_type`, `entity_id
 -- Interagency chat migration additions
 --
 
-ALTER TABLE `activity_log`
-  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT;
+-- activity_log AUTO_INCREMENT is applied after its primary key in the
+-- AUTO_INCREMENT section near the end of this dump.
 
 CREATE TABLE IF NOT EXISTS `interagency_user_thread_pairs` (
   `id` BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
@@ -296,16 +308,7 @@ CREATE TABLE `calls` (
   `latitude` decimal(10,7) DEFAULT NULL,
   `longitude` decimal(10,7) DEFAULT NULL,
   `incident_type` varchar(100) NOT NULL,
-  `priority` varchar(20) NOT NULL DEFAULT 'moderate',
-  `priority_score` tinyint(3) UNSIGNED DEFAULT NULL,
-  `priority_label` varchar(20) DEFAULT NULL,
-  `priority_color` varchar(20) DEFAULT NULL,
-  `indicator_incident_type` varchar(80) DEFAULT NULL,
-  `threat_to_life` varchar(80) DEFAULT NULL,
-  `severity_level` varchar(80) DEFAULT NULL,
-  `population_affected` varchar(80) DEFAULT NULL,
-  `verification_status` varchar(80) DEFAULT NULL,
-  `priority_breakdown` longtext DEFAULT NULL,
+  `priority` varchar(20) NOT NULL DEFAULT 'medium',
   `status` enum('new','triaged','closed') NOT NULL DEFAULT 'new',
   `description` text DEFAULT NULL,
   `received_at` datetime NOT NULL DEFAULT current_timestamp(),
@@ -337,13 +340,9 @@ INSERT INTO `calls` (`id`, `reference_no`, `caller_name`, `caller_phone`, `calle
 DELIMITER $$
 CREATE TRIGGER `trg_calls_ai_create_incident` AFTER INSERT ON `calls` FOR EACH ROW BEGIN
   INSERT INTO `incidents` (
-    `reference_no`, `type`, `priority`, `priority_score`, `priority_label`, `priority_color`,
-    `indicator_incident_type`, `threat_to_life`, `severity_level`, `population_affected`, `verification_status`, `priority_breakdown`,
-    `status`, `title`, `description`, `location_address`, `latitude`, `longitude`, `reported_by_call_id`
+    `reference_no`, `type`, `priority`, `status`, `title`, `description`, `location_address`, `latitude`, `longitude`, `reported_by_call_id`
   ) VALUES (
-    NEW.`reference_no`, NEW.`incident_type`, NEW.`priority`, NEW.`priority_score`, NEW.`priority_label`, NEW.`priority_color`,
-    NEW.`indicator_incident_type`, NEW.`threat_to_life`, NEW.`severity_level`, NEW.`population_affected`, NEW.`verification_status`, NEW.`priority_breakdown`,
-    'pending', CONCAT('Incident from call ', NEW.`reference_no`), NEW.`description`, NEW.`location_address`, NEW.`latitude`, NEW.`longitude`, NEW.`id`
+    NEW.`reference_no`, NEW.`incident_type`, NEW.`priority`, 'pending', CONCAT('Incident from call ', NEW.`reference_no`), NEW.`description`, NEW.`location_address`, NEW.`latitude`, NEW.`longitude`, NEW.`id`
   );
 END
 $$
@@ -357,7 +356,7 @@ DELIMITER ;
 
 CREATE TABLE `dispatches` (
   `id` bigint(20) UNSIGNED NOT NULL AUTO_INCREMENT,
-  `incident_id` bigint(20) UNSIGNED NOT NULL,
+  `reference_no` varchar(50) NOT NULL,
   `unit_id` bigint(20) UNSIGNED NOT NULL,
   `status` enum('assigned','acknowledged','enroute','on_scene','cleared','cancelled') NOT NULL DEFAULT 'assigned',
   `assigned_at` datetime NOT NULL DEFAULT current_timestamp(),
@@ -404,18 +403,18 @@ CREATE TABLE IF NOT EXISTS `dispatch_operator_records` (
 -- Dumping data for table `dispatches`
 --
 
-INSERT INTO `dispatches` (`id`, `incident_id`, `unit_id`, `status`, `assigned_at`, `acknowledged_at`, `enroute_at`, `on_scene_at`, `cleared_at`, `notes`) VALUES
-(1, 4, 2, 'cleared', '2026-02-04 19:04:58', NULL, NULL, NULL, '2026-02-04 19:34:57', NULL),
-(2, 7, 7, 'cleared', '2026-02-06 17:23:10', NULL, NULL, NULL, '2026-02-07 00:15:05', NULL),
-(3, 8, 5, 'cleared', '2026-02-08 05:28:03', NULL, NULL, NULL, '2026-02-11 17:54:47', NULL),
-(4, 6, 11, 'cleared', '2026-02-11 17:56:43', NULL, NULL, NULL, '2026-02-11 23:00:40', NULL),
-(5, 11, 1, 'cleared', '2026-02-11 23:01:38', NULL, NULL, NULL, '2026-02-11 23:22:18', NULL),
-(6, 12, 1, 'cleared', '2026-02-11 23:58:21', NULL, NULL, NULL, '2026-02-11 23:59:21', NULL),
-(7, 13, 6, 'assigned', '2026-02-12 02:34:09', NULL, NULL, NULL, NULL, NULL),
-(8, 13, 7, 'assigned', '2026-02-12 05:47:58', NULL, NULL, NULL, NULL, NULL),
-(9, 13, 9, 'assigned', '2026-02-12 05:56:05', NULL, NULL, NULL, NULL, NULL),
-(10, 13, 8, 'assigned', '2026-02-12 05:58:06', NULL, NULL, NULL, NULL, NULL),
-(11, 13, 10, 'assigned', '2026-02-12 05:58:31', NULL, NULL, NULL, NULL, NULL);
+INSERT INTO `dispatches` (`id`, `reference_no`, `unit_id`, `status`, `assigned_at`, `acknowledged_at`, `enroute_at`, `on_scene_at`, `cleared_at`, `notes`) VALUES
+(1, 'REF-20260204040430-8022', 2, 'cleared', '2026-02-04 19:04:58', NULL, NULL, NULL, '2026-02-04 19:34:57', NULL),
+(2, 'REF-20260206022224-2140', 7, 'cleared', '2026-02-06 17:23:10', NULL, NULL, NULL, '2026-02-07 00:15:05', NULL),
+(3, 'REF-20260207142751-7153', 5, 'cleared', '2026-02-08 05:28:03', NULL, NULL, NULL, '2026-02-11 17:54:47', NULL),
+(4, 'REF-20260204080042-4397', 11, 'cleared', '2026-02-11 17:56:43', NULL, NULL, NULL, '2026-02-11 23:00:40', NULL),
+(5, 'REF-20260211085107-1710', 1, 'cleared', '2026-02-11 23:01:38', NULL, NULL, NULL, '2026-02-11 23:22:18', NULL),
+(6, 'REF-20260211112610-3531', 1, 'cleared', '2026-02-11 23:58:21', NULL, NULL, NULL, '2026-02-11 23:59:21', NULL),
+(7, 'REF-20260211112610-3531', 6, 'assigned', '2026-02-12 02:34:09', NULL, NULL, NULL, NULL, NULL),
+(8, 'REF-20260211112610-3531', 7, 'assigned', '2026-02-12 05:47:58', NULL, NULL, NULL, NULL, NULL),
+(9, 'REF-20260211112610-3531', 9, 'assigned', '2026-02-12 05:56:05', NULL, NULL, NULL, NULL, NULL),
+(10, 'REF-20260211112610-3531', 8, 'assigned', '2026-02-12 05:58:06', NULL, NULL, NULL, NULL, NULL),
+(11, 'REF-20260211112610-3531', 10, 'assigned', '2026-02-12 05:58:31', NULL, NULL, NULL, NULL, NULL);
 
 --
 -- Triggers `dispatches`
@@ -423,11 +422,13 @@ INSERT INTO `dispatches` (`id`, `incident_id`, `unit_id`, `status`, `assigned_at
 DELIMITER $$
 CREATE TRIGGER `trg_dispatches_ai_update_status` AFTER INSERT ON `dispatches` FOR EACH ROW BEGIN
   UPDATE `units`
-    SET `status` = 'assigned', `current_incident_id` = NEW.`incident_id`, `last_status_at` = CURRENT_TIMESTAMP
+    SET `status` = 'assigned',
+        `current_incident_id` = (SELECT `id` FROM `incidents` WHERE `reference_no` = NEW.`reference_no` LIMIT 1),
+        `last_status_at` = CURRENT_TIMESTAMP
     WHERE `id` = NEW.`unit_id`;
   UPDATE `incidents`
     SET `status` = 'dispatched', `updated_at` = CURRENT_TIMESTAMP
-    WHERE `id` = NEW.`incident_id` AND `status` IN ('pending','cancelled');
+    WHERE `reference_no` = NEW.`reference_no` AND `status` IN ('pending','cancelled');
 END
 $$
 DELIMITER ;
@@ -442,9 +443,9 @@ CREATE TRIGGER `trg_dispatches_au_propagate` AFTER UPDATE ON `dispatches` FOR EA
   END IF;
 
   IF NEW.`status` = 'cleared' THEN
-    UPDATE `incidents` SET `status` = 'resolved', `resolved_at` = CURRENT_TIMESTAMP WHERE `id` = NEW.`incident_id`;
+    UPDATE `incidents` SET `status` = 'resolved', `resolved_at` = CURRENT_TIMESTAMP WHERE `reference_no` = NEW.`reference_no`;
   ELSEIF NEW.`status` = 'cancelled' THEN
-    UPDATE `incidents` SET `status` = 'cancelled' WHERE `id` = NEW.`incident_id`;
+    UPDATE `incidents` SET `status` = 'cancelled' WHERE `reference_no` = NEW.`reference_no`;
   END IF;
 END
 $$
@@ -461,7 +462,7 @@ CREATE TRIGGER `trg_dispatch_operator_records_au_complete` AFTER UPDATE ON `disp
     UPDATE `dispatches`
       SET `status` = 'cleared',
           `cleared_at` = COALESCE(`cleared_at`, CURRENT_TIMESTAMP)
-      WHERE `incident_id` = NEW.`incident_id`
+      WHERE `reference_no` = (SELECT `reference_no` FROM `incidents` WHERE `id` = NEW.`incident_id` LIMIT 1)
         AND `status` IN ('assigned','acknowledged','enroute','on_scene');
 
     UPDATE `units` u
@@ -469,7 +470,7 @@ CREATE TRIGGER `trg_dispatch_operator_records_au_complete` AFTER UPDATE ON `disp
       SET u.`status` = 'available',
           u.`current_incident_id` = NULL,
           u.`last_status_at` = CURRENT_TIMESTAMP
-      WHERE d.`incident_id` = NEW.`incident_id`;
+      WHERE d.`reference_no` = (SELECT `reference_no` FROM `incidents` WHERE `id` = NEW.`incident_id` LIMIT 1);
 
     UPDATE `incidents`
       SET `status` = 'resolved',
@@ -514,16 +515,7 @@ CREATE TABLE `incidents` (
   `id` bigint(20) UNSIGNED NOT NULL,
   `reference_no` varchar(50) NOT NULL,
   `type` varchar(100) NOT NULL,
-  `priority` varchar(20) NOT NULL DEFAULT 'moderate',
-  `priority_score` tinyint(3) UNSIGNED DEFAULT NULL,
-  `priority_label` varchar(20) DEFAULT NULL,
-  `priority_color` varchar(20) DEFAULT NULL,
-  `indicator_incident_type` varchar(80) DEFAULT NULL,
-  `threat_to_life` varchar(80) DEFAULT NULL,
-  `severity_level` varchar(80) DEFAULT NULL,
-  `population_affected` varchar(80) DEFAULT NULL,
-  `verification_status` varchar(80) DEFAULT NULL,
-  `priority_breakdown` longtext DEFAULT NULL,
+  `priority` varchar(20) NOT NULL DEFAULT 'medium',
   `status` enum('pending','dispatched','resolved','cancelled') NOT NULL DEFAULT 'pending',
   `title` varchar(200) DEFAULT NULL,
   `description` text DEFAULT NULL,
@@ -531,6 +523,7 @@ CREATE TABLE `incidents` (
   `latitude` decimal(10,7) DEFAULT NULL,
   `longitude` decimal(10,7) DEFAULT NULL,
   `reported_by_call_id` bigint(20) UNSIGNED DEFAULT NULL,
+  `intake_source` varchar(24) DEFAULT NULL,
   `created_at` datetime NOT NULL DEFAULT current_timestamp(),
   `updated_at` datetime DEFAULT NULL ON UPDATE current_timestamp(),
   `responded_at` datetime DEFAULT NULL,
@@ -541,19 +534,19 @@ CREATE TABLE `incidents` (
 -- Dumping data for table `incidents`
 --
 
-INSERT INTO `incidents` (`id`, `reference_no`, `type`, `priority`, `status`, `title`, `description`, `location_address`, `latitude`, `longitude`, `reported_by_call_id`, `created_at`, `updated_at`, `responded_at`, `resolved_at`) VALUES
-(1, 'REF-20260202152404-8436', 'police', 'medium', 'pending', 'Incident from call REF-20260202152404-8436', 'nakaw', 'Diliman', NULL, NULL, 1, '2026-02-12 00:07:39', NULL, NULL, NULL),
-(2, 'REF-20260203042136-4230', 'fire', 'low', 'pending', 'Incident from call REF-20260203042136-4230', 'bilog', 'Circle', NULL, NULL, 2, '2026-02-12 00:07:39', NULL, NULL, NULL),
-(3, 'REF-20260204035154-9212', 'traffic', 'low', 'pending', 'Incident from call REF-20260204035154-9212', 'hfffgdxffdf', 'bagong silang caloocan city', NULL, NULL, 3, '2026-02-12 00:07:39', NULL, NULL, NULL),
-(4, 'REF-20260204040430-8022', 'medical', 'high', 'pending', 'Incident from call REF-20260204040430-8022', 'stroke', 'Novaliches, Liliw, Laguna, Calabarzon, 4004, Philippines', NULL, NULL, 4, '2026-02-12 00:07:39', NULL, NULL, NULL),
-(5, 'REF-20260204040916-4898', 'medical', 'high', 'pending', 'Incident from call REF-20260204040916-4898', 'heart attack', 'novaliches', NULL, NULL, 5, '2026-02-12 00:07:39', NULL, NULL, NULL),
-(6, 'REF-20260204080042-4397', 'police', 'low', 'pending', 'Incident from call REF-20260204080042-4397', 'nakaw', 'City Hall', NULL, NULL, 6, '2026-02-12 00:07:39', NULL, NULL, NULL),
-(7, 'REF-20260206022224-2140', 'fire', 'medium', 'pending', 'Incident from call REF-20260206022224-2140', 'sunog', 'City Hall', NULL, NULL, 7, '2026-02-12 00:07:39', NULL, NULL, NULL),
-(8, 'REF-20260207142751-7153', 'medical', 'low', 'pending', 'Incident from call REF-20260207142751-7153', 'heart attack', 'novaliches', NULL, NULL, 8, '2026-02-12 00:07:39', NULL, NULL, NULL),
-(9, 'REF-20260211075330-5287', 'fire', 'medium', 'pending', 'Incident from call REF-20260211075330-5287', 'nasusunog na pagawaan ng sapatos', 'novaliches, quezon city', NULL, NULL, 9, '2026-02-12 00:07:39', NULL, NULL, NULL),
-(10, 'REF-20260211075707-4064', 'medical', 'low', 'pending', 'Incident from call REF-20260211075707-4064', 'fall from 2nd floor', 'Nicanor Padilla Street, San Miguel, Sixth District, Manila, Capital District, Metro Manila, 1005, Philippines', NULL, NULL, 10, '2026-02-12 00:07:39', NULL, NULL, NULL),
-(11, 'REF-20260211085107-1710', 'medical', 'low', 'pending', 'Incident from call REF-20260211085107-1710', 'cardiac', 'Circle', NULL, NULL, 11, '2026-02-12 00:07:39', NULL, NULL, NULL),
-(12, 'REF-20260211112610-3531', 'fire', 'low', 'pending', 'Incident from call REF-20260211112610-3531', 'burning stove', 'Quezon City Hall', NULL, NULL, 12, '2026-02-12 00:07:39', NULL, NULL, NULL);
+INSERT INTO `incidents` (`id`, `reference_no`, `type`, `priority`, `status`, `title`, `description`, `location_address`, `latitude`, `longitude`, `reported_by_call_id`, `intake_source`, `created_at`, `updated_at`, `responded_at`, `resolved_at`) VALUES
+(1, 'REF-20260202152404-8436', 'police', 'medium', 'pending', 'Incident from call REF-20260202152404-8436', 'nakaw', 'Diliman', NULL, NULL, 1, NULL, '2026-02-12 00:07:39', NULL, NULL, NULL),
+(2, 'REF-20260203042136-4230', 'fire', 'low', 'pending', 'Incident from call REF-20260203042136-4230', 'bilog', 'Circle', NULL, NULL, 2, NULL, '2026-02-12 00:07:39', NULL, NULL, NULL),
+(3, 'REF-20260204035154-9212', 'traffic', 'low', 'pending', 'Incident from call REF-20260204035154-9212', 'hfffgdxffdf', 'bagong silang caloocan city', NULL, NULL, 3, NULL, '2026-02-12 00:07:39', NULL, NULL, NULL),
+(4, 'REF-20260204040430-8022', 'medical', 'high', 'pending', 'Incident from call REF-20260204040430-8022', 'stroke', 'Novaliches, Liliw, Laguna, Calabarzon, 4004, Philippines', NULL, NULL, 4, NULL, '2026-02-12 00:07:39', NULL, NULL, NULL),
+(5, 'REF-20260204040916-4898', 'medical', 'high', 'pending', 'Incident from call REF-20260204040916-4898', 'heart attack', 'novaliches', NULL, NULL, 5, NULL, '2026-02-12 00:07:39', NULL, NULL, NULL),
+(6, 'REF-20260204080042-4397', 'police', 'low', 'pending', 'Incident from call REF-20260204080042-4397', 'nakaw', 'City Hall', NULL, NULL, 6, NULL, '2026-02-12 00:07:39', NULL, NULL, NULL),
+(7, 'REF-20260206022224-2140', 'fire', 'medium', 'pending', 'Incident from call REF-20260206022224-2140', 'sunog', 'City Hall', NULL, NULL, 7, NULL, '2026-02-12 00:07:39', NULL, NULL, NULL),
+(8, 'REF-20260207142751-7153', 'medical', 'low', 'pending', 'Incident from call REF-20260207142751-7153', 'heart attack', 'novaliches', NULL, NULL, 8, NULL, '2026-02-12 00:07:39', NULL, NULL, NULL),
+(9, 'REF-20260211075330-5287', 'fire', 'medium', 'pending', 'Incident from call REF-20260211075330-5287', 'nasusunog na pagawaan ng sapatos', 'novaliches, quezon city', NULL, NULL, 9, NULL, '2026-02-12 00:07:39', NULL, NULL, NULL),
+(10, 'REF-20260211075707-4064', 'medical', 'low', 'pending', 'Incident from call REF-20260211075707-4064', 'fall from 2nd floor', 'Nicanor Padilla Street, San Miguel, Sixth District, Manila, Capital District, Metro Manila, 1005, Philippines', NULL, NULL, 10, NULL, '2026-02-12 00:07:39', NULL, NULL, NULL),
+(11, 'REF-20260211085107-1710', 'medical', 'low', 'pending', 'Incident from call REF-20260211085107-1710', 'cardiac', 'Circle', NULL, NULL, 11, NULL, '2026-02-12 00:07:39', NULL, NULL, NULL),
+(12, 'REF-20260211112610-3531', 'fire', 'low', 'pending', 'Incident from call REF-20260211112610-3531', 'burning stove', 'Quezon City Hall', NULL, NULL, 12, NULL, '2026-02-12 00:07:39', NULL, NULL, NULL);
 
 -- --------------------------------------------------------
 
@@ -931,6 +924,8 @@ CREATE TABLE `users` (
   `unit_status` varchar(50) DEFAULT NULL,
   `role` enum('admin','operator','viewer','dispatcher','responder') NOT NULL DEFAULT 'viewer',
   `status` enum('active','inactive') NOT NULL DEFAULT 'active',
+  `failed_login_attempts` tinyint(3) UNSIGNED NOT NULL DEFAULT 0,
+  `locked_until` datetime DEFAULT NULL,
   `inactive_at` timestamp NULL DEFAULT NULL,
   `created_at` timestamp NOT NULL DEFAULT current_timestamp(),
   `updated_at` timestamp NULL DEFAULT NULL ON UPDATE current_timestamp(),
@@ -956,7 +951,16 @@ INSERT INTO `users` (`id`, `email`, `password`, `name`, `department`, `role`, `s
 -- Indexes for table `activity_log`
 --
 ALTER TABLE `activity_log`
-  ADD PRIMARY KEY (`id`);
+  ADD PRIMARY KEY (`id`),
+  ADD UNIQUE KEY `uk_activity_log_event_key` (`event_key`),
+  ADD KEY `idx_activity_log_created` (`created_at`,`id`),
+  ADD KEY `idx_activity_log_user_created` (`user_id`,`created_at`),
+  ADD KEY `idx_activity_log_actor_created` (`actor_role`,`created_at`),
+  ADD KEY `idx_activity_log_source_created` (`source_channel`,`created_at`),
+  ADD KEY `idx_activity_log_category_created` (`event_category`,`created_at`),
+  ADD KEY `idx_activity_log_outcome_created` (`event_outcome`,`created_at`),
+  ADD KEY `idx_activity_log_reference_created` (`reference_no`,`created_at`),
+  ADD KEY `idx_activity_log_entity_action` (`entity_type`,`action`,`entity_id`);
 
 --
 -- Indexes for table `admin_resources`
@@ -1017,7 +1021,7 @@ ALTER TABLE `calls`
 --
 ALTER TABLE `dispatches`
   ADD PRIMARY KEY (`id`),
-  ADD KEY `idx_dispatches_incident_id` (`incident_id`),
+  ADD KEY `idx_dispatches_reference_no` (`reference_no`),
   ADD KEY `idx_dispatches_unit_id` (`unit_id`),
   ADD KEY `idx_dispatches_status` (`status`),
   ADD KEY `idx_dispatches_assigned_at` (`assigned_at`),
@@ -1032,6 +1036,7 @@ ALTER TABLE `incidents`
   ADD KEY `idx_incidents_type` (`type`),
   ADD KEY `idx_incidents_priority` (`priority`),
   ADD KEY `idx_incidents_status` (`status`),
+  ADD KEY `idx_incidents_intake_source` (`intake_source`),
   ADD KEY `idx_incidents_created_at` (`created_at`),
   ADD KEY `idx_incidents_responded_at` (`responded_at`),
   ADD KEY `fk_incidents_call` (`reported_by_call_id`);
@@ -1100,6 +1105,7 @@ ALTER TABLE `users`
   ADD UNIQUE KEY `uk_users_email` (`email`),
   ADD KEY `idx_users_role` (`role`),
   ADD KEY `idx_users_status` (`status`),
+  ADD KEY `idx_users_locked_until` (`locked_until`),
   ADD KEY `idx_users_inactive_at` (`inactive_at`);
 
 --
@@ -1117,6 +1123,12 @@ ALTER TABLE `units`
 --
 -- AUTO_INCREMENT for dumped tables
 --
+
+--
+-- AUTO_INCREMENT for table `activity_log`
+--
+ALTER TABLE `activity_log`
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=13;
 
 --
 -- AUTO_INCREMENT for table `calls`

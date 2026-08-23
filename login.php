@@ -298,7 +298,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
             <div class="privacy-modal-actions">
                 <button type="button" class="privacy-btn privacy-btn-secondary" id="privacyCancelBtn">Cancel</button>
-                <button type="button" class="privacy-btn privacy-btn-primary" id="privacyAgreeBtn" disabled>Submit Agreement</button>
+                <button type="button" class="privacy-btn privacy-btn-primary" id="privacyAgreeBtn" disabled>Accept</button>
             </div>
         </div>
     </div>

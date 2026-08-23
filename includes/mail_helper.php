@@ -2,6 +2,8 @@
 use PHPMailer\PHPMailer\PHPMailer;
 use PHPMailer\PHPMailer\SMTP;
 
+require_once __DIR__ . '/phpmailer_loader.php';
+
 if (!function_exists('setLastOtpEmailErrorMessage')) {
     function setLastOtpEmailErrorMessage(string $message): void {
         $GLOBALS['last_otp_email_error_message'] = $message;
@@ -253,10 +255,6 @@ function saveOtpToDatabase($email, $otpCode, $expiryMinutes = 5) {
 function sendOtpEmail($to, $otpCode, $systemName = null, $logoUrl = 'Email.png') {
     setLastOtpEmailErrorMessage('');
 
-    require_once __DIR__ . '/../vendor/phpmailer/phpmailer/src/PHPMailer.php';
-    require_once __DIR__ . '/../vendor/phpmailer/phpmailer/src/SMTP.php';
-    require_once __DIR__ . '/../vendor/phpmailer/phpmailer/src/Exception.php';
-
     $readEnv = function ($key, $default = null) {
         if (array_key_exists($key, $_ENV)) {
             $value = $_ENV[$key];
@@ -353,6 +351,11 @@ function sendOtpEmail($to, $otpCode, $systemName = null, $logoUrl = 'Email.png')
     </div>';
 
     $errors = [];
+    $phpMailerError = null;
+    $phpMailerAvailable = ers_load_phpmailer($phpMailerError);
+    if (!$phpMailerAvailable) {
+        $errors[] = $phpMailerError ?? 'PHPMailer dependency is missing.';
+    }
     $encryptionAliases = [
         'starttls' => 'tls',
         'tls' => 'tls',
@@ -561,9 +564,11 @@ function sendOtpEmail($to, $otpCode, $systemName = null, $logoUrl = 'Email.png')
         ]);
     }
 
-    foreach ($smtpConfigs as $smtpConfig) {
-        if ($sendViaSmtp($smtpConfig, $body)) {
-            return true;
+    if ($phpMailerAvailable) {
+        foreach ($smtpConfigs as $smtpConfig) {
+            if ($sendViaSmtp($smtpConfig, $body)) {
+                return true;
+            }
         }
     }
 

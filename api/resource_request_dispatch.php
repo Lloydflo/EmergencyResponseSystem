@@ -1,6 +1,9 @@
 <?php
 require_once '../includes/db.php';
 require_once '../includes/vehicle_resource_units.php';
+require_once '../includes/emergency_com_status_sync.php';
+require_once '../includes/anonymous_tip_status_sync.php';
+require_once '../includes/dispatch_attempt_log.php';
 header('Content-Type: application/json');
 
 if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
@@ -13,6 +16,18 @@ $pdo = get_db_connection();
 if (!$pdo) {
     http_response_code(500);
     echo json_encode(['success' => false, 'error' => 'Database connection failed']);
+    exit;
+}
+
+function backup_dispatch_fail_response(PDO $pdo, int $incidentId, array $unitIds, string $message, array $context = [], int $statusCode = 400): void
+{
+    if ($pdo->inTransaction()) {
+        $pdo->rollBack();
+    }
+
+    ers_dispatch_attempt_log_failed($pdo, $incidentId, $unitIds, $message, 'resource_request_dispatch', $context);
+    http_response_code($statusCode);
+    echo json_encode(['success' => false, 'error' => $message]);
     exit;
 }
 
@@ -71,6 +86,27 @@ function backup_dispatch_index_exists(PDO $pdo, string $tableName, string $index
         return (bool)$stmt->fetchColumn();
     } catch (Throwable $e) {
         return false;
+    }
+}
+
+function backup_dispatch_ensure_assignment_schema(PDO $pdo): void
+{
+    if (!backup_dispatch_table_exists($pdo, 'dispatches')) {
+        return;
+    }
+
+    if (!backup_dispatch_column_exists($pdo, 'dispatches', 'reference_no')) {
+        $pdo->exec("ALTER TABLE `dispatches` ADD COLUMN `reference_no` VARCHAR(50) DEFAULT NULL AFTER `id`");
+    }
+    if (!backup_dispatch_column_exists($pdo, 'dispatches', 'incident_id')) {
+        $afterColumn = backup_dispatch_column_exists($pdo, 'dispatches', 'reference_no') ? 'reference_no' : 'id';
+        $pdo->exec("ALTER TABLE `dispatches` ADD COLUMN `incident_id` BIGINT(20) UNSIGNED DEFAULT NULL AFTER `{$afterColumn}`");
+    }
+    if (!backup_dispatch_index_exists($pdo, 'dispatches', 'idx_dispatches_reference_no')) {
+        $pdo->exec("ALTER TABLE `dispatches` ADD KEY `idx_dispatches_reference_no` (`reference_no`)");
+    }
+    if (!backup_dispatch_index_exists($pdo, 'dispatches', 'idx_dispatches_incident_id')) {
+        $pdo->exec("ALTER TABLE `dispatches` ADD KEY `idx_dispatches_incident_id` (`incident_id`)");
     }
 }
 
@@ -157,6 +193,33 @@ function backup_dispatch_vehicle_label(string $unitType, string $vehicleName = '
     return $vehicleName !== '' ? $vehicleName : 'Vehicle';
 }
 
+function backup_dispatch_requested_vehicle_codes(array $details): array
+{
+    $codes = [];
+    $selectedResources = $details['selected_resources'] ?? [];
+    if (!is_array($selectedResources)) {
+        return $codes;
+    }
+
+    foreach ($selectedResources as $item) {
+        if (!is_array($item)) {
+            continue;
+        }
+
+        $category = strtolower(trim((string)($item['category'] ?? '')));
+        if ($category !== 'vehicles' && $category !== 'vehicle') {
+            continue;
+        }
+
+        $code = strtoupper(trim((string)($item['code'] ?? ($item['identifier'] ?? ($item['unit_code'] ?? '')))));
+        if ($code !== '') {
+            $codes[$code] = true;
+        }
+    }
+
+    return $codes;
+}
+
 $requestId = isset($_POST['request_id']) ? (int)$_POST['request_id'] : 0;
 $incidentId = isset($_POST['incident_id']) ? (int)$_POST['incident_id'] : 0;
 $dispatcherName = trim((string)($_POST['dispatcher_name'] ?? 'Dispatcher'));
@@ -174,13 +237,16 @@ $unitIds = array_values(array_unique(array_filter(array_map(static function ($va
 })));
 
 if ($requestId <= 0 || $incidentId <= 0 || $unitIds === []) {
-    http_response_code(400);
-    echo json_encode(['success' => false, 'error' => 'Missing request, incident, or units to dispatch']);
-    exit;
+    backup_dispatch_fail_response($pdo, $incidentId, $unitIds, 'Missing request, incident, or units to dispatch', [
+        'request_id' => $requestId,
+        'incident_id' => $incidentId,
+        'unit_ids' => $unitIds,
+    ]);
 }
 
 try {
     backup_dispatch_ensure_operator_records_table($pdo);
+    backup_dispatch_ensure_assignment_schema($pdo);
 
     $pdo->beginTransaction();
 
@@ -188,41 +254,49 @@ try {
     $requestStmt->execute([$requestId]);
     $requestRow = $requestStmt->fetch(PDO::FETCH_ASSOC);
     if (!$requestRow) {
-        $pdo->rollBack();
-        http_response_code(404);
-        echo json_encode(['success' => false, 'error' => 'Backup request not found']);
-        exit;
+        backup_dispatch_fail_response($pdo, $incidentId, $unitIds, 'Backup request not found', [
+            'request_id' => $requestId,
+            'incident_id' => $incidentId,
+            'unit_ids' => $unitIds,
+        ], 404);
     }
 
     $currentStatus = (string)($requestRow['status'] ?? 'pending');
     if (in_array($currentStatus, ['rejected', 'cancelled'], true)) {
-        $pdo->rollBack();
-        http_response_code(400);
-        echo json_encode(['success' => false, 'error' => 'This request can no longer be dispatched']);
-        exit;
+        backup_dispatch_fail_response($pdo, $incidentId, $unitIds, 'This request can no longer be dispatched', [
+            'request_id' => $requestId,
+            'incident_id' => $incidentId,
+            'request_status' => $currentStatus,
+            'unit_ids' => $unitIds,
+        ]);
     }
     if ($currentStatus === 'fulfilled') {
-        $pdo->rollBack();
-        http_response_code(400);
-        echo json_encode(['success' => false, 'error' => 'This request was already sent to responders']);
-        exit;
+        backup_dispatch_fail_response($pdo, $incidentId, $unitIds, 'This request was already sent to responders', [
+            'request_id' => $requestId,
+            'incident_id' => $incidentId,
+            'request_status' => $currentStatus,
+            'unit_ids' => $unitIds,
+        ]);
     }
 
     $details = json_decode((string)($requestRow['details'] ?? '{}'), true);
     if (!is_array($details)) {
         $details = [];
     }
+    $requestedVehicleCodes = backup_dispatch_requested_vehicle_codes($details);
 
     $requestIncidentId = isset($details['incident_id']) ? (int)$details['incident_id'] : 0;
     if ($requestIncidentId > 0 && $requestIncidentId !== $incidentId) {
-        $pdo->rollBack();
-        http_response_code(400);
-        echo json_encode(['success' => false, 'error' => 'Incident mismatch for selected backup request']);
-        exit;
+        backup_dispatch_fail_response($pdo, $incidentId, $unitIds, 'Incident mismatch for selected backup request', [
+            'request_id' => $requestId,
+            'incident_id' => $incidentId,
+            'request_incident_id' => $requestIncidentId,
+            'unit_ids' => $unitIds,
+        ]);
     }
 
     $incidentStmt = $pdo->prepare('
-        SELECT id, priority, description, location_address, latitude, longitude
+        SELECT id, reference_no, priority, description, location_address, latitude, longitude
         FROM incidents
         WHERE id = ?
         LIMIT 1
@@ -230,10 +304,11 @@ try {
     $incidentStmt->execute([$incidentId]);
     $incidentRow = $incidentStmt->fetch(PDO::FETCH_ASSOC);
     if (!$incidentRow) {
-        $pdo->rollBack();
-        http_response_code(404);
-        echo json_encode(['success' => false, 'error' => 'Incident not found']);
-        exit;
+        backup_dispatch_fail_response($pdo, $incidentId, $unitIds, 'Incident not found', [
+            'request_id' => $requestId,
+            'incident_id' => $incidentId,
+            'unit_ids' => $unitIds,
+        ], 404);
     }
 
     $placeholders = implode(',', array_fill(0, count($unitIds), '?'));
@@ -287,38 +362,60 @@ try {
     $unitStmt->execute($unitIds);
     $availableUnits = [];
     foreach ($unitStmt->fetchAll(PDO::FETCH_ASSOC) as $unitRow) {
-        if ((string)($unitRow['status'] ?? '') !== 'available') {
-            $pdo->rollBack();
-            http_response_code(400);
-            echo json_encode([
-                'success' => false,
-                'error' => 'Unit ' . (string)($unitRow['identifier'] ?? $unitRow['id']) . ' is no longer available'
+        $unitLabel = (string)($unitRow['identifier'] ?? $unitRow['id']);
+        $unitCode = strtoupper(trim($unitLabel));
+        if ($requestedVehicleCodes !== [] && ($unitCode === '' || !isset($requestedVehicleCodes[$unitCode]))) {
+            backup_dispatch_fail_response($pdo, $incidentId, $unitIds, 'Unit ' . $unitLabel . ' was not selected in the admin backup request', [
+                'request_id' => $requestId,
+                'incident_id' => $incidentId,
+                'unit_ids' => $unitIds,
+                'unit_identifier' => $unitLabel,
+                'requested_vehicle_codes' => array_keys($requestedVehicleCodes),
             ]);
-            exit;
+        }
+        if ((string)($unitRow['status'] ?? '') !== 'available') {
+            backup_dispatch_fail_response($pdo, $incidentId, $unitIds, 'Unit ' . $unitLabel . ' is no longer available', [
+                'request_id' => $requestId,
+                'incident_id' => $incidentId,
+                'unit_ids' => $unitIds,
+                'unit_identifier' => $unitLabel,
+                'unit_status' => (string)($unitRow['status'] ?? ''),
+            ]);
         }
         if ((int)($unitRow['assigned_user_id'] ?? 0) <= 0) {
-            $pdo->rollBack();
-            http_response_code(400);
-            echo json_encode([
-                'success' => false,
-                'error' => 'Unit ' . (string)($unitRow['identifier'] ?? $unitRow['id']) . ' has no assigned responder'
+            $unitLabel = (string)($unitRow['identifier'] ?? $unitRow['id']);
+            backup_dispatch_fail_response($pdo, $incidentId, $unitIds, 'Unit ' . $unitLabel . ' has no assigned responder', [
+                'request_id' => $requestId,
+                'incident_id' => $incidentId,
+                'unit_ids' => $unitIds,
+                'unit_identifier' => $unitLabel,
             ]);
-            exit;
         }
         $availableUnits[(int)$unitRow['id']] = $unitRow;
     }
 
     foreach ($unitIds as $unitId) {
         if (!isset($availableUnits[$unitId])) {
-            $pdo->rollBack();
-            http_response_code(404);
-            echo json_encode(['success' => false, 'error' => 'One or more selected units were not found']);
-            exit;
+            backup_dispatch_fail_response($pdo, $incidentId, $unitIds, 'One or more selected units were not found', [
+                'request_id' => $requestId,
+                'incident_id' => $incidentId,
+                'unit_ids' => $unitIds,
+                'missing_unit_id' => $unitId,
+            ], 404);
         }
     }
 
     $dispatchTime = backup_dispatch_philippine_timestamp();
-    $dispatchInsert = $pdo->prepare("INSERT INTO dispatches (incident_id, unit_id, status, assigned_at) VALUES (?, ?, 'assigned', ?)");
+    $incidentReferenceNo = trim((string)($incidentRow['reference_no'] ?? ''));
+    if ($incidentReferenceNo === '') {
+        backup_dispatch_fail_response($pdo, $incidentId, $unitIds, 'Incident reference number is missing', [
+            'request_id' => $requestId,
+            'incident_id' => $incidentId,
+            'unit_ids' => $unitIds,
+        ]);
+    }
+
+    $dispatchInsert = $pdo->prepare("INSERT INTO dispatches (incident_id, reference_no, unit_id, status, assigned_at) VALUES (?, ?, ?, 'assigned', ?)");
     $unitUpdate = $pdo->prepare("UPDATE units SET status = 'assigned', current_incident_id = ?, last_status_at = CURRENT_TIMESTAMP WHERE id = ?");
     $operatorRecordInsert = $pdo->prepare("
         INSERT INTO dispatch_operator_records
@@ -328,7 +425,7 @@ try {
 
     $dispatchedUnits = [];
     foreach ($unitIds as $unitId) {
-        $dispatchInsert->execute([$incidentId, $unitId, $dispatchTime]);
+        $dispatchInsert->execute([$incidentId, $incidentReferenceNo, $unitId, $dispatchTime]);
         $unitUpdate->execute([$incidentId, $unitId]);
         ers_sync_vehicle_resource_status_by_unit_id($pdo, $unitId, 'in_use');
 
@@ -366,12 +463,21 @@ try {
         ];
     }
 
+    $incidentDestination = [
+        'incident_id' => $incidentId,
+        'incident_code' => $incidentReferenceNo,
+        'location' => (string)($incidentRow['location_address'] ?? ''),
+        'latitude' => $incidentRow['latitude'] !== null && $incidentRow['latitude'] !== '' ? (float)$incidentRow['latitude'] : null,
+        'longitude' => $incidentRow['longitude'] !== null && $incidentRow['longitude'] !== '' ? (float)$incidentRow['longitude'] : null,
+    ];
+
     $incidentUpdate = $pdo->prepare("UPDATE incidents SET status = 'dispatched', updated_at = CURRENT_TIMESTAMP WHERE id = ?");
     $incidentUpdate->execute([$incidentId]);
 
     $details['dispatcher_name'] = $dispatcherName !== '' ? $dispatcherName : 'Dispatcher';
     $details['dispatch_notes'] = $notes;
     $details['dispatched_at'] = $dispatchTime;
+    $details['incident_destination'] = $incidentDestination;
     $details['dispatched_units'] = $dispatchedUnits;
     $details['dispatched_unit_ids'] = $unitIds;
 
@@ -383,19 +489,29 @@ try {
     ]);
 
     $pdo->commit();
+    ers_notify_emergency_com_status($pdo, $incidentId, 'Additional response resources are being dispatched.');
+    $anonymousTipStatusSync = ers_notify_anonymous_tip_status_result($pdo, $incidentId, 'dispatched', 'Additional response resources are being dispatched.');
 
     echo json_encode([
         'success' => true,
         'ok' => true,
         'request_id' => $requestId,
         'incident_id' => $incidentId,
+        'incident_destination' => $incidentDestination,
         'dispatched_count' => count($dispatchedUnits),
         'dispatched_units' => $dispatchedUnits,
+        'anonymous_tip_status_sync' => $anonymousTipStatusSync,
     ]);
 } catch (Throwable $e) {
     if ($pdo->inTransaction()) {
         $pdo->rollBack();
     }
+    ers_dispatch_attempt_log_failed($pdo, $incidentId, $unitIds, 'Backup dispatch failed: ' . $e->getMessage(), 'resource_request_dispatch', [
+        'request_id' => $requestId,
+        'incident_id' => $incidentId,
+        'unit_ids' => $unitIds,
+        'exception' => $e->getMessage(),
+    ]);
     http_response_code(500);
     echo json_encode(['success' => false, 'error' => $e->getMessage()]);
 }

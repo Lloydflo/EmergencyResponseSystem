@@ -1,108 +1,135 @@
 <?php
-header("Content-Type: application/json");
+declare(strict_types=1);
+require_once __DIR__ . '/_operational_api.php';
+require_once __DIR__ . '/_fcm.php';
+require_once __DIR__ . '/../../includes/user_presence.php';
 
-require_once __DIR__ . "/connect.php";
-require_once __DIR__ . "/../../includes/user_presence.php";
+op_require_method('POST');
+$groupId = op_post_int('group_id');
+$senderId = op_post_int('sender_user_id');
+$fileUrl = op_post_string('file_url', '', 500);
+$fileName = op_post_string('file_name', '', 255);
+$mimeType = op_post_string('mime_type', 'application/octet-stream', 150);
+$fileSize = max(0, op_post_int('file_size'));
+$isImage = op_post_bool('is_image', false);
+$isAudio = op_post_bool('is_audio', false);
+$audioDurationMs = max(0, min(120000, op_post_int('audio_duration_ms')));
+$normalizedMime = strtolower(trim($mimeType));
+$fileExtension = strtolower((string)pathinfo($fileName, PATHINFO_EXTENSION));
+$isAudio = $isAudio
+    || str_starts_with($normalizedMime, 'audio/')
+    || in_array($fileExtension, ['m4a', 'aac', '3gp', 'ogg', 'opus', 'wav', 'mp3'], true);
+if ($isAudio) {
+    $isImage = false;
+}
+
+op_require_positive($groupId, 'group_id');
+op_require_positive($senderId, 'sender_user_id');
+op_require_text($fileUrl, 'file_url');
+op_require_text($fileName, 'file_name');
 
 try {
     $pdo = db();
-    $now = date("Y-m-d H:i:s");
-
-    $group_id = intval($_POST["group_id"] ?? 0);
-    $sender_user_id = trim($_POST["sender_user_id"] ?? "");
-    $file_url = trim($_POST["file_url"] ?? "");
-    $file_name = trim($_POST["file_name"] ?? "");
-    $mime_type = trim($_POST["mime_type"] ?? "");
-    $file_size = intval($_POST["file_size"] ?? 0);
-    $is_image = intval($_POST["is_image"] ?? 0);
-
-    if ($group_id <= 0 || $sender_user_id === "" || $file_url === "" || $file_name === "") {
-        echo json_encode(["success" => false, "message" => "Missing fields"]);
-        exit;
+    $sender = op_require_active_responder($pdo, $senderId);
+    if (!op_active_group_exists($pdo, $groupId)) {
+        op_error('Department channel was not found or is inactive.', 404);
     }
-    if (is_numeric($sender_user_id)) {
-        touch_user_presence($pdo, intval($sender_user_id));
+    if (!op_is_group_member($pdo, $groupId, $senderId)) {
+        op_error('You do not have access to this department channel.', 403);
+    }
+    try {
+        touch_user_presence($pdo, $senderId);
+    } catch (Throwable $presenceError) {
+        error_log('send-interagency-group-attachment presence update skipped: ' . $presenceError->getMessage());
     }
 
-    $messageText = $is_image === 1 ? "Image" : $file_name;
+    $groupStatement = $pdo->prepare('SELECT name FROM interagency_group_threads WHERE id = ? LIMIT 1');
+    $groupStatement->execute([$groupId]);
+    $groupName = trim((string)$groupStatement->fetchColumn());
+    $messageText = $isAudio ? 'Voice message' : ($isImage ? 'Image' : $fileName);
+    $messageDetails = json_encode(
+        [
+            'text' => $messageText,
+            'attachments' => [[
+                'name' => $fileName,
+                'url' => $fileUrl,
+                'mime_type' => $mimeType,
+                'size' => $fileSize,
+                'is_image' => $isImage ? 1 : 0,
+                'is_audio' => $isAudio ? 1 : 0,
+                'duration_ms' => $isAudio ? $audioDurationMs : 0,
+            ]],
+        ],
+        JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_INVALID_UTF8_SUBSTITUTE
+    );
 
-    $message_details = json_encode([
-        "text" => $messageText,
-        "attachments" => [
-            [
-                "name" => $file_name,
-                "url" => $file_url,
-                "mime_type" => $mime_type,
-                "size" => $file_size,
-                "is_image" => $is_image
-            ]
-        ]
+    $pdo->beginTransaction();
+    $log = $pdo->prepare(
+        "INSERT INTO activity_log
+         (user_id, action, entity_type, entity_id, details, created_at)
+         VALUES (?, 'chat_attachment', 'agency_group_chat', ?, ?, NOW())"
+    );
+    $log->execute([$senderId, $groupId, $messageDetails]);
+    $activityLogId = (int)$pdo->lastInsertId();
+
+    $message = $pdo->prepare(
+        'INSERT INTO interagency_groups_threads_read '
+        . '(activity_log_id, group_id, sender_user_id, message_details, created_at) '
+        . 'VALUES (?, ?, ?, ?, NOW())'
+    );
+    $message->execute([$activityLogId, $groupId, (string)$senderId, $messageDetails]);
+    $messageId = (int)$pdo->lastInsertId();
+
+    $attachment = $pdo->prepare(
+        'INSERT INTO interagency_message_attachments '
+        . '(message_id, file_name, file_url, file_path, mime_type, file_size, is_image, created_at) '
+        . 'VALUES (?, ?, ?, NULL, ?, ?, ?, NOW())'
+    );
+    $attachment->execute([
+        $messageId,
+        $fileName,
+        $fileUrl,
+        $mimeType,
+        $fileSize,
+        $isImage ? 1 : 0,
     ]);
+    $pdo->commit();
 
-    $nextIdStmt = $pdo->query("
-        SELECT COALESCE(MAX(id), 0) + 1 AS next_id 
-        FROM activity_log
-    ");
-    $activity_log_id = intval($nextIdStmt->fetch()["next_id"]);
+    $push = ['attempted' => 0, 'delivered' => 0, 'failed' => 0];
+    try {
+        $push = ers_fcm_send_to_group($pdo, $groupId, $senderId, [
+            'type' => 'department_chat',
+            'group_id' => $groupId,
+            'group_name' => $groupName,
+            'message_id' => $messageId,
+            'sender_id' => $senderId,
+            'sender_name' => (string)($sender['name'] ?? 'Responder'),
+            'message_type' => $isAudio ? 'audio' : ($isImage ? 'image' : 'file'),
+            'body' => $isAudio
+                ? 'Sent a voice message'
+                : ($isImage
+                    ? 'Sent an image'
+                    : 'Sent a file: ' . ers_notification_preview($fileName, 160)),
+        ]);
+    } catch (Throwable $pushError) {
+        error_log('department attachment push skipped: ' . $pushError->getMessage());
+    }
 
-    $logStmt = $pdo->prepare("
-        INSERT INTO activity_log
-        (id, user_id, action, entity_type, entity_id, details, created_at)
-        VALUES
-        (:id, :user_id, 'chat_attachment', 'agency_group_chat', :entity_id, :details, :created_at)
-    ");
-
-    $logStmt->execute([
-        "id" => $activity_log_id,
-        "user_id" => is_numeric($sender_user_id) ? intval($sender_user_id) : null,
-        "entity_id" => $group_id,
-        "details" => $message_details,
-        "created_at" => $now
-    ]);
-
-    $msgStmt = $pdo->prepare("
-        INSERT INTO interagency_groups_threads_read
-        (activity_log_id, group_id, sender_user_id, message_details, created_at)
-        VALUES
-        (:activity_log_id, :group_id, :sender_user_id, :message_details, :created_at)
-    ");
-
-    $msgStmt->execute([
-        "activity_log_id" => $activity_log_id,
-        "group_id" => $group_id,
-        "sender_user_id" => $sender_user_id,
-        "message_details" => $message_details,
-        "created_at" => $now
-    ]);
-
-    $message_id = $pdo->lastInsertId();
-
-    $attStmt = $pdo->prepare("
-        INSERT INTO interagency_message_attachments
-        (message_id, file_name, file_url, file_path, mime_type, file_size, is_image, created_at)
-        VALUES
-        (:message_id, :file_name, :file_url, NULL, :mime_type, :file_size, :is_image, :created_at)
-    ");
-
-    $attStmt->execute([
-        "message_id" => $activity_log_id,
-        "file_name" => $file_name,
-        "file_url" => $file_url,
-        "mime_type" => $mime_type,
-        "file_size" => $file_size,
-        "is_image" => $is_image,
-        "created_at" => $now
-    ]);
-
-    echo json_encode([
-        "success" => true,
-        "message" => "Attachment sent",
-        "message_id" => $message_id
-    ]);
-
-} catch (Throwable $e) {
-    echo json_encode([
-        "success" => false,
-        "message" => $e->getMessage()
-    ]);
+    op_success([
+        'message' => 'Attachment sent.',
+        'message_id' => $messageId,
+        'message_type' => $isAudio ? 'audio' : ($isImage ? 'image' : 'file'),
+        'audio_duration_ms' => $isAudio ? $audioDurationMs : 0,
+        'push' => [
+            'attempted' => (int)$push['attempted'],
+            'delivered' => (int)$push['delivered'],
+            'failed' => (int)$push['failed'],
+        ],
+    ], 201);
+} catch (Throwable $error) {
+    if (isset($pdo) && $pdo instanceof PDO && $pdo->inTransaction()) {
+        $pdo->rollBack();
+    }
+    error_log('send-interagency-group-attachment: ' . $error->getMessage());
+    op_error('Unable to send the department attachment.', 500);
 }
