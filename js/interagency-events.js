@@ -411,7 +411,7 @@
             <h3>Dispatch Responders</h3><p>${escapeHtml(item.event_profile || item.coordination_id)}</p>
             <div class="ia-event-assigned"><strong>Assigned to this event</strong>${assigned.length ? assigned.map((assignment) => `<span>${escapeHtml(assignment.identifier || `Unit ${assignment.unit_id}`)} • ${escapeHtml(assignment.unit_type || 'Responder')}</span>`).join('') : '<span>No units assigned yet.</span>'}</div>
             <form data-event-dispatch-form><div class="ia-event-unit-list">${state.dispatchLoading ? '<span>Loading units...</span>' : (units || '<span>No available responder units.</span>')}</div>
-            <div class="ia-event-form-actions"><button type="button" class="ia-event-secondary" data-event-dialog-close>Cancel</button><button type="submit" class="ia-event-primary" ${state.dispatchLoading || !units ? 'disabled' : ''}>Assign selected units</button></div></form>
+            <div class="ia-event-form-actions"><button type="button" class="ia-event-secondary" data-event-dialog-close>Cancel</button><button type="submit" class="ia-event-primary" ${state.dispatchLoading || !units ? 'disabled' : ''}>Dispatch</button></div></form>
         </section></div>`;
     };
 
