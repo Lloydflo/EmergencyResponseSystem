@@ -1482,13 +1482,6 @@ function viewDetails(btn) {
         });
 }
 
-function contactCaller(btn) {
-    const phone = btn.getAttribute('data-phone');
-    if (!phone) { alert('No phone number'); return; }
-    window.location.href = 'tel:' + encodeURIComponent(phone);
-}
-
-
 // Focus the map on the selected unit marker
 function focusUnitOnMap(unitIdentifier) {
     if (!unitIdentifier) return;
@@ -1680,7 +1673,6 @@ document.addEventListener('DOMContentLoaded', () => {
                     const timeAgo = minsAgo < 1 ? 'Just now' : (minsAgo + ' min ago');
                     const title = it.title || it.type || 'Incident';
                     const caller = it.caller_name || 'Unknown';
-                    const phone = it.caller_phone || '';
                     const card = document.createElement('div');
                     card.className = 'call-card ' + prioClass;
                     card.setAttribute('data-incident-id', String(it.id));
@@ -1698,7 +1690,6 @@ document.addEventListener('DOMContentLoaded', () => {
                         <div class="call-actions">
                             <button class="btn-dispatch" onclick="openDispatchModal(${it.id})">Dispatch Unit</button>
                             <button class="btn-action-small" onclick="viewDetails(this)" data-incident-id="${it.id}"><i class="fas fa-eye"></i> Details</button>
-                            ${phone ? `<button class=\"btn-action-small\" onclick=\"contactCaller(this)\" data-phone=\"${escapeAttr(phone)}\"><i class=\"fas fa-phone\"></i> Call</button>` : ''}
                         </div>`;
                     container.appendChild(card);
                 });
@@ -2058,12 +2049,6 @@ function viewDetails(btn) {
       });
 }
 
-function contactCaller(btn) {
-    const phone = btn && btn.dataset ? btn.dataset.phone : '';
-    if (!phone) { alert('No phone number available'); return; }
-    window.location.href = 'tel:' + phone;
-}
-
 function unitLocation(btn) {
     const unitId = btn && btn.dataset ? btn.dataset.unitId : '';
     const identifier = btn && btn.dataset ? btn.dataset.identifier : '';
@@ -2131,7 +2116,6 @@ function refreshActiveCalls() {
             const timeAgo = minsAgo < 1 ? 'Just now' : (minsAgo + ' min ago');
             const title = it.title || it.type || 'Incident';
             const caller = it.caller_name || 'Unknown';
-            const phone = it.caller_phone || '';
             const card = document.createElement('div');
             card.className = 'call-card ' + prioClass;
             card.setAttribute('data-incident-id', String(it.id));
@@ -2149,7 +2133,6 @@ function refreshActiveCalls() {
                 <div class=\"call-actions\">
                     <button class=\"btn-dispatch\" onclick=\"openDispatchModal(${it.id})\">Dispatch Unit</button>
                     <button class=\"btn-action-small\" onclick=\"viewDetails(this)\" data-incident-id=\"${it.id}\"><i class=\"fas fa-eye\"></i> Details</button>
-                    ${phone ? `<button class=\\\"btn-action-small\\\" onclick=\\\"contactCaller(this)\\\" data-phone=\\\"${escapeAttr(phone)}\\\"><i class=\\\"fas fa-phone\\\"></i> Call</button>` : ''}
                 </div>`;
             container.appendChild(card);
         });
