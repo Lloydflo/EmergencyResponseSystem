@@ -327,9 +327,6 @@
                     </div>
                     <button type="button" class="ia-event-dispatch-toggle" data-event-dispatch-status="${Number(item.id)}" aria-expanded="${state.dispatchStatusEventId === Number(item.id) ? 'true' : 'false'}"><i class="fas fa-chevron-${state.dispatchStatusEventId === Number(item.id) ? 'up' : 'down'}"></i> Dispatch Status</button>
                 </div>
-                <div class="ia-event-row-actions">
-                    <button type="button" class="ia-event-primary ia-event-row-dispatch" data-event-dispatch="${Number(item.id)}"><i class="fas fa-ambulance"></i> Dispatch</button>
-                </div>
             </article>
             ${renderStatusTable(item)}
             </div>
