@@ -918,3 +918,77 @@
         animation: none !important;
     }
 }
+
+/* Responsive hardening for the No After-Action Report queue and review workspace. */
+.ar-stat.no-report {
+    min-width: 0;
+}
+
+.ar-stat.no-report .ar-stat-copy {
+    min-width: 0;
+}
+
+@media (max-width: 980px) {
+    .ar-review-workspace {
+        grid-template-columns: minmax(0, 1fr);
+    }
+
+    .ar-review-context,
+    .ar-after-action-panel,
+    .ar-review-support {
+        min-width: 0;
+        width: 100%;
+    }
+
+    .ar-review-support {
+        grid-column: auto;
+    }
+
+    .ar-after-action-panel .ar-after-action-list {
+        min-width: 0;
+    }
+}
+
+@media (max-width: 700px) {
+    .ar-stats {
+        grid-template-columns: 1fr;
+    }
+
+    .ar-stats .ar-stat,
+    .ar-stats .ar-stat.no-report {
+        width: 100%;
+        min-width: 0;
+    }
+
+    .ar-stats .ar-stat .ar-stat-copy {
+        grid-template-columns: minmax(0, 1fr) auto;
+    }
+
+    .ar-card-head-actions {
+        max-width: 100%;
+        flex-wrap: wrap;
+    }
+
+    .ar-report-card,
+    .ar-report-grid {
+        min-width: 0;
+        width: 100%;
+    }
+}
+
+@media (max-width: 520px) {
+    .ar-stats .ar-stat .ar-stat-copy {
+        grid-template-columns: minmax(0, 1fr);
+        gap: .2rem;
+    }
+
+    .ar-stats .ar-stat strong {
+        grid-column: 1;
+        grid-row: auto;
+        justify-self: start;
+    }
+
+    .ar-stats .ar-stat em {
+        grid-column: 1;
+    }
+}

@@ -724,3 +724,153 @@
             from { transform: translateX(100%); opacity: 0; }
             to { transform: translateX(0); opacity: 1; }
         }
+/* Compact Operations Desk: replaces the large empty workflow lane area. */
+.ia-ops-desk-compact {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    gap: 1rem;
+}
+
+.ia-ops-desk-compact .ia-ops-overview {
+    min-width: 0;
+}
+
+.ia-ops-eyebrow {
+    display: block;
+    margin-bottom: .2rem;
+    color: #64748b;
+    font-size: .68rem;
+    font-weight: 800;
+    letter-spacing: .08em;
+    text-transform: uppercase;
+}
+
+.ia-ops-desk-compact .ia-ops-module-grid {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: .8rem;
+    margin: 0;
+}
+
+.ia-ops-desk-compact .ia-module-btn {
+    min-width: 0;
+    min-height: 112px;
+    padding: .9rem;
+}
+
+.ia-ops-desk-compact .ia-module-btn-main {
+    min-width: 0;
+}
+
+.ia-ops-desk-compact .ia-module-btn-title,
+.ia-ops-desk-compact .ia-module-btn-sub {
+    overflow-wrap: anywhere;
+}
+
+@media (max-width: 1100px) {
+    .ia-ops-desk-compact .ia-ops-module-grid {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+}
+
+@media (max-width: 620px) {
+    .ia-ops-desk-compact .ia-ops-module-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .ia-ops-desk-compact .ia-module-btn {
+        min-height: 92px;
+    }
+
+    .ia-ops-desk-compact .ia-ops-metrics {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+}
+
+@media (max-width: 420px) {
+    .ia-ops-desk-compact .ia-ops-metrics {
+        grid-template-columns: 1fr;
+    }
+}
+
+/* Command Operations layout: keep the four operational modules under the
+   queue metrics and restore the Incident Monitor as the right-side panel. */
+.ia-ops-desk-compact {
+    grid-template-columns: minmax(0, 1.65fr) minmax(360px, 1fr);
+    align-items: stretch;
+}
+
+.ia-ops-desk-compact .ia-ops-overview {
+    display: flex;
+    flex-direction: column;
+}
+
+.ia-ops-desk-compact .ia-ops-overview > .ia-ops-module-grid {
+    margin-top: 1rem;
+}
+
+.ia-ops-desk-compact > .ia-incident-monitor {
+    margin: 0;
+    min-height: 100%;
+    border: 1px solid var(--ia-border, #dfe6ee);
+    border-radius: 8px;
+    background: var(--ia-card, #fff);
+    box-shadow: 0 14px 28px rgba(15, 23, 42, 0.06);
+    overflow: hidden;
+}
+
+@media (max-width: 1100px) {
+    .ia-ops-desk-compact {
+        grid-template-columns: 1fr;
+    }
+
+    .ia-ops-desk-compact > .ia-incident-monitor {
+        min-height: 0;
+    }
+}
+
+/* Command Operations: keep the four operational workspaces INSIDE the
+   Command Operations panel, directly below the five queue metrics. */
+.ia-ops-desk-compact .ia-ops-overview {
+    overflow: hidden;
+}
+
+.ia-ops-desk-compact .ia-ops-module-grid {
+    width: 100%;
+    box-sizing: border-box;
+    margin: 1rem 0 0;
+    padding: 1rem;
+    border-top: 1px solid var(--ia-border, #dfe6ee);
+    background: #f8fafc;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: .75rem;
+}
+
+.ia-ops-desk-compact .ia-ops-module-grid::before {
+    content: "Operational Workspaces";
+    grid-column: 1 / -1;
+    color: #64748b;
+    font-size: .68rem;
+    font-weight: 800;
+    letter-spacing: .08em;
+    text-transform: uppercase;
+    margin-bottom: -.15rem;
+}
+
+.ia-ops-desk-compact .ia-module-btn {
+    min-height: 100px;
+    height: 100%;
+    background: var(--ia-card, #fff);
+}
+
+@media (max-width: 1200px) {
+    .ia-ops-desk-compact .ia-ops-module-grid {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+}
+
+@media (max-width: 620px) {
+    .ia-ops-desk-compact .ia-ops-module-grid {
+        grid-template-columns: 1fr;
+    }
+}
