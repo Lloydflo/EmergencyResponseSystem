@@ -33,6 +33,15 @@ try {
     $input = ers_external_input();
     $action = strtolower(ers_external_clean($input['action'] ?? '', 40));
 
+    if ($action === 'sync_alertara_campaigns') {
+        $result = ers_event_sync_alertara_campaigns($pdo);
+        ers_external_json(200, [
+            'success' => true,
+            'message' => 'Alertara campaigns synchronized.',
+            'sync' => $result,
+        ]);
+    }
+
     if ($action === 'send' || !empty($input['send_to_group6'])) {
         $sent = ers_event_send_to_group6($pdo, $input);
         ers_external_json(200, [
@@ -178,6 +187,89 @@ function ers_event_normalize_datetime($value): ?string
     }
 
     return date('Y-m-d H:i:s', $time);
+}
+
+/**
+ * Imports operational campaigns published by Alertara into Event Coordination.
+ *
+ * The upstream endpoint is a public feed, not a webhook.  Keeping the URL
+ * fixed here prevents an authenticated user from using this endpoint as an
+ * arbitrary server-side request proxy.
+ */
+function ers_event_sync_alertara_campaigns(PDO $pdo): array
+{
+    $endpoint = 'https://campaign.alertaraqc.com/api/v1/campaigns/public';
+    $ch = curl_init($endpoint);
+    curl_setopt_array($ch, [
+        CURLOPT_RETURNTRANSFER => true,
+        CURLOPT_HTTPHEADER => ['Accept: application/json'],
+        CURLOPT_CONNECTTIMEOUT => 10,
+        CURLOPT_TIMEOUT => 25,
+        CURLOPT_FOLLOWLOCATION => false,
+        CURLOPT_PROTOCOLS => CURLPROTO_HTTPS,
+    ]);
+    $raw = curl_exec($ch);
+    $curlError = curl_error($ch);
+    $httpCode = (int)curl_getinfo($ch, CURLINFO_HTTP_CODE);
+    curl_close($ch);
+
+    if ($curlError !== '' || $httpCode < 200 || $httpCode >= 300 || !is_string($raw)) {
+        throw new RuntimeException('Alertara campaign feed is unavailable.');
+    }
+
+    $decoded = json_decode($raw, true);
+    $campaigns = is_array($decoded) && is_array($decoded['campaigns'] ?? null) ? $decoded['campaigns'] : null;
+    if ($campaigns === null) {
+        throw new RuntimeException('Alertara campaign feed returned an invalid response.');
+    }
+
+    $result = ['received' => count($campaigns), 'created' => 0, 'updated' => 0, 'skipped' => 0];
+    foreach ($campaigns as $campaign) {
+        if (!is_array($campaign) || !isset($campaign['id'])) {
+            $result['skipped']++;
+            continue;
+        }
+
+        $sourceStatus = strtolower(trim((string)($campaign['status'] ?? '')));
+        // Draft and archived campaigns are visible in the public feed but are
+        // not operational events that responders should be asked to plan for.
+        if (!in_array($sourceStatus, ['approved', 'scheduled', 'active'], true)) {
+            $result['skipped']++;
+            continue;
+        }
+
+        $coordinationId = 'ALERTARA-CAMPAIGN-' . (int)$campaign['id'];
+        $existing = $pdo->prepare('SELECT id FROM interagency_event_profiles WHERE coordination_id = ? LIMIT 1');
+        $existing->execute([$coordinationId]);
+        $exists = (bool)$existing->fetchColumn();
+
+        $item = ers_event_normalize([
+            'coordination_id' => $coordinationId,
+            'event_profile' => $campaign['title'] ?? ('Alertara campaign #' . $campaign['id']),
+            'event_location' => $campaign['location'] ?? $campaign['geographic_scope'] ?? '',
+            'event_schedule' => $campaign['start_date'] ?? '',
+            'on_site_safety_hazard_level' => ers_event_alertara_hazard($campaign['category'] ?? ''),
+            'required_standby_responders' => $campaign['staff_count'] ?? 0,
+            'emergency_contact_persons' => '',
+            'status' => $sourceStatus === 'active' ? 'active' : 'standby',
+            'source_system' => 'Alertara Campaign API',
+            'alertara_campaign' => $campaign,
+        ], 'Alertara Campaign API');
+        $saved = ers_event_save($pdo, $item);
+        ers_event_log_sync($pdo, 'incoming', 'received', (int)($saved['id'] ?? 0), $item, null, null);
+        $result[$exists ? 'updated' : 'created']++;
+    }
+
+    return $result;
+}
+
+function ers_event_alertara_hazard($category): string
+{
+    $category = strtolower(trim((string)$category));
+    if (in_array($category, ['fire', 'earthquake', 'flood'], true)) {
+        return 'high';
+    }
+    return 'medium';
 }
 
 function ers_event_save(PDO $pdo, array $item): array

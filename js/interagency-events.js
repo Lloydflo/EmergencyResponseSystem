@@ -324,6 +324,29 @@
         }
     };
 
+    const syncAlertaraCampaigns = async () => {
+        state.loading = true;
+        state.error = '';
+        render();
+        try {
+            const response = await fetch(apiUrl, {
+                method: 'POST',
+                credentials: 'same-origin',
+                headers: { Accept: 'application/json', 'Content-Type': 'application/json' },
+                body: JSON.stringify({ action: 'sync_alertara_campaigns' }),
+            });
+            const data = await response.json();
+            if (!response.ok || !data.success) {
+                throw new Error(data.error || 'Unable to synchronize Alertara campaigns');
+            }
+            await loadEvents();
+        } catch (error) {
+            state.loading = false;
+            state.error = error.message || 'Unable to synchronize Alertara campaigns';
+            render();
+        }
+    };
+
     const renderStats = () => {
         const active = state.items.filter((item) => ['active', 'standby'].includes(item.status)).length;
         const highHazards = state.items.filter((item) => ['high', 'critical'].includes(item.on_site_safety_hazard_level)).length;
@@ -535,6 +558,9 @@
                 <div class="ia-event-dropdown" id="iaEventDropdown" ${state.expanded ? '' : 'hidden'}>
                     <div class="ia-event-toolbar">
                         <div class="ia-event-actions">
+                            <button type="button" class="ia-event-icon" data-event-sync-alertara title="Sync Alertara campaigns" aria-label="Sync Alertara campaigns">
+                                <i class="fas fa-cloud-arrow-down"></i>
+                            </button>
                             <button type="button" class="ia-event-icon" data-event-refresh title="Refresh events" aria-label="Refresh events">
                                 <i class="fas fa-rotate-right"></i>
                             </button>
@@ -583,6 +609,11 @@
 
         if (target.matches('[data-event-refresh]')) {
             loadEvents();
+            return;
+        }
+
+        if (target.matches('[data-event-sync-alertara]')) {
+            syncAlertaraCampaigns();
             return;
         }
 
