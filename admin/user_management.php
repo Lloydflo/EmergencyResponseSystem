@@ -2820,8 +2820,8 @@ $adminName = $_SESSION['user_name'] ?? 'Admin';
             addUserForm.reset();
             openModal();
         });
-        closeAddUserModal.addEventListener('click', () => closeModal());
-        cancelAddUserBtn.addEventListener('click', () => closeModal());
+        closeAddUserModal.addEventListener('click', (event) => { event.preventDefault(); closeModal(true); });
+        cancelAddUserBtn.addEventListener('click', (event) => { event.preventDefault(); closeModal(true); });
 
         addUserModal.addEventListener('click', (event) => {
             if (event.target === addUserModal) closeModal();
