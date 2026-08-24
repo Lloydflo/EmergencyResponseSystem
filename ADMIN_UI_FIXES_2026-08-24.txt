@@ -1,0 +1,17 @@
+Emergency Response System - Admin UI Fixes
+=============================================
+
+Changes in this build:
+1. Removed the Partner Agencies dashboard metric/card.
+2. Report Analytics: Recent Incidents is now a fixed-height, internally scrollable table.
+3. Operations Desk: replaced the large workflow-lane area with four responsive operational modules:
+   - Command Center
+   - Event Coordination
+   - Anonymous Tip Box
+   - External Incident Inbox
+4. After-Action Review: hardened responsive behavior, including the No After-Action Report state/card.
+5. User Management: Add Team Member Cancel and X buttons now close immediately without the unsaved-changes confirmation.
+
+Validation:
+- PHP syntax checked for modified admin pages.
+- JavaScript syntax checked for modified dashboard/interagency scripts.

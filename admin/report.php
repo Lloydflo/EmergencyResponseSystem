@@ -519,7 +519,7 @@ function report_page_metric($value, string $suffix = '', int $decimals = 1): str
                 <div class="table-header">
                     <h3 class="table-title">Recent Incidents</h3>
                 </div>
-                <div class="table-container">
+                <div class="table-container recent-incidents-scroll">
                     <table class="analytics-table scrollable">
                         <thead>
                             <tr>

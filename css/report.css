@@ -1126,3 +1126,34 @@ html[data-theme="dark"] .status-critical { background: #421d1d; color: #fca5a5; 
     .ai-loading i { animation: none; }
     .report-notification { transition: none; }
 }
+
+
+/* Recent incidents: keep the analytics page compact while preserving the full queue. */
+.data-table[data-report-section="summary incident"] .recent-incidents-scroll {
+    max-height: 24rem;
+    overflow-x: auto;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    scrollbar-gutter: stable;
+}
+
+.data-table[data-report-section="summary incident"] .recent-incidents-scroll .analytics-table {
+    min-width: 900px;
+}
+
+.data-table[data-report-section="summary incident"] .recent-incidents-scroll thead th {
+    position: sticky;
+    top: 0;
+    z-index: 2;
+}
+
+.data-table[data-report-section="summary incident"] .recent-incidents-scroll::-webkit-scrollbar {
+    width: 9px;
+    height: 9px;
+}
+
+@media (max-width: 768px) {
+    .data-table[data-report-section="summary incident"] .recent-incidents-scroll {
+        max-height: 20rem;
+    }
+}
