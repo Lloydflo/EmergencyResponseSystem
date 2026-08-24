@@ -12,7 +12,7 @@ require_once __DIR__ . '/../includes/db.php';
 require_once __DIR__ . '/../includes/auth.php';
 require_once __DIR__ . '/../includes/activity_log.php';
 require_once __DIR__ . '/../includes/incident_priority.php';
-require_once __DIR__ . '/system_API/group1_incident_client.php';
+require_once __DIR__ . '/system_API/incident_logging_classification.php';
 if (!is_logged_in() || !in_array(current_session_role(), ['dispatcher', 'admin'], true)) {
     http_response_code(401);
     echo json_encode(['ok' => false, 'error' => 'Authenticated dispatcher or admin session required']);
@@ -515,7 +515,7 @@ function calls_create_link_audit_session(
 }
 
 function calls_create_try_group1_sync(PDO $pdo, int $callId, int $incidentId): array {
-    $result = ers_group1_send_logged_incident($pdo, $callId, $incidentId);
+    $result = ers_send_incident_logging_classification($pdo, $callId, $incidentId);
     return [
         'success' => (bool)($result['success'] ?? false),
         'status' => (string)($result['status'] ?? 'failed'),
