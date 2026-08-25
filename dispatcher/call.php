@@ -1259,7 +1259,7 @@ if ($turnIsConfigured && preg_match('/^turns?:(?:\/\/)?([^:\/?]+)/i', $turnUrl, 
             report.location || 'Location not provided';
         card.querySelector('.transfer-report-dismiss').addEventListener('click', () => card.remove());
         card.querySelector('.transfer-report-open').addEventListener('click', () => {
-            openIncidentModal(transferredIncidentItem(report));
+            openTransferredReportForm(report);
             card.remove();
         });
 
@@ -1268,6 +1268,7 @@ if ($turnIsConfigured && preg_match('/^turns?:(?:\/\/)?([^:\/?]+)/i', $turnUrl, 
             stack.lastElementChild.remove();
         }
         playIncomingTransferAlert();
+        openTransferredReportForm(report);
     }
 
     function transferQueueKey(transfer) {
@@ -1605,7 +1606,29 @@ if ($turnIsConfigured && preg_match('/^turns?:(?:\/\/)?([^:\/?]+)/i', $turnUrl, 
             acceptCall();
             return;
         }
-        openIncidentModal(transferredIncidentItem(item));
+        openTransferredReportForm(item);
+    }
+
+    function openTransferredReportForm(report) {
+        if (!report) return;
+        openCreateIncidentForm();
+        applyIncomingCallToForm({
+            isTransfer: true,
+            name: report.caller_name || 'Transferred reporter',
+            phone: report.caller_phone || '',
+            transferId: report.transfer_id || '',
+            incidentId: report.incident_id || null,
+            incidentReferenceNo: report.reference_no || '',
+            incidentStatus: report.incident_status || 'pending',
+            incidentType: report.type || 'other',
+            priority: report.priority || 'medium',
+            location: report.location || '',
+            latitude: report.latitude ?? null,
+            longitude: report.longitude ?? null,
+            description: report.description || '',
+            sourceSystem: report.source_system || 'AlertaraQC Emergency Communication'
+        });
+        focusAcceptedCallForm();
     }
 
     function applyIncomingCallToForm(call) {
