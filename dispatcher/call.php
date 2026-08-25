@@ -1467,7 +1467,9 @@ if ($turnIsConfigured && preg_match('/^turns?:(?:\/\/)?([^:\/?]+)/i', $turnUrl, 
             call && call.call_id_external,
             call && call.incidentId,
             call && call.incident_id,
-            call && call.room
+            call && call.room,
+            call && call.referenceNo,
+            call && call.reference_no
         ].map((value) => String(value || '').trim()).filter(Boolean));
         if (!keys.size) return;
         markTransferQueueKeysDismissed(Array.from(keys));
@@ -3233,6 +3235,14 @@ if ($turnIsConfigured && preg_match('/^turns?:(?:\/\/)?([^:\/?]+)/i', $turnUrl, 
                 });
             }
             const wasTransferredCall = !!activeTransferCall;
+            if (transferContext.incidentId > 0 || transferContext.transferId || transferContext.callId || transferContext.referenceNo) {
+                dismissTransferredQueueItemForIncomingCall({
+                    incidentId: transferContext.incidentId,
+                    transferId: transferContext.transferId,
+                    callId: transferContext.callId,
+                    referenceNo: transferContext.referenceNo
+                });
+            }
             broadcastLoggedIncident(data);
             showToast(wasTransferredCall ? 'Transferred incident logged successfully.' : 'Incident logged successfully.');
             e.target.reset();
