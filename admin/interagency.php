@@ -1980,6 +1980,165 @@ $pageTitle = 'Inter-Agency Conversations';
             }
         }
 
+        /* Responsive command room: keep all three workspace columns usable without horizontal clipping. */
+        .ia-board,
+        .ia-list-panel,
+        .ia-chat-panel,
+        .ia-user-status-panel,
+        .ia-chat-compose,
+        .ia-form-row {
+            min-width: 0;
+        }
+
+        .ia-list-panel,
+        .ia-chat-panel,
+        .ia-user-status-panel {
+            max-width: 100%;
+        }
+
+        .ia-form-row > * {
+            min-width: 0;
+        }
+
+        .ia-input,
+        .ia-select,
+        .ia-send,
+        .ia-attach {
+            max-width: 100%;
+        }
+
+        @media (max-width: 1180px) and (min-width: 1081px) {
+            .ia-board {
+                grid-template-columns: 270px minmax(0, 1fr) 240px;
+                gap: 0.7rem;
+            }
+
+            .ia-form-row {
+                grid-template-columns: 125px minmax(0, 1fr) auto auto auto;
+            }
+
+            .ia-send {
+                padding-left: 0.7rem;
+                padding-right: 0.7rem;
+            }
+        }
+
+        @media (max-width: 1080px) {
+            .ia-board {
+                grid-template-columns: minmax(0, 1fr) minmax(0, 1.55fr);
+                gap: 0.75rem;
+            }
+
+            .ia-user-status-panel {
+                grid-column: 1 / -1;
+                border-right-width: 1px;
+                border-top: 4px solid #0f766e;
+            }
+
+            .ia-user-status-list {
+                max-height: 280px;
+            }
+
+            .ia-form-row {
+                grid-template-columns: 125px minmax(0, 1fr) auto auto auto;
+            }
+        }
+
+        @media (max-width: 820px) {
+            .ia-board {
+                grid-template-columns: 1fr;
+            }
+
+            .ia-list-panel,
+            .ia-chat-panel,
+            .ia-user-status-panel {
+                width: 100%;
+            }
+
+            .ia-thread-list,
+            .ia-user-status-list {
+                max-height: 300px;
+            }
+
+            .ia-chat-body {
+                height: min(55vh, 440px);
+            }
+
+            .ia-form-row {
+                grid-template-columns: 1fr 1fr;
+            }
+
+            .ia-form-row .ia-select,
+            .ia-form-row .ia-input {
+                grid-column: 1 / -1;
+            }
+
+            .ia-form-row .ia-send {
+                grid-column: 1 / -1;
+                width: 100%;
+            }
+
+            .ia-form-row .ia-attach {
+                width: 100%;
+            }
+        }
+
+        @media (max-width: 560px) {
+            .main-content {
+                padding-left: 0.65rem;
+                padding-right: 0.65rem;
+            }
+
+            .ia-shell {
+                width: 100%;
+            }
+
+            .ia-head h1 {
+                font-size: 1.35rem;
+                overflow-wrap: anywhere;
+            }
+
+            .ia-head p {
+                font-size: 0.82rem;
+                line-height: 1.45;
+            }
+
+            .ia-pill {
+                max-width: 100%;
+                white-space: normal;
+            }
+
+            .ia-list-actions {
+                grid-template-columns: minmax(0, 1fr) 32px !important;
+            }
+
+            .ia-chat-head {
+                align-items: flex-start;
+            }
+
+            .ia-chat-title {
+                font-size: 0.92rem;
+            }
+
+            .ia-chat-meta {
+                overflow-wrap: anywhere;
+            }
+
+            .ia-chat-body {
+                height: 52vh;
+                min-height: 300px;
+            }
+
+            .ia-chat-compose {
+                padding: 0.7rem;
+            }
+
+            .ia-note {
+                font-size: 0.72rem;
+                line-height: 1.45;
+            }
+        }
+
         .ia-incident-card {
             border: 1px solid #fed7aa;
             border-radius: 12px;
