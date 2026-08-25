@@ -1148,6 +1148,7 @@ function initFirebaseLiveTracking() {
             const status = String(r.status || 'available').trim().toLowerCase();
             if (['offline', 'logged_out', 'inactive'].includes(status)) {
                 removeUnitMarkerByIdentifier(key);
+                clearLiveUnitLocation(key);
                 return;
             }
             // Firebase GPS can retain a responder's last coordinate after the
@@ -1155,6 +1156,7 @@ function initFirebaseLiveTracking() {
             // whether a responder is currently logged in.
             if (!canRenderLiveUnitMarker(key)) {
                 removeUnitMarkerByIdentifier(key);
+                clearLiveUnitLocation(key);
                 return;
             }
             applyLiveResponderLocationToUnit(key, lat, lng);
@@ -1194,9 +1196,10 @@ function initFirebaseLiveTracking() {
         });
 
         Object.keys(markers).forEach((key) => {
-            if (markers[key].isLive && !seenKeys.has(key) && !hasLiveUnitLocation(key)) {
+            if (markers[key].isLive && !seenKeys.has(key)) {
                 map.removeLayer(markers[key].marker);
                 delete markers[key];
+                clearLiveUnitLocation(key);
             }
         });
     }, (error) => {
@@ -1300,8 +1303,14 @@ function addIncidentMarker(id, lat, lng, label) {
 function removeUnitMarkerByIdentifier(identifier) {
     const id = String(identifier || '').trim();
     if (!id) return;
-    const markerKey = Object.keys(markers).find((key) => String(key).toUpperCase() === id.toUpperCase());
-    if (!markerKey || markers[markerKey].type !== 'unit') return;
+    const markerKey = markers[id] && markers[id].type === 'unit'
+        ? id
+        : Object.keys(markers).find((key) => {
+            return markers[key]
+                && markers[key].type === 'unit'
+                && String(key).toUpperCase() === id.toUpperCase();
+        });
+    if (!markerKey) return;
     try { map.removeLayer(markers[markerKey].marker); } catch (e) {}
     delete markers[markerKey];
 }
@@ -1309,13 +1318,21 @@ function removeUnitMarkerByIdentifier(identifier) {
 function hasLiveUnitLocation(identifier) {
     const id = normalizeUnitIdentifier(identifier);
     if (!id) return false;
-    const livePoint = liveUnitLocationsByIdentifier[id] || liveUnitLocationsByIdentifier[id.toUpperCase()] || null;
-    return !!livePoint && !isInvalidResponderCoordinate(livePoint.lat, livePoint.lng);
+    const markerKey = markers[id] && markers[id].type === 'unit'
+        ? id
+        : Object.keys(markers).find((key) => {
+            return markers[key]
+                && markers[key].type === 'unit'
+                && String(key).toUpperCase() === id.toUpperCase();
+        });
+    return Boolean(markerKey);
 }
 
 function removeUnitMarkerIfNotLive(identifier) {
+    const id = normalizeUnitIdentifier(identifier);
+    if (!id) return;
     // A cached live GPS point must never keep an offline responder visible.
-    removeUnitMarkerByIdentifier(normalizeUnitIdentifier(identifier));
+    removeUnitMarkerByIdentifier(id);
 }
 
 function isResponderUnitOnline(unit) {
@@ -1345,6 +1362,7 @@ function onlineResponderUnits(items) {
     return (items || []).filter(u => {
         if (isResponderUnitOnline(u)) return true;
         removeUnitMarkerIfNotLive(u && u.identifier);
+        clearLiveUnitLocation(u && u.identifier);
         return false;
     });
 }
@@ -1379,6 +1397,7 @@ function pruneOfflineUnitMarkers() {
                 if (!onlineKeys.has(String(key)) && !onlineKeys.has(String(key).toUpperCase())) {
                     try { map.removeLayer(entry.marker); } catch (e) {}
                     delete markers[key];
+                    clearLiveUnitLocation(key);
                 }
             });
         })
@@ -1819,6 +1838,13 @@ function mergeLiveLocationIntoUnit(unit) {
     unit.longitude = livePoint.lng;
     unit.location_current = '1';
     return unit;
+}
+
+function clearLiveUnitLocation(unitIdentifier) {
+    const normalized = normalizeUnitIdentifier(unitIdentifier);
+    if (!normalized) return;
+    delete liveUnitLocationsByIdentifier[normalized];
+    delete liveUnitLocationsByIdentifier[normalized.toUpperCase()];
 }
 
 function updateUnitCardGpsText(unitIdentifier, lat, lng) {

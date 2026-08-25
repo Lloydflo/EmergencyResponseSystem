@@ -183,6 +183,167 @@ $reviewLandscapeCssVersion = rawurlencode($reviewUiBuild . '-' . $reviewLandscap
         .ar-toast.leaving { opacity: 0; transform: translateY(-8px); }
         html.ar-modal-open, html.ar-modal-open body { overflow: hidden; }
         [data-theme="dark"] .main-content { background: radial-gradient(circle at top right, rgba(59,130,246,.14), transparent 28%), #08111f; }
+        /* Responsive review cards: prevent action buttons and report fields from overflowing. */
+        .ar-shell,
+        .ar-card,
+        .ar-card-head,
+        .ar-after-action-list,
+        .ar-report-card,
+        .ar-report-head,
+        .ar-report-grid,
+        .ar-review-box,
+        .ar-row-actions,
+        .ar-review-actions {
+            min-width: 0;
+        }
+
+        .ar-card-head-actions,
+        .ar-row-actions,
+        .ar-review-actions {
+            max-width: 100%;
+        }
+
+        .ar-row-actions .ar-action,
+        .ar-review-actions .ar-review-btn {
+            min-width: 0;
+            max-width: 100%;
+        }
+
+        .ar-report-head > *,
+        .ar-report-field,
+        .ar-detail,
+        .ar-feedback-head {
+            min-width: 0;
+        }
+
+        .ar-report-head h5,
+        .ar-report-head p,
+        .ar-report-field strong,
+        .ar-detail strong,
+        .ar-feedback-head strong {
+            overflow-wrap: anywhere;
+            word-break: break-word;
+        }
+
+        @media (max-width: 1180px) {
+            .main-content {
+                padding-left: clamp(0.9rem, 2.5vw, 2rem);
+                padding-right: clamp(0.9rem, 2.5vw, 2rem);
+            }
+
+            .ar-shell {
+                width: 100%;
+            }
+
+            .ar-grid {
+                grid-template-columns: repeat(2, minmax(0, 1fr));
+            }
+
+            .ar-report-grid {
+                grid-template-columns: repeat(2, minmax(0, 1fr));
+            }
+
+            .ar-row-actions {
+                justify-content: flex-start;
+            }
+        }
+
+        @media (max-width: 900px) {
+            .ar-stats {
+                grid-template-columns: repeat(2, minmax(0, 1fr));
+            }
+
+            .ar-grid,
+            .ar-report-grid {
+                grid-template-columns: 1fr;
+            }
+
+            .ar-card-head,
+            .ar-report-head,
+            .ar-feedback-head {
+                align-items: flex-start;
+            }
+
+            .ar-row-actions {
+                display: grid;
+                grid-template-columns: repeat(2, minmax(0, 1fr));
+                width: 100%;
+            }
+
+            .ar-row-actions .ar-action {
+                width: 100%;
+                white-space: normal;
+            }
+        }
+
+        @media (max-width: 640px) {
+            .main-content {
+                padding: calc(var(--app-header-height-mobile-1) + 0.8rem) 0.7rem 1.25rem;
+            }
+
+            .ar-hero {
+                padding: 1rem;
+                border-radius: 18px;
+            }
+
+            .ar-hero h1 {
+                font-size: 1.3rem;
+                overflow-wrap: anywhere;
+            }
+
+            .ar-hero p {
+                font-size: 0.82rem;
+            }
+
+            .ar-stats,
+            .ar-toolbar,
+            .ar-grid,
+            .ar-report-grid {
+                grid-template-columns: 1fr;
+            }
+
+            .ar-stat,
+            .ar-toolbar,
+            .ar-card,
+            .ar-modal-dialog {
+                border-radius: 16px;
+            }
+
+            .ar-card-head,
+            .ar-report-head {
+                flex-direction: column;
+            }
+
+            .ar-card-head-actions,
+            .ar-row-actions,
+            .ar-review-actions {
+                width: 100%;
+            }
+
+            .ar-row-actions,
+            .ar-review-actions {
+                grid-template-columns: 1fr;
+            }
+
+            .ar-action,
+            .ar-review-btn {
+                width: 100%;
+            }
+
+            .ar-report-field-wide {
+                grid-column: auto;
+            }
+
+            .ar-detail {
+                flex-direction: column;
+                align-items: flex-start;
+            }
+
+            .ar-detail strong {
+                text-align: left;
+            }
+        }
+
         [data-theme="dark"] .ar-stat, [data-theme="dark"] .ar-toolbar, [data-theme="dark"] .ar-card, [data-theme="dark"] .ar-modal-dialog { background: linear-gradient(180deg, rgba(15,23,42,.98), rgba(2,6,23,.98)); border-color: #334155; box-shadow: 0 18px 42px rgba(2,6,23,.38); }
         [data-theme="dark"] .ar-stat strong, [data-theme="dark"] .ar-card-head h2, [data-theme="dark"] .ar-modal-head h3, [data-theme="dark"] .ar-spotlight h4, [data-theme="dark"] .ar-side strong, [data-theme="dark"] .ar-grid h4, [data-theme="dark"] .ar-feedback-panel h4, [data-theme="dark"] .ar-detail strong, [data-theme="dark"] .ar-feedback-head strong, [data-theme="dark"] .ar-proof-card figcaption strong { color: #f8fafc !important; }
         [data-theme="dark"] .ar-stat span, [data-theme="dark"] .ar-stat p, [data-theme="dark"] .ar-field label, [data-theme="dark"] .ar-card-head p, [data-theme="dark"] .ar-modal-head p, [data-theme="dark"] .ar-spotlight .type, [data-theme="dark"] .ar-spotlight .desc, [data-theme="dark"] .ar-side span, [data-theme="dark"] .ar-detail span, [data-theme="dark"] .ar-feedback-panel p, [data-theme="dark"] .ar-feedback-head span, [data-theme="dark"] .ar-note, [data-theme="dark"] .ar-feedback-empty, [data-theme="dark"] .ar-proof-card figcaption { color: #94a3b8 !important; }

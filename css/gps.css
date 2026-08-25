@@ -184,6 +184,9 @@
 }
 
 .tracking-controls {
+    position: relative;
+    z-index: 1;
+    overflow: visible;
     padding: 1.35rem 1.4rem;
     margin-bottom: 1.5rem;
     background: rgba(255, 255, 255, 0.84);
@@ -244,6 +247,11 @@
     display: flex;
     flex-direction: column;
     gap: 0.45rem;
+}
+
+.control-group-search {
+    position: relative;
+    z-index: 20;
 }
 
 .control-group label {

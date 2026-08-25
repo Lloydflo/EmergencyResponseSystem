@@ -1190,6 +1190,15 @@ if (!headers_sent()) {
                     </div>
                     <button
                         type="button"
+                        class="btn-secondary"
+                        id="requestBackupBtn"
+                        aria-haspopup="dialog"
+                        aria-controls="requestBackupModal"
+                    >
+                        <i class="fas fa-truck-medical"></i> Send Backup
+                    </button>
+                    <button
+                        type="button"
                         class="btn-primary"
                         id="addResourceBtn"
                         data-open-resource-modal
