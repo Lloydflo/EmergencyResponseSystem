@@ -535,21 +535,40 @@ if (!function_exists('ers_vehicle_resource_unit_code_for_responder')) {
 if (!function_exists('ers_responder_has_active_dispatch_assignment')) {
     function ers_responder_has_active_dispatch_assignment(PDO $pdo, int $responderId): bool
     {
-        if ($responderId <= 0 || !ers_vehicle_resource_table_exists($pdo, 'dispatch_operator_records')) {
+        if ($responderId <= 0) {
             return false;
         }
 
         try {
-            $stmt = $pdo->prepare(
+            if (ers_vehicle_resource_table_exists($pdo, 'dispatch_operator_records')) {
+                $stmt = $pdo->prepare(
+                    "SELECT 1
+                     FROM `dispatch_operator_records`
+                     WHERE `assigned_to` = ?
+                       AND `status` IN ('pending','assigned','received','accepted','acknowledged','busy','in_use','enroute','en_route','on_scene')
+                     ORDER BY `assigned_at` DESC, `id` DESC
+                     LIMIT 1"
+                );
+                $stmt->execute([$responderId]);
+                if ((bool) $stmt->fetchColumn()) {
+                    return true;
+                }
+            }
+
+            if (!ers_vehicle_resource_table_exists($pdo, 'event_unit_dispatches')) {
+                return false;
+            }
+
+            $eventStmt = $pdo->prepare(
                 "SELECT 1
-                 FROM `dispatch_operator_records`
-                 WHERE `assigned_to` = ?
-                   AND `status` IN ('pending','assigned','received','accepted','acknowledged','busy','in_use','enroute','en_route','on_scene')
-                 ORDER BY `assigned_at` DESC, `id` DESC
+                 FROM event_unit_dispatches ed
+                 INNER JOIN users u ON UPPER(TRIM(u.unit_code)) = UPPER(TRIM((SELECT identifier FROM units WHERE id = ed.unit_id LIMIT 1)))
+                 WHERE u.id = ?
+                   AND ed.status = 'assigned'
                  LIMIT 1"
             );
-            $stmt->execute([$responderId]);
-            return (bool) $stmt->fetchColumn();
+            $eventStmt->execute([$responderId]);
+            return (bool) $eventStmt->fetchColumn();
         } catch (Throwable $e) {
             return false;
         }

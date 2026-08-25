@@ -1979,6 +1979,165 @@ $pageTitle = 'Inter-Agency Conversations';
             }
         }
 
+        /* Responsive command room: keep all three workspace columns usable without horizontal clipping. */
+        .ia-board,
+        .ia-list-panel,
+        .ia-chat-panel,
+        .ia-user-status-panel,
+        .ia-chat-compose,
+        .ia-form-row {
+            min-width: 0;
+        }
+
+        .ia-list-panel,
+        .ia-chat-panel,
+        .ia-user-status-panel {
+            max-width: 100%;
+        }
+
+        .ia-form-row > * {
+            min-width: 0;
+        }
+
+        .ia-input,
+        .ia-select,
+        .ia-send,
+        .ia-attach {
+            max-width: 100%;
+        }
+
+        @media (max-width: 1180px) and (min-width: 1081px) {
+            .ia-board {
+                grid-template-columns: 270px minmax(0, 1fr) 240px;
+                gap: 0.7rem;
+            }
+
+            .ia-form-row {
+                grid-template-columns: 125px minmax(0, 1fr) auto auto auto;
+            }
+
+            .ia-send {
+                padding-left: 0.7rem;
+                padding-right: 0.7rem;
+            }
+        }
+
+        @media (max-width: 1080px) {
+            .ia-board {
+                grid-template-columns: minmax(0, 1fr) minmax(0, 1.55fr);
+                gap: 0.75rem;
+            }
+
+            .ia-user-status-panel {
+                grid-column: 1 / -1;
+                border-right-width: 1px;
+                border-top: 4px solid #0f766e;
+            }
+
+            .ia-user-status-list {
+                max-height: 280px;
+            }
+
+            .ia-form-row {
+                grid-template-columns: 125px minmax(0, 1fr) auto auto auto;
+            }
+        }
+
+        @media (max-width: 820px) {
+            .ia-board {
+                grid-template-columns: 1fr;
+            }
+
+            .ia-list-panel,
+            .ia-chat-panel,
+            .ia-user-status-panel {
+                width: 100%;
+            }
+
+            .ia-thread-list,
+            .ia-user-status-list {
+                max-height: 300px;
+            }
+
+            .ia-chat-body {
+                height: min(55vh, 440px);
+            }
+
+            .ia-form-row {
+                grid-template-columns: 1fr 1fr;
+            }
+
+            .ia-form-row .ia-select,
+            .ia-form-row .ia-input {
+                grid-column: 1 / -1;
+            }
+
+            .ia-form-row .ia-send {
+                grid-column: 1 / -1;
+                width: 100%;
+            }
+
+            .ia-form-row .ia-attach {
+                width: 100%;
+            }
+        }
+
+        @media (max-width: 560px) {
+            .main-content {
+                padding-left: 0.65rem;
+                padding-right: 0.65rem;
+            }
+
+            .ia-shell {
+                width: 100%;
+            }
+
+            .ia-head h1 {
+                font-size: 1.35rem;
+                overflow-wrap: anywhere;
+            }
+
+            .ia-head p {
+                font-size: 0.82rem;
+                line-height: 1.45;
+            }
+
+            .ia-pill {
+                max-width: 100%;
+                white-space: normal;
+            }
+
+            .ia-list-actions {
+                grid-template-columns: minmax(0, 1fr) 32px !important;
+            }
+
+            .ia-chat-head {
+                align-items: flex-start;
+            }
+
+            .ia-chat-title {
+                font-size: 0.92rem;
+            }
+
+            .ia-chat-meta {
+                overflow-wrap: anywhere;
+            }
+
+            .ia-chat-body {
+                height: 52vh;
+                min-height: 300px;
+            }
+
+            .ia-chat-compose {
+                padding: 0.7rem;
+            }
+
+            .ia-note {
+                font-size: 0.72rem;
+                line-height: 1.45;
+            }
+        }
+
         .ia-incident-card {
             border: 1px solid #fed7aa;
             border-radius: 12px;
@@ -2237,12 +2396,13 @@ $pageTitle = 'Inter-Agency Conversations';
                 </article>
             </section>
 
-            <section class="ia-ops-desk" id="iaOperationsDesk" aria-label="Inter-agency operations desk">
-                <div class="ia-ops-panel">
+            <section class="ia-ops-desk ia-ops-desk-compact" id="iaOperationsDesk" aria-label="Inter-agency operations desk">
+                <div class="ia-ops-panel ia-ops-overview">
                     <div class="ia-ops-panel-head">
                         <div>
-                            <h2 class="ia-ops-title">Operations Desk</h2>
-                            <p class="ia-ops-sub">Live admin triage view for command rooms, external reports, events, and anonymous tips.</p>
+                            <span class="ia-ops-eyebrow">Operations</span>
+                            <h2 class="ia-ops-title">Command Operations</h2>
+                            <p class="ia-ops-sub">Open the operational workspace that needs attention.</p>
                         </div>
                         <span class="ia-ops-live" id="iaOpsUpdated"><i class="fas fa-rotate"></i> Syncing</span>
                     </div>
@@ -2273,84 +2433,45 @@ $pageTitle = 'Inter-Agency Conversations';
                             <div class="ia-ops-metric-note">Required for events</div>
                         </article>
                     </div>
-                </div>
-                <aside class="ia-ops-panel">
-                    <div class="ia-ops-panel-head">
-                        <div>
-                            <h2 class="ia-ops-title">Workflow Lanes</h2>
-                            <p class="ia-ops-sub">Jump into the queue that needs action.</p>
-                        </div>
-                    </div>
-                    <div class="ia-ops-lanes">
-                        <article class="ia-ops-lane">
-                            <span class="ia-ops-lane-icon"><i class="fas fa-tower-broadcast"></i></span>
-                            <span>
-                                <strong class="ia-ops-lane-title">Command Center</strong>
-                                <span class="ia-ops-lane-sub">Tasking, broadcast ack, map, and audit trail.</span>
-                            </span>
-                            <button type="button" class="ia-ops-jump" data-ops-open="iaCommandCenter" aria-label="Open command center"><i class="fas fa-arrow-down"></i></button>
-                        </article>
-                        <article class="ia-ops-lane">
-                            <span class="ia-ops-lane-icon"><i class="fas fa-calendar-check"></i></span>
-                            <span>
-                                <strong class="ia-ops-lane-title">Event Coordination</strong>
-                                <span class="ia-ops-lane-sub">Readiness for scheduled and standby events.</span>
-                            </span>
-                            <button type="button" class="ia-ops-jump" data-ops-open="iaEventCoordination" aria-label="Open event coordination"><i class="fas fa-arrow-down"></i></button>
-                        </article>
-                        <article class="ia-ops-lane">
-                            <span class="ia-ops-lane-icon"><i class="fas fa-user-secret"></i></span>
-                            <span>
-                                <strong class="ia-ops-lane-title">Tip Inbox</strong>
-                                <span class="ia-ops-lane-sub">Verify, dismiss, or prepare tips for incident conversion.</span>
-                            </span>
-                            <button type="button" class="ia-ops-jump" data-ops-open="iaAnonymousTipInbox" aria-label="Open anonymous tip inbox"><i class="fas fa-arrow-down"></i></button>
-                        </article>
-                        <article class="ia-ops-lane">
-                            <span class="ia-ops-lane-icon"><i class="fas fa-inbox"></i></span>
-                            <span>
-                                <strong class="ia-ops-lane-title">External Inbox</strong>
-                                <span class="ia-ops-lane-sub">Triage outside reports and live call transfers.</span>
-                            </span>
-                            <button type="button" class="ia-ops-jump" data-ops-open="iaExternalIncidentInbox" aria-label="Open external incident inbox"><i class="fas fa-arrow-down"></i></button>
-                        </article>
-                    </div>
-                </aside>
-            </section>
 
-            <section class="ia-module-launcher" aria-label="Inter-agency module launcher">
-                <button type="button" class="ia-module-btn" data-module-open="iaCommandCenter" data-module-title="Inter-Agency Command Center" data-module-subtitle="Incident intelligence, tasking, broadcasts, acknowledgements, and audit trail.">
-                    <span class="ia-module-btn-icon"><i class="fas fa-tower-broadcast"></i></span>
-                    <span class="ia-module-btn-main">
-                        <span class="ia-module-btn-title">Command Center</span>
-                        <span class="ia-module-btn-sub">Active incident rooms</span>
-                    </span>
-                    <span class="ia-module-badge" data-module-badge="iaCommandCenter">0</span>
-                </button>
-                <button type="button" class="ia-module-btn" data-module-open="iaEventCoordination" data-module-title="Event Coordination" data-module-subtitle="Shared event profiles, standby needs, hazards, and readiness checklist.">
-                    <span class="ia-module-btn-icon"><i class="fas fa-calendar-check"></i></span>
-                    <span class="ia-module-btn-main">
-                        <span class="ia-module-btn-title">Event Coordination</span>
-                        <span class="ia-module-btn-sub">High-risk and standby events</span>
-                    </span>
-                    <span class="ia-module-badge" data-module-badge="iaEventCoordination">0</span>
-                </button>
-                <button type="button" class="ia-module-btn" data-module-open="iaAnonymousTipInbox" data-module-title="Anonymous Tip Inbox" data-module-subtitle="Incoming anonymous tips, evidence, review status, and outcomes.">
-                    <span class="ia-module-btn-icon"><i class="fas fa-user-secret"></i></span>
-                    <span class="ia-module-btn-main">
-                        <span class="ia-module-btn-title">Anonymous Tip Inbox</span>
-                        <span class="ia-module-btn-sub">Tips needing review</span>
-                    </span>
-                    <span class="ia-module-badge" data-module-badge="iaAnonymousTipInbox">0</span>
-                </button>
-                <button type="button" class="ia-module-btn" data-module-open="iaExternalIncidentInbox" data-module-title="External Incident Inbox" data-module-subtitle="Incoming incidents and call transfers from connected systems.">
-                    <span class="ia-module-btn-icon"><i class="fas fa-inbox"></i></span>
-                    <span class="ia-module-btn-main">
-                        <span class="ia-module-btn-title">External Incident Inbox</span>
-                        <span class="ia-module-btn-sub">Incoming external reports</span>
-                    </span>
-                    <span class="ia-module-badge" data-module-badge="iaExternalIncidentInbox">0</span>
-                </button>
+                <section class="ia-module-launcher ia-ops-module-grid" aria-label="Command Operations modules">
+                    <button type="button" class="ia-module-btn" data-module-open="iaCommandCenter" data-module-title="Inter-Agency Command Center" data-module-subtitle="Incident intelligence, tasking, broadcasts, acknowledgements, and audit trail.">
+                        <span class="ia-module-btn-icon"><i class="fas fa-tower-broadcast"></i></span>
+                        <span class="ia-module-btn-main">
+                            <span class="ia-module-btn-title">Command Center</span>
+                            <span class="ia-module-btn-sub">Active incident rooms</span>
+                        </span>
+                        <span class="ia-module-badge" data-module-badge="iaCommandCenter">0</span>
+                    </button>
+                    <button type="button" class="ia-module-btn" data-module-open="iaEventCoordination" data-module-title="Event Coordination" data-module-subtitle="Shared event profiles, standby needs, hazards, and readiness checklist.">
+                        <span class="ia-module-btn-icon"><i class="fas fa-calendar-check"></i></span>
+                        <span class="ia-module-btn-main">
+                            <span class="ia-module-btn-title">Event Coordination</span>
+                            <span class="ia-module-btn-sub">High-risk and standby events</span>
+                        </span>
+                        <span class="ia-module-badge" data-module-badge="iaEventCoordination">0</span>
+                    </button>
+                    <button type="button" class="ia-module-btn" data-module-open="iaAnonymousTipInbox" data-module-title="Anonymous Tip Inbox" data-module-subtitle="Incoming anonymous tips, evidence, review status, and outcomes.">
+                        <span class="ia-module-btn-icon"><i class="fas fa-user-secret"></i></span>
+                        <span class="ia-module-btn-main">
+                            <span class="ia-module-btn-title">Anonymous Tip Box</span>
+                            <span class="ia-module-btn-sub">Tips needing review</span>
+                        </span>
+                        <span class="ia-module-badge" data-module-badge="iaAnonymousTipInbox">0</span>
+                    </button>
+                    <button type="button" class="ia-module-btn" data-module-open="iaExternalIncidentInbox" data-module-title="External Incident Inbox" data-module-subtitle="Incoming incidents and call transfers from connected systems.">
+                        <span class="ia-module-btn-icon"><i class="fas fa-inbox"></i></span>
+                        <span class="ia-module-btn-main">
+                            <span class="ia-module-btn-title">External Incident Inbox</span>
+                            <span class="ia-module-btn-sub">Incoming external reports</span>
+                        </span>
+                        <span class="ia-module-badge" data-module-badge="iaExternalIncidentInbox">0</span>
+                    </button>
+                </section>
+
+                </div>
+
+                <aside class="ia-ops-panel ia-incident-monitor" id="iaIncidentMonitorPanel" aria-label="Incident Monitor"></aside>
             </section>
 
             <div class="ia-module-stage" id="iaModuleStage">
@@ -5492,7 +5613,7 @@ $pageTitle = 'Inter-Agency Conversations';
     </script>
     <script src="js/interagency-operations.js"></script>
     <script src="js/interagency-command.js"></script>
-    <script src="js/interagency-events.js"></script>
+    <script src="js/interagency-events.js?v=<?php echo filemtime($rootDir . '/js/interagency-events.js'); ?>"></script>
     <script src="js/interagency-tips.js?v=20260809-ph-time-v1"></script>
     <script src="js/admin-anonymous-tip-details.js?v=20260808-admin-tip-details-v2"></script>
     <script src="js/interagency-external-inbox.js"></script>

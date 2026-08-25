@@ -44,7 +44,11 @@ if (isset($cache[$cacheKey]) && is_fresh_cache_entry($cache[$cacheKey], $now)) {
     exit;
 }
 
-$items = fetch_geocode_candidates($rawQuery, $limit, $strict);
+$localItems = find_local_location_candidates($rawQuery, $limit);
+$items = !empty($localItems) ? $localItems : fetch_geocode_candidates($rawQuery, $limit, $strict);
+// Keep the dispatch area usable when the public geocoder is rate-limited or
+// the server has no outbound internet access. Known local barangays are
+// returned immediately instead of being shown as "No results found".
 if (!empty($items)) {
     $normalized = normalize_items($items, $limit);
     $cache[$cacheKey] = [
@@ -56,7 +60,7 @@ if (!empty($items)) {
 
     echo json_encode([
         'ok' => true,
-        'source' => 'live',
+        'source' => !empty($localItems) ? 'local' : 'live',
         'items' => $normalized,
     ]);
     exit;
@@ -142,6 +146,52 @@ function normalize_items(array $items, int $limit): array {
         if (count($out) >= $limit) break;
     }
     return $out;
+}
+
+function find_local_location_candidates(string $query, int $limit): array {
+    $needle = strtolower(trim((string)preg_replace('/\s+/', ' ', $query)));
+    if ($needle === '') {
+        return [];
+    }
+
+    // The boundary used by Dispatch/GPS is bundled with ERS.  Its centre is
+    // a dependable fallback coordinate for barangay-level incident reports.
+    $catalog = [
+        [
+            'name' => 'San Agustin',
+            'display_name' => 'San Agustin, Novaliches, Quezon City, Metro Manila, Philippines',
+            'lat' => '14.732600',
+            'lon' => '121.035200',
+        ],
+        [
+            'name' => 'Quezon City',
+            'display_name' => 'Quezon City, Metro Manila, Philippines',
+            'lat' => '14.676000',
+            'lon' => '121.043700',
+        ],
+        [
+            'name' => 'Novaliches',
+            'display_name' => 'Novaliches, Quezon City, Metro Manila, Philippines',
+            'lat' => '14.721900',
+            'lon' => '121.038800',
+        ],
+    ];
+
+    $matches = [];
+    foreach ($catalog as $place) {
+        $haystack = strtolower($place['name'] . ' ' . $place['display_name']);
+        if (strpos($haystack, $needle) === false && strpos($needle, strtolower($place['name'])) === false) {
+            continue;
+        }
+        $place['importance'] = 1.0;
+        $place['class'] = 'boundary';
+        $place['type'] = 'administrative';
+        $matches[] = $place;
+        if (count($matches) >= $limit) {
+            break;
+        }
+    }
+    return $matches;
 }
 
 function build_nominatim_url(string $query, int $limit, bool $strict): string {

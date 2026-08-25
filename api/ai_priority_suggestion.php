@@ -58,6 +58,28 @@ $priorityMetricForAi = [
     }, (array)($priorityAssessment['factors'] ?? [])), 0, 8),
 ];
 
+function priority_fallback_response(array $assessment): array
+{
+    $priority = ers_normalize_priority_value((string)($assessment['priority'] ?? 'medium'));
+    $factors = array_values(array_filter(array_map(static function ($factor): string {
+        return trim((string)($factor['label'] ?? ''));
+    }, (array)($assessment['factors'] ?? []))));
+    $reason = !empty($factors)
+        ? implode('; ', array_slice($factors, 0, 2)) . '.'
+        : 'Based on the incident details currently provided.';
+
+    return [
+        'ok' => true,
+        'priority' => $priority,
+        'reason' => $reason,
+        'confidence' => (float)($assessment['confidence'] ?? 0.25),
+        'needs_more_info' => empty($factors)
+            ? ['Is anyone in immediate danger, injured, or unable to leave the area?']
+            : [],
+        'source' => 'local_rules',
+    ];
+}
+
 $context = [
     'allowed_priorities' => ['low', 'medium', 'high', 'critical'],
     'incident_types' => $incidentTypes,
@@ -84,8 +106,9 @@ $prompt = "You are an AI assistant for an emergency call center in the Philippin
 
 $text = ers_gemini_generate_text($prompt, 0.1);
 if (!is_string($text) || trim($text) === '') {
-    $error = function_exists('getGeminiLastError') ? trim((string)getGeminiLastError()) : '';
-    echo json_encode(['ok' => false, 'error' => $error !== '' ? $error : 'AI unavailable']);
+    // Gemini is optional enhancement only.  A failed provider must not make
+    // dispatchers see an error or lose a safe priority recommendation.
+    echo json_encode(priority_fallback_response($priorityAssessment), JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
     exit;
 }
 
@@ -98,13 +121,13 @@ if (preg_match('/```(?:json)?\s*(.*?)\s*```/is', $jsonText, $match)) {
 
 $parsed = json_decode($jsonText, true);
 if (!is_array($parsed)) {
-    echo json_encode(['ok' => false, 'error' => 'AI returned an unreadable priority suggestion']);
+    echo json_encode(priority_fallback_response($priorityAssessment), JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
     exit;
 }
 
 $priority = strtolower(trim((string)($parsed['priority'] ?? '')));
 if (!in_array($priority, ['low', 'medium', 'high', 'critical'], true)) {
-    echo json_encode(['ok' => false, 'error' => 'AI returned an unsupported priority']);
+    echo json_encode(priority_fallback_response($priorityAssessment), JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
     exit;
 }
 
@@ -133,4 +156,5 @@ echo json_encode([
     'reason' => $reason,
     'confidence' => $confidence,
     'needs_more_info' => $needsMoreInfo,
+    'source' => 'gemini',
 ], JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);

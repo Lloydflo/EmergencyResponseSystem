@@ -33,6 +33,15 @@ try {
     $input = ers_external_input();
     $action = strtolower(ers_external_clean($input['action'] ?? '', 40));
 
+    if ($action === 'sync_alertara_campaigns') {
+        $result = ers_event_sync_alertara_campaigns($pdo);
+        ers_external_json(200, [
+            'success' => true,
+            'message' => 'Alertara campaigns synchronized.',
+            'sync' => $result,
+        ]);
+    }
+
     if ($action === 'send' || !empty($input['send_to_group6'])) {
         $sent = ers_event_send_to_group6($pdo, $input);
         ers_external_json(200, [
@@ -106,6 +115,10 @@ function ers_event_normalize(array $input, ?string $externalClient = null): arra
     $eventSchedule = ers_event_normalize_datetime(
         $input['event_schedule']
             ?? $input['eventSchedule']
+            ?? $input['event_datetime']
+            ?? $input['eventDateTime']
+            ?? $input['date_time']
+            ?? $input['dateTime']
             ?? $input['schedule']
             ?? ''
     );
@@ -128,6 +141,15 @@ function ers_event_normalize(array $input, ?string $externalClient = null): arra
             $input['event_profile']
                 ?? $input['eventProfile']
                 ?? $input['profile']
+                ?? '',
+            255
+        ),
+        'event_location' => ers_external_clean(
+            $input['event_location']
+                ?? $input['eventLocation']
+                ?? $input['location_address']
+                ?? $input['location']
+                ?? $input['venue']
                 ?? '',
             255
         ),
@@ -167,6 +189,89 @@ function ers_event_normalize_datetime($value): ?string
     return date('Y-m-d H:i:s', $time);
 }
 
+/**
+ * Imports operational campaigns published by Alertara into Event Coordination.
+ *
+ * The upstream endpoint is a public feed, not a webhook.  Keeping the URL
+ * fixed here prevents an authenticated user from using this endpoint as an
+ * arbitrary server-side request proxy.
+ */
+function ers_event_sync_alertara_campaigns(PDO $pdo): array
+{
+    $endpoint = 'https://campaign.alertaraqc.com/api/v1/campaigns/public';
+    $ch = curl_init($endpoint);
+    curl_setopt_array($ch, [
+        CURLOPT_RETURNTRANSFER => true,
+        CURLOPT_HTTPHEADER => ['Accept: application/json'],
+        CURLOPT_CONNECTTIMEOUT => 10,
+        CURLOPT_TIMEOUT => 25,
+        CURLOPT_FOLLOWLOCATION => false,
+        CURLOPT_PROTOCOLS => CURLPROTO_HTTPS,
+    ]);
+    $raw = curl_exec($ch);
+    $curlError = curl_error($ch);
+    $httpCode = (int)curl_getinfo($ch, CURLINFO_HTTP_CODE);
+    curl_close($ch);
+
+    if ($curlError !== '' || $httpCode < 200 || $httpCode >= 300 || !is_string($raw)) {
+        throw new RuntimeException('Alertara campaign feed is unavailable.');
+    }
+
+    $decoded = json_decode($raw, true);
+    $campaigns = is_array($decoded) && is_array($decoded['campaigns'] ?? null) ? $decoded['campaigns'] : null;
+    if ($campaigns === null) {
+        throw new RuntimeException('Alertara campaign feed returned an invalid response.');
+    }
+
+    $result = ['received' => count($campaigns), 'created' => 0, 'updated' => 0, 'skipped' => 0];
+    foreach ($campaigns as $campaign) {
+        if (!is_array($campaign) || !isset($campaign['id'])) {
+            $result['skipped']++;
+            continue;
+        }
+
+        $sourceStatus = strtolower(trim((string)($campaign['status'] ?? '')));
+        // Draft and archived campaigns are visible in the public feed but are
+        // not operational events that responders should be asked to plan for.
+        if (!in_array($sourceStatus, ['approved', 'scheduled', 'active'], true)) {
+            $result['skipped']++;
+            continue;
+        }
+
+        $coordinationId = 'ALERTARA-CAMPAIGN-' . (int)$campaign['id'];
+        $existing = $pdo->prepare('SELECT id FROM interagency_event_profiles WHERE coordination_id = ? LIMIT 1');
+        $existing->execute([$coordinationId]);
+        $exists = (bool)$existing->fetchColumn();
+
+        $item = ers_event_normalize([
+            'coordination_id' => $coordinationId,
+            'event_profile' => $campaign['title'] ?? ('Alertara campaign #' . $campaign['id']),
+            'event_location' => $campaign['location'] ?? $campaign['geographic_scope'] ?? '',
+            'event_schedule' => $campaign['start_date'] ?? '',
+            'on_site_safety_hazard_level' => ers_event_alertara_hazard($campaign['category'] ?? ''),
+            'required_standby_responders' => $campaign['staff_count'] ?? 0,
+            'emergency_contact_persons' => '',
+            'status' => $sourceStatus === 'active' ? 'active' : 'standby',
+            'source_system' => 'Alertara Campaign API',
+            'alertara_campaign' => $campaign,
+        ], 'Alertara Campaign API');
+        $saved = ers_event_save($pdo, $item);
+        ers_event_log_sync($pdo, 'incoming', 'received', (int)($saved['id'] ?? 0), $item, null, null);
+        $result[$exists ? 'updated' : 'created']++;
+    }
+
+    return $result;
+}
+
+function ers_event_alertara_hazard($category): string
+{
+    $category = strtolower(trim((string)$category));
+    if (in_array($category, ['fire', 'earthquake', 'flood'], true)) {
+        return 'high';
+    }
+    return 'medium';
+}
+
 function ers_event_save(PDO $pdo, array $item): array
 {
     $existingId = 0;
@@ -186,6 +291,7 @@ function ers_event_save(PDO $pdo, array $item): array
         $stmt = $pdo->prepare(
             "UPDATE interagency_event_profiles
              SET event_profile = ?,
+                 event_location = ?,
                  event_schedule = ?,
                  on_site_safety_hazard_level = ?,
                  required_standby_responders = ?,
@@ -198,6 +304,7 @@ function ers_event_save(PDO $pdo, array $item): array
         );
         $stmt->execute([
             $item['event_profile'],
+            $item['event_location'],
             $item['event_schedule'],
             $item['on_site_safety_hazard_level'],
             $item['required_standby_responders'],
@@ -212,15 +319,16 @@ function ers_event_save(PDO $pdo, array $item): array
 
     $stmt = $pdo->prepare(
         "INSERT INTO interagency_event_profiles
-            (coordination_id, event_profile, event_schedule, on_site_safety_hazard_level,
+            (coordination_id, event_profile, event_location, event_schedule, on_site_safety_hazard_level,
              required_standby_responders, emergency_contact_persons, status, source_system,
              received_at, updated_at, raw_payload)
          VALUES
-            (?, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW(), ?)"
+            (?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW(), ?)"
     );
     $stmt->execute([
         $item['coordination_id'],
         $item['event_profile'],
+        $item['event_location'],
         $item['event_schedule'],
         $item['on_site_safety_hazard_level'],
         $item['required_standby_responders'],
@@ -236,7 +344,7 @@ function ers_event_save(PDO $pdo, array $item): array
 function ers_event_find(PDO $pdo, int $id): array
 {
     $stmt = $pdo->prepare(
-        "SELECT id, coordination_id, event_profile, event_schedule, on_site_safety_hazard_level,
+        "SELECT id, coordination_id, event_profile, event_location, event_schedule, on_site_safety_hazard_level,
                 required_standby_responders, emergency_contact_persons, status, source_system,
                 received_at, updated_at
          FROM interagency_event_profiles
@@ -268,7 +376,7 @@ function ers_event_list(PDO $pdo): array
         $params[] = $like;
     }
 
-    $sql = "SELECT id, coordination_id, event_profile, event_schedule, on_site_safety_hazard_level,
+    $sql = "SELECT id, coordination_id, event_profile, event_location, event_schedule, on_site_safety_hazard_level,
                    required_standby_responders, emergency_contact_persons, status, source_system,
                    received_at, updated_at
             FROM interagency_event_profiles";
@@ -317,6 +425,7 @@ function ers_event_send_to_group6(PDO $pdo, array $input): array
     $payload = [
         'coordination_id' => $item['coordination_id'] ?? '',
         'event_profile' => $item['event_profile'] ?? '',
+        'event_location' => $item['event_location'] ?? '',
         'event_schedule' => $item['event_schedule'] ?? null,
         'on_site_safety_hazard_level' => $item['on_site_safety_hazard_level'] ?? '',
         'required_standby_responders' => (int)($item['required_standby_responders'] ?? 0),
@@ -390,6 +499,7 @@ function ers_event_ensure_tables(PDO $pdo): void
             `id` BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
             `coordination_id` VARCHAR(120) NOT NULL,
             `event_profile` VARCHAR(255) NOT NULL,
+            `event_location` VARCHAR(255) DEFAULT NULL,
             `event_schedule` DATETIME DEFAULT NULL,
             `on_site_safety_hazard_level` ENUM('low','medium','high','critical') NOT NULL DEFAULT 'medium',
             `required_standby_responders` INT UNSIGNED NOT NULL DEFAULT 0,
@@ -410,7 +520,8 @@ function ers_event_ensure_tables(PDO $pdo): void
     $columns = [
         'coordination_id' => "ALTER TABLE `interagency_event_profiles` ADD COLUMN `coordination_id` VARCHAR(120) DEFAULT NULL AFTER `id`",
         'event_profile' => "ALTER TABLE `interagency_event_profiles` ADD COLUMN `event_profile` VARCHAR(255) DEFAULT NULL AFTER `coordination_id`",
-        'event_schedule' => "ALTER TABLE `interagency_event_profiles` ADD COLUMN `event_schedule` DATETIME DEFAULT NULL AFTER `event_profile`",
+        'event_location' => "ALTER TABLE `interagency_event_profiles` ADD COLUMN `event_location` VARCHAR(255) DEFAULT NULL AFTER `event_profile`",
+        'event_schedule' => "ALTER TABLE `interagency_event_profiles` ADD COLUMN `event_schedule` DATETIME DEFAULT NULL AFTER `event_location`",
         'on_site_safety_hazard_level' => "ALTER TABLE `interagency_event_profiles` ADD COLUMN `on_site_safety_hazard_level` ENUM('low','medium','high','critical') NOT NULL DEFAULT 'medium' AFTER `event_schedule`",
         'required_standby_responders' => "ALTER TABLE `interagency_event_profiles` ADD COLUMN `required_standby_responders` INT UNSIGNED NOT NULL DEFAULT 0 AFTER `on_site_safety_hazard_level`",
         'emergency_contact_persons' => "ALTER TABLE `interagency_event_profiles` ADD COLUMN `emergency_contact_persons` TEXT DEFAULT NULL AFTER `required_standby_responders`",

@@ -14,6 +14,14 @@
     margin: 1rem 0;
 }
 
+/* Admin Command Operations launcher: keep the four modules compact in a 2x2 layout.
+ * This is intentionally scoped to the admin operations grid so the existing
+ * metrics (External Queue, Active Incidents, New Tips, High-Risk Events,
+ * Standby Units) and other inter-agency layouts remain unchanged. */
+.ia-ops-module-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
 .ia-module-btn {
     position: relative;
     min-height: 92px;
@@ -1636,6 +1644,10 @@
 }
 
 @media (max-width: 720px) {
+    .ia-ops-module-grid {
+        grid-template-columns: 1fr;
+    }
+
     .ia-incident-monitor-tabs {
         grid-template-columns: 1fr;
     }

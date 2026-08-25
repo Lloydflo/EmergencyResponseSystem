@@ -713,6 +713,34 @@ function cleanAnonymousTipDispatchDescription(value) {
         .replace(/\bDescription\s*:\s*/ig, '')
         .trim();
 }
+function cleanEmergencyReportDispatchDescription(value) {
+    const raw = String(value || '').trim();
+    if (!raw || !/emergency report conversation summary/i.test(raw)) {
+        return raw;
+    }
+
+    const compact = raw.replace(/\s+/g, ' ').trim();
+    const messages = [];
+    const messagePattern = /(?:^|\s)-\s*[^:(]+?\s*\([^)]*\)\s*:\s*([\s\S]*?)(?=\s+-\s*[^:(]+?\s*\([^)]*\)\s*:|$)/g;
+    let match;
+    while ((match = messagePattern.exec(compact)) !== null) {
+        const message = match[1]
+            .replace(/\s+\bIncident Type\s*:\s*[\s\S]*?(?=\s+\b(?:Needs Severity|Severity|Location|Map|Coordinates|Priority|Emergency type)\s*:|$)/i, '')
+            .replace(/\s+\b(?:Needs Severity|Severity|Location|Map|Coordinates|Priority|Emergency type)\s*:\s*[\s\S]*$/i, '')
+            .trim();
+        if (message) messages.push(message);
+    }
+
+    // Emergency-Com reports contain routing data (caller, location, map, and
+    // priority) before the chat transcript. The description area should show
+    // only what the caller actually said.
+    if (messages.length) {
+        return messages.join(' ');
+    }
+
+    const descriptionMatch = compact.match(/\bDescription\s*:\s*([\s\S]*?)(?=\s+\b(?:Incident Type|Emergency type|Location|Priority|Coordinates|Map)\s*:|$)/i);
+    return descriptionMatch && descriptionMatch[1] ? descriptionMatch[1].trim() : 'No description provided.';
+}
 function parseLatLngFromText(text) {
     const raw = String(text || '');
     const match = raw.match(/(?:lat(?:itude)?\s*[:=]?\s*)?(-?\d{1,3}(?:\.\d+)?)\s*[, ]\s*(?:lon(?:gitude)?|lng)?\s*[:=]?\s*(-?\d{1,3}(?:\.\d+)?)/i);
@@ -723,7 +751,9 @@ function renderIncidentDetails(inc) {
     const hasPoint = currentIncidentLat !== null && currentIncidentLng !== null;
     const callerName = inc.caller_name || 'N/A';
     const callerPhone = inc.caller_phone || 'N/A';
-    const description = cleanAnonymousTipDispatchDescription(inc.description) || 'No description provided.';
+    const description = cleanEmergencyReportDispatchDescription(
+        cleanAnonymousTipDispatchDescription(inc.description)
+    ) || 'No description provided.';
     document.getElementById('modal-incident-details').innerHTML =
         `<strong>Type:</strong> ${escapeHtml(formatIncidentTypeLabel(inc.type) || inc.type || '')}<br>` +
         `<strong>Title:</strong> ${escapeHtml(inc.title || '')}<br>` +
@@ -1121,6 +1151,9 @@ function initFirebaseLiveTracking() {
                 clearLiveUnitLocation(key);
                 return;
             }
+            // Firebase GPS can retain a responder's last coordinate after the
+            // app closes. The API presence record is the source of truth for
+            // whether a responder is currently logged in.
             if (!canRenderLiveUnitMarker(key)) {
                 removeUnitMarkerByIdentifier(key);
                 clearLiveUnitLocation(key);
@@ -1268,7 +1301,7 @@ function addIncidentMarker(id, lat, lng, label) {
 }
 
 function removeUnitMarkerByIdentifier(identifier) {
-    const id = normalizeUnitIdentifier(identifier);
+    const id = String(identifier || '').trim();
     if (!id) return;
     const markerKey = markers[id] && markers[id].type === 'unit'
         ? id
@@ -1282,9 +1315,23 @@ function removeUnitMarkerByIdentifier(identifier) {
     delete markers[markerKey];
 }
 
+function hasLiveUnitLocation(identifier) {
+    const id = normalizeUnitIdentifier(identifier);
+    if (!id) return false;
+    const markerKey = markers[id] && markers[id].type === 'unit'
+        ? id
+        : Object.keys(markers).find((key) => {
+            return markers[key]
+                && markers[key].type === 'unit'
+                && String(key).toUpperCase() === id.toUpperCase();
+        });
+    return Boolean(markerKey);
+}
+
 function removeUnitMarkerIfNotLive(identifier) {
     const id = normalizeUnitIdentifier(identifier);
     if (!id) return;
+    // A cached live GPS point must never keep an offline responder visible.
     removeUnitMarkerByIdentifier(id);
 }
 
@@ -1993,13 +2040,6 @@ function viewDetails(btn) {
         });
 }
 
-function contactCaller(btn) {
-    const phone = btn.getAttribute('data-phone');
-    if (!phone) { alert('No phone number'); return; }
-    window.location.href = 'tel:' + encodeURIComponent(phone);
-}
-
-
 // Focus the map on the selected unit marker
 function focusUnitOnMap(unitIdentifier, unitId) {
     const normalizedIdentifier = normalizeUnitIdentifier(unitIdentifier);
@@ -2529,12 +2569,6 @@ function viewDetails(btn) {
       });
 }
 
-function contactCaller(btn) {
-    const phone = btn && btn.dataset ? btn.dataset.phone : '';
-    if (!phone) { alert('No phone number available'); return; }
-    window.location.href = 'tel:' + phone;
-}
-
 function unitLocation(btn) {
     const unitId = btn && btn.dataset ? btn.dataset.unitId : '';
     const identifier = btn && btn.dataset ? btn.dataset.identifier : '';
@@ -2699,15 +2733,11 @@ function renderIncidentIntakeQueue() {
         const reference = String(item.incident_code || item.reference_no || `Incident ${incidentId}`).trim();
         const location = String(item.location || item.location_address || 'Location not recorded').trim();
         const timeAgo = formatTimeAgo(item.created_at) || 'Just now';
-        const phone = String(item.caller_phone || item.contact_number || item.phone || '').trim();
         const sourceSystem = String(item.intake_source_system || '').trim();
         const sourceLabel = String(item.intake_source_label || sourceInfo.cardLabel || sourceInfo.shortLabel).trim();
         const sourceDetail = source === 'call' && sourceSystem
             ? `<span class="intake-source-system" title="Call origin">Via ${escapeHtml(sourceSystem)}</span>`
             : '';
-        const callAction = phone
-            ? `<button type="button" class="btn-action-small call-phone-btn" onclick="contactCaller(this)" data-phone="${escapeHtml(phone)}"><i class="fas fa-phone" aria-hidden="true"></i> Call Reporter</button>`
-            : '<button type="button" class="btn-action-small call-phone-btn" disabled aria-disabled="true" title="No reporter phone number is available"><i class="fas fa-phone-slash" aria-hidden="true"></i> No Phone</button>';
 
         return `
             <article class="call-card incident-intake-card ${priority} source-${source}${incidentId === recentlyLoggedIncidentId ? ' is-recently-logged' : ''}" data-incident-id="${incidentId}" role="listitem" aria-label="${escapeHtml(reference)}, ${escapeHtml(sourceInfo.label)}">
@@ -2729,7 +2759,6 @@ function renderIncidentIntakeQueue() {
                 <div class="call-actions intake-card-actions">
                     <button type="button" class="btn-dispatch" onclick="openDispatchModal(${incidentId})"><svg class="dispatch-action-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" focusable="false" aria-hidden="true"><path d="M3 6h11v11H3Z"/><path d="M14 10h4l3 3v4h-2"/><circle cx="7" cy="18" r="2"/><circle cx="17" cy="18" r="2"/><path d="M8.5 8.5v5M6 11h5"/></svg><span>Dispatch Unit</span></button>
                     <button type="button" class="btn-action-small" onclick="viewDetails(this)" data-incident-id="${incidentId}"><i class="fas fa-eye" aria-hidden="true"></i> View Details</button>
-                    ${callAction}
                 </div>
             </article>`;
     }).join('');
