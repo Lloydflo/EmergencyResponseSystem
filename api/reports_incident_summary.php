@@ -58,18 +58,17 @@ $rangeLabel = $scope['period_label'] . ': ' . $scope['start_date'] . ' to ' . $s
         .report { max-width: 1180px; margin: auto; }
         .head, .card { border: 1px solid #dbe3e7; border-radius: 14px; background: #fff; }
         .head { display:flex; justify-content:space-between; gap:20px; padding:20px; }
-        h1 { margin:0; font-size:24px; } h2 { margin:0 0 12px; font-size:16px; }
+        h1 { margin:0; font-size:16px; } h2 { margin:0 0 12px; font-size:16px; }
         .sub, .muted { color:#60717a; font-size:13px; line-height:1.5; }
         .toolbar { display:flex; align-items:flex-start; gap:8px; }
         button { padding:9px 13px; border:1px solid #cbd5db; border-radius:8px; background:#fff; cursor:pointer; font-weight:700; }
         .grid { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:12px; margin-top:12px; }
         .card { padding:16px; }
         .metric-label { color:#60717a; font-size:11px; font-weight:800; letter-spacing:.05em; text-transform:uppercase; }
-        .metric { margin-top:6px; font-size:26px; font-weight:800; }
+        .metric { margin-top:6px; font-size:16px; font-weight:800; }
         .two { display:grid; grid-template-columns:1fr 1fr; gap:12px; margin-top:12px; }
         table { width:100%; border-collapse:collapse; } th,td { padding:9px 10px; border-bottom:1px solid #e7edef; text-align:left; font-size:12px; vertical-align:top; }
         th { background:#f7f9fa; color:#54656e; font-size:10px; text-transform:uppercase; letter-spacing:.04em; }
-        .definition { margin-top:12px; padding:12px 14px; border-left:4px solid #3f7f7d; background:#eef6f5; color:#3e555d; font-size:12px; line-height:1.55; }
         .badge { display:inline-flex; padding:3px 7px; border-radius:999px; background:#eef6f5; color:#326a68; font-size:10px; font-weight:800; }
         .scroll { max-height:560px; overflow:auto; }
         @media (max-width:850px){ .grid{grid-template-columns:repeat(2,1fr)} .two{grid-template-columns:1fr} .head{flex-direction:column} }
@@ -93,8 +92,6 @@ $rangeLabel = $scope['period_label'] . ': ' . $scope['start_date'] . ' to ' . $s
         <article class="card"><div class="metric-label">Resolution rate</div><div class="metric"><?php echo report_number_or_dash($metrics['resolution_rate'], 1, '%'); ?></div><div class="muted">Resolved ÷ incidents created</div></article>
         <article class="card"><div class="metric-label">Dispatch-to-scene average</div><div class="metric"><?php echo report_number_or_dash($metrics['avg_response_time_min'], 1, ' min'); ?></div><div class="muted"><?php echo number_format((int)$metrics['avg_response_sample_count']); ?> valid on-scene sample(s)</div></article>
     </section>
-
-    <div class="definition"><strong>Measurement rules:</strong> Incident volume is based only on <code>incidents.created_at</code>. Response time is measured from dispatch assignment to a recorded on-scene arrival; completion time is not used as an arrival substitute. Days or records without a valid on-scene timestamp are excluded from the response-time average.</div>
 
     <section class="two">
         <article class="card"><h2>Incidents by type</h2><table><tbody><?php foreach (['medical','fire','police','traffic','other'] as $key): ?><tr><td><?php echo report_html(ucfirst($key)); ?></td><td><?php echo number_format((int)($typeCounts[$key] ?? 0)); ?></td></tr><?php endforeach; ?></tbody></table></article>

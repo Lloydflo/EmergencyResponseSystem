@@ -152,6 +152,12 @@ if ($transfer_incident_id > 0) {
                 $priorityAssessment,
                 'interagency'
             );
+            calls_create_log_transfer_handled(
+                $pdo,
+                (int)$updatedIncident['id'],
+                $updatedCallId,
+                (string)$updatedIncident['reference_no']
+            );
             $group1Sync = calls_create_try_group1_sync(
                 $pdo,
                 isset($updatedIncident['call_id']) ? (int)$updatedIncident['call_id'] : 0,
@@ -306,6 +312,41 @@ try {
     http_response_code(500);
     error_log('calls_create insert failed: ' . $e->getMessage());
     echo json_encode(['ok' => false, 'error' => build_user_facing_db_error($e)]);
+}
+
+function calls_create_log_transfer_handled(PDO $pdo, int $incidentId, ?int $callId, string $referenceNo): void
+{
+    if ($incidentId < 1) {
+        return;
+    }
+
+    try {
+        $userId = isset($_SESSION['user_id']) && (int)$_SESSION['user_id'] > 0
+            ? (int)$_SESSION['user_id']
+            : null;
+        $role = strtolower(trim((string)($_SESSION['login_role'] ?? $_SESSION['user_role'] ?? '')));
+        $actorRole = in_array($role, ['admin', 'dispatcher'], true) ? $role : 'system';
+        record_operational_audit_event(
+            $pdo,
+            $userId,
+            'transfer_handled',
+            'incident',
+            $incidentId,
+            'Transferred incident was logged by the response team.',
+            [
+                'actor_role' => $actorRole,
+                'source_channel' => $actorRole === 'dispatcher' ? 'dispatcher_web' : 'admin_web',
+                'event_category' => 'incident',
+                'event_outcome' => 'success',
+                'reference_no' => $referenceNo,
+                'incident_id' => $incidentId,
+                'call_id' => $callId,
+                'event_key' => 'transfer:' . $incidentId . ':handled',
+            ]
+        );
+    } catch (Throwable $e) {
+        error_log('Unable to record handled transfer audit: ' . $e->getMessage());
+    }
 }
 
 function log_incident_created_audit(

@@ -79,7 +79,7 @@ function admin_dashboard_h($value): string
                     <span class="dashboard-chip"><i class="fas fa-user-shield" aria-hidden="true"></i><?php echo admin_dashboard_h($dashboardRoleLabel); ?></span>
                     <span class="dashboard-chip"><i class="far fa-clock" aria-hidden="true"></i><span id="dashboardLiveClock">Loading time…</span></span>
                     <button id="dashboardRefreshButton" class="dashboard-refresh-btn" type="button">
-                        <i class="fas fa-rotate" aria-hidden="true"></i><span>Refresh data</span>
+                        <i class="fas fa-rotate" aria-hidden="true"></i><span>Refresh</span>
                     </button>
                 </div>
             </header>

@@ -76,6 +76,20 @@ function incoming_transfer_fallback_rows(PDO $pdo, int $limit): array
                     WHERE l.incident_id = i.id
                     LIMIT 1
                )
+            AND NOT EXISTS (
+                SELECT 1
+                FROM activity_log handled
+                WHERE handled.entity_type = 'incident'
+                  AND handled.entity_id = i.id
+                  AND handled.action = 'transfer_handled'
+            )
+                             AND NOT EXISTS (
+                                        SELECT 1
+                                        FROM activity_log call_done
+                                        WHERE call_done.entity_type = 'call'
+                                            AND call_done.entity_id = c.id
+                                            AND call_done.action IN ('call_accepted', 'call_ended')
+                             )
                AND (
                     i.reference_no LIKE 'TRN-%'
                     OR LOWER(COALESCE(i.title, '')) LIKE '%transferred%'
@@ -169,6 +183,20 @@ try {
          INNER JOIN incidents i ON i.id = l.incident_id
          LEFT JOIN calls c ON c.id = i.reported_by_call_id
          WHERE l.id > :after_id
+                     AND NOT EXISTS (
+                                SELECT 1
+                                FROM activity_log handled
+                                WHERE handled.entity_type = 'incident'
+                                    AND handled.entity_id = i.id
+                                    AND handled.action = 'transfer_handled'
+                     )
+                     AND NOT EXISTS (
+                                SELECT 1
+                                FROM activity_log call_done
+                                WHERE call_done.entity_type = 'call'
+                                    AND call_done.entity_id = c.id
+                                    AND call_done.action IN ('call_accepted', 'call_ended')
+                     )
          ORDER BY l.id " . ($latestOnly ? 'DESC' : 'ASC') . "
          LIMIT {$limit}"
     );

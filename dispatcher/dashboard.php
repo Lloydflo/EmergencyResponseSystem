@@ -96,10 +96,12 @@ try {
                     rr.code AS identifier,
                     rr.name AS unit_type,
                     rr.status,
+                    COALESCE(responder.name, 'Unassigned') AS responder_name,
                     i.reference_no AS incident_code
                 FROM `" . $vehicleResourceTable . "` rr
                 LEFT JOIN units u ON u.identifier = rr.code
                 LEFT JOIN incidents i ON i.id = u.current_incident_id
+                LEFT JOIN users responder ON responder.unit_code = rr.code AND LOWER(COALESCE(responder.role, '')) = 'responder'
                 WHERE LOWER(rr.category) = 'vehicles'
                 ORDER BY FIELD(LOWER(rr.status), 'available', 'in_use', 'busy', 'assigned', 'enroute', 'on_scene', 'maintenance', 'offline', 'unavailable'), rr.code ASC
             ");
@@ -110,9 +112,11 @@ try {
                     u.identifier,
                     u.unit_type,
                     u.status,
+                    COALESCE(responder.name, 'Unassigned') AS responder_name,
                     i.reference_no AS incident_code
                 FROM units u
                 LEFT JOIN incidents i ON i.id = u.current_incident_id
+                LEFT JOIN users responder ON responder.unit_code = u.identifier AND LOWER(COALESCE(responder.role, '')) = 'responder'
                 ORDER BY FIELD(u.status, 'available', 'assigned', 'busy', 'in_use', 'enroute', 'on_scene', 'maintenance', 'offline', 'unavailable'), u.identifier ASC
             ");
         }
@@ -283,6 +287,7 @@ $type_total = array_sum($type_counts);
                         <h2><i class="fas fa-triangle-exclamation"></i> Priority Incident Queue</h2>
                         <div class="queue-filters">
                             <button type="button" class="queue-filter active" data-priority="all">All</button>
+                            <button type="button" class="queue-filter" data-priority="critical">Critical</button>
                             <button type="button" class="queue-filter" data-priority="high">High</button>
                             <button type="button" class="queue-filter" data-priority="medium">Medium</button>
                             <button type="button" class="queue-filter" data-priority="low">Low</button>
@@ -341,10 +346,13 @@ $type_total = array_sum($type_counts);
                         <?php else: ?>
                             <?php foreach ($unit_items as $unit): ?>
                                 <?php $status = strtolower((string)($unit['status'] ?? 'unknown')); ?>
+                                <?php $unitType = ucfirst((string)($unit['unit_type'] ?? 'Responder')); ?>
+                                <?php $responderName = trim((string)($unit['responder_name'] ?? '')); ?>
+                                <?php $displayType = $responderName !== '' && $responderName !== 'Unassigned' ? $unitType . ' / ' . $responderName : $unitType; ?>
                                 <article class="unit-item">
                                     <div class="unit-main">
                                         <div class="unit-name"><?php echo htmlspecialchars((string)($unit['identifier'] ?? 'Unit')); ?></div>
-                                        <div class="unit-type"><?php echo htmlspecialchars(ucfirst((string)($unit['unit_type'] ?? 'Responder'))); ?></div>
+                                        <div class="unit-type"><?php echo htmlspecialchars($displayType); ?></div>
                                     </div>
                                     <div class="unit-side">
                                         <span class="pill status <?php echo dispatcher_status_class($status); ?>"><?php echo htmlspecialchars(ucwords(str_replace('_', ' ', $status))); ?></span>
@@ -527,11 +535,15 @@ $type_total = array_sum($type_counts);
         container.innerHTML = items.map(function (unit) {
             const status = String(unit.status || 'unknown').toLowerCase();
             const typeLabel = String(unit.unit_type || 'Responder');
+            const responderName = String(unit.responder_name || '').trim();
+            const displayType = responderName && responderName.toLowerCase() !== 'unassigned'
+                ? `${typeLabel.charAt(0).toUpperCase() + typeLabel.slice(1)} / ${responderName}`
+                : (typeLabel.charAt(0).toUpperCase() + typeLabel.slice(1));
             return `
                 <article class="unit-item">
                     <div class="unit-main">
                         <div class="unit-name">${dispatcherEscapeHtml(unit.identifier || 'Unit')}</div>
-                        <div class="unit-type">${dispatcherEscapeHtml(typeLabel.charAt(0).toUpperCase() + typeLabel.slice(1))}</div>
+                        <div class="unit-type">${dispatcherEscapeHtml(displayType)}</div>
                     </div>
                     <div class="unit-side">
                         <span class="pill status ${dispatcherStatusClass(status)}">${dispatcherEscapeHtml(status.replace(/_/g, ' '))}</span>
