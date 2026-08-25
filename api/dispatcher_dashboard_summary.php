@@ -285,6 +285,7 @@ try {
 
         $unitJoin = '';
         $incidentJoin = '';
+        $responderJoin = '';
         $incidentCodeExpr = 'NULL';
         if ($hasUnitsCore) {
             $unitJoin = ' LEFT JOIN units u ON u.identifier = rr.code';
@@ -297,6 +298,9 @@ try {
                 $incidentCodeExpr = 'i.reference_no';
             }
         }
+        if (ers_dispatcher_summary_has_table($schema, 'users') && ers_dispatcher_summary_has_column($schema, 'users', 'unit_code')) {
+            $responderJoin = " LEFT JOIN users responder ON responder.unit_code = rr.code AND LOWER(COALESCE(responder.role, '')) = 'responder'";
+        }
 
         $unitStmt = $pdo->query(
             "SELECT
@@ -304,10 +308,12 @@ try {
                 rr.code AS identifier,
                 {$rrNameExpr} AS unit_type,
                 {$rrStatusExpr} AS status,
+                COALESCE(responder.name, 'Unassigned') AS responder_name,
                 {$incidentCodeExpr} AS incident_code
              FROM `{$vehicleResourceTable}` rr
              {$unitJoin}
              {$incidentJoin}
+             {$responderJoin}
              WHERE rr.category = 'vehicles'
              ORDER BY FIELD(LOWER({$rrStatusExpr}), 'available', 'in_use', 'busy', 'assigned', 'enroute', 'on_scene', 'maintenance', 'offline', 'unavailable'), rr.code ASC"
         );
@@ -315,6 +321,7 @@ try {
     } elseif ($hasUnitsCore) {
         $unitTypeExpr = ers_dispatcher_summary_has_column($schema, 'units', 'unit_type') ? 'u.unit_type' : "'other'";
         $incidentJoin = '';
+        $responderJoin = '';
         $incidentCodeExpr = 'NULL';
         if (
             ers_dispatcher_summary_has_column($schema, 'units', 'current_incident_id')
@@ -324,6 +331,9 @@ try {
             $incidentJoin = ' LEFT JOIN incidents i ON i.id = u.current_incident_id';
             $incidentCodeExpr = 'i.reference_no';
         }
+        if (ers_dispatcher_summary_has_table($schema, 'users') && ers_dispatcher_summary_has_column($schema, 'users', 'unit_code')) {
+            $responderJoin = " LEFT JOIN users responder ON responder.unit_code = u.identifier AND LOWER(COALESCE(responder.role, '')) = 'responder'";
+        }
 
         $unitStmt = $pdo->query(
             "SELECT
@@ -331,9 +341,11 @@ try {
                 u.identifier,
                 {$unitTypeExpr} AS unit_type,
                 u.status,
+                COALESCE(responder.name, 'Unassigned') AS responder_name,
                 {$incidentCodeExpr} AS incident_code
              FROM units u
              {$incidentJoin}
+             {$responderJoin}
              ORDER BY FIELD(u.status, 'available', 'assigned', 'busy', 'in_use', 'enroute', 'on_scene', 'maintenance', 'offline', 'unavailable'), u.identifier ASC"
         );
         $unitItems = $unitStmt ? $unitStmt->fetchAll(PDO::FETCH_ASSOC) : [];

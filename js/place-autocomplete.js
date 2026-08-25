@@ -78,7 +78,7 @@
         dropdown.style.background = '#ffffff';
         dropdown.style.border = '1px solid #cbd5e1';
         dropdown.style.borderRadius = '8px';
-        dropdown.style.zIndex = 2000;
+        dropdown.style.zIndex = 5000;
         dropdown.style.width = input.offsetWidth + 'px';
         dropdown.style.maxHeight = '220px';
         dropdown.style.overflowY = 'auto';
@@ -86,6 +86,7 @@
         const parent = input.parentElement;
         if (parent) {
             parent.style.position = 'relative';
+            parent.style.zIndex = '30';
             dropdown.style.left = '0px';
             dropdown.style.top = (input.offsetTop + input.offsetHeight + 4) + 'px';
             parent.appendChild(dropdown);
