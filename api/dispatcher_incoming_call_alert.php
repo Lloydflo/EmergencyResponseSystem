@@ -91,6 +91,18 @@ try {
          LEFT JOIN calls c ON c.id = i.reported_by_call_id
          WHERE UPPER(TRIM(COALESCE(i.reference_no, ''))) LIKE 'TRN-%'
            AND LOWER(TRIM(COALESCE(i.status, ''))) NOT IN ('resolved', 'cancelled', 'closed', 'rejected')
+                     AND NOT EXISTS (
+                                SELECT 1
+                                FROM activity_log call_done
+                                WHERE call_done.action IN ('call_accepted', 'call_ended', 'call_rejected')
+                                    AND (
+                                            (call_done.entity_type = 'call'
+                                             AND call_done.entity_id = i.reported_by_call_id)
+                                            OR
+                                            (call_done.entity_type = 'call_session'
+                                             AND NULLIF(TRIM(call_done.reference_no), '') = NULLIF(TRIM(i.reference_no), ''))
+                                    )
+                     )
          ORDER BY l.id DESC
          LIMIT 50"
     );
