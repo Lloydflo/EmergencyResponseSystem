@@ -758,13 +758,29 @@
         }
     }
 
+    function formatAiInsightText(value) {
+        const text = String(value || '')
+            .replace(/\*\*(.+?)\*\*/g, '$1')
+            .replace(/\*(.+?)\*/g, '$1')
+            .replace(/^\s*#{1,6}\s*/gm, '')
+            .replace(/^\s*[-*]\s*/gm, '')
+            .trim();
+
+        if (!text) return 'No insight text was returned.';
+
+        return text
+            .split(/\r?\n/)
+            .map((line) => escapeHtml(line.trim()))
+            .join('<br>');
+    }
+
     async function refreshAIInsights() {
         const container = byId('ai-insights-content');
         if (!container) return;
         container.innerHTML = '<div class="ai-loading"><i class="fas fa-spinner fa-spin"></i> Analyzing the verified dataset…</div>';
         try {
             const data = await fetchJson(`api/ai_report_insights.php${buildQuery(state.filters)}`);
-            container.textContent = data.text || 'No insight text was returned.';
+            container.innerHTML = formatAiInsightText(data.text || 'No insight text was returned.');
             container.classList.add('ai-insight-text');
         } catch (error) {
             container.classList.remove('ai-insight-text');

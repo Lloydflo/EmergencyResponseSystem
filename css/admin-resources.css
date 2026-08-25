@@ -98,6 +98,8 @@
 }
 
 .overview-grid {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
     gap: 0.7rem;
     margin: 0;
 }
@@ -106,6 +108,7 @@
     position: relative;
     display: flex;
     min-width: 0;
+    flex: 1 1 0;
     align-items: center;
     gap: 0.75rem;
     padding: 0.9rem;
