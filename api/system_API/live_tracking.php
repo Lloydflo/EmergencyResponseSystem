@@ -1,0 +1,205 @@
+<?php
+// Live tracking feed for interagency partners: for every unit currently
+// dispatched to an incident, returns the unit's latest GPS position and the
+// lat/lng of the incident it's assigned to. Auth matches the rest of
+// system_API (X-ERS-API-Key / X-API-Key / Bearer token / ?api_key=).
+declare(strict_types=1);
+
+require_once __DIR__ . '/../_bootstrap.php';
+
+$auth = ers_external_authenticate();
+$pdo = ers_external_db();
+
+if (($_SERVER['REQUEST_METHOD'] ?? '') !== 'GET') {
+    ers_external_json(405, [
+        'success' => false,
+        'error' => 'GET method required',
+    ]);
+}
+
+try {
+    $rows = ers_live_tracking_fetch($pdo);
+
+    ers_external_json(200, [
+        'success' => true,
+        'generated_at' => date('c'),
+        'count' => count($rows),
+        'items' => $rows,
+    ]);
+} catch (Throwable $e) {
+    error_log('live_tracking.php failed: ' . $e->getMessage());
+    ers_external_json(500, [
+        'success' => false,
+        'error' => 'Unable to fetch live tracking data',
+    ]);
+}
+
+/**
+ * @return array<int, array<string, mixed>>
+ */
+function ers_live_tracking_fetch(PDO $pdo): array
+{
+    $schema = ers_live_tracking_schema($pdo);
+
+    if (!ers_live_tracking_has_table($schema, 'units')) {
+        return [];
+    }
+
+    $hasCurrentIncidentId = ers_live_tracking_has_column($schema, 'units', 'current_incident_id');
+    if (!$hasCurrentIncidentId) {
+        // Nothing to report an "assignment" against without this column.
+        return [];
+    }
+
+    $hasIncidents = ers_live_tracking_has_table($schema, 'incidents')
+        && ers_live_tracking_has_column($schema, 'incidents', 'id');
+    if (!$hasIncidents) {
+        return [];
+    }
+
+    // Latest GPS ping per unit, same pattern as units_list.php.
+    $locationJoin = '';
+    $unitLatExpr = 'NULL';
+    $unitLngExpr = 'NULL';
+    $lastRecordedExpr = 'NULL';
+    $canJoinLocation = ers_live_tracking_has_table($schema, 'unit_locations')
+        && ers_live_tracking_has_column($schema, 'unit_locations', 'id')
+        && ers_live_tracking_has_column($schema, 'unit_locations', 'unit_id')
+        && ers_live_tracking_has_column($schema, 'unit_locations', 'recorded_at')
+        && ers_live_tracking_has_column($schema, 'unit_locations', 'latitude')
+        && ers_live_tracking_has_column($schema, 'unit_locations', 'longitude');
+
+    if ($canJoinLocation) {
+        $locationJoin = " LEFT JOIN unit_locations ul
+            ON ul.id = (
+                SELECT ul2.id
+                FROM unit_locations ul2
+                WHERE ul2.unit_id = u.id
+                ORDER BY ul2.recorded_at DESC, ul2.id DESC
+                LIMIT 1
+            )";
+        $unitLatExpr = 'ul.latitude';
+        $unitLngExpr = 'ul.longitude';
+        $lastRecordedExpr = 'ul.recorded_at';
+    } elseif (
+        ers_live_tracking_has_column($schema, 'units', 'latitude')
+        && ers_live_tracking_has_column($schema, 'units', 'longitude')
+    ) {
+        // Fall back to the stored coordinate on the unit row itself.
+        $unitLatExpr = 'u.latitude';
+        $unitLngExpr = 'u.longitude';
+    }
+
+    // Responder name/unit code, so the other side can label the marker.
+    $responderJoin = '';
+    $responderNameExpr = 'NULL';
+    $hasResponderJoin = ers_live_tracking_has_table($schema, 'users')
+        && ers_live_tracking_has_column($schema, 'users', 'id')
+        && ers_live_tracking_has_column($schema, 'users', 'role')
+        && ers_live_tracking_has_column($schema, 'users', 'unit_code')
+        && ers_live_tracking_has_column($schema, 'users', 'name');
+    if ($hasResponderJoin) {
+        $responderJoin = " LEFT JOIN (
+            SELECT usr_base.id, usr_base.unit_code, usr_base.name
+            FROM users usr_base
+            INNER JOIN (
+                SELECT UPPER(TRIM(unit_code)) AS unit_code_key, MAX(id) AS max_id
+                FROM users
+                WHERE role = 'responder'
+                  AND unit_code IS NOT NULL
+                  AND TRIM(unit_code) <> ''
+                GROUP BY UPPER(TRIM(unit_code))
+            ) latest_usr ON latest_usr.max_id = usr_base.id
+        ) usr ON UPPER(TRIM(usr.unit_code)) = UPPER(TRIM(u.identifier))";
+        $responderNameExpr = 'usr.name';
+    }
+
+    $incidentCodeExpr = ers_live_tracking_has_column($schema, 'incidents', 'reference_no') ? 'i.reference_no' : 'NULL';
+    $incidentTypeExpr = ers_live_tracking_has_column($schema, 'incidents', 'type') ? 'i.type' : 'NULL';
+    $incidentLocationExpr = ers_live_tracking_has_column($schema, 'incidents', 'location_address') ? 'i.location_address' : 'NULL';
+    $incidentLatExpr = ers_live_tracking_has_column($schema, 'incidents', 'latitude') ? 'i.latitude' : 'NULL';
+    $incidentLngExpr = ers_live_tracking_has_column($schema, 'incidents', 'longitude') ? 'i.longitude' : 'NULL';
+
+    $statusExpr = ers_live_tracking_has_column($schema, 'units', 'status') ? 'u.status' : "'unknown'";
+
+    $sql = "SELECT
+                u.id AS unit_id,
+                u.identifier AS unit_identifier,
+                {$responderNameExpr} AS responder_name,
+                {$statusExpr} AS unit_status,
+                {$unitLatExpr} AS responder_latitude,
+                {$unitLngExpr} AS responder_longitude,
+                {$lastRecordedExpr} AS responder_location_recorded_at,
+                u.current_incident_id AS incident_id,
+                {$incidentCodeExpr} AS incident_code,
+                {$incidentTypeExpr} AS incident_type,
+                {$incidentLocationExpr} AS incident_address,
+                {$incidentLatExpr} AS incident_latitude,
+                {$incidentLngExpr} AS incident_longitude
+            FROM units u
+            {$locationJoin}
+            {$responderJoin}
+            INNER JOIN incidents i ON i.id = u.current_incident_id
+            WHERE u.current_incident_id IS NOT NULL
+            ORDER BY u.identifier";
+
+    $stmt = $pdo->query($sql);
+    $rows = $stmt !== false ? $stmt->fetchAll(PDO::FETCH_ASSOC) : [];
+
+    foreach ($rows as &$row) {
+        foreach (['responder_latitude', 'responder_longitude', 'incident_latitude', 'incident_longitude'] as $coordKey) {
+            if ($row[$coordKey] !== null) {
+                $row[$coordKey] = (float)$row[$coordKey];
+            }
+        }
+        $row['unit_id'] = (int)$row['unit_id'];
+        $row['incident_id'] = (int)$row['incident_id'];
+    }
+    unset($row);
+
+    return $rows;
+}
+
+/** @return array<string,array<string,true>> */
+function ers_live_tracking_schema(PDO $pdo): array
+{
+    $tables = ['units', 'unit_locations', 'incidents', 'users'];
+    $placeholders = implode(',', array_fill(0, count($tables), '?'));
+
+    try {
+        $stmt = $pdo->prepare(
+            "SELECT TABLE_NAME, COLUMN_NAME
+             FROM INFORMATION_SCHEMA.COLUMNS
+             WHERE TABLE_SCHEMA = DATABASE()
+               AND TABLE_NAME IN ({$placeholders})"
+        );
+        $stmt->execute($tables);
+    } catch (Throwable $e) {
+        error_log('live_tracking schema lookup failed: ' . $e->getMessage());
+        return [];
+    }
+
+    $schema = [];
+    foreach ($stmt->fetchAll(PDO::FETCH_ASSOC) as $row) {
+        $table = (string)($row['TABLE_NAME'] ?? '');
+        $column = (string)($row['COLUMN_NAME'] ?? '');
+        if ($table !== '' && $column !== '') {
+            $schema[$table][$column] = true;
+        }
+    }
+
+    return $schema;
+}
+
+/** @param array<string,array<string,true>> $schema */
+function ers_live_tracking_has_table(array $schema, string $table): bool
+{
+    return isset($schema[$table]);
+}
+
+/** @param array<string,array<string,true>> $schema */
+function ers_live_tracking_has_column(array $schema, string $table, string $column): bool
+{
+    return isset($schema[$table][$column]);
+}
+?>
