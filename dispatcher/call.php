@@ -2942,7 +2942,8 @@ if ($turnIsConfigured && preg_match('/^turns?:(?:\/\/)?([^:\/?]+)/i', $turnUrl, 
                 setPrioritySelection(aiSuggested);
             }
 
-            let message = `Gemini suggests ${aiSuggested.toUpperCase()}: ${data.reason || 'based on the incident details.'}`;
+            const isLocalSuggestion = data.source === 'local_rules';
+            let message = `${isLocalSuggestion ? 'Suggested' : 'Gemini suggests'} ${aiSuggested.toUpperCase()}: ${data.reason || 'based on the incident details.'}`;
             if (Array.isArray(data.needs_more_info) && data.needs_more_info.length) {
                 message += ` Ask: ${data.needs_more_info.join(' ')}`;
             }
