@@ -542,13 +542,51 @@ html[data-theme="dark"] .dispatcher-detail-narrative-copy {
     margin: 0 auto;
 }
 
+@media (min-width: 761px) {
+    .dispatcher-interagency-page .ia-shell {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) 360px;
+        gap: 0.9rem;
+        align-items: start;
+    }
+
+    .dispatcher-interagency-page .ia-head {
+        grid-column: 1;
+        grid-row: 1;
+    }
+
+    .dispatcher-interagency-page .ia-ops-desk {
+        display: contents;
+    }
+
+    .dispatcher-interagency-page .ia-ops-desk > div:first-child {
+        grid-column: 1;
+        grid-row: 2;
+    }
+
+    .dispatcher-interagency-page .ia-ops-desk > aside.ia-incident-monitor {
+        grid-column: 2;
+        grid-row: 1 / span 3;
+    }
+
+    .dispatcher-interagency-page .ia-module-launcher {
+        grid-column: 1;
+        grid-row: 3;
+    }
+
+    .dispatcher-interagency-page .ia-module-stage,
+    .dispatcher-interagency-page .ia-board {
+        grid-column: 1 / -1;
+    }
+}
+
 .dispatcher-interagency-page .ia-head {
     min-height: 94px;
     margin: 0;
     padding: 1rem 1.15rem;
     border: 1px solid #d9e3ec;
     border-bottom: 0;
-    border-radius: 8px 8px 0 0;
+    border-radius: 8px 0 0 0;
     background: #f8fbff;
 }
 
@@ -641,7 +679,7 @@ html[data-theme="dark"] .dispatcher-detail-narrative-copy {
     padding: 1rem;
     border: 1px solid #d9e3ec;
     border-top: 0;
-    border-radius: 0 0 8px 8px;
+    border-radius: 0 0 0 8px;
     background: #fff;
 }
 
