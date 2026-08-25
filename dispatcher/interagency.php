@@ -22,7 +22,6 @@ $pageTitle = 'Inter-Agency Coordination';
     <link rel="stylesheet" href="css/interagency-command.css?v=<?php echo filemtime($rootDir . '/css/interagency-command.css'); ?>">
     <link rel="stylesheet" href="css/interagency-events.css?v=<?php echo filemtime($rootDir . '/css/interagency-events.css'); ?>">
     <link rel="stylesheet" href="css/interagency-tips.css">
-    <link rel="stylesheet" href="css/dispatcher-interagency-ux.css?v=<?php echo filemtime($rootDir . '/css/dispatcher-interagency-ux.css'); ?>">
     <style>
         :root {
             --ia-bg: #f4f7fb;
@@ -2048,11 +2047,11 @@ $pageTitle = 'Inter-Agency Coordination';
         <div class="main-container ia-shell">
             <section class="ia-head">
                 <div>
-                    <h1>Command Operations</h1>
-                    <p>Open the operational workspace that needs attention.</p>
+                    <h1>Inter-Agency Conversations</h1>
+                    <p>Unified communication panel para sa departments at responders during active incidents.</p>
                 </div>
-                <div class="ia-pill" id="iaOpsUpdated">
-                    <i class="fas fa-circle-check"></i> Updated just now
+                <div class="ia-pill">
+                    <i class="fas fa-signal"></i> Coordination Hub Live
                 </div>
             </section>
 
@@ -2075,14 +2074,15 @@ $pageTitle = 'Inter-Agency Coordination';
                 </article>
             </section>
 
-            <section class="ia-ops-desk" id="iaOperationsDesk" aria-label="Inter-agency operations desk">
-                <div class="ia-ops-panel">
+            <section class="ia-ops-desk ia-ops-desk-compact" id="iaOperationsDesk" aria-label="Inter-agency operations desk">
+                <div class="ia-ops-panel ia-ops-overview">
                     <div class="ia-ops-panel-head">
                         <div>
-                            <h2 class="ia-ops-title">Operations Desk</h2>
-                            <p class="ia-ops-sub">Live triage view for command rooms, external reports, events, and anonymous tips.</p>
+                            <span class="ia-ops-eyebrow">Operations</span>
+                            <h2 class="ia-ops-title">Command Operations</h2>
+                            <p class="ia-ops-sub">Open the operational workspace that needs attention.</p>
                         </div>
-                        <span class="ia-ops-live"><i class="fas fa-rotate"></i> Syncing</span>
+                        <span class="ia-ops-live" id="iaOpsUpdated"><i class="fas fa-rotate"></i> Syncing</span>
                     </div>
                     <div class="ia-ops-metrics">
                         <article class="ia-ops-metric">
@@ -2112,51 +2112,10 @@ $pageTitle = 'Inter-Agency Coordination';
                         </article>
                     </div>
                 </div>
-                <aside class="ia-ops-panel">
-                    <div class="ia-ops-panel-head">
-                        <div>
-                            <h2 class="ia-ops-title">Workflow Lanes</h2>
-                            <p class="ia-ops-sub">Jump into the queue that needs action.</p>
-                        </div>
-                    </div>
-                    <div class="ia-ops-lanes">
-                        <article class="ia-ops-lane">
-                            <span class="ia-ops-lane-icon"><i class="fas fa-tower-broadcast"></i></span>
-                            <span>
-                                <strong class="ia-ops-lane-title">Command Center</strong>
-                                <span class="ia-ops-lane-sub">Tasking, broadcast ack, map, and audit trail.</span>
-                            </span>
-                            <button type="button" class="ia-ops-jump" data-ops-open="iaCommandCenter" aria-label="Open command center"><i class="fas fa-arrow-down"></i></button>
-                        </article>
-                        <article class="ia-ops-lane">
-                            <span class="ia-ops-lane-icon"><i class="fas fa-calendar-check"></i></span>
-                            <span>
-                                <strong class="ia-ops-lane-title">Event Coordination</strong>
-                                <span class="ia-ops-lane-sub">Readiness for scheduled and standby events.</span>
-                            </span>
-                            <button type="button" class="ia-ops-jump" data-ops-open="iaEventCoordination" aria-label="Open event coordination"><i class="fas fa-arrow-down"></i></button>
-                        </article>
-                        <article class="ia-ops-lane">
-                            <span class="ia-ops-lane-icon"><i class="fas fa-user-secret"></i></span>
-                            <span>
-                                <strong class="ia-ops-lane-title">Tip Inbox</strong>
-                                <span class="ia-ops-lane-sub">Verify, dismiss, or prepare tips for incident conversion.</span>
-                            </span>
-                            <button type="button" class="ia-ops-jump" data-ops-open="iaAnonymousTipInbox" aria-label="Open anonymous tip inbox"><i class="fas fa-arrow-down"></i></button>
-                        </article>
-                        <article class="ia-ops-lane">
-                            <span class="ia-ops-lane-icon"><i class="fas fa-inbox"></i></span>
-                            <span>
-                                <strong class="ia-ops-lane-title">External Inbox</strong>
-                                <span class="ia-ops-lane-sub">Triage outside reports and live call transfers.</span>
-                            </span>
-                            <button type="button" class="ia-ops-jump" data-ops-open="iaExternalIncidentInbox" aria-label="Open external incident inbox"><i class="fas fa-arrow-down"></i></button>
-                        </article>
-                    </div>
-                </aside>
+                <aside class="ia-ops-panel ia-incident-monitor" id="iaIncidentMonitorPanel" aria-label="Incident Monitor"></aside>
             </section>
 
-            <section class="ia-module-launcher" aria-label="Inter-agency module launcher">
+            <section class="ia-module-launcher ia-ops-module-grid" aria-label="Command Operations modules">
                 <button type="button" class="ia-module-btn" data-module-open="iaCommandCenter" data-module-title="Inter-Agency Command Center" data-module-subtitle="Incident intelligence, tasking, broadcasts, acknowledgements, and audit trail.">
                     <span class="ia-module-btn-icon"><i class="fas fa-tower-broadcast"></i></span>
                     <span class="ia-module-btn-main">
