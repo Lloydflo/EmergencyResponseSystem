@@ -20,6 +20,26 @@ if (!function_exists('ers_predictive_table_exists')) {
     }
 }
 
+if (!function_exists('ers_predictive_column_exists')) {
+    function ers_predictive_column_exists(PDO $pdo, string $tableName, string $columnName): bool
+    {
+        try {
+            $stmt = $pdo->prepare(
+                "SELECT 1
+                 FROM INFORMATION_SCHEMA.COLUMNS
+                 WHERE TABLE_SCHEMA = DATABASE()
+                   AND TABLE_NAME = ?
+                   AND COLUMN_NAME = ?
+                 LIMIT 1"
+            );
+            $stmt->execute([$tableName, $columnName]);
+            return (bool)$stmt->fetchColumn();
+        } catch (Throwable $e) {
+            return false;
+        }
+    }
+}
+
 if (!function_exists('ers_predictive_average')) {
     function ers_predictive_average(array $values): float
     {
@@ -288,7 +308,7 @@ if (!function_exists('ers_predictive_build_snapshot')) {
                     SUM(CASE WHEN created_at >= :currentStart AND created_at < :currentEnd THEN 1 ELSE 0 END) AS current_count,
                     SUM(CASE WHEN created_at >= :previousStart AND created_at < :previousEnd THEN 1 ELSE 0 END) AS previous_count
              FROM incidents
-             WHERE created_at >= :previousStart AND created_at < :currentEnd
+             WHERE created_at >= :windowStart AND created_at < :windowEnd
              GROUP BY LOWER(type)"
         );
         $typeStmt->execute([
@@ -296,6 +316,8 @@ if (!function_exists('ers_predictive_build_snapshot')) {
             ':currentEnd' => $historyEndExclusive->format('Y-m-d 00:00:00'),
             ':previousStart' => $today->modify('-59 days')->format('Y-m-d 00:00:00'),
             ':previousEnd' => $last30Start->format('Y-m-d 00:00:00'),
+            ':windowStart' => $today->modify('-59 days')->format('Y-m-d 00:00:00'),
+            ':windowEnd' => $historyEndExclusive->format('Y-m-d 00:00:00'),
         ]);
         foreach ($typeStmt->fetchAll(PDO::FETCH_ASSOC) as $row) {
             $key = ers_predictive_normalize_type((string)($row['type_name'] ?? 'other'));
@@ -374,16 +396,19 @@ if (!function_exists('ers_predictive_build_snapshot')) {
         }
 
         $hotspots = [];
+        $locationExpression = ers_predictive_column_exists($pdo, 'incidents', 'location')
+            ? 'location'
+            : (ers_predictive_column_exists($pdo, 'incidents', 'location_address') ? 'location_address' : "''");
         $hotspotStmt = $pdo->prepare(
-            "SELECT TRIM(location) AS location_name,
+            "SELECT TRIM({$locationExpression}) AS location_name,
                     LOWER(type) AS type_name,
                     COUNT(*) AS total_count,
                     SUM(CASE WHEN LOWER(priority) IN ('high', 'critical') THEN 1 ELSE 0 END) AS high_count
              FROM incidents
              WHERE created_at >= :start
                AND created_at < :end
-               AND TRIM(COALESCE(location, '')) <> ''
-             GROUP BY TRIM(location), LOWER(type)
+               AND TRIM(COALESCE({$locationExpression}, '')) <> ''
+             GROUP BY TRIM({$locationExpression}), LOWER(type)
              ORDER BY total_count DESC"
         );
         $hotspotStmt->execute([

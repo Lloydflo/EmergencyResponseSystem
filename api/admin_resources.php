@@ -472,7 +472,7 @@ function apply_active_assignment_to_item(array $item, array $activeIncidentAssig
     $incidentAssignment = strtolower((string)($item['category'] ?? '')) === 'vehicles'
         ? ($activeIncidentAssignments[$unitCode] ?? null)
         : null;
-    if (is_array($incidentAssignment)) {
+    if (is_array($incidentAssignment) && strtolower((string)($item['status'] ?? '')) !== 'offline') {
         $item['status'] = 'in_use';
         $item['assignmentDetails'] = (string)($incidentAssignment['details'] ?? '');
         $item['assignmentIncidentId'] = (int)($incidentAssignment['incident_id'] ?? 0);
@@ -810,6 +810,10 @@ function sync_vehicle_resource_assignment_availability(PDO $pdo): void {
         return;
     }
 
+    $presenceMap = function_exists('ers_vehicle_resource_responder_presence_map')
+        ? ers_vehicle_resource_responder_presence_map($pdo)
+        : [];
+
     $stmt = $pdo->query(
         "SELECT `code`, `status`
          FROM `" . RESOURCE_RECORDS_TABLE . "`
@@ -825,22 +829,42 @@ function sync_vehicle_resource_assignment_availability(PDO $pdo): void {
         }
 
         $hasAssignedResponder = vehicle_resource_has_assigned_responder($pdo, $unitCode);
+        if (isset($presenceMap[$unitCode])) {
+            $presenceStatus = function_exists('ers_vehicle_resource_status_from_responder_state')
+                ? ers_vehicle_resource_status_from_responder_state($presenceMap[$unitCode])
+                : 'offline';
+            if ($status !== $presenceStatus) {
+                ers_update_vehicle_resource_status_by_identifier($pdo, $unitCode, $presenceStatus);
+                ers_update_unit_status_by_identifier($pdo, $unitCode, map_vehicle_resource_status_to_unit_status($presenceStatus));
+            }
+            continue;
+        }
+
         if ($status === 'available' && !$hasAssignedResponder) {
             ers_update_vehicle_resource_status_by_identifier($pdo, $unitCode, 'offline');
             deactivate_vehicle_resource_unit($pdo, $unitCode);
-        }
-        if ($status === 'offline' && $hasAssignedResponder) {
-            ers_update_vehicle_resource_status_by_identifier($pdo, $unitCode, 'available');
-            ers_update_unit_status_by_identifier($pdo, $unitCode, 'available');
         }
     }
 }
 
 function apply_unassigned_vehicle_status(PDO $pdo, array $payload): array {
+    if (strtolower(trim((string)($payload['category'] ?? ''))) !== 'vehicles') {
+        return $payload;
+    }
+
+    $unitCode = strtoupper(trim((string)($payload['code'] ?? '')));
+    $presenceMap = function_exists('ers_vehicle_resource_responder_presence_map')
+        ? ers_vehicle_resource_responder_presence_map($pdo)
+        : [];
+
+    if ($unitCode !== '' && isset($presenceMap[$unitCode]) && function_exists('ers_vehicle_resource_status_from_responder_state')) {
+        $payload['status'] = ers_vehicle_resource_status_from_responder_state($presenceMap[$unitCode]);
+        return $payload;
+    }
+
     if (
-        strtolower(trim((string)($payload['category'] ?? ''))) === 'vehicles' &&
-        strtolower(trim((string)($payload['status'] ?? ''))) === 'available' &&
-        !vehicle_resource_has_assigned_responder($pdo, (string)($payload['code'] ?? ''))
+        strtolower(trim((string)($payload['status'] ?? ''))) === 'available'
+        && !vehicle_resource_has_assigned_responder($pdo, $unitCode)
     ) {
         $payload['status'] = 'offline';
     }
@@ -879,8 +903,16 @@ try {
             );
             $rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
             $activeIncidentAssignments = load_active_unit_incident_assignment_map($pdo);
+            $responderPresenceMap = function_exists('ers_vehicle_resource_responder_presence_map')
+                ? ers_vehicle_resource_responder_presence_map($pdo)
+                : [];
             $items = array_map(
-                static fn(array $row): array => apply_active_assignment_to_item(row_to_item($row), $activeIncidentAssignments),
+                static function (array $row) use ($activeIncidentAssignments, $responderPresenceMap): array {
+                    if (function_exists('ers_apply_responder_presence_to_vehicle_resource_row')) {
+                        $row = ers_apply_responder_presence_to_vehicle_resource_row($row, $responderPresenceMap);
+                    }
+                    return apply_active_assignment_to_item(row_to_item($row), $activeIncidentAssignments);
+                },
                 $rows
             );
         }

@@ -1115,16 +1115,18 @@ function initFirebaseLiveTracking() {
             if (rawKey && rawKey !== key) {
                 removeUnitMarkerByIdentifier(rawKey);
             }
-            applyLiveResponderLocationToUnit(key, lat, lng);
             const status = String(r.status || 'available').trim().toLowerCase();
             if (['offline', 'logged_out', 'inactive'].includes(status)) {
                 removeUnitMarkerByIdentifier(key);
+                clearLiveUnitLocation(key);
                 return;
             }
             if (!canRenderLiveUnitMarker(key)) {
                 removeUnitMarkerByIdentifier(key);
+                clearLiveUnitLocation(key);
                 return;
             }
+            applyLiveResponderLocationToUnit(key, lat, lng);
             seenKeys.add(key);
 
             const label = `${key} — ${r.responderName || 'Responder'}`;
@@ -1161,9 +1163,10 @@ function initFirebaseLiveTracking() {
         });
 
         Object.keys(markers).forEach((key) => {
-            if (markers[key].isLive && !seenKeys.has(key) && !hasLiveUnitLocation(key)) {
+            if (markers[key].isLive && !seenKeys.has(key)) {
                 map.removeLayer(markers[key].marker);
                 delete markers[key];
+                clearLiveUnitLocation(key);
             }
         });
     }, (error) => {
@@ -1265,24 +1268,23 @@ function addIncidentMarker(id, lat, lng, label) {
 }
 
 function removeUnitMarkerByIdentifier(identifier) {
-    const id = String(identifier || '').trim();
-    if (!id || !markers[id] || markers[id].type !== 'unit') return;
-    try { map.removeLayer(markers[id].marker); } catch (e) {}
-    delete markers[id];
-}
-
-function hasLiveUnitLocation(identifier) {
     const id = normalizeUnitIdentifier(identifier);
-    if (!id) return false;
-    const livePoint = liveUnitLocationsByIdentifier[id] || liveUnitLocationsByIdentifier[id.toUpperCase()] || null;
-    return !!livePoint && !isInvalidResponderCoordinate(livePoint.lat, livePoint.lng);
+    if (!id) return;
+    const markerKey = markers[id] && markers[id].type === 'unit'
+        ? id
+        : Object.keys(markers).find((key) => {
+            return markers[key]
+                && markers[key].type === 'unit'
+                && String(key).toUpperCase() === id.toUpperCase();
+        });
+    if (!markerKey) return;
+    try { map.removeLayer(markers[markerKey].marker); } catch (e) {}
+    delete markers[markerKey];
 }
 
 function removeUnitMarkerIfNotLive(identifier) {
     const id = normalizeUnitIdentifier(identifier);
     if (!id) return;
-    const entry = markers[id] || markers[Object.keys(markers).find((key) => String(key).toUpperCase() === id.toUpperCase())];
-    if (entry && entry.isLive && hasLiveUnitLocation(id)) return;
     removeUnitMarkerByIdentifier(id);
 }
 
@@ -1313,6 +1315,7 @@ function onlineResponderUnits(items) {
     return (items || []).filter(u => {
         if (isResponderUnitOnline(u)) return true;
         removeUnitMarkerIfNotLive(u && u.identifier);
+        clearLiveUnitLocation(u && u.identifier);
         return false;
     });
 }
@@ -1345,9 +1348,9 @@ function pruneOfflineUnitMarkers() {
             Object.entries(markers).forEach(([key, entry]) => {
                 if (!entry || entry.type !== 'unit') return;
                 if (!onlineKeys.has(String(key)) && !onlineKeys.has(String(key).toUpperCase())) {
-                    if (entry.isLive && hasLiveUnitLocation(key)) return;
                     try { map.removeLayer(entry.marker); } catch (e) {}
                     delete markers[key];
+                    clearLiveUnitLocation(key);
                 }
             });
         })
@@ -1356,7 +1359,6 @@ function pruneOfflineUnitMarkers() {
 
 function canRenderLiveUnitMarker(identifier) {
     const id = String(identifier || '').trim();
-    if (hasLiveUnitLocation(id)) return true;
     return !!id
         && authoritativeOnlineUnitKeysReady
         && (authoritativeOnlineUnitKeys.has(id) || authoritativeOnlineUnitKeys.has(id.toUpperCase()));
@@ -1789,6 +1791,13 @@ function mergeLiveLocationIntoUnit(unit) {
     unit.longitude = livePoint.lng;
     unit.location_current = '1';
     return unit;
+}
+
+function clearLiveUnitLocation(unitIdentifier) {
+    const normalized = normalizeUnitIdentifier(unitIdentifier);
+    if (!normalized) return;
+    delete liveUnitLocationsByIdentifier[normalized];
+    delete liveUnitLocationsByIdentifier[normalized.toUpperCase()];
 }
 
 function updateUnitCardGpsText(unitIdentifier, lat, lng) {
