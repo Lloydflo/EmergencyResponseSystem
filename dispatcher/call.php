@@ -2921,7 +2921,7 @@ if ($turnIsConfigured && preg_match('/^turns?:(?:\/\/)?([^:\/?]+)/i', $turnUrl, 
         if (priorityAuto) {
             setPrioritySelection(suggested);
         }
-        setPrioritySuggestionMessage(`Checking with Gemini AI... Local fallback: ${suggested.toUpperCase()}.`, 'loading');
+        setPrioritySuggestionMessage(`Assessing priority... Current recommendation: ${suggested.toUpperCase()}.`, 'loading');
 
         try {
             const res = await fetch(API_AI_PRIORITY_URL, {
@@ -2933,7 +2933,7 @@ if ($turnIsConfigured && preg_match('/^turns?:(?:\/\/)?([^:\/?]+)/i', $turnUrl, 
             if (requestSeq !== prioritySuggestRequestSeq) return;
 
             if (!res.ok || !data || data.ok !== true) {
-                applyLocalPrioritySuggestion(text, 'Gemini unavailable, using local keyword rules.');
+                applyLocalPrioritySuggestion(text, 'Local safety rules based on the incident details.');
                 return;
             }
 
@@ -2950,7 +2950,7 @@ if ($turnIsConfigured && preg_match('/^turns?:(?:\/\/)?([^:\/?]+)/i', $turnUrl, 
             setPrioritySuggestionMessage(message, 'ai');
         } catch (e) {
             if (requestSeq !== prioritySuggestRequestSeq) return;
-            applyLocalPrioritySuggestion(text, 'Gemini unavailable, using local keyword rules.');
+            applyLocalPrioritySuggestion(text, 'Local safety rules based on the incident details.');
         }
     }
 
