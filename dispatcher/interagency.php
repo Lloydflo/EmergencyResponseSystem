@@ -2048,11 +2048,11 @@ $pageTitle = 'Inter-Agency Coordination';
         <div class="main-container ia-shell">
             <section class="ia-head">
                 <div>
-                    <h1>Inter-Agency Conversations</h1>
-                    <p>Unified communication panel para sa departments at responders during active incidents.</p>
+                    <h1>Command Operations</h1>
+                    <p>Open the operational workspace that needs attention.</p>
                 </div>
-                <div class="ia-pill">
-                    <i class="fas fa-signal"></i> Coordination Hub Live
+                <div class="ia-pill" id="iaOpsUpdated">
+                    <i class="fas fa-circle-check"></i> Updated just now
                 </div>
             </section>
 
@@ -2082,7 +2082,7 @@ $pageTitle = 'Inter-Agency Coordination';
                             <h2 class="ia-ops-title">Operations Desk</h2>
                             <p class="ia-ops-sub">Live triage view for command rooms, external reports, events, and anonymous tips.</p>
                         </div>
-                        <span class="ia-ops-live" id="iaOpsUpdated"><i class="fas fa-rotate"></i> Syncing</span>
+                        <span class="ia-ops-live"><i class="fas fa-rotate"></i> Syncing</span>
                     </div>
                     <div class="ia-ops-metrics">
                         <article class="ia-ops-metric">

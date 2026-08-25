@@ -536,3 +536,177 @@ html[data-theme="dark"] .dispatcher-detail-narrative-copy {
         animation-iteration-count: 1 !important;
     }
 }
+
+.dispatcher-interagency-page .ia-shell {
+    max-width: 1180px;
+    margin: 0 auto;
+}
+
+.dispatcher-interagency-page .ia-head {
+    min-height: 94px;
+    margin: 0;
+    padding: 1rem 1.15rem;
+    border: 1px solid #d9e3ec;
+    border-bottom: 0;
+    border-radius: 8px 8px 0 0;
+    background: #f8fbff;
+}
+
+.dispatcher-interagency-page .ia-head h1 {
+    font-size: 1.12rem;
+    line-height: 1.05;
+}
+
+.dispatcher-interagency-page .ia-head h1::before {
+    display: block;
+    margin-bottom: 0.2rem;
+    color: #64748b;
+    content: 'Operations';
+    font-size: 0.78rem;
+    font-weight: 500;
+}
+
+.dispatcher-interagency-page .ia-head p {
+    margin-top: 0.32rem;
+    font-size: 0.82rem;
+}
+
+.dispatcher-interagency-page .ia-pill {
+    border-color: #bfdbfe;
+    background: #eff6ff;
+    color: #2563eb;
+    font-size: 0.72rem;
+}
+
+.dispatcher-interagency-page .ia-overview {
+    display: none;
+}
+
+.dispatcher-interagency-page .ia-ops-desk {
+    display: block;
+    margin: 0;
+}
+
+.dispatcher-interagency-page .ia-ops-panel {
+    border-radius: 0;
+    border-color: #d9e3ec;
+    box-shadow: none;
+}
+
+.dispatcher-interagency-page .ia-ops-panel-head {
+    display: none;
+}
+
+.dispatcher-interagency-page .ia-ops-metrics {
+    border-right: 1px solid #d9e3ec;
+    border-left: 1px solid #d9e3ec;
+    background: #fff;
+}
+
+.dispatcher-interagency-page .ia-ops-metric {
+    min-height: 108px;
+    padding: 1rem 1.05rem;
+}
+
+.dispatcher-interagency-page .ia-ops-metric-label {
+    color: #526b84;
+    font-size: 0.68rem;
+}
+
+.dispatcher-interagency-page .ia-ops-metric-value {
+    margin-top: 0.45rem;
+    color: #071a32;
+    font-size: 1.7rem;
+}
+
+.dispatcher-interagency-page .ia-ops-metric-note {
+    margin-top: 0.42rem;
+    font-size: 0.76rem;
+}
+
+.dispatcher-interagency-page .ia-ops-desk > aside {
+    display: none;
+}
+
+.dispatcher-interagency-page .ia-module-launcher {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0.75rem;
+    margin: 0;
+    padding: 1rem;
+    border: 1px solid #d9e3ec;
+    border-top: 0;
+    border-radius: 0 0 8px 8px;
+    background: #fff;
+}
+
+.dispatcher-interagency-page .ia-module-btn {
+    min-height: 104px;
+    border-color: #d9e3ec;
+    border-radius: 8px;
+    box-shadow: none;
+}
+
+.dispatcher-interagency-page .ia-module-btn:nth-child(1),
+.dispatcher-interagency-page .ia-module-btn:nth-child(4) {
+    background: #effcf9;
+    border-color: #0f9f95;
+}
+
+.dispatcher-interagency-page .ia-module-btn:nth-child(3) {
+    background: #f1fcfb;
+}
+
+.dispatcher-interagency-page .ia-module-btn:hover,
+.dispatcher-interagency-page .ia-module-btn.has-new {
+    background: #e6f7f5;
+    border-color: #0f766e;
+    box-shadow: 0 5px 14px rgba(15, 118, 110, 0.12);
+}
+
+.dispatcher-interagency-page .ia-module-btn-icon {
+    width: 44px;
+    height: 44px;
+    border-radius: 8px;
+    font-size: 1rem;
+}
+
+.dispatcher-interagency-page .ia-module-btn-title {
+    font-size: 1rem;
+}
+
+.dispatcher-interagency-page .ia-module-btn-sub {
+    font-size: 0.78rem;
+}
+
+.dispatcher-interagency-page .ia-module-badge {
+    min-width: 30px;
+    height: 30px;
+    font-size: 0.76rem;
+}
+
+@media (max-width: 760px) {
+    .dispatcher-interagency-page .ia-head {
+        align-items: flex-start;
+        flex-direction: column;
+    }
+
+    .dispatcher-interagency-page .ia-ops-metrics {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .dispatcher-interagency-page .ia-ops-metric:nth-child(odd) {
+        border-right: 1px solid #d9e3ec;
+    }
+
+    .dispatcher-interagency-page .ia-ops-metric:nth-child(3),
+    .dispatcher-interagency-page .ia-ops-metric:nth-child(4),
+    .dispatcher-interagency-page .ia-ops-metric:nth-child(5) {
+        border-top: 1px solid #d9e3ec;
+    }
+}
+
+@media (max-width: 520px) {
+    .dispatcher-interagency-page .ia-module-launcher {
+        grid-template-columns: 1fr;
+    }
+}
