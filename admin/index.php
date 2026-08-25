@@ -118,18 +118,6 @@ function admin_dashboard_h($value): string
                         <a class="btn-metric" href="admin/user_management.php"><i class="fas fa-user-gear" aria-hidden="true"></i>Manage accounts</a>
                     </article>
 
-                    <article class="metric-card warning">
-                        <div class="metric-card-top">
-                            <div>
-                                <span class="metric-title">Partner agencies</span>
-                                <strong class="metric-value" id="metricPartnerAgencies">—</strong>
-                            </div>
-                            <span class="metric-icon partner"><i class="fas fa-handshake" aria-hidden="true"></i></span>
-                        </div>
-                        <p class="metric-context">Active agency records available for coordination.</p>
-                        <a class="btn-metric" href="admin/interagency.php"><i class="fas fa-handshake-angle" aria-hidden="true"></i>Open desk</a>
-                    </article>
-
                     <article class="metric-card info">
                         <div class="metric-card-top">
                             <div>

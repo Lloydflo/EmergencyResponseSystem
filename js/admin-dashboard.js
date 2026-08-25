@@ -329,7 +329,6 @@
             const metrics = payload.metrics || {};
             setText('metricOpenIncidents', formatNumber(metrics.open_incidents));
             setText('metricActiveAccounts', formatNumber(metrics.active_accounts ?? metrics.active_users));
-            setText('metricPartnerAgencies', formatNumber(metrics.partner_agencies));
             setText('metricRegisteredUnits', formatNumber(metrics.registered_units ?? metrics.resource_records));
             setText('metricMonthlyIncidents', formatNumber(metrics.monthly_incidents));
 
