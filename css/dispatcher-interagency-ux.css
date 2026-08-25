@@ -583,7 +583,9 @@ html[data-theme="dark"] .dispatcher-detail-narrative-copy {
 }
 
 .dispatcher-interagency-page .ia-ops-desk {
-    display: block;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 360px;
+    gap: 0.9rem;
     margin: 0;
 }
 
@@ -624,8 +626,12 @@ html[data-theme="dark"] .dispatcher-detail-narrative-copy {
     font-size: 0.76rem;
 }
 
-.dispatcher-interagency-page .ia-ops-desk > aside {
+.dispatcher-interagency-page .ia-ops-desk > aside:not(.ia-incident-monitor) {
     display: none;
+}
+
+.dispatcher-interagency-page .ia-incident-monitor {
+    min-height: 450px;
 }
 
 .dispatcher-interagency-page .ia-module-launcher {
@@ -692,6 +698,10 @@ html[data-theme="dark"] .dispatcher-detail-narrative-copy {
 
     .dispatcher-interagency-page .ia-ops-metrics {
         grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .dispatcher-interagency-page .ia-ops-desk {
+        grid-template-columns: 1fr;
     }
 
     .dispatcher-interagency-page .ia-ops-metric:nth-child(odd) {
