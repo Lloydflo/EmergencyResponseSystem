@@ -720,3 +720,62 @@ html[data-theme="dark"] .dispatcher-detail-narrative-copy {
         grid-template-columns: 1fr;
     }
 }
+
+html[data-theme="dark"] .dispatcher-interagency-page .main-content {
+    background: #08111f;
+}
+
+html[data-theme="dark"] .dispatcher-interagency-page .ia-head {
+    border-color: #2f4055;
+    background: #202b3b;
+}
+
+html[data-theme="dark"] .dispatcher-interagency-page .ia-head h1,
+html[data-theme="dark"] .dispatcher-interagency-page .ia-head p,
+html[data-theme="dark"] .dispatcher-interagency-page .ia-ops-metric-value,
+html[data-theme="dark"] .dispatcher-interagency-page .ia-module-btn-title {
+    color: #f8fafc;
+}
+
+html[data-theme="dark"] .dispatcher-interagency-page .ia-head h1::before,
+html[data-theme="dark"] .dispatcher-interagency-page .ia-ops-metric-label,
+html[data-theme="dark"] .dispatcher-interagency-page .ia-ops-metric-note,
+html[data-theme="dark"] .dispatcher-interagency-page .ia-module-btn-sub {
+    color: #d2dbea;
+}
+
+html[data-theme="dark"] .dispatcher-interagency-page .ia-ops-panel,
+html[data-theme="dark"] .dispatcher-interagency-page .ia-ops-metrics,
+html[data-theme="dark"] .dispatcher-interagency-page .ia-module-launcher {
+    border-color: #2f4055;
+    background: #101a2a;
+}
+
+html[data-theme="dark"] .dispatcher-interagency-page .ia-ops-metric {
+    border-color: #2f4055;
+}
+
+html[data-theme="dark"] .dispatcher-interagency-page .ia-module-btn {
+    border-color: #2f4055;
+    background: #101a2a;
+}
+
+html[data-theme="dark"] .dispatcher-interagency-page .ia-module-btn:nth-child(1),
+html[data-theme="dark"] .dispatcher-interagency-page .ia-module-btn:nth-child(4),
+html[data-theme="dark"] .dispatcher-interagency-page .ia-module-btn:nth-child(3) {
+    border-color: #0faaa0;
+    background: #102f3b;
+}
+
+html[data-theme="dark"] .dispatcher-interagency-page .ia-module-btn:hover,
+html[data-theme="dark"] .dispatcher-interagency-page .ia-module-btn.has-new {
+    border-color: #1ed1c3;
+    background: #143e48;
+    box-shadow: 0 6px 18px rgba(15, 170, 160, 0.16);
+}
+
+html[data-theme="dark"] .dispatcher-interagency-page .ia-pill {
+    border-color: #bdd6ff;
+    background: #f0f6ff;
+    color: #1556d6;
+}
