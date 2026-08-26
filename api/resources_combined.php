@@ -398,6 +398,9 @@ function ers_resources_load_active_unit_incident_assignment_map(PDO $pdo): array
     $locationSelect = ers_resources_column_exists($pdo, 'dispatch_operator_records', 'location') ? 'd.location' : 'NULL';
     $prioritySelect = ers_resources_column_exists($pdo, 'dispatch_operator_records', 'priority') ? 'd.priority' : 'NULL';
     $assignedAtOrder = ers_resources_column_exists($pdo, 'dispatch_operator_records', 'assigned_at') ? 'd.assigned_at DESC, ' : '';
+    $incidentActiveFilter = $incidentsJoin !== ''
+        ? "AND (d.incident_id IS NULL OR d.incident_id = 0 OR i.id IS NULL OR LOWER(COALESCE(i.status, '')) NOT IN ('resolved', 'closed', 'cancelled', 'completed'))"
+        : "";
 
     try {
         $stmt = $pdo->query(
@@ -420,6 +423,7 @@ function ers_resources_load_active_unit_incident_assignment_map(PDO $pdo): array
              {$usersJoin}
              {$incidentsJoin}
              WHERE LOWER(d.status) IN ('pending','assigned','received','accepted','acknowledged','busy','in_use','enroute','en_route','on_scene')
+               {$incidentActiveFilter}
              ORDER BY {$assignedAtOrder}d.id DESC"
         );
     } catch (Throwable $e) {

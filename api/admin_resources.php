@@ -395,6 +395,10 @@ function load_active_unit_incident_assignment_map(PDO $pdo): array {
         ? 'd.assigned_at DESC, '
         : '';
 
+    $incidentActiveFilter = $incidentsJoin !== ''
+        ? "AND (d.incident_id IS NULL OR d.incident_id = 0 OR i.id IS NULL OR LOWER(COALESCE(i.status, '')) NOT IN ('resolved', 'closed', 'cancelled', 'completed'))"
+        : "";
+
     try {
         $stmt = $pdo->query(
             "SELECT
@@ -416,6 +420,7 @@ function load_active_unit_incident_assignment_map(PDO $pdo): array {
              {$usersJoin}
              {$incidentsJoin}
              WHERE LOWER(d.status) IN ('pending','assigned','received','accepted','acknowledged','busy','in_use','enroute','en_route','on_scene')
+               {$incidentActiveFilter}
              ORDER BY {$assignedAtOrder}d.id DESC"
         );
     } catch (Throwable $e) {
@@ -847,12 +852,18 @@ function sync_vehicle_resource_assignment_availability(PDO $pdo): void {
     }
 }
 
-function apply_unassigned_vehicle_status(PDO $pdo, array $payload): array {
+function apply_unassigned_vehicle_status(PDO $pdo, array $payload, bool $isExplicitAdminEdit = false): array {
     if (strtolower(trim((string)($payload['category'] ?? ''))) !== 'vehicles') {
         return $payload;
     }
 
     $unitCode = strtoupper(trim((string)($payload['code'] ?? '')));
+    $status = strtolower(trim((string)($payload['status'] ?? 'available')));
+
+    if ($isExplicitAdminEdit && in_array($status, ['available', 'maintenance', 'offline'], true)) {
+        return $payload;
+    }
+
     $presenceMap = function_exists('ers_vehicle_resource_responder_presence_map')
         ? ers_vehicle_resource_responder_presence_map($pdo)
         : [];
@@ -863,7 +874,7 @@ function apply_unassigned_vehicle_status(PDO $pdo, array $payload): array {
     }
 
     if (
-        strtolower(trim((string)($payload['status'] ?? ''))) === 'available'
+        $status === 'available'
         && !vehicle_resource_has_assigned_responder($pdo, $unitCode)
     ) {
         $payload['status'] = 'offline';
@@ -878,6 +889,10 @@ try {
     ensure_legacy_resource_quantity_columns($pdo);
     migrate_legacy_admin_resource_tables($pdo);
     purge_expired_archived_resources($pdo);
+
+    if (function_exists('ers_reconcile_all_dispatch_and_unit_statuses')) {
+        ers_reconcile_all_dispatch_and_unit_statuses($pdo);
+    }
 
     $method = strtoupper((string)($_SERVER['REQUEST_METHOD'] ?? 'GET'));
     if ($method === 'GET') {
@@ -987,33 +1002,33 @@ try {
                 if ($pdo->inTransaction()) {
                     $pdo->rollBack();
                 }
-                    throw $transactionError;
-                }
+                throw $transactionError;
+            }
 
-                sync_vehicle_resource_unit($pdo, [
-                    'code' => (string)$archivedResource['code'],
-                    'name' => (string)$archivedResource['name'],
-                    'category' => (string)$archivedResource['category'],
-                    'status' => (string)$archivedResource['status'],
-                    'location' => (string)($archivedResource['location'] ?? ''),
-                    'latitude' => $archivedResource['latitude'] ?? null,
-                    'longitude' => $archivedResource['longitude'] ?? null,
-                    'assignment' => (string)($archivedResource['assignment'] ?? ''),
-                    'notes' => (string)($archivedResource['notes'] ?? ''),
-                    'driver_name' => (string)($archivedResource['driver_name'] ?? ''),
-                    'plate_number' => (string)($archivedResource['plate_number'] ?? '')
-                ]);
+            sync_vehicle_resource_unit($pdo, [
+                'code' => (string)$archivedResource['code'],
+                'name' => (string)$archivedResource['name'],
+                'category' => (string)$archivedResource['category'],
+                'status' => (string)$archivedResource['status'],
+                'location' => (string)($archivedResource['location'] ?? ''),
+                'latitude' => $archivedResource['latitude'] ?? null,
+                'longitude' => $archivedResource['longitude'] ?? null,
+                'assignment' => (string)($archivedResource['assignment'] ?? ''),
+                'notes' => (string)($archivedResource['notes'] ?? ''),
+                'driver_name' => (string)($archivedResource['driver_name'] ?? ''),
+                'plate_number' => (string)($archivedResource['plate_number'] ?? '')
+            ]);
 
-                $item = fetch_item($pdo, $restoredId);
-                echo json_encode([
-                    'ok' => true,
+            $item = fetch_item($pdo, $restoredId);
+            echo json_encode([
+                'ok' => true,
                 'item' => $item,
                 'restored_archive_id' => $archiveId
             ]);
             exit;
         }
 
-        $payload = apply_unassigned_vehicle_status($pdo, normalize_payload($rawPayload));
+        $payload = apply_unassigned_vehicle_status($pdo, normalize_payload($rawPayload), true);
         $stmt = $pdo->prepare(
             "INSERT INTO `" . RESOURCE_RECORDS_TABLE . "` (code, name, category, status, location, latitude, longitude, driver_name, plate_number, position_title, assignment, quantity, notes, created_at, updated_at)
              VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW())"
@@ -1057,7 +1072,7 @@ try {
             exit;
         }
 
-        $payload = apply_unassigned_vehicle_status($pdo, normalize_payload($rawPayload));
+        $payload = apply_unassigned_vehicle_status($pdo, normalize_payload($rawPayload), true);
         $stmt = $pdo->prepare(
             "UPDATE `" . RESOURCE_RECORDS_TABLE . "`
              SET code = ?, name = ?, category = ?, status = ?, location = ?, latitude = ?, longitude = ?, driver_name = ?, plate_number = ?, position_title = ?, assignment = ?, quantity = ?, notes = ?, updated_at = NOW()
@@ -1085,6 +1100,46 @@ try {
         } else {
             sync_vehicle_resource_unit($pdo, $payload, (string)($existingItem['code'] ?? ''));
         }
+
+        if ($payload['category'] === 'vehicles') {
+            $unitCode = strtoupper(trim((string)$payload['code']));
+            $newStatus = strtolower(trim((string)$payload['status']));
+
+            if ($newStatus === 'available') {
+                if (table_exists($pdo, 'users') && table_column_exists($pdo, 'users', 'unit_status')) {
+                    $pdo->prepare("UPDATE `users` SET unit_status = 'available' WHERE UPPER(TRIM(unit_code)) = ? AND LOWER(COALESCE(role, '')) = 'responder'")->execute([$unitCode]);
+                }
+                if (table_exists($pdo, 'units')) {
+                    $hasCurr = table_column_exists($pdo, 'units', 'current_incident_id');
+                    $currSql = $hasCurr ? ", current_incident_id = NULL" : "";
+                    $pdo->prepare("UPDATE `units` SET status = 'available'{$currSql} WHERE UPPER(TRIM(identifier)) = ?")->execute([$unitCode]);
+                }
+                if (table_exists($pdo, 'dispatch_operator_records') && table_exists($pdo, 'incidents')) {
+                    $pdo->prepare("
+                        UPDATE `dispatch_operator_records` dor
+                        INNER JOIN `incidents` i ON i.id = dor.incident_id
+                        SET dor.status = 'completed'
+                        WHERE UPPER(TRIM(dor.assigned_unit_code)) = ?
+                          AND LOWER(COALESCE(i.status, '')) IN ('resolved', 'closed', 'cancelled', 'completed')
+                    ")->execute([$unitCode]);
+                }
+            } elseif ($newStatus === 'maintenance') {
+                if (table_exists($pdo, 'users') && table_column_exists($pdo, 'users', 'unit_status')) {
+                    $pdo->prepare("UPDATE `users` SET unit_status = 'maintenance' WHERE UPPER(TRIM(unit_code)) = ? AND LOWER(COALESCE(role, '')) = 'responder'")->execute([$unitCode]);
+                }
+                if (table_exists($pdo, 'units')) {
+                    $pdo->prepare("UPDATE `units` SET status = 'maintenance' WHERE UPPER(TRIM(identifier)) = ?")->execute([$unitCode]);
+                }
+            } elseif ($newStatus === 'offline') {
+                if (table_exists($pdo, 'users') && table_column_exists($pdo, 'users', 'unit_status')) {
+                    $pdo->prepare("UPDATE `users` SET unit_status = 'offline' WHERE UPPER(TRIM(unit_code)) = ? AND LOWER(COALESCE(role, '')) = 'responder'")->execute([$unitCode]);
+                }
+                if (table_exists($pdo, 'units')) {
+                    $pdo->prepare("UPDATE `units` SET status = 'unavailable' WHERE UPPER(TRIM(identifier)) = ?")->execute([$unitCode]);
+                }
+            }
+        }
+
         $item = fetch_item($pdo, $id);
         echo json_encode(['ok' => true, 'item' => $item]);
         exit;
