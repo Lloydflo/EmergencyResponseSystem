@@ -203,6 +203,19 @@
         return `${base}/dispatcher/incident.php?code=${ref}`;
     };
 
+    const dispatchUrl = (referenceNo, incidentId) => {
+        const ref = String(referenceNo || '').trim();
+        const id = Number(incidentId || 0);
+        const base = appBasePath();
+        const params = new URLSearchParams({
+            source: 'tip',
+            open_dispatch: '1',
+        });
+        if (ref) params.append('code', ref);
+        if (id > 0) params.append('incident_id', String(id));
+        return `${base}/dispatcher/dispatch.php?${params.toString()}`;
+    };
+
     const notifyCountsChanged = () => {
         window.dispatchEvent(new CustomEvent('ers:anonymous-tips-updated'));
     };
@@ -450,7 +463,7 @@
 
     const convertTip = async () => {
         const item = selectedItem();
-        if (!item || isConvertedStatus(item)) {
+        if (!item) {
             return;
         }
 
@@ -494,15 +507,8 @@
             notifyCountsChanged();
             notifyIncidentQueueChanged(data.incident || null);
             const incidentId = Number(data.incident?.id || 0);
-            if (incidentId > 0) {
-                const dispatchUrl = new URL('dispatcher/dispatch.php', document.baseURI || window.location.href);
-                dispatchUrl.search = new URLSearchParams({
-                    incident_id: String(incidentId),
-                    code: reference,
-                    source: 'tip',
-                    open_dispatch: '1',
-                }).toString();
-                window.location.href = dispatchUrl.href;
+            if (incidentId > 0 || reference) {
+                window.location.href = dispatchUrl(reference, incidentId);
             }
         } catch (error) {
             state.error = error.message || 'Unable to convert anonymous tip';
@@ -614,10 +620,13 @@
                    </a>`
                 : '<div class="ia-tip-detail-value">Evidence saved but no image URL was provided.</div>')
             : '<div class="ia-tip-detail-value">None</div>';
-        const incidentLink = convertedReference
-            ? `<a class="ia-tip-secondary" href="${escapeHtml(incidentUrl(convertedReference))}"><i class="fas fa-arrow-up-right-from-square"></i> ${escapeHtml(convertedReference)}</a>`
+        const incidentLink = convertedReference || convertedId > 0
+            ? `<div class="ia-tip-link-group" style="display:flex;flex-wrap:wrap;gap:0.4rem;align-items:center;">
+                 <a class="ia-tip-secondary" href="${escapeHtml(dispatchUrl(convertedReference, convertedId))}"><i class="fas fa-truck-fast"></i> Dispatch Queue</a>
+                 <a class="ia-tip-secondary" href="${escapeHtml(incidentUrl(convertedReference))}"><i class="fas fa-list-check"></i> ${escapeHtml(convertedReference || ('Incident #' + convertedId))}</a>
+               </div>`
             : '<div class="ia-tip-detail-value">Not converted</div>';
-        const actionDisabled = (status) => state.action !== '' || isConverted || itemStatus === status;
+        const actionDisabled = (status) => state.action !== '' || itemStatus === status;
         const actionButtonText = (status, label) => state.action === status
             ? '<i class="fas fa-spinner fa-spin"></i> Working'
             : label;
@@ -659,9 +668,8 @@
                 <div class="ia-tip-quick-actions" aria-label="Tip quick actions">
                     <button type="button" class="ia-tip-secondary" data-tip-quick-status="reviewing" ${actionDisabled('reviewing') ? 'disabled' : ''}>${actionButtonText('reviewing', '<i class="fas fa-magnifying-glass"></i> Review')}</button>
                     <button type="button" class="ia-tip-secondary" data-tip-quick-status="verified" ${actionDisabled('verified') ? 'disabled' : ''}>${actionButtonText('verified', '<i class="fas fa-check-circle"></i> Verify')}</button>
-                    ${isConverted && convertedReference
-                        ? `<a class="ia-tip-secondary" href="${escapeHtml(incidentUrl(convertedReference))}"><i class="fas fa-arrow-up-right-from-square"></i> Open Incident</a>`
-                        : `<button type="button" class="ia-tip-secondary" data-tip-convert ${state.action !== '' ? 'disabled' : ''}>${actionButtonText('converted_to_incident', '<i class="fas fa-file-circle-plus"></i> Convert')}</button>`}
+                    <button type="button" class="ia-tip-secondary" data-tip-convert ${state.action !== '' ? 'disabled' : ''}>${actionButtonText('converted_to_incident', `<i class="fas ${isConverted ? 'fa-arrows-rotate' : 'fa-file-circle-plus'}"></i> ${isConverted ? 'Re-Send to Queue' : 'Convert to Incident'}`)}</button>
+                    ${isConverted ? `<a class="ia-tip-secondary" href="${escapeHtml(dispatchUrl(convertedReference, convertedId))}"><i class="fas fa-truck-fast"></i> Open in Dispatch</a>` : ''}
                     <button type="button" class="ia-tip-secondary" data-tip-quick-status="dismissed" ${actionDisabled('dismissed') ? 'disabled' : ''}>${actionButtonText('dismissed', '<i class="fas fa-ban"></i> Dismiss')}</button>
                 </div>
                 ${isConverted ? '<div class="ia-tip-lock-note">This tip is already linked to an incident, so review buttons are locked.</div>' : ''}

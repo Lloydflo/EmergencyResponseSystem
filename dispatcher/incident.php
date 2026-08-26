@@ -507,10 +507,20 @@ try {
         });
 
         window.addEventListener('storage', function(e) {
-            if (e.key === 'ers_incidents' || e.key === 'ers_incidents_changed') {
+            if (e.key === 'ers_incidents' || e.key === 'ers_incidents_changed' || e.key === 'ers_anonymous_tips_changed' || e.key === 'ers_last_logged_incident') {
                 refreshAIAnalysis();
                 fetchIncidents();
             }
+        });
+
+        window.addEventListener('ers:incident-queue-updated', function() {
+            refreshAIAnalysis();
+            fetchIncidents();
+        });
+
+        window.addEventListener('ers:anonymous-tips-updated', function() {
+            refreshAIAnalysis();
+            fetchIncidents();
         });
 
         // Filter functionality
@@ -813,10 +823,14 @@ try {
                 if (statusValue && mapped !== statusValue) return false;   // respect explicit filter selection
             }
 
-            if (typeValue && (i.type || '').toLowerCase() !== typeValue) return false;
+            if (typeValue) {
+                const incidentType = (i.type || '').toLowerCase();
+                const types = incidentType.split(',').map(t => t.trim());
+                if (!types.includes(typeValue) && !incidentType.includes(typeValue)) return false;
+            }
 
             if (searchValue) {
-                const hay = [i.reference_no, i.type, i.location, i.location_address, i.description]
+                const hay = [i.reference_no, i.incident_code, i.type, i.title, i.location, i.location_address, i.description, i.caller_name]
                     .map(v => (v || '').toString().toLowerCase()).join(' ');
                 if (!hay.includes(searchValue)) return false;
             }
@@ -1239,14 +1253,36 @@ try {
     </script>
 
     <script>
-    // Handle URL params for deep linking from reports
+    // Handle URL params for deep linking from reports or anonymous tips
     document.addEventListener('DOMContentLoaded', () => {
         try {
             const params = new URLSearchParams(window.location.search);
-            const code = params.get('code');
+            const code = params.get('code') || params.get('reference_no') || '';
+            const incidentId = Number(params.get('incident_id') || params.get('id') || 0);
             const period = params.get('period');
-            if (code) {
-                alert('Opening incident details for: ' + code);
+            if (code || incidentId > 0) {
+                const targetRef = code.trim().toLowerCase();
+                window.setTimeout(() => {
+                    const matchedCard = (incidentId > 0 ? document.querySelector(`[data-id="${incidentId}"]`) : null)
+                        || (targetRef ? document.querySelector(`[data-ref="${targetRef}"]`) : null)
+                        || Array.from(document.querySelectorAll('[data-incident-row]')).find(row => {
+                            const ref = (row.getAttribute('data-ref') || '').toLowerCase();
+                            return targetRef && ref.includes(targetRef);
+                        });
+                    if (matchedCard) {
+                        matchedCard.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                        matchedCard.style.outline = '2px solid #2563eb';
+                        matchedCard.style.outlineOffset = '3px';
+                        window.setTimeout(() => {
+                            matchedCard.style.outline = '';
+                            matchedCard.style.outlineOffset = '';
+                        }, 4000);
+                    }
+                    showNotification(
+                        code ? `Viewing incident ${code}` : 'Incident loaded in queue.',
+                        'info'
+                    );
+                }, 350);
             }
             if (period) {
                 console.log('Incident view period:', period);
