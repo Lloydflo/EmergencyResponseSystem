@@ -641,9 +641,8 @@ function ers_tip_convert_to_incident(PDO $pdo, array $input): array
                 ':longitude' => $coordinates['longitude'],
                 ':reported_by_call_id' => $callId,
             ]);
-            if ($hasIntakeSource) {
-                $pdo->prepare("UPDATE incidents SET intake_source = 'tip' WHERE id = ?")->execute([$incidentId]);
-            }
+            $intakeSql = $hasIntakeSource ? ", intake_source = 'tip'" : '';
+            $pdo->prepare("UPDATE incidents SET status = 'pending'{$intakeSql} WHERE id = ?")->execute([$incidentId]);
             ers_tip_activate_incident($pdo, $incidentId);
             $created = ['id' => $incidentId, 'reference_no' => $referenceNo, 'status' => 'pending'];
         }
