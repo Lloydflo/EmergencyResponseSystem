@@ -602,6 +602,29 @@ if (!headers_sent()) {
             flex-shrink: 0;
         }
 
+        .request-resource-table tbody tr.incoming-request-clickable {
+            cursor: pointer;
+            transition: background 0.15s ease, box-shadow 0.15s ease;
+        }
+
+        .request-resource-table tbody tr.incoming-request-clickable:hover {
+            background: rgba(59, 130, 246, 0.08);
+        }
+
+        .request-resource-table tbody tr.incoming-request-active {
+            background: rgba(37, 99, 235, 0.14) !important;
+            box-shadow: inset 4px 0 0 #2563eb;
+        }
+
+        html[data-theme="dark"] .request-resource-table tbody tr.incoming-request-clickable:hover {
+            background: rgba(59, 130, 246, 0.18);
+        }
+
+        html[data-theme="dark"] .request-resource-table tbody tr.incoming-request-active {
+            background: rgba(59, 130, 246, 0.25) !important;
+            box-shadow: inset 4px 0 0 #60a5fa;
+        }
+
         .archive-summary {
             border: 1px solid #dbeafe;
             background: linear-gradient(135deg, #eff6ff, #f8fafc);
@@ -1486,8 +1509,8 @@ if (!headers_sent()) {
                         <section class="request-panel">
                             <div class="request-panel-head">
                                 <div>
-                                    <h3>Available Vehicles</h3>
-                                    <span>Only emergency vehicles with `Available` status are listed here.</span>
+                                    <h3>Available Resources</h3>
+                                    <span>Only resources with `Available` status are listed here.</span>
                                 </div>
                                 <span class="request-count-chip"><span id="requestSelectedCount">0</span> selected</span>
                             </div>
@@ -1495,24 +1518,24 @@ if (!headers_sent()) {
                                 <table class="request-resource-table">
                                     <thead>
                                         <tr>
-                                            <th>Vehicle Code</th>
-                                            <th>Vehicle / Name</th>
-                                            <th>Driver / Plate</th>
+                                            <th>Operational No.</th>
+                                            <th>Resource</th>
+                                            <th>Category</th>
                                             <th>Location</th>
                                             <th>Add</th>
                                         </tr>
                                     </thead>
                                     <tbody id="requestResourcePickerBody">
                                         <tr>
-                                            <td colspan="5" class="request-empty">No available vehicles.</td>
+                                            <td colspan="5" class="request-empty">No available resources.</td>
                                         </tr>
                                     </tbody>
                                 </table>
                             </div>
                             <div class="request-selected-wrap">
-                                <strong>Selected backup vehicles</strong>
+                                <strong>Selected backup resources</strong>
                                 <div class="request-selected-list" id="requestSelectedList">
-                                    <span class="request-empty">Choose vehicles using the + button.</span>
+                                    <span class="request-empty">Choose resources using the + button.</span>
                                 </div>
                             </div>
                         </section>
@@ -2105,6 +2128,58 @@ if (!headers_sent()) {
             return item.assignment || 'N/A';
         }
 
+        let activeSelectedIncomingRequestId = null;
+
+        function applyIncomingRequestContext(req) {
+            if (!req) return;
+            activeSelectedIncomingRequestId = Number(req.id) || null;
+
+            // 1. Auto-select Incident
+            const targetIncidentId = Number(req.incident_id || 0);
+            if (targetIncidentId > 0) {
+                const exists = backupIncidents.some((inc) => Number(inc.id) === targetIncidentId);
+                if (!exists) {
+                    backupIncidents.unshift({
+                        id: targetIncidentId,
+                        code: req.incident_code || `INC-${targetIncidentId}`,
+                        title: req.incident_title || 'Active Incident',
+                        location: req.location || '',
+                        priority: req.priority || 'high',
+                        status: 'active'
+                    });
+                    renderBackupIncidentOptions();
+                }
+                requestIncidentSelect.value = String(targetIncidentId);
+                updateBackupIncidentMeta();
+            } else if (req.incident_code) {
+                const found = backupIncidents.find((inc) => inc.code === req.incident_code);
+                if (found) {
+                    requestIncidentSelect.value = String(found.id);
+                    updateBackupIncidentMeta();
+                }
+            }
+
+            // 2. Pre-fill Priority & Urgency
+            if (req.priority && ['high', 'medium', 'low'].includes(String(req.priority).toLowerCase())) {
+                requestPriorityInput.value = String(req.priority).toLowerCase();
+            } else if (String(req.urgency || '').toLowerCase() === 'critical' || String(req.urgency || '').toLowerCase() === 'urgent') {
+                requestPriorityInput.value = 'high';
+            }
+            if (req.urgency && ['urgent', 'normal'].includes(String(req.urgency).toLowerCase())) {
+                requestUrgencyInput.value = String(req.urgency).toLowerCase();
+            }
+
+            // 3. Pre-fill Reason / Backup Need notes
+            const reasonParts = [];
+            if (req.requestor) reasonParts.push(`Requestor: ${req.requestor}`);
+            if (req.resource_name) reasonParts.push(`Need: ${req.quantity || 1}x ${req.resource_name}`);
+            if (req.notes) reasonParts.push(`Notes: ${req.notes}`);
+            requestBackupNotes.value = reasonParts.join(' | ') || req.notes || `Backup requested for incident ${req.incident_code || req.incident_id || ''}`;
+
+            // 4. Update the visual selection in incoming table
+            renderIncomingRequests();
+        }
+
         function renderIncomingRequests() {
             if (!incomingRequestTableBody || !incomingRequestCount) return;
 
@@ -2117,16 +2192,20 @@ if (!headers_sent()) {
             incomingRequestTableBody.innerHTML = incomingRequests.map((item) => {
                 const typeLabel = item.type
                     ? String(item.type).charAt(0).toUpperCase() + String(item.type).slice(1)
-                    : 'Other';
+                    : 'Vehicle';
                 const detailParts = [];
                 if (item.location) detailParts.push(item.location);
                 if (item.notes) detailParts.push(item.notes);
                 if (item.incident_code || item.incident_id) {
                     detailParts.push(item.incident_code || `Incident #${item.incident_id}`);
                 }
+                const isSelected = activeSelectedIncomingRequestId && Number(activeSelectedIncomingRequestId) === Number(item.id);
                 return `
-                    <tr>
-                        <td>${escapeHtml(item.requestor || 'Responder')}</td>
+                    <tr class="incoming-request-clickable ${isSelected ? 'incoming-request-active' : ''}" data-incoming-request-id="${item.id}" title="Click to select this request and auto-fill the backup form">
+                        <td>
+                            <strong>${escapeHtml(item.requestor || 'Responder')}</strong>
+                            ${isSelected ? '<br><span style="font-size:0.75rem; color:#2563eb; font-weight:600;"><i class="fas fa-check-circle"></i> Selected</span>' : ''}
+                        </td>
                         <td>
                             <strong>${escapeHtml(item.resource_name || 'Request')}</strong><br>
                             <span class="resource-meta-note">${escapeHtml(relativeRequestTime(item.date_requested || ''))}</span>
@@ -2168,7 +2247,7 @@ if (!headers_sent()) {
 
         function getAvailableBackupResources() {
             return resources
-                .filter((item) => item.status === 'available' && (item.category === 'vehicles' || item.category === 'vehicle'))
+                .filter((item) => item.status === 'available')
                 .slice()
                 .sort((a, b) => {
                     const codeA = String(a.code || '').toLowerCase();
@@ -2183,7 +2262,12 @@ if (!headers_sent()) {
         }
 
         function inferBackupResourceType(items) {
-            return 'vehicle';
+            const categories = Array.from(new Set(items.map((item) => String(item.category || '').trim()).filter(Boolean)));
+            if (categories.length !== 1) return 'other';
+            if (categories[0] === 'vehicles') return 'vehicle';
+            if (categories[0] === 'personnel') return 'personnel';
+            if (categories[0] === 'equipment') return 'equipment';
+            return 'other';
         }
 
         function renderBackupIncidentOptions() {
@@ -2223,7 +2307,7 @@ if (!headers_sent()) {
             const availableResources = getAvailableBackupResources();
 
             if (availableResources.length === 0) {
-                requestResourcePickerBody.innerHTML = '<tr><td colspan="5" class="request-empty">No available vehicles ready for backup request.</td></tr>';
+                requestResourcePickerBody.innerHTML = '<tr><td colspan="5" class="request-empty">No available resources ready for backup request.</td></tr>';
                 return;
             }
 
@@ -2233,17 +2317,17 @@ if (!headers_sent()) {
                 return `
                     <tr>
                         <td class="request-number-cell">
-                            <span>Vehicle</span>
+                            <span>${escapeHtml(resourceIdentifierLabel(item.category))}</span>
                             <strong>${escapeHtml(item.code)}</strong>
                         </td>
                         <td class="name-cell">
                             <strong>${escapeHtml(item.name)}</strong>
-                            <span>${escapeHtml(item.assignment || 'Fleet Unit')}</span>
+                            <span>${escapeHtml(detailLine)}</span>
                         </td>
-                        <td>${escapeHtml(detailLine)}</td>
+                        <td>${escapeHtml(formatCategory(item.category))}</td>
                         <td>${escapeHtml(formatResourceLocation(item))}</td>
                         <td>
-                            <button type="button" class="request-pick-btn ${isSelected ? 'selected' : ''}" data-backup-resource-id="${item.id}" aria-label="${isSelected ? 'Remove vehicle' : 'Add vehicle'}">
+                            <button type="button" class="request-pick-btn ${isSelected ? 'selected' : ''}" data-backup-resource-id="${item.id}" aria-label="${isSelected ? 'Remove resource' : 'Add resource'}">
                                 <i class="fas ${isSelected ? 'fa-check' : 'fa-plus'}"></i>
                             </button>
                         </td>
@@ -2257,13 +2341,13 @@ if (!headers_sent()) {
             requestSelectedCount.textContent = String(selectedItems.length);
 
             if (selectedItems.length === 0) {
-                requestSelectedList.innerHTML = '<span class="request-empty">Choose vehicles using the + button.</span>';
+                requestSelectedList.innerHTML = '<span class="request-empty">Choose resources using the + button.</span>';
                 return;
             }
 
             requestSelectedList.innerHTML = selectedItems.map((item) => `
                 <span class="request-selected-chip">
-                    <span>${escapeHtml(item.code)} - ${escapeHtml(item.name)}</span>
+                    <span>${escapeHtml(item.code)} - ${escapeHtml(item.name)}${item.category === 'equipment' ? ` (Qty: ${escapeHtml(Math.max(1, Number(item.quantity) || 1))})` : ''}</span>
                     <button type="button" data-remove-backup-resource-id="${item.id}" aria-label="Remove ${escapeHtml(item.name)}">
                         <i class="fas fa-times"></i>
                     </button>
@@ -2272,10 +2356,12 @@ if (!headers_sent()) {
         }
 
         function resetBackupRequestState() {
+            activeSelectedIncomingRequestId = null;
             selectedBackupResourceIds.clear();
             requestBackupForm.reset();
             requestPriorityInput.value = 'high';
             requestUrgencyInput.value = 'urgent';
+            renderIncomingRequests();
             renderBackupRequestTable();
             renderSelectedBackupResources();
             renderBackupIncidentOptions();
@@ -2691,16 +2777,49 @@ if (!headers_sent()) {
             }
         }
 
-        async function openRequestBackupModal() {
+        async function openRequestBackupModal(context) {
             rememberTrigger(requestBackupBtn);
             await loadBackupIncidents();
             await loadIncomingRequests();
             resetBackupRequestState();
+
+            if (context) {
+                const reqId = Number(context.requestId || context.id || 0);
+                const incId = Number(context.incidentId || 0);
+                let matchedRequest = null;
+                if (reqId > 0) {
+                    matchedRequest = incomingRequests.find((r) => Number(r.id) === reqId);
+                }
+                if (!matchedRequest && incId > 0) {
+                    matchedRequest = incomingRequests.find((r) => Number(r.incident_id) === incId);
+                }
+                if (matchedRequest) {
+                    applyIncomingRequestContext(matchedRequest);
+                } else if (incId > 0) {
+                    const exists = backupIncidents.some((inc) => Number(inc.id) === incId);
+                    if (!exists) {
+                        backupIncidents.unshift({
+                            id: incId,
+                            code: `INC-${incId}`,
+                            title: 'Active Incident',
+                            location: '',
+                            priority: 'high',
+                            status: 'active'
+                        });
+                        renderBackupIncidentOptions();
+                    }
+                    requestIncidentSelect.value = String(incId);
+                    updateBackupIncidentMeta();
+                }
+            }
+
             requestBackupModal.classList.add('show');
             requestBackupModal.setAttribute('aria-hidden', 'false');
             document.body.style.overflow = 'hidden';
             requestIncidentSelect.focus();
         }
+
+        window.openRequestBackupModalWithContext = openRequestBackupModal;
 
         function closeRequestBackupModal() {
             requestBackupModal.classList.remove('show');
@@ -3062,12 +3181,34 @@ if (!headers_sent()) {
             showToast('Filters reset.');
         });
 
+        if (incomingRequestTableBody) {
+            incomingRequestTableBody.addEventListener('click', (event) => {
+                const row = event.target.closest('[data-incoming-request-id]');
+                if (!row) return;
+                const reqId = Number(row.getAttribute('data-incoming-request-id') || 0);
+                const matched = incomingRequests.find((r) => Number(r.id) === reqId);
+                if (matched) {
+                    applyIncomingRequestContext(matched);
+                    showToast(`Selected request from ${matched.requestor || 'Responder'}`);
+                }
+            });
+        }
+
         initializeLocationAutocomplete();
 
         (async () => {
             try {
                 await loadResources();
                 await loadArchivedResources();
+
+                // Check URL params for automated backup modal opening
+                const urlParams = new URLSearchParams(window.location.search);
+                if (urlParams.get('open_request_backup') === '1') {
+                    await openRequestBackupModal({
+                        requestId: urlParams.get('request_id'),
+                        incidentId: urlParams.get('incident_id')
+                    });
+                }
             } catch (err) {
                 tableBody.innerHTML = '<div class="resource-empty-state"><div><span class="resource-empty-icon"><i class="fas fa-triangle-exclamation" aria-hidden="true"></i></span><h3>Resource roster unavailable</h3><p>The current resource list could not be loaded. Refresh the page or try again shortly.</p></div></div>';
                 showToast((err && err.message) ? String(err.message) : 'Unable to load resources.');

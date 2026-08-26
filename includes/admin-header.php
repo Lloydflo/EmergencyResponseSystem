@@ -603,106 +603,6 @@ document.addEventListener('DOMContentLoaded', function() {
         }
 
         notificationList.innerHTML = combinedNotificationParts.join('');
-        return;
-
-        const latest = state.unreadThreads[0] || state.recentThreads[0] || null;
-        const backupCount = Array.isArray(state.backupRequests) ? state.backupRequests.length : 0;
-        const latestBackup = backupCount > 0 ? state.backupRequests[0] : null;
-        const resourceAdditionItems = Array.isArray(state.resourceAdditionNotifications) ? state.resourceAdditionNotifications.slice(0, 3) : [];
-        const resolvedItems = Array.isArray(state.resolvedNotifications) ? state.resolvedNotifications.slice(0, 3) : [];
-        const incidentCardItems = Array.isArray(state.incidentCardNotifications) ? state.incidentCardNotifications.slice(0, 3) : [];
-        const parts = [];
-
-        incidentCardItems.forEach(function(item) {
-            const label = incidentCardLabel(item);
-            const isUnread = Number(item.notification_id || 0) > state.incidentCardSeenId;
-            parts.push(`
-                <button type="button" class="notification-item header-reset-button" data-open-interagency="1" data-incident-card-notification="1">
-                    <div class="notification-icon">
-                        <i class="fas ${isUnread ? 'fa-triangle-exclamation' : 'fa-clipboard-list'}"></i>
-                    </div>
-                    <div class="notification-details">
-                        <div class="notification-title">${escapeHtml(isUnread ? 'Incident card sent' : 'Incident card')}</div>
-                        <div class="notification-text">${escapeHtml(incidentCardText(item))}</div>
-                        <div class="notification-time">${escapeHtml(label)} · ${escapeHtml(relativeTime(item.notified_at))}</div>
-                    </div>
-                </button>
-            `);
-        });
-
-        resolvedItems.forEach(function(item) {
-            const incident = item && item.incident ? item.incident : {};
-            const incidentLabel = incident.label || incident.reference_no || (incident.id ? ('#' + incident.id) : 'Incident');
-            const detailText = item.details || `${incidentLabel} has been resolved.`;
-            const isUnread = Number(item.notification_id || 0) > state.resolvedSeenId;
-            parts.push(`
-                <button type="button" class="notification-item header-reset-button" data-open-review="1">
-                    <div class="notification-icon">
-                        <i class="fas ${isUnread ? 'fa-circle-check' : 'fa-check'}"></i>
-                    </div>
-                    <div class="notification-details">
-                        <div class="notification-title">${escapeHtml(isUnread ? 'Resolved review sent' : 'Resolved review')}</div>
-                        <div class="notification-text">${escapeHtml(detailText)}</div>
-                        <div class="notification-time">${escapeHtml(relativeTime(item.notified_at || incident.resolved_at))}</div>
-                    </div>
-                </button>
-            `);
-        });
-
-        resourceAdditionItems.forEach(function(item) {
-            const isUnread = Number(item.notification_id || 0) > state.resourceAdditionSeenId;
-            parts.push(`
-                <button type="button" class="notification-item header-reset-button" data-open-resources="1" data-resource-addition-notification="1">
-                    <div class="notification-icon">
-                        <i class="fas ${isUnread ? 'fa-circle-plus' : 'fa-box'}"></i>
-                    </div>
-                    <div class="notification-details">
-                        <div class="notification-title">${escapeHtml(isUnread ? 'Resource added' : 'Added resource')}</div>
-                        <div class="notification-text">${escapeHtml(resourceAdditionText(item))}</div>
-                        <div class="notification-time">${escapeHtml(relativeTime(item.notified_at))}</div>
-                    </div>
-                </button>
-            `);
-        });
-
-        if (latestBackup) {
-            const notificationText = backupRequestText(latestBackup);
-            const iconClass = latestBackup.request_kind === 'backup' ? 'fa-truck-medical' : 'fa-hand-holding-medical';
-            parts.push(`
-                <button type="button" class="notification-item header-reset-button" data-open-resources="1">
-                    <div class="notification-icon">
-                        <i class="fas ${iconClass}"></i>
-                    </div>
-                    <div class="notification-details">
-                        <div class="notification-title">${escapeHtml(backupUnreadText(backupCount))}</div>
-                        <div class="notification-text">${escapeHtml(notificationText)}</div>
-                        <div class="notification-time">${escapeHtml(relativeTime(latestBackup.date_requested))}</div>
-                    </div>
-                </button>
-            `);
-        }
-
-        if (unreadCount > 0 && latest) {
-            parts.push(`
-                <button type="button" class="notification-item header-reset-button" data-open-interagency="1">
-                    <div class="notification-icon">
-                        <i class="fas fa-envelope"></i>
-                    </div>
-                    <div class="notification-details">
-                        <div class="notification-title">${escapeHtml(unreadText(unreadCount))}</div>
-                        <div class="notification-text">${escapeHtml(threadTitle(latest))}: ${escapeHtml(previewText(latest))}</div>
-                        <div class="notification-time">${escapeHtml(relativeTime(latest.last_at))}</div>
-                    </div>
-                </button>
-            `);
-        }
-
-        if (!parts.length) {
-            notificationList.innerHTML = emptyState('fa-bell-slash', 'No new notifications.');
-            return;
-        }
-
-        notificationList.innerHTML = parts.join('');
     }
 
     function backupRequestLabel(item) {
@@ -889,26 +789,42 @@ document.addEventListener('DOMContentLoaded', function() {
 
     function renderMessageList() {
         if (!messageList) return;
-        const items = state.recentThreads.slice(0, 6);
-        if (!items.length) {
-            messageList.innerHTML = emptyState('fa-inbox', 'No interagency messages yet.');
+        if (!state.unreadThreads.length && !state.recentThreads.length) {
+            messageList.innerHTML = emptyState('fa-comment-slash', 'No conversations found.');
             return;
         }
 
-        messageList.innerHTML = items.map((item) => {
-            const unread = Math.max(0, Number(item.unread) || 0);
+        const renderedIds = new Set();
+        const items = [];
+        state.unreadThreads.forEach(function(thread) {
+            const id = String(thread.id || '');
+            if (!renderedIds.has(id)) {
+                renderedIds.add(id);
+                items.push(thread);
+            }
+        });
+        state.recentThreads.forEach(function(thread) {
+            const id = String(thread.id || '');
+            if (!renderedIds.has(id)) {
+                renderedIds.add(id);
+                items.push(thread);
+            }
+        });
+
+        messageList.innerHTML = items.map(function(thread) {
+            const unread = Math.max(0, Number(thread.unread) || 0);
+            const title = threadTitle(thread);
             return `
-                <button type="button" class="message-item header-message-item" data-open-interagency="1">
-                    <div class="message-avatar header-message-avatar">${escapeHtml(avatarInitials(threadTitle(item)))}</div>
-                    <div class="message-details">
-                        <div class="message-title">${escapeHtml(threadTitle(item))}</div>
-                        <div class="message-text">${escapeHtml(previewText(item))}</div>
-                        <div class="header-message-meta">
-                            <span class="message-time">${escapeHtml(relativeTime(item.last_at))}</span>
-                            ${unread > 0 ? `<span class="header-message-count">${escapeHtml(unreadText(unread))}</span>` : ''}
+                <button type="button" class="message-content-item header-reset-button" data-open-interagency="1">
+                    <div class="message-content-avatar">${escapeHtml(avatarInitials(title))}</div>
+                    <div class="message-content-body">
+                        <div class="message-content-top">
+                            <span class="message-content-author">${escapeHtml(title)}</span>
+                            <span class="message-content-time">${escapeHtml(relativeTime(thread.last_at))}</span>
                         </div>
+                        <div class="message-content-preview">${escapeHtml(previewText(thread))}</div>
                     </div>
-                    ${unread > 0 ? '<div class="message-status unread"></div>' : ''}
+                    ${unread > 0 ? `<span class="message-content-unread">${escapeHtml(String(unread))}</span>` : ''}
                 </button>
             `;
         }).join('');
@@ -920,14 +836,14 @@ document.addEventListener('DOMContentLoaded', function() {
         window.clearTimeout(state.toastTimer);
         state.toastTimer = window.setTimeout(function() {
             liveToast.hidden = true;
-        }, 200);
+        }, 220);
     }
 
-    function showLiveToast(count) {
-        if (!liveToast || count <= 0) return;
+    function showMessageToast(thread) {
+        if (!liveToast || !thread) return;
         if (liveToastIcon) liveToastIcon.className = 'fas fa-envelope';
-        if (liveToastTitle) liveToastTitle.textContent = 'Interagency';
-        if (liveToastText) liveToastText.textContent = unreadText(count);
+        if (liveToastTitle) liveToastTitle.textContent = threadTitle(thread);
+        if (liveToastText) liveToastText.textContent = previewText(thread);
         liveToast.setAttribute('data-toast-target', 'interagency');
         liveToast.hidden = false;
         window.clearTimeout(state.toastTimer);
@@ -942,7 +858,12 @@ document.addEventListener('DOMContentLoaded', function() {
         if (liveToastIcon) liveToastIcon.className = 'fas fa-truck-medical';
         if (liveToastTitle) liveToastTitle.textContent = 'Resource Requests';
         if (liveToastText) liveToastText.textContent = backupUnreadText(count);
-        liveToast.setAttribute('data-toast-target', 'resources');
+        liveToast.setAttribute('data-toast-target', 'backup_requests');
+        if (Array.isArray(state.backupRequests) && state.backupRequests.length > 0) {
+            const firstReq = state.backupRequests[0];
+            liveToast.setAttribute('data-request-id', String(firstReq.id || ''));
+            liveToast.setAttribute('data-incident-id', String(firstReq.incident_id || ''));
+        }
         liveToast.hidden = false;
         window.clearTimeout(state.toastTimer);
         window.requestAnimationFrame(function() {
@@ -968,8 +889,8 @@ document.addEventListener('DOMContentLoaded', function() {
     function showResolvedToast(count) {
         if (!liveToast || count <= 0) return;
         if (liveToastIcon) liveToastIcon.className = 'fas fa-circle-check';
-        if (liveToastTitle) liveToastTitle.textContent = 'Resolved Review';
-        if (liveToastText) liveToastText.textContent = count === 1 ? '1 resolved review was sent to admin' : count + ' resolved reviews were sent to admin';
+        if (liveToastTitle) liveToastTitle.textContent = 'Resolved Incidents';
+        if (liveToastText) liveToastText.textContent = resolvedUnreadText(count);
         liveToast.setAttribute('data-toast-target', 'review');
         liveToast.hidden = false;
         window.clearTimeout(state.toastTimer);
@@ -981,8 +902,8 @@ document.addEventListener('DOMContentLoaded', function() {
 
     function showIncidentCardToast(count) {
         if (!liveToast || count <= 0) return;
-        if (liveToastIcon) liveToastIcon.className = 'fas fa-triangle-exclamation';
-        if (liveToastTitle) liveToastTitle.textContent = 'Incident Card';
+        if (liveToastIcon) liveToastIcon.className = 'fas fa-clipboard-list';
+        if (liveToastTitle) liveToastTitle.textContent = 'Incident Cards';
         if (liveToastText) liveToastText.textContent = incidentCardUnreadText(count);
         liveToast.setAttribute('data-toast-target', 'incident-card');
         liveToast.hidden = false;
@@ -1006,26 +927,6 @@ document.addEventListener('DOMContentLoaded', function() {
         });
         state.toastTimer = window.setTimeout(hideLiveToast, 4000);
     }
-
-    function closeModal(modalId) {
-        const modal = document.getElementById(modalId);
-        if (!modal) return;
-        modal.classList.remove('show');
-        if (modalId === 'notificationModal' && notificationBtn) notificationBtn.classList.remove('active');
-        if (modalId === 'allNotificationsModal' && notificationBtn) notificationBtn.classList.remove('active');
-        if (modalId === 'messageModal' && messageBtn) messageBtn.classList.remove('active');
-        document.body.style.overflow = '';
-    }
-
-    function closeAllModals() {
-        document.querySelectorAll('.notification-modal, .message-content-modal').forEach(function(modal) {
-            modal.classList.remove('show');
-        });
-        if (notificationBtn) notificationBtn.classList.remove('active');
-        if (messageBtn) messageBtn.classList.remove('active');
-        document.body.style.overflow = '';
-    }
-
     function toggleModal(modal, button, otherModal, otherButton) {
         if (!modal || !button) return;
         const willShow = !modal.classList.contains('show');
@@ -1036,6 +937,18 @@ document.addEventListener('DOMContentLoaded', function() {
         modal.classList.toggle('show', willShow);
         button.classList.toggle('active', willShow);
         document.body.style.overflow = '';
+    }
+
+    function openBackupRequestFlow(reqId, incId) {
+        if (typeof openRequestBackupModalWithContext === 'function') {
+            openRequestBackupModalWithContext({ requestId: reqId, incidentId: incId });
+            return;
+        }
+        const targetUrl = new URL(resourcesUrl, window.location.href);
+        targetUrl.searchParams.set('open_request_backup', '1');
+        if (reqId) targetUrl.searchParams.set('request_id', String(reqId));
+        if (incId) targetUrl.searchParams.set('incident_id', String(incId));
+        window.location.href = targetUrl.toString();
     }
 
     async function openAllNotifications() {
@@ -1434,6 +1347,19 @@ document.addEventListener('DOMContentLoaded', function() {
             return;
         }
 
+        const requestBackupTrigger = event.target.closest('[data-open-request-backup]');
+        if (requestBackupTrigger) {
+            event.preventDefault();
+            markResourceRequestNotificationsSeen();
+            setBadge(notificationBadge, notificationBadgeTotal());
+            closeAllModals();
+            openBackupRequestFlow(
+                requestBackupTrigger.getAttribute('data-request-id') || '',
+                requestBackupTrigger.getAttribute('data-incident-id') || ''
+            );
+            return;
+        }
+
         const resourceTrigger = event.target.closest('[data-open-resources]');
         if (resourceTrigger) {
             event.preventDefault();
@@ -1504,6 +1430,16 @@ document.addEventListener('DOMContentLoaded', function() {
             if (liveToast.getAttribute('data-toast-target') === 'review') {
                 markResolvedNotificationsSeen();
                 openReview();
+                return;
+            }
+            if (liveToast.getAttribute('data-toast-target') === 'backup_requests') {
+                markResourceRequestNotificationsSeen();
+                setBadge(notificationBadge, notificationBadgeTotal());
+                hideLiveToast();
+                openBackupRequestFlow(
+                    liveToast.getAttribute('data-request-id') || '',
+                    liveToast.getAttribute('data-incident-id') || ''
+                );
                 return;
             }
             if (liveToast.getAttribute('data-toast-target') === 'resources') {
