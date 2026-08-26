@@ -296,6 +296,10 @@ function ers_live_tracking_route_polyline(
             CURLOPT_TIMEOUT => 8,
             CURLOPT_SSL_VERIFYPEER => true,
             CURLOPT_SSL_VERIFYHOST => 2,
+            // OSRM's public demo server 403s requests with no/blank
+            // User-Agent (part of their anti-abuse policy) — curl CLI sends
+            // one by default, PHP's curl does not unless we set it here.
+            CURLOPT_USERAGENT => 'EmergencyResponseSystem-LiveTracking/1.0 (+https://github.com/Lloydflo/EmergencyResponseSystem)',
             CURLOPT_HTTPHEADER => ['Accept: application/json'],
         ]);
         $raw = curl_exec($curl);
