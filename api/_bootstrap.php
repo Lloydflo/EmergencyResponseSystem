@@ -133,9 +133,9 @@ function ers_external_input(): array
 
     $trimmed = trim($raw);
     $contentType = strtolower((string)($_SERVER['CONTENT_TYPE'] ?? ''));
-    $looksJson = str_contains($contentType, 'application/json')
-        || str_starts_with($trimmed, '{')
-        || str_starts_with($trimmed, '[');
+    $looksJson = strpos($contentType, 'application/json') !== false
+        || strpos($trimmed, '{') === 0
+        || strpos($trimmed, '[') === 0;
 
     if ($looksJson) {
         $decoded = json_decode($trimmed, true);
@@ -148,7 +148,7 @@ function ers_external_input(): array
     }
 
     $form = [];
-    if (str_contains($contentType, 'application/x-www-form-urlencoded') || str_contains($trimmed, '=')) {
+    if (strpos($contentType, 'application/x-www-form-urlencoded') !== false || strpos($trimmed, '=') !== false) {
         parse_str($trimmed, $form);
     }
     if (is_array($form) && $form !== []) {
