@@ -2569,3 +2569,285 @@ body.incident-details-modal-open {
         grid-template-columns: 1fr;
     }
 }
+
+/* ==========================================================================
+   San Agustin Street Autocomplete & Location Coordinate Badges
+   ========================================================================== */
+.location-form-group {
+    position: relative;
+}
+
+.location-label-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 0.35rem;
+}
+
+.location-coverage-tag {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    font-size: 0.72rem;
+    font-weight: 700;
+    color: #0284c7;
+    background: #e0f2fe;
+    padding: 0.18rem 0.5rem;
+    border-radius: 999px;
+    border: 1px solid rgba(2, 132, 199, 0.25);
+    letter-spacing: 0.02em;
+}
+
+.location-input-wrapper {
+    position: relative;
+    display: flex;
+    align-items: center;
+}
+
+.location-input-wrapper input {
+    width: 100%;
+    padding-right: 2.4rem !important;
+}
+
+.location-status-icon {
+    position: absolute;
+    right: 0.75rem;
+    top: 50%;
+    transform: translateY(-50%);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.95rem;
+    pointer-events: none;
+    color: #64748b;
+    transition: color 0.2s ease, transform 0.2s ease;
+}
+
+.location-coords-badge {
+    margin-top: 0.4rem;
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+    font-size: 0.76rem;
+    font-weight: 600;
+    color: #065f46;
+    background: #d1fae5;
+    border: 1px solid #a7f3d0;
+    padding: 0.3rem 0.65rem;
+    border-radius: 6px;
+    animation: fadeInSlide 0.2s ease-out;
+}
+
+.location-coords-badge .badge-tag {
+    background: #059669;
+    color: #ffffff;
+    font-size: 0.68rem;
+    padding: 0.1rem 0.4rem;
+    border-radius: 4px;
+    margin-left: 0.3rem;
+}
+
+@keyframes fadeInSlide {
+    from {
+        opacity: 0;
+        transform: translateY(-4px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+/* Autocomplete Dropdown */
+.ers-street-dropdown {
+    position: absolute;
+    top: calc(100% + 4px);
+    left: 0;
+    right: 0;
+    z-index: 5000;
+    background: #ffffff;
+    border: 1px solid #cbd5e1;
+    border-radius: 10px;
+    box-shadow: 0 14px 35px -6px rgba(15, 23, 42, 0.18), 0 4px 12px -2px rgba(15, 23, 42, 0.08);
+    max-height: 260px;
+    overflow-y: auto;
+    scrollbar-width: thin;
+    scrollbar-color: #cbd5e1 transparent;
+}
+
+.ers-autocomplete-header {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+    padding: 0.5rem 0.85rem;
+    font-size: 0.72rem;
+    font-weight: 800;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: #0284c7;
+    background: #f0f9ff;
+    border-bottom: 1px solid #e0f2fe;
+}
+
+.ers-autocomplete-item {
+    display: flex;
+    align-items: flex-start;
+    gap: 0.65rem;
+    padding: 0.65rem 0.85rem;
+    cursor: pointer;
+    border-bottom: 1px solid #f1f5f9;
+    transition: background-color 0.15s ease, transform 0.1s ease;
+}
+
+.ers-autocomplete-item:last-child {
+    border-bottom: none;
+}
+
+.ers-autocomplete-item:hover,
+.ers-autocomplete-item.selected {
+    background-color: #f0fdf4;
+}
+
+.ers-autocomplete-item .item-icon {
+    margin-top: 0.15rem;
+    width: 22px;
+    height: 22px;
+    border-radius: 6px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.82rem;
+    background: #dbeafe;
+    color: #2563eb;
+    flex-shrink: 0;
+}
+
+.ers-autocomplete-item.san-agustin-item .item-icon {
+    background: #dcfce7;
+    color: #16a34a;
+}
+
+.ers-autocomplete-item.ers-coord-item .item-icon {
+    background: #ffedd5;
+    color: #ea580c;
+}
+
+.ers-autocomplete-item .item-body {
+    flex: 1;
+    min-width: 0;
+}
+
+.ers-autocomplete-item .item-header-row {
+    display: flex;
+    align-items: center;
+    gap: 0.45rem;
+    flex-wrap: wrap;
+}
+
+.ers-autocomplete-item .item-title {
+    font-size: 0.88rem;
+    font-weight: 700;
+    color: #0f172a;
+}
+
+.ers-autocomplete-item .item-area-badge {
+    font-size: 0.68rem;
+    font-weight: 700;
+    color: #047857;
+    background: #ecfdf5;
+    border: 1px solid rgba(5, 150, 105, 0.2);
+    padding: 0.1rem 0.4rem;
+    border-radius: 4px;
+}
+
+.ers-autocomplete-item .item-subtitle {
+    font-size: 0.76rem;
+    color: #64748b;
+    margin-top: 0.15rem;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.ers-autocomplete-item .item-coords {
+    font-size: 0.72rem;
+    font-weight: 600;
+    color: #64748b;
+    background: #f8fafc;
+    border: 1px solid #e2e8f0;
+    padding: 0.2rem 0.45rem;
+    border-radius: 4px;
+    align-self: center;
+    white-space: nowrap;
+}
+
+.ers-autocomplete-message {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+    padding: 1rem 0.85rem;
+    font-size: 0.82rem;
+    font-weight: 600;
+    color: #64748b;
+    text-align: center;
+}
+
+.ers-autocomplete-message.error {
+    color: #dc2626;
+}
+
+/* Dark Mode Overrides */
+html[data-theme="dark"] .ers-street-dropdown {
+    background: #0f172a;
+    border-color: #334155;
+    box-shadow: 0 16px 36px rgba(0, 0, 0, 0.55);
+}
+
+html[data-theme="dark"] .ers-autocomplete-header {
+    background: #082f49;
+    border-bottom-color: #0369a1;
+    color: #38bdf8;
+}
+
+html[data-theme="dark"] .ers-autocomplete-item {
+    border-bottom-color: #1e293b;
+}
+
+html[data-theme="dark"] .ers-autocomplete-item:hover,
+html[data-theme="dark"] .ers-autocomplete-item.selected {
+    background-color: #064e3b;
+}
+
+html[data-theme="dark"] .ers-autocomplete-item .item-title {
+    color: #f8fafc;
+}
+
+html[data-theme="dark"] .ers-autocomplete-item .item-subtitle {
+    color: #94a3b8;
+}
+
+html[data-theme="dark"] .ers-autocomplete-item .item-area-badge {
+    background: #064e3b;
+    color: #6ee7b7;
+    border-color: #059669;
+}
+
+html[data-theme="dark"] .ers-autocomplete-item .item-coords {
+    background: #1e293b;
+    color: #94a3b8;
+    border-color: #334155;
+}
+
+html[data-theme="dark"] .location-coverage-tag {
+    background: #082f49;
+    color: #38bdf8;
+    border-color: #0284c7;
+}
+
+html[data-theme="dark"] .location-coords-badge {
+    background: #064e3b;
+    color: #a7f3d0;
+    border-color: #059669;
+}
+

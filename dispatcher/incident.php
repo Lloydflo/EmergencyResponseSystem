@@ -132,6 +132,7 @@ try {
     <link rel="stylesheet" href="<?php echo $assetUrl('css/sidebar-footer.css'); ?>">
     <link rel="stylesheet" href="<?php echo $assetUrl('css/cards.css'); ?>">
     <link rel="stylesheet" href="<?php echo $assetUrl('css/incident.css'); ?>">
+    <script defer src="<?php echo $assetUrl('js/place-autocomplete.js'); ?>"></script>
 
 </head>
 <body class="dispatcher-incident-page">
@@ -1101,6 +1102,9 @@ try {
             document.getElementById('modal-priority-input').value = (incident.priority || 'low').toLowerCase();
             document.getElementById('modal-desc-input').value = incident.description || '';
             document.getElementById('modal-location-input').value = incident.location || incident.location_address || '';
+            if (typeof window.attachPlaceAutocomplete === 'function') {
+                window.attachPlaceAutocomplete('modal-location-input');
+            }
             document.getElementById('modal-status-input').value = normalizeIncidentStatus(incident.status || 'pending');
             // Add Leaflet map picker for location
             function initIncidentMap() {

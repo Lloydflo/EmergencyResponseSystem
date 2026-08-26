@@ -154,20 +154,74 @@ function find_local_location_candidates(string $query, int $limit): array {
         return [];
     }
 
-    // The boundary used by Dispatch/GPS is bundled with ERS.  Its centre is
-    // a dependable fallback coordinate for barangay-level incident reports.
+    $matches = [];
+    $seen = [];
+
+    // 1. Search San Agustin pre-mapped streets and landmarks directory
+    $streetsFile = __DIR__ . '/../data/san_agustin_streets.json';
+    if (file_exists($streetsFile)) {
+        $raw = @file_get_contents($streetsFile);
+        $dataset = is_string($raw) ? json_decode($raw, true) : null;
+        if (is_array($dataset) && isset($dataset['streets']) && is_array($dataset['streets'])) {
+            $needleClean = trim((string)preg_replace('/\b(street|st|road|rd|drive|dr|avenue|ave|subdivision|subd|compound|cmpd|village|novaliches|quezon city|qc|metro manila|philippines|barangay|brgy|bgy|san agustin)\b/i', '', $needle));
+            $needleClean = trim((string)preg_replace('/^[\d\s,-]+/', '', $needleClean));
+
+            foreach ($dataset['streets'] as $street) {
+                $name = strtolower((string)($street['name'] ?? ''));
+                $nameClean = trim((string)preg_replace('/\b(street|st|road|rd|drive|dr|avenue|ave|subdivision|subd|compound|cmpd|village)\b/i', '', $name));
+                $aliases = array_map('strtolower', (array)($street['aliases'] ?? []));
+                $display = (string)($street['display_name'] ?? '');
+
+                $matched = false;
+                if ($needle === $name || in_array($needle, $aliases, true)) {
+                    $matched = true;
+                } elseif ($needleClean !== '' && ($needleClean === $nameClean || in_array($needleClean, $aliases, true))) {
+                    $matched = true;
+                } elseif (strpos($needle, $name) !== false || ($nameClean !== '' && strpos($needle, $nameClean) !== false)) {
+                    $matched = true;
+                } elseif (strpos($name, $needleClean) !== false && strlen($needleClean) >= 3) {
+                    $matched = true;
+                }
+
+                if (!$matched) {
+                    foreach ($aliases as $alias) {
+                        if (strpos($needle, $alias) !== false || ($needleClean !== '' && strpos($alias, $needleClean) !== false && strlen($needleClean) >= 3)) {
+                            $matched = true;
+                            break;
+                        }
+                    }
+                }
+
+                if ($matched) {
+                    $key = strtolower($display);
+                    if (!isset($seen[$key])) {
+                        $seen[$key] = true;
+                        $matches[] = [
+                            'name' => $street['name'],
+                            'display_name' => $display,
+                            'lat' => (string)$street['lat'],
+                            'lon' => (string)$street['lng'],
+                            'importance' => 1.5,
+                            'class' => 'highway',
+                            'type' => 'residential',
+                            'area' => $street['area'] ?? '',
+                        ];
+                        if (count($matches) >= $limit) {
+                            return $matches;
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    // 2. High-level boundary fallbacks
     $catalog = [
         [
             'name' => 'San Agustin',
             'display_name' => 'San Agustin, Novaliches, Quezon City, Metro Manila, Philippines',
-            'lat' => '14.732600',
-            'lon' => '121.035200',
-        ],
-        [
-            'name' => 'Quezon City',
-            'display_name' => 'Quezon City, Metro Manila, Philippines',
-            'lat' => '14.676000',
-            'lon' => '121.043700',
+            'lat' => '14.7295595',
+            'lon' => '121.0386039',
         ],
         [
             'name' => 'Novaliches',
@@ -175,22 +229,32 @@ function find_local_location_candidates(string $query, int $limit): array {
             'lat' => '14.721900',
             'lon' => '121.038800',
         ],
+        [
+            'name' => 'Quezon City',
+            'display_name' => 'Quezon City, Metro Manila, Philippines',
+            'lat' => '14.676000',
+            'lon' => '121.043700',
+        ],
     ];
 
-    $matches = [];
     foreach ($catalog as $place) {
         $haystack = strtolower($place['name'] . ' ' . $place['display_name']);
         if (strpos($haystack, $needle) === false && strpos($needle, strtolower($place['name'])) === false) {
             continue;
         }
-        $place['importance'] = 1.0;
-        $place['class'] = 'boundary';
-        $place['type'] = 'administrative';
-        $matches[] = $place;
-        if (count($matches) >= $limit) {
-            break;
+        $key = strtolower($place['display_name']);
+        if (!isset($seen[$key])) {
+            $seen[$key] = true;
+            $place['importance'] = 1.0;
+            $place['class'] = 'boundary';
+            $place['type'] = 'administrative';
+            $matches[] = $place;
+            if (count($matches) >= $limit) {
+                break;
+            }
         }
     }
+
     return $matches;
 }
 

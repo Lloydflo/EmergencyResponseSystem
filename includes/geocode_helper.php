@@ -356,6 +356,99 @@ if (!function_exists('ers_geocode_fetch_candidates')) {
     }
 }
 
+if (!function_exists('ers_geocode_san_agustin_streets_catalog')) {
+    function ers_geocode_san_agustin_streets_catalog(): array
+    {
+        static $catalog = null;
+        if ($catalog !== null) {
+            return $catalog;
+        }
+
+        $path = dirname(__DIR__) . '/data/san_agustin_streets.json';
+        if (!is_file($path)) {
+            $catalog = [];
+            return $catalog;
+        }
+
+        $raw = @file_get_contents($path);
+        $data = is_string($raw) ? json_decode($raw, true) : null;
+        $catalog = is_array($data) && isset($data['streets']) && is_array($data['streets'])
+            ? $data['streets']
+            : [];
+
+        return $catalog;
+    }
+}
+
+if (!function_exists('ers_geocode_match_san_agustin_street')) {
+    function ers_geocode_match_san_agustin_street(string $location): ?array
+    {
+        $streets = ers_geocode_san_agustin_streets_catalog();
+        if (empty($streets)) {
+            return null;
+        }
+
+        $needle = strtolower(trim((string)preg_replace('/\s+/', ' ', $location)));
+        if ($needle === '') {
+            return null;
+        }
+
+        // Clean up common boilerplate words to extract the core street name
+        $needleClean = trim((string)preg_replace('/\b(street|st|road|rd|drive|dr|avenue|ave|subdivision|subd|compound|cmpd|village|novaliches|quezon city|qc|metro manila|philippines|barangay|brgy|bgy|san agustin)\b/i', '', $needle));
+        $needleClean = trim((string)preg_replace('/^[\d\s,-]+/', '', $needleClean)); // remove leading house number if any
+
+        $best = null;
+        $bestScore = 0;
+
+        foreach ($streets as $street) {
+            $name = strtolower((string)($street['name'] ?? ''));
+            $nameClean = trim((string)preg_replace('/\b(street|st|road|rd|drive|dr|avenue|ave|subdivision|subd|compound|cmpd|village)\b/i', '', $name));
+            $aliases = array_map('strtolower', (array)($street['aliases'] ?? []));
+
+            $score = 0;
+
+            // Direct full or alias match
+            if ($needle === $name || in_array($needle, $aliases, true)) {
+                $score = 100;
+            } elseif ($needleClean !== '' && ($needleClean === $nameClean || in_array($needleClean, $aliases, true))) {
+                $score = 90;
+            } elseif (strpos($needle, $name) !== false || ($nameClean !== '' && strpos($needle, $nameClean) !== false)) {
+                $score = 80;
+            } elseif (strpos($name, $needleClean) !== false && strlen($needleClean) >= 3) {
+                $score = 70;
+            }
+
+            if ($score === 0) {
+                foreach ($aliases as $alias) {
+                    if (strpos($needle, $alias) !== false) {
+                        $score = 75;
+                        break;
+                    }
+                    if ($needleClean !== '' && strpos($alias, $needleClean) !== false && strlen($needleClean) >= 3) {
+                        $score = 65;
+                        break;
+                    }
+                }
+            }
+
+            if ($score > $bestScore) {
+                $bestScore = $score;
+                $best = $street;
+            }
+        }
+
+        if ($best !== null && $bestScore >= 65 && isset($best['lat'], $best['lng'])) {
+            return [
+                (float)$best['lat'],
+                (float)$best['lng'],
+                'street' => $best,
+            ];
+        }
+
+        return null;
+    }
+}
+
 if (!function_exists('ers_geocode_location_to_coordinates')) {
     function ers_geocode_location_to_coordinates(string $location): ?array
     {
@@ -375,6 +468,12 @@ if (!function_exists('ers_geocode_location_to_coordinates')) {
         $plusCodeCoordinates = ers_geocode_plus_code_to_coordinates($input);
         if ($plusCodeCoordinates !== null) {
             return $plusCodeCoordinates;
+        }
+
+        // Fast-path: Match against pre-mapped Barangay San Agustin street catalog
+        $streetMatch = ers_geocode_match_san_agustin_street($input);
+        if ($streetMatch !== null && isset($streetMatch[0], $streetMatch[1])) {
+            return [(float)$streetMatch[0], (float)$streetMatch[1]];
         }
 
         $normalized = ers_geocode_normalize_local_address($input);
@@ -423,3 +522,4 @@ if (!function_exists('ers_geocode_location_to_coordinates')) {
         return $best;
     }
 }
+

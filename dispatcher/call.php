@@ -304,9 +304,16 @@ if ($turnIsConfigured && preg_match('/^turns?:(?:\/\/)?([^:\/?]+)/i', $turnUrl, 
                                         </div>
                                         <input type="hidden" id="incidentType" name="incidentType">
                                     </div>
-                                    <div class="form-group">
-                                        <label for="incidentLocation">Location</label>
-                                        <input type="text" id="incidentLocation" name="incidentLocation" placeholder="Enter address or coordinates" required>
+                                    <div class="form-group location-form-group">
+                                        <div class="location-label-row">
+                                            <label for="incidentLocation">Location</label>
+                                            <span class="location-coverage-tag"><i class="fas fa-map-marker-alt"></i> San Agustin Directory</span>
+                                        </div>
+                                        <div class="location-input-wrapper">
+                                            <input type="text" id="incidentLocation" name="incidentLocation" placeholder="Enter street, subdivision, or landmark (e.g. Patnubay, Susano)" required autocomplete="off">
+                                            <span class="location-status-icon" id="locationStatusIcon" title="San Agustin street matching"><i class="fas fa-search-location"></i></span>
+                                        </div>
+                                        <div class="location-coords-badge" id="locationCoordsBadge" style="display: none;"></div>
                                     </div>
                                 </div>
                                 <div class="form-group">
