@@ -492,8 +492,14 @@
             notifyIncidentQueueChanged(data.incident || null);
             const incidentId = Number(data.incident?.id || 0);
             if (incidentId > 0) {
-                const base = appBasePath();
-                window.location.href = `${base}/dispatcher/dispatch.php?incident_id=${encodeURIComponent(incidentId)}&code=${encodeURIComponent(reference)}`;
+                const dispatchUrl = new URL('dispatcher/dispatch.php', document.baseURI || window.location.href);
+                dispatchUrl.search = new URLSearchParams({
+                    incident_id: String(incidentId),
+                    code: reference,
+                    source: 'tip',
+                    open_dispatch: '1',
+                }).toString();
+                window.location.href = dispatchUrl.href;
             }
         } catch (error) {
             state.error = error.message || 'Unable to convert anonymous tip';
