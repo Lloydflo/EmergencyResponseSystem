@@ -9,13 +9,15 @@ header('Content-Type: application/json');
 header('Access-Control-Allow-Origin: ' . (string)ers_env('ERS_EXTERNAL_API_CORS_ORIGIN', '*'));
 header('Access-Control-Allow-Headers: Authorization, Content-Type, X-ERS-API-Key, X-API-Key, X-ERS-Client');
 header('Access-Control-Allow-Methods: GET, POST, PATCH, OPTIONS');
+header('Cache-Control: no-store, no-cache, must-revalidate, max-age=0');
+header('Pragma: no-cache');
 
 if (($_SERVER['REQUEST_METHOD'] ?? '') === 'OPTIONS') {
     http_response_code(204);
     exit;
 }
 
-function ers_external_json(int $status, array $payload): void
+function ers_external_json(int $status, array $payload): never
 {
     http_response_code($status);
     echo json_encode($payload, JSON_UNESCAPED_SLASHES);
@@ -131,9 +133,9 @@ function ers_external_input(): array
 
     $trimmed = trim($raw);
     $contentType = strtolower((string)($_SERVER['CONTENT_TYPE'] ?? ''));
-    $looksJson = str_contains($contentType, 'application/json')
-        || str_starts_with($trimmed, '{')
-        || str_starts_with($trimmed, '[');
+    $looksJson = strpos($contentType, 'application/json') !== false
+        || strpos($trimmed, '{') === 0
+        || strpos($trimmed, '[') === 0;
 
     if ($looksJson) {
         $decoded = json_decode($trimmed, true);
@@ -146,7 +148,7 @@ function ers_external_input(): array
     }
 
     $form = [];
-    if (str_contains($contentType, 'application/x-www-form-urlencoded') || str_contains($trimmed, '=')) {
+    if (strpos($contentType, 'application/x-www-form-urlencoded') !== false || strpos($trimmed, '=') !== false) {
         parse_str($trimmed, $form);
     }
     if (is_array($form) && $form !== []) {

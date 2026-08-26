@@ -1228,14 +1228,6 @@ if (!headers_sent()) {
                         <span class="overview-note">Fleet and response units</span>
                     </div>
                 </article>
-                <article class="overview-item personnel">
-                    <span class="overview-icon"><i class="fas fa-user-shield" aria-hidden="true"></i></span>
-                    <div class="overview-copy">
-                        <div class="overview-label">Personnel</div>
-                        <div class="overview-value" id="ovPersonnel">0</div>
-                        <span class="overview-note">Registered operations staff</span>
-                    </div>
-                </article>
                 <article class="overview-item equipment">
                     <span class="overview-icon"><i class="fas fa-toolbox" aria-hidden="true"></i></span>
                     <div class="overview-copy">
@@ -1267,9 +1259,6 @@ if (!headers_sent()) {
                     </button>
                     <button type="button" class="resource-category-tab" role="tab" aria-selected="false" data-resource-category="vehicles">
                         Vehicles <span class="resource-tab-count" id="tabCountVehicles">0</span>
-                    </button>
-                    <button type="button" class="resource-category-tab" role="tab" aria-selected="false" data-resource-category="personnel">
-                        Personnel <span class="resource-tab-count" id="tabCountPersonnel">0</span>
                     </button>
                     <button type="button" class="resource-category-tab" role="tab" aria-selected="false" data-resource-category="equipment">
                         Equipment <span class="resource-tab-count" id="tabCountEquipment">0</span>
@@ -1326,7 +1315,6 @@ if (!headers_sent()) {
                         <p id="modalHelperText">Fill out the details below to register a new resource entry.</p>
                         <div class="preset-row">
                             <button type="button" class="preset-btn" data-preset="vehicles">Vehicle Preset</button>
-                            <button type="button" class="preset-btn" data-preset="personnel">Personnel Preset</button>
                             <button type="button" class="preset-btn" data-preset="equipment">Equipment Preset</button>
                         </div>
                     </div>
@@ -1604,7 +1592,6 @@ if (!headers_sent()) {
         const resourceResultSummary = document.getElementById('resourceResultSummary');
         const tabCountAll = document.getElementById('tabCountAll');
         const tabCountVehicles = document.getElementById('tabCountVehicles');
-        const tabCountPersonnel = document.getElementById('tabCountPersonnel');
         const tabCountEquipment = document.getElementById('tabCountEquipment');
         const resetFiltersBtn = document.getElementById('resetFiltersBtn');
         const resourceModal = document.getElementById('resourceModal');
@@ -2467,19 +2454,16 @@ if (!headers_sent()) {
         function renderOverview() {
             const total = resources.length;
             const vehicles = resources.filter((item) => item.category === 'vehicles').length;
-            const personnel = resources.filter((item) => item.category === 'personnel').length;
             const equipment = resources.filter((item) => item.category === 'equipment').length;
             const available = resources.filter((item) => item.status === 'available').length;
 
             ovTotal.textContent = total;
             ovVehicles.textContent = vehicles;
-            ovPersonnel.textContent = personnel;
             ovEquipment.textContent = equipment;
             ovAvailable.textContent = available;
 
             if (tabCountAll) tabCountAll.textContent = String(total);
             if (tabCountVehicles) tabCountVehicles.textContent = String(vehicles);
-            if (tabCountPersonnel) tabCountPersonnel.textContent = String(personnel);
             if (tabCountEquipment) tabCountEquipment.textContent = String(equipment);
             syncCategoryTabs();
         }

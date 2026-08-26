@@ -1,7 +1,7 @@
-// Location autocomplete via backend geocode proxy (Nominatim + cache).
+// Location autocomplete with Barangay San Agustin Street Directory & Fast Geocoding
 // Usage: attachPlaceAutocomplete(inputId, onSelect, options)
 (function () {
-    const DEFAULT_LIMIT = 10;
+    const DEFAULT_LIMIT = 12;
 
     function toNum(value) {
         const n = Number(value);
@@ -23,72 +23,139 @@
         return String(value || '').replace(/\s+/g, ' ').trim();
     }
 
-    function buildProxyParams(query, options) {
-        return new URLSearchParams({
-            q: query,
-            limit: String(options.limit || DEFAULT_LIMIT)
-        });
+    function updateCoordinateFeedback(input, place) {
+        if (!input) return;
+        const parent = input.closest('.form-group') || input.parentElement;
+        if (!parent) return;
+
+        let badge = parent.querySelector('.location-coords-badge');
+        let statusIcon = parent.querySelector('.location-status-icon');
+
+        const lat = toNum(place && (place.lat || place.latitude));
+        const lon = toNum(place && (place.lon || place.lng || place.longitude));
+
+        if (lat !== null && lon !== null) {
+            input.dataset.lat = String(lat);
+            input.dataset.lon = String(lon);
+
+            if (statusIcon) {
+                statusIcon.innerHTML = '<i class="fas fa-check-circle" style="color:#10b981;"></i>';
+                statusIcon.title = `Coordinates locked: ${lat.toFixed(6)}, ${lon.toFixed(6)}`;
+            }
+
+            if (!badge) {
+                badge = document.createElement('div');
+                badge.className = 'location-coords-badge';
+                parent.appendChild(badge);
+            }
+
+            const areaTag = place.area ? ` <span class="badge-tag">${escapeHtml(place.area)}</span>` : '';
+            badge.style.display = 'flex';
+            badge.innerHTML = `
+                <i class="fas fa-map-pin" style="color:#10b981; margin-right:6px;"></i>
+                <span><strong>Coordinates locked:</strong> ${lat.toFixed(6)}, ${lon.toFixed(6)}${areaTag}</span>
+            `;
+        } else {
+            delete input.dataset.lat;
+            delete input.dataset.lon;
+
+            if (statusIcon) {
+                statusIcon.innerHTML = '<i class="fas fa-search-location" style="color:#94a3b8;"></i>';
+                statusIcon.title = 'Searching location...';
+            }
+
+            if (badge) {
+                badge.style.display = 'none';
+            }
+        }
     }
 
-    function scoreSuggestion(place, query) {
-        const label = String(place.display_name || '').toLowerCase();
-        const q = String(query || '').toLowerCase();
-        let score = toNum(place.importance) || 0;
-        if (label.includes(q)) score += 1.5;
-        return score;
+    function escapeHtml(str) {
+        return String(str || '')
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;');
     }
 
-    function dedupePlaces(items) {
-        const out = [];
-        const seen = {};
-        (items || []).forEach((item) => {
-            const key = String(item.display_name || '').toLowerCase();
-            if (!key || seen[key]) return;
-            seen[key] = true;
-            out.push(item);
-        });
-        return out;
+    // Fast-path: query local San Agustin streets catalog first
+    async function fetchSanAgustinStreets(query, signal) {
+        try {
+            const url = `api/san_agustin_streets.php?q=${encodeURIComponent(query)}`;
+            const res = await fetch(url, { signal, headers: { Accept: 'application/json' } });
+            if (!res.ok) return [];
+            const data = await res.json();
+            if (data && data.ok && Array.isArray(data.items)) {
+                return data.items.map(item => ({
+                    name: item.name,
+                    area: item.area || 'San Agustin',
+                    display_name: item.display_name,
+                    lat: String(item.lat),
+                    lon: String(item.lng),
+                    importance: 2.0,
+                    isSanAgustin: true
+                }));
+            }
+        } catch (e) {
+            // ignore abort or fetch errors
+        }
+        return [];
     }
 
     async function fetchPlaces(query, options, signal) {
         const input = normalizeText(query);
         if (!input) return [];
 
-        const params = buildProxyParams(input, options);
-        const url = `api/geocode_proxy.php?${params.toString()}`;
-        const res = await fetch(url, {
+        // 1. Fetch San Agustin pre-mapped streets
+        const localPromise = fetchSanAgustinStreets(input, signal);
+
+        // 2. Fetch geocode proxy (with Nominatim/cache)
+        const params = new URLSearchParams({
+            q: input,
+            limit: String(options.limit || DEFAULT_LIMIT)
+        });
+        const proxyPromise = fetch(`api/geocode_proxy.php?${params.toString()}`, {
             signal: signal,
             headers: { Accept: 'application/json' }
-        });
-        if (!res.ok) {
-            return [];
-        }
-        const payload = await res.json();
-        const list = (payload && payload.ok && Array.isArray(payload.items)) ? payload.items : [];
+        }).then(r => r.ok ? r.json() : null).catch(() => null);
 
-        return dedupePlaces(list)
-            .sort((a, b) => scoreSuggestion(b, input) - scoreSuggestion(a, input))
-            .slice(0, options.limit || DEFAULT_LIMIT);
+        const [localResults, proxyData] = await Promise.all([localPromise, proxyPromise]);
+        const proxyList = (proxyData && proxyData.ok && Array.isArray(proxyData.items)) ? proxyData.items : [];
+
+        // Merge results, prioritizing San Agustin catalog
+        const combined = [];
+        const seen = new Set();
+
+        (localResults || []).forEach(item => {
+            const key = (item.display_name || item.name || '').toLowerCase();
+            if (key && !seen.has(key)) {
+                seen.add(key);
+                combined.push(item);
+            }
+        });
+
+        (proxyList || []).forEach(item => {
+            const key = (item.display_name || '').toLowerCase();
+            if (key && !seen.has(key)) {
+                seen.add(key);
+                combined.push(item);
+            }
+        });
+
+        return combined.slice(0, options.limit || DEFAULT_LIMIT);
     }
 
     function createDropdown(input) {
         const dropdown = document.createElement('div');
-        dropdown.className = 'autocomplete-dropdown';
-        dropdown.style.position = 'absolute';
-        dropdown.style.background = '#ffffff';
-        dropdown.style.border = '1px solid #cbd5e1';
-        dropdown.style.borderRadius = '8px';
-        dropdown.style.zIndex = 5000;
-        dropdown.style.width = input.offsetWidth + 'px';
-        dropdown.style.maxHeight = '220px';
-        dropdown.style.overflowY = 'auto';
-        dropdown.style.boxShadow = '0 10px 30px rgba(0,0,0,0.15)';
-        const parent = input.parentElement;
+        dropdown.className = 'autocomplete-dropdown ers-street-dropdown';
+        dropdown.setAttribute('role', 'listbox');
+
+        const parent = input.closest('.location-input-wrapper') || input.parentElement;
         if (parent) {
-            parent.style.position = 'relative';
-            parent.style.zIndex = '30';
-            dropdown.style.left = '0px';
-            dropdown.style.top = (input.offsetTop + input.offsetHeight + 4) + 'px';
+            const currentPos = window.getComputedStyle(parent).position;
+            if (!currentPos || currentPos === 'static') {
+                parent.style.position = 'relative';
+            }
             parent.appendChild(dropdown);
         }
         return dropdown;
@@ -107,7 +174,10 @@
         }
         if (place.display_name) {
             input.value = String(place.display_name);
+        } else if (place.name) {
+            input.value = String(place.name);
         }
+        updateCoordinateFeedback(input, place);
     }
 
     function attachPlaceAutocomplete(inputId, onSelect, options) {
@@ -119,8 +189,8 @@
         const mergedOptions = Object.assign(
             {
                 limit: DEFAULT_LIMIT,
-                minChars: 3,
-                debounceMs: 220
+                minChars: 1,
+                debounceMs: 150
             },
             options || {}
         );
@@ -129,17 +199,26 @@
         let debounceTimer = null;
         let activeController = null;
         let requestSeq = 0;
+        let selectedIndex = -1;
+        let currentItems = [];
 
         function removeDropdown() {
             if (dropdown) {
                 dropdown.remove();
                 dropdown = null;
             }
+            selectedIndex = -1;
+            currentItems = [];
         }
 
-        function renderMessage(text) {
+        function renderMessage(text, isError = false) {
             if (!dropdown) return;
-            dropdown.innerHTML = `<div style="padding:12px 14px; color:#64748b; font-size:0.9rem; font-weight:500; text-align:center;">${text}</div>`;
+            dropdown.innerHTML = `
+                <div class="ers-autocomplete-message ${isError ? 'error' : ''}">
+                    <i class="fas ${isError ? 'fa-exclamation-triangle' : 'fa-spinner fa-spin'}"></i>
+                    <span>${escapeHtml(text)}</span>
+                </div>
+            `;
         }
 
         function selectPlace(place) {
@@ -150,78 +229,115 @@
             removeDropdown();
         }
 
+        function highlightItem(index) {
+            if (!dropdown) return;
+            const elements = dropdown.querySelectorAll('.ers-autocomplete-item');
+            elements.forEach((el, idx) => {
+                if (idx === index) {
+                    el.classList.add('selected');
+                    el.scrollIntoView({ block: 'nearest' });
+                } else {
+                    el.classList.remove('selected');
+                }
+            });
+            selectedIndex = index;
+        }
+
         function renderItems(items, rawInput) {
             if (!dropdown) return;
             dropdown.innerHTML = '';
+            currentItems = [];
 
             const directCoords = parseCoordinateText(rawInput);
             if (directCoords) {
                 const coordItem = document.createElement('div');
-                coordItem.style.padding = '10px 14px';
-                coordItem.style.cursor = 'pointer';
-                coordItem.style.color = '#1f2937';
-                coordItem.style.fontSize = '0.95rem';
-                coordItem.style.borderBottom = '1px solid #f0f0f0';
-                coordItem.style.fontWeight = '500';
-                coordItem.style.transition = 'background-color 0.2s ease';
-                coordItem.textContent = `Use coordinates: ${directCoords.lat.toFixed(6)}, ${directCoords.lon.toFixed(6)}`;
-                coordItem.addEventListener('mouseenter', function () {
-                    coordItem.style.backgroundColor = '#e0f2fe';
-                });
-                coordItem.addEventListener('mouseleave', function () {
-                    coordItem.style.backgroundColor = 'transparent';
-                });
+                coordItem.className = 'ers-autocomplete-item ers-coord-item';
+                coordItem.setAttribute('role', 'option');
+                coordItem.innerHTML = `
+                    <div class="item-icon"><i class="fas fa-crosshairs"></i></div>
+                    <div class="item-body">
+                        <div class="item-title">Use exact GPS coordinates</div>
+                        <div class="item-subtitle">${directCoords.lat.toFixed(6)}, ${directCoords.lon.toFixed(6)}</div>
+                    </div>
+                `;
+                const coordPlace = {
+                    display_name: `${directCoords.lat.toFixed(6)}, ${directCoords.lon.toFixed(6)}`,
+                    lat: directCoords.lat,
+                    lon: directCoords.lon
+                };
                 coordItem.addEventListener('mousedown', function (e) {
                     e.preventDefault();
-                    selectPlace({
-                        display_name: `${directCoords.lat.toFixed(6)}, ${directCoords.lon.toFixed(6)}`,
-                        lat: directCoords.lat,
-                        lon: directCoords.lon
-                    });
+                    selectPlace(coordPlace);
                 });
                 dropdown.appendChild(coordItem);
+                currentItems.push(coordPlace);
             }
 
             if (!items.length) {
                 if (!directCoords) {
-                    renderMessage('No results found');
+                    renderMessage('No matching streets found in San Agustin directory.');
                 }
                 return;
             }
 
+            // Header for San Agustin streets
+            const hasSanAgustin = items.some(i => i.isSanAgustin);
+            if (hasSanAgustin) {
+                const header = document.createElement('div');
+                header.className = 'ers-autocomplete-header';
+                header.innerHTML = '<i class="fas fa-shield-alt"></i> Barangay San Agustin Directory';
+                dropdown.appendChild(header);
+            }
+
             items.forEach((place) => {
                 const item = document.createElement('div');
-                item.textContent = place.display_name || '';
-                item.style.padding = '10px 14px';
-                item.style.cursor = 'pointer';
-                item.style.color = '#1f2937';
-                item.style.fontSize = '0.95rem';
-                item.style.borderBottom = '1px solid #f0f0f0';
-                item.style.transition = 'background-color 0.2s ease';
+                item.className = `ers-autocomplete-item ${place.isSanAgustin ? 'san-agustin-item' : ''}`;
+                item.setAttribute('role', 'option');
+
+                const titleText = place.name || (place.display_name ? place.display_name.split(',')[0] : 'Unknown Location');
+                const areaBadge = place.area ? `<span class="item-area-badge">${escapeHtml(place.area)}</span>` : '';
+                const subText = place.display_name || '';
+                const coordsText = (place.lat && place.lon) ? `${Number(place.lat).toFixed(4)}, ${Number(place.lon).toFixed(4)}` : '';
+
+                item.innerHTML = `
+                    <div class="item-icon">
+                        <i class="fas ${place.isSanAgustin ? 'fa-map-pin' : 'fa-location-dot'}"></i>
+                    </div>
+                    <div class="item-body">
+                        <div class="item-header-row">
+                            <span class="item-title">${escapeHtml(titleText)}</span>
+                            ${areaBadge}
+                        </div>
+                        <div class="item-subtitle">${escapeHtml(subText)}</div>
+                    </div>
+                    ${coordsText ? `<div class="item-coords" title="Coordinates"><i class="fas fa-satellite"></i> ${coordsText}</div>` : ''}
+                `;
+
                 item.addEventListener('mouseenter', function () {
-                    item.style.backgroundColor = '#e0f2fe';
+                    const allItems = Array.from(dropdown.querySelectorAll('.ers-autocomplete-item'));
+                    selectedIndex = allItems.indexOf(item);
+                    allItems.forEach(el => el.classList.remove('selected'));
+                    item.classList.add('selected');
                 });
-                item.addEventListener('mouseleave', function () {
-                    item.style.backgroundColor = 'transparent';
-                });
+
                 item.addEventListener('mousedown', function (e) {
                     e.preventDefault();
                     selectPlace(place);
                 });
+
                 dropdown.appendChild(item);
+                currentItems.push(place);
             });
         }
 
         async function runQuery(rawValue) {
             const value = normalizeText(rawValue);
-            delete input.dataset.lat;
-            delete input.dataset.lon;
             removeDropdown();
 
             if (value.length < mergedOptions.minChars) return;
 
             dropdown = createDropdown(input);
-            renderMessage('Loading...');
+            renderMessage('Searching San Agustin streets & locations...');
 
             if (activeController) {
                 activeController.abort();
@@ -236,11 +352,12 @@
             } catch (error) {
                 if (error && error.name === 'AbortError') return;
                 if (currentSeq !== requestSeq) return;
-                renderMessage('Suggestions unavailable. You can still type location manually.');
+                renderMessage('Suggestions unavailable. You can still type location manually.', true);
             }
         }
 
         input.setAttribute('autocomplete', 'off');
+
         input.addEventListener('input', function () {
             const value = input.value;
             if (debounceTimer) clearTimeout(debounceTimer);
@@ -248,8 +365,38 @@
                 runQuery(value);
             }, mergedOptions.debounceMs);
         });
+
+        input.addEventListener('focus', function () {
+            if (input.value.trim().length >= mergedOptions.minChars) {
+                runQuery(input.value);
+            }
+        });
+
+        input.addEventListener('keydown', function (e) {
+            if (!dropdown) return;
+            const items = dropdown.querySelectorAll('.ers-autocomplete-item');
+            if (!items.length) return;
+
+            if (e.key === 'ArrowDown') {
+                e.preventDefault();
+                const nextIndex = selectedIndex < items.length - 1 ? selectedIndex + 1 : 0;
+                highlightItem(nextIndex);
+            } else if (e.key === 'ArrowUp') {
+                e.preventDefault();
+                const prevIndex = selectedIndex > 0 ? selectedIndex - 1 : items.length - 1;
+                highlightItem(prevIndex);
+            } else if (e.key === 'Enter') {
+                if (selectedIndex >= 0 && selectedIndex < currentItems.length) {
+                    e.preventDefault();
+                    selectPlace(currentItems[selectedIndex]);
+                }
+            } else if (e.key === 'Escape') {
+                removeDropdown();
+            }
+        });
+
         input.addEventListener('blur', function () {
-            setTimeout(removeDropdown, 160);
+            setTimeout(removeDropdown, 200);
         });
     }
 
@@ -259,9 +406,10 @@
     // Auto-attach for known fields
     window.addEventListener('DOMContentLoaded', function () {
         attachPlaceAutocomplete('incidentLocation');
+        attachPlaceAutocomplete('modal-location-input');
         attachPlaceAutocomplete('search-location', function (place) {
             const lat = toNum(place && place.lat);
-            const lon = toNum(place && place.lon);
+            const lon = toNum(place && (place.lon || place.lng));
             if (lat === null || lon === null) return;
             if (typeof window.focusMapToLocation === 'function') {
                 window.focusMapToLocation(lat, lon);

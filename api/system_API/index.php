@@ -41,6 +41,10 @@ function ers_system_api_routes(): array
         'routing' => 'send_route.php',
         'tracking_data' => 'tracking_data.php',
         'tracking' => 'tracking_data.php',
+        'live_tracking' => 'live_tracking.php',
+        'live_track' => 'live_tracking.php',
+        'receive_alternative_route' => 'receive_alternative_route.php',
+        'alternative_route' => 'receive_alternative_route.php',
     ];
 }
 
@@ -62,6 +66,8 @@ function ers_system_api_overview(): array
             'POST /ERS/api/system_API/?action=send_incident',
             'POST /ERS/api/system_API/?action=send_route',
             'POST /ERS/api/system_API/?action=tracking_data',
+            'GET /ERS/api/system_API/?action=live_tracking',
+            'POST /ERS/api/system_API/?action=receive_alternative_route',
         ],
         'actions' => array_keys(ers_system_api_routes()),
     ];

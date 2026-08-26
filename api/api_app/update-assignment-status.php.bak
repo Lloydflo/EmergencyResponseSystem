@@ -3,7 +3,6 @@ declare(strict_types=1);
 
 require_once __DIR__ . '/_assignment.php';
 require_once __DIR__ . '/../../includes/anonymous_tip_status_sync.php';
-require_once __DIR__ . '/../../includes/tftr_status_sync.php';
 
 op_require_method('POST');
 $assignmentId = op_post_int('assignment_id');
@@ -101,13 +100,6 @@ try {
     }
 
     $pdo->commit();
-    if ($isTransition && $requestedStatus === 'on_scene' && $incidentId > 0) {
-        try {
-            ers_tftr_sync_accident_status($pdo, $incidentId, 'On Scene');
-        } catch (Throwable $tftrError) {
-            error_log('[update-assignment-status] TFTR sync skipped: ' . $tftrError->getMessage());
-        }
-    }
     $anonymousTipStatusSync = null;
     if ($isTransition && $requestedStatus === 'completed' && $incidentId > 0) {
         $anonymousTipStatusSync = ers_notify_anonymous_tip_status_result(

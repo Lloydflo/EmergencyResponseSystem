@@ -322,6 +322,7 @@
 
         try {
             const response = await fetch(`${apiUrl}&limit=80`, {
+                cache: 'no-store',
                 credentials: 'same-origin',
                 headers: { Accept: 'application/json' },
             });
@@ -492,6 +493,17 @@
             render();
             notifyCountsChanged();
             notifyIncidentQueueChanged(data.incident || null);
+            const incidentId = Number(data.incident?.id || 0);
+            if (incidentId > 0) {
+                const dispatchUrl = new URL('dispatcher/dispatch.php', document.baseURI || window.location.href);
+                dispatchUrl.search = new URLSearchParams({
+                    incident_id: String(incidentId),
+                    code: reference,
+                    source: 'tip',
+                    open_dispatch: '1',
+                }).toString();
+                window.location.href = dispatchUrl.href;
+            }
         } catch (error) {
             state.error = error.message || 'Unable to convert anonymous tip';
             render();

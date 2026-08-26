@@ -40,6 +40,7 @@ function ers_incidents_schema(PDO $pdo): array
 {
     $tables = [
         'incidents',
+        'anonymous_tips',
         'calls',
         'external_incident_links',
         'activity_log',
@@ -381,6 +382,52 @@ $includeIntakeSource = isset($_GET['include_intake_source'])
 $typeValues = ers_incidents_normalized_type_values($type);
 [$rangeStart, $rangeEnd] = ers_incidents_resolve_range();
 
+if (
+    $includeIntakeSource
+    && $status === 'pending'
+    && ers_incidents_has_table($schema, 'anonymous_tips')
+    && ers_incidents_has_table($schema, 'external_incident_links')
+    && ers_incidents_has_table($schema, 'dispatches')
+    && ers_incidents_has_column($schema, 'incidents', 'status')
+    && ers_incidents_has_column($schema, 'incidents', 'updated_at')
+    && ers_incidents_has_column($schema, 'external_incident_links', 'incident_id')
+    && ers_incidents_has_column($schema, 'external_incident_links', 'source_system')
+    && ers_incidents_has_column($schema, 'external_incident_links', 'external_incident_id')
+    && ers_incidents_has_column($schema, 'anonymous_tips', 'tip_id')
+    && ers_incidents_has_column($schema, 'anonymous_tips', 'status')
+) {
+    $dispatchRepairJoin = '';
+    $dispatchRepairGuard = '';
+    if (ers_incidents_has_column($schema, 'dispatches', 'incident_id')) {
+        $dispatchRepairJoin = 'LEFT JOIN dispatches d ON d.incident_id = i.id';
+        $dispatchRepairGuard = 'AND d.incident_id IS NULL';
+    } elseif (
+        ers_incidents_has_column($schema, 'dispatches', 'reference_no')
+        && ers_incidents_has_column($schema, 'incidents', 'reference_no')
+    ) {
+        $dispatchRepairJoin = 'LEFT JOIN dispatches d ON d.reference_no = i.reference_no';
+        $dispatchRepairGuard = 'AND d.reference_no IS NULL';
+    }
+
+    if ($dispatchRepairJoin !== '') {
+        try {
+            $pdo->exec("UPDATE incidents i
+            INNER JOIN external_incident_links l
+                ON l.incident_id = i.id
+               AND l.source_system = 'Anonymous Tip Inbox'
+            INNER JOIN anonymous_tips at
+                ON at.tip_id = l.external_incident_id
+               AND at.status = 'converted_to_incident'
+        {$dispatchRepairJoin}
+            SET i.status = 'active', i.updated_at = CURRENT_TIMESTAMP
+            WHERE i.status IN ('resolved', 'completed', 'closed')
+          {$dispatchRepairGuard}");
+        } catch (Throwable $repairError) {
+            error_log('Converted anonymous tip queue repair skipped: ' . $repairError->getMessage());
+        }
+    }
+}
+
 // Optional shared resource table.
 $resourceRecordsTable = null;
 foreach (['resource_records', 'admin_resources'] as $candidate) {
@@ -440,6 +487,9 @@ if (
 }
 $latitudeExpr = ers_incidents_coalesce([$incidentLatExpr, $callLatExpr]);
 $longitudeExpr = ers_incidents_coalesce([$incidentLngExpr, $callLngExpr]);
+$hasAnonymousTipCallerExpr = $callerNameExpr !== 'NULL'
+    ? "CASE WHEN LOWER(TRIM(COALESCE({$callerNameExpr}, ''))) = 'anonymous tip' THEN 1 ELSE 0 END"
+    : '0';
 
 // Intake-source signals are returned as read-only metadata for the Dispatcher
 // queue. The existing incident workflow and status filters remain unchanged.
@@ -576,6 +626,7 @@ if (
 $intakeSourceExpr = "CASE
     WHEN {$normalizedReferenceNoExpr} LIKE 'TIP-%'
       OR {$hasTipOriginExpr} = 1
+    OR {$hasAnonymousTipCallerExpr} = 1
       OR {$normalizedIncidentIntakeSourceExpr} = 'tip' THEN 'tip'
     WHEN {$normalizedReferenceNoExpr} LIKE 'TRN-%' THEN 'call'
     WHEN {$normalizedReferenceNoExpr} LIKE 'REF-%'
@@ -592,6 +643,7 @@ END";
 $intakeSourceLabelExpr = "CASE
     WHEN {$normalizedReferenceNoExpr} LIKE 'TIP-%'
       OR {$hasTipOriginExpr} = 1
+    OR {$hasAnonymousTipCallerExpr} = 1
       OR {$normalizedIncidentIntakeSourceExpr} = 'tip' THEN 'Converted TIP'
     WHEN {$normalizedReferenceNoExpr} LIKE 'TRN-%' THEN 'Transferred App Call'
     WHEN {$normalizedReferenceNoExpr} LIKE 'REF-%'
@@ -628,6 +680,7 @@ END";
 $intakeDetectionExpr = "CASE
     WHEN {$normalizedReferenceNoExpr} LIKE 'TIP-%' THEN 'reference_prefix'
     WHEN {$hasTipOriginExpr} = 1 THEN 'anonymous_tip_link'
+    WHEN {$hasAnonymousTipCallerExpr} = 1 THEN 'anonymous_tip_caller'
     WHEN {$normalizedIncidentIntakeSourceExpr} = 'tip' THEN 'recorded_intake_source'
     WHEN {$normalizedReferenceNoExpr} LIKE 'TRN-%' THEN 'reference_prefix'
     WHEN {$normalizedReferenceNoExpr} LIKE 'REF-%'
@@ -651,6 +704,7 @@ $intakeSourceInferredExpr = "CASE
     WHEN {$normalizedReferenceNoExpr} LIKE 'TIP-%'
       OR {$normalizedReferenceNoExpr} LIKE 'TRN-%'
       OR {$hasTipOriginExpr} = 1
+    OR {$hasAnonymousTipCallerExpr} = 1
       OR {$hasExternalOriginExpr} = 1
       OR {$hasIncidentExternalSourceExpr} = 1
       OR {$hasSystemExternalCardExpr} = 1
@@ -937,7 +991,7 @@ if ($priority !== '' && ers_incidents_has_column($schema, 'incidents', 'priority
 
 if ($status !== '' && ers_incidents_has_column($schema, 'incidents', 'status')) {
     if ($status === 'pending') {
-        $where[] = "i.status IN ('pending', 'new')";
+        $where[] = "i.status IN ('pending', 'new', 'active')";
         if (
             $hasLatestDispatch
             && ers_incidents_has_column($schema, 'dispatches', 'status')

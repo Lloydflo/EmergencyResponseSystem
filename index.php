@@ -44,7 +44,7 @@ $landingCssVersion = is_file(__DIR__ . '/css/landing.css')
             <img src="images/logo.svg" alt="ALERTARA">
             <span><strong>ALERTARA</strong><small>Emergency Response System</small></span>
         </a>
-        <nav class="landing-nav" aria-label="Main navigation">
+        <nav class="landing-nav" aria-label="Main Navigation">
             <a href="#capabilities">Capabilities</a>
             <a href="#workflow">How it works</a>
             <a href="#about">About</a>
