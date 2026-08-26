@@ -711,6 +711,49 @@ if (!function_exists('ers_reconcile_all_dispatch_and_unit_statuses')) {
                       {$dispatchCheck}
                 ");
             }
+
+            // 7. Mark responder_backup_requests completed if linked incident is resolved/closed/cancelled
+            if (ers_vehicle_resource_table_exists($pdo, 'responder_backup_requests') && $hasIncidents) {
+                $pdo->exec("
+                    UPDATE `responder_backup_requests` rbr
+                    INNER JOIN `incidents` i ON (i.id = rbr.incident_id OR i.reference_no = rbr.incident_id)
+                    SET rbr.status = 'completed',
+                        rbr.updated_at = CURRENT_TIMESTAMP
+                    WHERE LOWER(COALESCE(i.status, '')) IN ('resolved', 'closed', 'cancelled', 'completed')
+                      AND LOWER(COALESCE(rbr.status, '')) = 'pending'
+                ");
+            }
+
+            // 8. Mark responder_resource_requests completed if linked incident is resolved/closed/cancelled
+            if (ers_vehicle_resource_table_exists($pdo, 'responder_resource_requests') && $hasIncidents) {
+                $pdo->exec("
+                    UPDATE `responder_resource_requests` rrr
+                    INNER JOIN `incidents` i ON (i.id = rrr.incident_id OR i.reference_no = rrr.incident_id)
+                    SET rrr.status = 'completed',
+                        rrr.updated_at = CURRENT_TIMESTAMP
+                    WHERE LOWER(COALESCE(i.status, '')) IN ('resolved', 'closed', 'cancelled', 'completed')
+                      AND LOWER(COALESCE(rrr.status, '')) = 'pending'
+                ");
+            }
+
+            // 9. Mark resource_requests completed if linked incident is resolved/closed/cancelled
+            if (ers_vehicle_resource_table_exists($pdo, 'resource_requests') && $hasIncidents) {
+                $rStmt = $pdo->query("SELECT id, details FROM `resource_requests` WHERE status = 'pending'");
+                if ($rStmt) {
+                    while ($rRow = $rStmt->fetch(PDO::FETCH_ASSOC)) {
+                        $rDetails = json_decode((string)($rRow['details'] ?? ''), true);
+                        if (is_array($rDetails) && !empty($rDetails['incident_id'])) {
+                            $rIncId = (int)$rDetails['incident_id'];
+                            $chk = $pdo->prepare("SELECT 1 FROM `incidents` WHERE id = ? AND LOWER(COALESCE(status, '')) IN ('resolved', 'closed', 'cancelled', 'completed') LIMIT 1");
+                            $chk->execute([$rIncId]);
+                            if ($chk->fetchColumn()) {
+                                $upd = $pdo->prepare("UPDATE `resource_requests` SET status = 'completed' WHERE id = ?");
+                                $upd->execute([(int)$rRow['id']]);
+                            }
+                        }
+                    }
+                }
+            }
         } catch (Throwable $e) {
             error_log('ers_reconcile_all_dispatch_and_unit_statuses skipped: ' . $e->getMessage());
         }

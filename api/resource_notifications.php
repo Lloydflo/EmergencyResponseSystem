@@ -175,7 +175,14 @@ function resource_notification_addition_item(array $row): array {
 }
 
 try {
+    require_once __DIR__ . '/../includes/vehicle_resource_units.php';
+    if (function_exists('ers_reconcile_all_dispatch_and_unit_statuses')) {
+        ers_reconcile_all_dispatch_and_unit_statuses($pdo);
+    }
+
+    $hasIncidents = resource_notification_table_exists($pdo, 'incidents');
     $requests = [];
+
     if (resource_notification_table_exists($pdo, 'resource_requests')) {
         $stmt = $pdo->query(
             "SELECT id, requestor, resource_name, date_requested, status, details
@@ -185,6 +192,17 @@ try {
              LIMIT " . (int)$limit
         );
         while ($row = $stmt->fetch(PDO::FETCH_ASSOC)) {
+            $details = json_decode((string)($row['details'] ?? ''), true);
+            $incId = is_array($details) ? (int)($details['incident_id'] ?? 0) : 0;
+            if ($incId > 0 && $hasIncidents) {
+                $chk = $pdo->prepare("SELECT status FROM incidents WHERE id = ? LIMIT 1");
+                $chk->execute([$incId]);
+                $incStatus = strtolower(trim((string)$chk->fetchColumn()));
+                if (in_array($incStatus, ['resolved', 'closed', 'cancelled', 'completed'], true)) {
+                    continue;
+                }
+            }
+
             $item = resource_notification_request_item($row);
             if ($item !== null) {
                 $requests[] = $item;
@@ -193,11 +211,15 @@ try {
     }
 
     if (resource_notification_table_exists($pdo, 'responder_resource_requests')) {
+        $incJoin = $hasIncidents ? "LEFT JOIN incidents i ON (i.id = r.incident_id OR i.reference_no = r.incident_id)" : "";
+        $incFilter = $hasIncidents ? "AND (r.incident_id IS NULL OR r.incident_id = '' OR r.incident_id = '0' OR i.id IS NULL OR LOWER(COALESCE(i.status, '')) NOT IN ('resolved', 'closed', 'cancelled', 'completed'))" : "";
         $stmt = $pdo->query(
-            "SELECT id, responder_name, category, resource_name, quantity, urgency, incident_id, location, notes, status, created_at, updated_at
-             FROM responder_resource_requests
-             WHERE status = 'pending'
-             ORDER BY created_at DESC, id DESC
+            "SELECT r.id, r.responder_name, r.category, r.resource_name, r.quantity, r.urgency, r.incident_id, r.location, r.notes, r.status, r.created_at, r.updated_at
+             FROM responder_resource_requests r
+             {$incJoin}
+             WHERE r.status = 'pending'
+               {$incFilter}
+             ORDER BY r.created_at DESC, r.id DESC
              LIMIT " . (int)$limit
         );
         while ($row = $stmt->fetch(PDO::FETCH_ASSOC)) {
@@ -209,11 +231,15 @@ try {
     }
 
     if (resource_notification_table_exists($pdo, 'responder_backup_requests')) {
+        $incJoin = $hasIncidents ? "LEFT JOIN incidents i ON (i.id = b.incident_id OR i.reference_no = b.incident_id)" : "";
+        $incFilter = $hasIncidents ? "AND (b.incident_id IS NULL OR b.incident_id = '' OR b.incident_id = '0' OR i.id IS NULL OR LOWER(COALESCE(i.status, '')) NOT IN ('resolved', 'closed', 'cancelled', 'completed'))" : "";
         $stmt = $pdo->query(
-            "SELECT id, responder_name, requested_department, resources, is_full_backup, incident_id, status, created_at, updated_at
-             FROM responder_backup_requests
-             WHERE status = 'pending'
-             ORDER BY created_at DESC, id DESC
+            "SELECT b.id, b.responder_name, b.requested_department, b.resources, b.is_full_backup, b.incident_id, b.status, b.created_at, b.updated_at
+             FROM responder_backup_requests b
+             {$incJoin}
+             WHERE b.status = 'pending'
+               {$incFilter}
+             ORDER BY b.created_at DESC, b.id DESC
              LIMIT " . (int)$limit
         );
         while ($row = $stmt->fetch(PDO::FETCH_ASSOC)) {

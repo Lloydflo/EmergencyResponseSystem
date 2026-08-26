@@ -245,6 +245,22 @@ try {
 
     incident_resolve_complete_operator_records($pdo, $incidentId);
 
+    // Complete pending responder backup & resource requests for this incident
+    if (incident_resolve_table_exists($pdo, 'responder_backup_requests')) {
+        try {
+            $pdo->prepare("UPDATE responder_backup_requests SET status = 'completed', updated_at = NOW() WHERE (incident_id = :iid1 OR incident_id = :ref) AND status = 'pending'")->execute([':iid1' => (string)$incidentId, ':ref' => (string)$incidentCode]);
+        } catch (Throwable $rbrErr) {
+            error_log('Incident resolve backup request completion skipped: ' . $rbrErr->getMessage());
+        }
+    }
+    if (incident_resolve_table_exists($pdo, 'responder_resource_requests')) {
+        try {
+            $pdo->prepare("UPDATE responder_resource_requests SET status = 'completed', updated_at = NOW() WHERE (incident_id = :iid1 OR incident_id = :ref) AND status = 'pending'")->execute([':iid1' => (string)$incidentId, ':ref' => (string)$incidentCode]);
+        } catch (Throwable $rrrErr) {
+            error_log('Incident resolve resource request completion skipped: ' . $rrrErr->getMessage());
+        }
+    }
+
     // Reset responder unit_status for responders assigned to this incident
     if (incident_resolve_table_exists($pdo, 'users') && incident_resolve_column_exists($pdo, 'users', 'unit_status')) {
         try {
