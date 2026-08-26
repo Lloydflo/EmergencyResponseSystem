@@ -750,11 +750,13 @@ function ers_tip_status_lookup(PDO $pdo, string $tipId): array
     $dispatchedStatuses = [
         'assigned', 'acknowledged', 'dispatching', 'dispatched',
         'enroute', 'en_route', 'on_scene', 'ongoing', 'ongoing_dispatch',
-        'in_progress', 'resolved', 'complete', 'completed', 'closed',
+        'in_progress',
     ];
     $completedStatuses = ['resolved', 'complete', 'completed', 'closed'];
     $dispatched = $dispatch['unit_count'] > 0 || in_array($incidentStatus, $dispatchedStatuses, true);
-    $completed = in_array($incidentStatus, $completedStatuses, true) || trim((string)($row['incident_completed_at'] ?? '')) !== '';
+    $hasDispatch = $dispatch['unit_count'] > 0;
+    $completed = $hasDispatch
+        && (in_array($incidentStatus, $completedStatuses, true) || trim((string)($row['incident_completed_at'] ?? '')) !== '');
     $displayStatus = $completed
         ? 'completed'
         : ($dispatched ? 'dispatched' : ((string)($row['tip_status'] ?? '') ?: 'new'));
@@ -951,7 +953,8 @@ function ers_tip_prepare_response(array $row, ?PDO $pdo = null): array
         'in_progress',
     ];
     $completedStatuses = ['resolved', 'complete', 'completed', 'closed'];
-    $isCompleted = in_array($incidentStatus, $completedStatuses, true);
+    $hasDispatch = (int)($dispatch['unit_count'] ?? 0) > 0;
+    $isCompleted = $hasDispatch && in_array($incidentStatus, $completedStatuses, true);
     $isDispatched = (int)($dispatch['unit_count'] ?? 0) > 0
         || in_array($incidentStatus, $dispatchedStatuses, true);
     $row['raw_status'] = (string)($row['status'] ?? '');
