@@ -1509,8 +1509,8 @@ if (!headers_sent()) {
                         <section class="request-panel">
                             <div class="request-panel-head">
                                 <div>
-                                    <h3>Available Vehicles</h3>
-                                    <span>Only emergency vehicles with `Available` status are listed here.</span>
+                                    <h3>Available Resources</h3>
+                                    <span>Only resources with `Available` status are listed here.</span>
                                 </div>
                                 <span class="request-count-chip"><span id="requestSelectedCount">0</span> selected</span>
                             </div>
@@ -1518,24 +1518,24 @@ if (!headers_sent()) {
                                 <table class="request-resource-table">
                                     <thead>
                                         <tr>
-                                            <th>Vehicle Code</th>
-                                            <th>Vehicle / Name</th>
-                                            <th>Driver / Plate</th>
+                                            <th>Operational No.</th>
+                                            <th>Resource</th>
+                                            <th>Category</th>
                                             <th>Location</th>
                                             <th>Add</th>
                                         </tr>
                                     </thead>
                                     <tbody id="requestResourcePickerBody">
                                         <tr>
-                                            <td colspan="5" class="request-empty">No available vehicles.</td>
+                                            <td colspan="5" class="request-empty">No available resources.</td>
                                         </tr>
                                     </tbody>
                                 </table>
                             </div>
                             <div class="request-selected-wrap">
-                                <strong>Selected backup vehicles</strong>
+                                <strong>Selected backup resources</strong>
                                 <div class="request-selected-list" id="requestSelectedList">
-                                    <span class="request-empty">Choose vehicles using the + button.</span>
+                                    <span class="request-empty">Choose resources using the + button.</span>
                                 </div>
                             </div>
                         </section>
@@ -2247,7 +2247,7 @@ if (!headers_sent()) {
 
         function getAvailableBackupResources() {
             return resources
-                .filter((item) => item.status === 'available' && (item.category === 'vehicles' || item.category === 'vehicle'))
+                .filter((item) => item.status === 'available')
                 .slice()
                 .sort((a, b) => {
                     const codeA = String(a.code || '').toLowerCase();
@@ -2262,7 +2262,12 @@ if (!headers_sent()) {
         }
 
         function inferBackupResourceType(items) {
-            return 'vehicle';
+            const categories = Array.from(new Set(items.map((item) => String(item.category || '').trim()).filter(Boolean)));
+            if (categories.length !== 1) return 'other';
+            if (categories[0] === 'vehicles') return 'vehicle';
+            if (categories[0] === 'personnel') return 'personnel';
+            if (categories[0] === 'equipment') return 'equipment';
+            return 'other';
         }
 
         function renderBackupIncidentOptions() {
@@ -2302,7 +2307,7 @@ if (!headers_sent()) {
             const availableResources = getAvailableBackupResources();
 
             if (availableResources.length === 0) {
-                requestResourcePickerBody.innerHTML = '<tr><td colspan="5" class="request-empty">No available vehicles ready for backup request.</td></tr>';
+                requestResourcePickerBody.innerHTML = '<tr><td colspan="5" class="request-empty">No available resources ready for backup request.</td></tr>';
                 return;
             }
 
@@ -2312,17 +2317,17 @@ if (!headers_sent()) {
                 return `
                     <tr>
                         <td class="request-number-cell">
-                            <span>Vehicle</span>
+                            <span>${escapeHtml(resourceIdentifierLabel(item.category))}</span>
                             <strong>${escapeHtml(item.code)}</strong>
                         </td>
                         <td class="name-cell">
                             <strong>${escapeHtml(item.name)}</strong>
-                            <span>${escapeHtml(item.assignment || 'Fleet Unit')}</span>
+                            <span>${escapeHtml(detailLine)}</span>
                         </td>
-                        <td>${escapeHtml(detailLine)}</td>
+                        <td>${escapeHtml(formatCategory(item.category))}</td>
                         <td>${escapeHtml(formatResourceLocation(item))}</td>
                         <td>
-                            <button type="button" class="request-pick-btn ${isSelected ? 'selected' : ''}" data-backup-resource-id="${item.id}" aria-label="${isSelected ? 'Remove vehicle' : 'Add vehicle'}">
+                            <button type="button" class="request-pick-btn ${isSelected ? 'selected' : ''}" data-backup-resource-id="${item.id}" aria-label="${isSelected ? 'Remove resource' : 'Add resource'}">
                                 <i class="fas ${isSelected ? 'fa-check' : 'fa-plus'}"></i>
                             </button>
                         </td>
@@ -2336,13 +2341,13 @@ if (!headers_sent()) {
             requestSelectedCount.textContent = String(selectedItems.length);
 
             if (selectedItems.length === 0) {
-                requestSelectedList.innerHTML = '<span class="request-empty">Choose vehicles using the + button.</span>';
+                requestSelectedList.innerHTML = '<span class="request-empty">Choose resources using the + button.</span>';
                 return;
             }
 
             requestSelectedList.innerHTML = selectedItems.map((item) => `
                 <span class="request-selected-chip">
-                    <span>${escapeHtml(item.code)} - ${escapeHtml(item.name)}</span>
+                    <span>${escapeHtml(item.code)} - ${escapeHtml(item.name)}${item.category === 'equipment' ? ` (Qty: ${escapeHtml(Math.max(1, Number(item.quantity) || 1))})` : ''}</span>
                     <button type="button" data-remove-backup-resource-id="${item.id}" aria-label="Remove ${escapeHtml(item.name)}">
                         <i class="fas fa-times"></i>
                     </button>

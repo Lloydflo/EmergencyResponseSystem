@@ -722,49 +722,6 @@ document.addEventListener('DOMContentLoaded', function() {
                 title: isUnread ? 'Resource added' : 'Added resource',
                 text: resourceAdditionText(item),
                 meta: relativeTime(item.notified_at),
-            const isUnread = Number(item.notification_id || 0) > state.incidentCardSeenId;
-            entries.push({
-                kind: 'incident-card',
-                hrefAttr: 'data-open-interagency="1" data-incident-card-notification="1"',
-                icon: isUnread ? 'fa-triangle-exclamation' : 'fa-clipboard-list',
-                title: isUnread ? 'Incident card sent' : 'Incident card',
-                text: incidentCardText(item),
-                meta: label + ' - ' + relativeTime(item.notified_at),
-                time: item.notified_at,
-                id: Number(item.notification_id || 0)
-            });
-        });
-
-        (Array.isArray(state.resolvedNotifications) ? state.resolvedNotifications : []).forEach(function(item) {
-            const incident = item && item.incident ? item.incident : {};
-            const incidentLabel = incident.label || incident.reference_no || (incident.id ? ('#' + incident.id) : 'Incident');
-            const detailText = item.details || (incidentLabel + ' has been resolved.');
-            const isUnread = Number(item.notification_id || 0) > state.resolvedSeenId;
-            const time = item.notified_at || incident.resolved_at;
-            const isAdminReviewNotification = userRole === 'admin';
-            entries.push({
-                kind: 'resolved',
-                hrefAttr: 'data-open-review="1"',
-                icon: isUnread ? 'fa-circle-check' : 'fa-check',
-                title: isAdminReviewNotification
-                    ? (isUnread ? 'Resolved review sent' : 'Resolved review')
-                    : (isUnread ? 'Incident resolved' : 'Resolved incident'),
-                text: detailText,
-                meta: relativeTime(time),
-                time: time,
-                id: Number(item.notification_id || 0)
-            });
-        });
-
-        (Array.isArray(state.resourceAdditionNotifications) ? state.resourceAdditionNotifications : []).forEach(function(item) {
-            const isUnread = Number(item.notification_id || 0) > state.resourceAdditionSeenId;
-            entries.push({
-                kind: 'resource-added',
-                hrefAttr: 'data-open-resources="1" data-resource-addition-notification="1"',
-                icon: isUnread ? 'fa-circle-plus' : 'fa-box',
-                title: isUnread ? 'Resource added' : 'Added resource',
-                text: resourceAdditionText(item),
-                meta: relativeTime(item.notified_at),
                 time: item.notified_at,
                 id: Number(item.notification_id || 0)
             });
@@ -773,7 +730,7 @@ document.addEventListener('DOMContentLoaded', function() {
         (Array.isArray(state.backupRequests) ? state.backupRequests : []).forEach(function(item) {
             entries.push({
                 kind: 'resource',
-                hrefAttr: 'data-open-request-backup="1" data-request-id="' + escapeHtml(String(item.id || '')) + '" data-incident-id="' + escapeHtml(String(item.incident_id || '')) + '"',
+                hrefAttr: 'data-open-resources="1"',
                 icon: item.request_kind === 'backup' ? 'fa-truck-medical' : 'fa-hand-holding-medical',
                 title: item.request_kind === 'backup' ? 'Pending backup request' : 'Pending resource request',
                 text: backupRequestText(item),
@@ -963,6 +920,12 @@ document.addEventListener('DOMContentLoaded', function() {
         if (liveToastTitle) liveToastTitle.textContent = 'Responder Zones';
         if (liveToastText) liveToastText.textContent = zoneNotificationUnreadText(count);
         liveToast.setAttribute('data-toast-target', 'zone');
+        liveToast.hidden = false;
+        window.clearTimeout(state.toastTimer);
+        window.requestAnimationFrame(function() {
+            liveToast.classList.add('show');
+        });
+        state.toastTimer = window.setTimeout(hideLiveToast, 4000);
     }
     function toggleModal(modal, button, otherModal, otherButton) {
         if (!modal || !button) return;
@@ -1373,12 +1336,6 @@ document.addEventListener('DOMContentLoaded', function() {
             renderAllNotificationsList();
             return;
         }
-
-        const trigger = event.target.closest('[data-open-interagency]');
-        if (trigger) {
-            event.preventDefault();
-            if (trigger.hasAttribute('data-incident-card-notification')) {
-                markIncidentCardNotificationsSeen();
 
         const trigger = event.target.closest('[data-open-interagency]');
         if (trigger) {
