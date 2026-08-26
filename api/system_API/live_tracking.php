@@ -57,11 +57,14 @@ function ers_live_tracking_fetch(PDO $pdo): array
         return [];
     }
 
-    // Latest GPS ping per unit, same pattern as units_list.php.
+    // Latest GPS ping per unit, same pattern as units_list.php — including
+    // skipping known seed/placeholder coordinates so a stale test ping
+    // never wins over a real, older-but-genuine GPS fix.
     $locationJoin = '';
     $unitLatExpr = 'NULL';
     $unitLngExpr = 'NULL';
     $lastRecordedExpr = 'NULL';
+    $locationSourceExpr = 'NULL';
     $canJoinLocation = ers_live_tracking_has_table($schema, 'unit_locations')
         && ers_live_tracking_has_column($schema, 'unit_locations', 'id')
         && ers_live_tracking_has_column($schema, 'unit_locations', 'unit_id')
@@ -70,24 +73,38 @@ function ers_live_tracking_fetch(PDO $pdo): array
         && ers_live_tracking_has_column($schema, 'unit_locations', 'longitude');
 
     if ($canJoinLocation) {
+        $validLocationWhere = ' AND NOT ' . ers_live_tracking_fallback_coordinate_condition('ul2');
+        $hasSource = ers_live_tracking_has_column($schema, 'unit_locations', 'source');
+        // 'responder_route' rows are simulated waypoints saved by the route
+        // preview/testing feature (save-route-point.php), not real device
+        // GPS. Real pings are tagged 'responder_gps'. Prefer a genuine GPS
+        // fix no matter how old over a simulated route point, and only
+        // fall back to a route point if the unit has never sent real GPS.
+        $orderBy = $hasSource
+            ? "ORDER BY (ul2.source = 'responder_route') ASC, ul2.recorded_at DESC, ul2.id DESC"
+            : 'ORDER BY ul2.recorded_at DESC, ul2.id DESC';
         $locationJoin = " LEFT JOIN unit_locations ul
             ON ul.id = (
                 SELECT ul2.id
                 FROM unit_locations ul2
                 WHERE ul2.unit_id = u.id
-                ORDER BY ul2.recorded_at DESC, ul2.id DESC
+                {$validLocationWhere}
+                {$orderBy}
                 LIMIT 1
             )";
         $unitLatExpr = 'ul.latitude';
         $unitLngExpr = 'ul.longitude';
         $lastRecordedExpr = 'ul.recorded_at';
+        $locationSourceExpr = $hasSource ? 'ul.source' : 'NULL';
     } elseif (
         ers_live_tracking_has_column($schema, 'units', 'latitude')
         && ers_live_tracking_has_column($schema, 'units', 'longitude')
     ) {
-        // Fall back to the stored coordinate on the unit row itself.
-        $unitLatExpr = 'u.latitude';
-        $unitLngExpr = 'u.longitude';
+        // Fall back to the stored coordinate on the unit row itself,
+        // still excluding the same known seed/placeholder values.
+        $storedFallback = ers_live_tracking_fallback_coordinate_condition('u');
+        $unitLatExpr = "CASE WHEN {$storedFallback} THEN NULL ELSE u.latitude END";
+        $unitLngExpr = "CASE WHEN {$storedFallback} THEN NULL ELSE u.longitude END";
     }
 
     // Responder name/unit code, so the other side can label the marker.
@@ -120,6 +137,25 @@ function ers_live_tracking_fetch(PDO $pdo): array
     $incidentLatExpr = ers_live_tracking_has_column($schema, 'incidents', 'latitude') ? 'i.latitude' : 'NULL';
     $incidentLngExpr = ers_live_tracking_has_column($schema, 'incidents', 'longitude') ? 'i.longitude' : 'NULL';
 
+    // Some incidents only have coordinates on the originating call record —
+    // fall back to that the same way units_list.php does, so "null" isn't
+    // reported just because the incident row itself wasn't geocoded.
+    $callJoin = '';
+    $hasCallJoin = ers_live_tracking_has_column($schema, 'incidents', 'reported_by_call_id')
+        && ers_live_tracking_has_table($schema, 'calls')
+        && ers_live_tracking_has_column($schema, 'calls', 'id');
+    if ($hasCallJoin) {
+        $callJoin = ' LEFT JOIN calls c ON c.id = i.reported_by_call_id';
+        $callLatExpr = ers_live_tracking_has_column($schema, 'calls', 'latitude') ? 'c.latitude' : 'NULL';
+        $callLngExpr = ers_live_tracking_has_column($schema, 'calls', 'longitude') ? 'c.longitude' : 'NULL';
+        if ($callLatExpr !== 'NULL') {
+            $incidentLatExpr = "COALESCE({$incidentLatExpr}, {$callLatExpr})";
+        }
+        if ($callLngExpr !== 'NULL') {
+            $incidentLngExpr = "COALESCE({$incidentLngExpr}, {$callLngExpr})";
+        }
+    }
+
     $statusExpr = ers_live_tracking_has_column($schema, 'units', 'status') ? 'u.status' : "'unknown'";
 
     $sql = "SELECT
@@ -130,6 +166,7 @@ function ers_live_tracking_fetch(PDO $pdo): array
                 {$unitLatExpr} AS responder_latitude,
                 {$unitLngExpr} AS responder_longitude,
                 {$lastRecordedExpr} AS responder_location_recorded_at,
+                {$locationSourceExpr} AS responder_location_source,
                 u.current_incident_id AS incident_id,
                 {$incidentCodeExpr} AS incident_code,
                 {$incidentTypeExpr} AS incident_type,
@@ -140,6 +177,7 @@ function ers_live_tracking_fetch(PDO $pdo): array
             {$locationJoin}
             {$responderJoin}
             INNER JOIN incidents i ON i.id = u.current_incident_id
+            {$callJoin}
             WHERE u.current_incident_id IS NOT NULL
             ORDER BY u.identifier";
 
@@ -158,6 +196,24 @@ function ers_live_tracking_fetch(PDO $pdo): array
     unset($row);
 
     return $rows;
+}
+
+/**
+ * Same known seed/placeholder coordinates that units_list.php excludes, so
+ * this feed never reports a fake test pin as if it were a live position.
+ */
+function ers_live_tracking_fallback_coordinate_condition(string $alias): string
+{
+    $safeAlias = preg_replace('/[^A-Za-z0-9_]/', '', $alias) ?: 'u';
+
+    return "(
+        (ABS({$safeAlias}.latitude) < 0.000001 AND ABS({$safeAlias}.longitude) < 0.000001)
+        OR
+        (ABS({$safeAlias}.latitude - 14.7338) < 0.000001 AND ABS({$safeAlias}.longitude - 121.0368) < 0.000001)
+        OR (ABS({$safeAlias}.latitude - 14.7295) < 0.000001 AND ABS({$safeAlias}.longitude - 121.0342) < 0.000001)
+        OR (ABS({$safeAlias}.latitude - 14.7351) < 0.000001 AND ABS({$safeAlias}.longitude - 121.0380) < 0.000001)
+        OR (ABS({$safeAlias}.latitude - 14.7320) < 0.000001 AND ABS({$safeAlias}.longitude - 121.0351) < 0.000001)
+    )";
 }
 
 /** @return array<string,array<string,true>> */
