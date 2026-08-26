@@ -65,11 +65,46 @@ $avatar_source = $user_avatar !== ''
     : 'data:image/svg+xml;base64,' . base64_encode($fallback_avatar_svg);
 ?>
 
+<link rel="stylesheet" href="css/admin-header.css">
 <link rel="stylesheet" href="css/notification-modal.css">
 <link rel="stylesheet" href="css/message-modal.css">
 <link rel="stylesheet" href="css/message-content-modal.css">
 <link rel="stylesheet" href="css/admin-dark-theme.css">
 <style>
+    .user-profile {
+        cursor: pointer;
+        user-select: none;
+    }
+
+    .user-profile-dropdown {
+        position: fixed;
+        top: var(--app-header-height-1, 70px);
+        right: 2rem;
+        width: 320px;
+        max-width: calc(100vw - 2rem);
+        background-color: var(--card-bg-1, #ffffff);
+        border: 1px solid var(--border-color-1, #e2e8f0);
+        border-radius: 0.75rem;
+        box-shadow: 0 10px 25px rgba(0, 0, 0, 0.15);
+        z-index: 2100;
+        opacity: 0;
+        visibility: hidden;
+        transform: translateY(-10px);
+        transition: opacity 0.2s ease, transform 0.2s ease, visibility 0.2s ease;
+        overflow: hidden;
+    }
+
+    .user-profile-dropdown.show {
+        opacity: 1 !important;
+        visibility: visible !important;
+        transform: translateY(0) !important;
+        pointer-events: auto !important;
+    }
+
+    .notification-modal {
+        z-index: 2100;
+    }
+
     .header-empty-state {
         display: grid;
         place-items: center;
@@ -436,7 +471,8 @@ $avatar_source = $user_avatar !== ''
 </div>
 
 <script>
-document.addEventListener('DOMContentLoaded', function() {
+(function() {
+function initAdminHeader() {
     const menuToggle = document.getElementById('menuToggle');
     const notificationBtn = document.getElementById('headerNotificationBtn');
     const messageBtn = document.getElementById('headerMessageBtn');
@@ -1002,6 +1038,9 @@ document.addEventListener('DOMContentLoaded', function() {
         window.requestAnimationFrame(function() {
             liveToast.classList.add('show');
         });
+        state.toastTimer = window.setTimeout(hideLiveToast, 4000);
+    }
+
     function showLiveToast(count) {
         if (!liveToast || count <= 0) return;
         if (liveToastIcon) liveToastIcon.className = 'fas fa-envelope';
@@ -1396,28 +1435,32 @@ document.addEventListener('DOMContentLoaded', function() {
     }
 
     if (notificationBtn) {
-        notificationBtn.addEventListener('click', async function(event) {
+        notificationBtn.addEventListener('click', function(event) {
             event.preventDefault();
             event.stopPropagation();
-            await loadHeaderSummary(100);
-            markResolvedNotificationsSeen();
-            markIncidentCardNotificationsSeen();
-            markZoneNotificationsSeen();
-            markResourceAdditionNotificationsSeen();
-            markResourceRequestNotificationsSeen();
-            const unreadCount = Math.max(0, Number(state.lastUnreadCount) || 0);
-            setBadge(notificationBadge, notificationBadgeTotal());
-            renderNotificationList(unreadCount);
             toggleModal(notificationModal, notificationBtn, messageModal, messageBtn);
+            if (notificationModal && notificationModal.classList.contains('show')) {
+                loadHeaderSummary(100).then(function() {
+                    markResolvedNotificationsSeen();
+                    markIncidentCardNotificationsSeen();
+                    markZoneNotificationsSeen();
+                    markResourceAdditionNotificationsSeen();
+                    markResourceRequestNotificationsSeen();
+                    setBadge(notificationBadge, notificationBadgeTotal());
+                    renderNotificationList(Math.max(0, Number(state.lastUnreadCount) || 0));
+                }).catch(function() {});
+            }
         });
     }
 
     if (messageBtn) {
-        messageBtn.addEventListener('click', async function(event) {
+        messageBtn.addEventListener('click', function(event) {
             event.preventDefault();
             event.stopPropagation();
-            await loadInteragencySummary();
             toggleModal(messageModal, messageBtn, notificationModal, notificationBtn);
+            if (messageModal && messageModal.classList.contains('show')) {
+                loadInteragencySummary().catch(function() {});
+            }
         });
     }
 
@@ -1604,5 +1647,12 @@ document.addEventListener('DOMContentLoaded', function() {
         }
         runWhenPageSettled(startHeaderSummaryPolling);
     });
-});
+}
+
+if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', initAdminHeader);
+} else {
+    initAdminHeader();
+}
+})();
 </script>
