@@ -84,14 +84,19 @@ try {
         }
 
         // Get active incidents (pending or dispatched)
-        $activeIncidents = (int)$pdo->query("SELECT COUNT(*) AS c FROM incidents WHERE status IN ('pending','new','dispatched')")->fetch()['c'];
+        $activeIncidents = (int)$pdo->query("SELECT COUNT(*) AS c FROM incidents WHERE status IN ('pending','new','active','dispatched')")->fetch()['c'];
 
         // Get available units
         $availableUnits = ers_count_available_vehicle_resource_units($pdo, $vehicleResourceTable ?? null);
 
         // Get pending calls that do not already have responders assigned.
-        $pendingCallsSql = "SELECT COUNT(*) AS c FROM incidents i WHERE i.status IN ('pending','new')";
-        if (function_exists('ers_vehicle_resource_table_exists') && ers_vehicle_resource_table_exists($pdo, 'dispatches')) {
+        $pendingCallsSql = "SELECT COUNT(*) AS c FROM incidents i WHERE i.status IN ('pending','new','active')";
+        if (
+            function_exists('ers_vehicle_resource_table_exists')
+            && ers_vehicle_resource_table_exists($pdo, 'dispatches')
+            && function_exists('dispatch_column_exists')
+            && dispatch_column_exists($pdo, 'dispatches', 'incident_id')
+        ) {
             $pendingCallsSql .= " AND NOT EXISTS (
                 SELECT 1
                 FROM dispatches d_pending
