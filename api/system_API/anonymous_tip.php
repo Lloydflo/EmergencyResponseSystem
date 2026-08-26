@@ -336,10 +336,7 @@ function ers_tip_normalize(array $input, ?string $externalClient = null): array
     }
     $photo = ers_tip_store_inline_evidence((string)$photo, $tipId);
 
-    $status = strtolower(ers_external_clean($input['status'] ?? 'new', 40));
-    if (!in_array($status, ['new', 'reviewing', 'verified', 'dismissed', 'converted_to_incident'], true)) {
-        $status = 'new';
-    }
+    $status = 'new';
 
     $rawPayload = json_encode($input, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
     if (!is_string($rawPayload)) {
@@ -943,7 +940,10 @@ function ers_tip_prepare_response(array $row, ?PDO $pdo = null): array
     $isDispatched = (int)($dispatch['unit_count'] ?? 0) > 0
         || in_array($incidentStatus, $dispatchedStatuses, true);
     $row['raw_status'] = (string)($row['status'] ?? '');
-    $row['display_status'] = $isCompleted ? 'resolved' : ($isDispatched ? 'dispatched' : (string)($row['status'] ?? ''));
+    $isConverted = $row['raw_status'] === 'converted_to_incident';
+    $row['display_status'] = $isConverted
+        ? ($isCompleted ? 'resolved' : ($isDispatched ? 'dispatched' : $row['raw_status']))
+        : ($row['raw_status'] !== '' ? $row['raw_status'] : 'new');
     $row['interagency_status'] = $row['display_status'];
     $row['dispatched'] = $isDispatched;
     $row['is_dispatched'] = $isDispatched;
