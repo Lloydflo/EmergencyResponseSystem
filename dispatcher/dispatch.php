@@ -2946,16 +2946,28 @@ function removeIncidentFromActiveCalls(incidentId) {
     renderIncidentIntakeQueue();
 }
 
-document.addEventListener('DOMContentLoaded', initializeIncidentIntakeQueue);
+document.addEventListener('DOMContentLoaded', function() {
+    initializeIncidentIntakeQueue();
+    setInterval(function() {
+        if (!document.hidden) {
+            refreshActiveCalls();
+        }
+    }, 6000);
+});
 
 window.addEventListener('storage', function(e) {
-    if (e.key === 'ers_incidents' || e.key === 'ers_incidents_changed' || e.key === 'ers_last_logged_incident') {
+    if (e.key === 'ers_incidents' || e.key === 'ers_incidents_changed' || e.key === 'ers_last_logged_incident' || e.key === 'ers_anonymous_tips_changed') {
         refreshActiveCalls();
         loadIncidentMarkers();
     }
 });
 
 window.addEventListener('ers:incident-queue-updated', function() {
+    refreshActiveCalls();
+    loadIncidentMarkers();
+});
+
+window.addEventListener('ers:anonymous-tips-updated', function() {
     refreshActiveCalls();
     loadIncidentMarkers();
 });

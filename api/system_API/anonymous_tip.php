@@ -380,19 +380,30 @@ function ers_tip_normalize_datetime($value): ?string
 {
     $raw = trim((string)$value);
     if ($raw === '') {
-        return date('Y-m-d H:i:s');
+        return (new DateTimeImmutable('now', new DateTimeZone('Asia/Manila')))->format('Y-m-d H:i:s');
     }
 
-    $time = strtotime($raw);
-    if ($time === false) {
-        return date('Y-m-d H:i:s');
+    try {
+        $philippineZone = new DateTimeZone('Asia/Manila');
+        if (preg_match('/(Z|[+-]\d{2}(?::?\d{2})?)$/i', $raw)) {
+            $date = new DateTimeImmutable($raw);
+            return $date->setTimezone($philippineZone)->format('Y-m-d H:i:s');
+        }
+        $date = new DateTimeImmutable($raw, $philippineZone);
+        return $date->setTimezone($philippineZone)->format('Y-m-d H:i:s');
+    } catch (Throwable $e) {
+        $time = strtotime($raw);
+        if ($time !== false) {
+            $dt = (new DateTimeImmutable('@' . $time))->setTimezone(new DateTimeZone('Asia/Manila'));
+            return $dt->format('Y-m-d H:i:s');
+        }
+        return (new DateTimeImmutable('now', new DateTimeZone('Asia/Manila')))->format('Y-m-d H:i:s');
     }
-
-    return date('Y-m-d H:i:s', $time);
 }
 
 function ers_tip_save(PDO $pdo, array $item): array
 {
+    $phNow = (new DateTimeImmutable('now', new DateTimeZone('Asia/Manila')))->format('Y-m-d H:i:s');
     $existingId = 0;
     if ($item['id'] > 0) {
         $stmt = $pdo->prepare('SELECT id FROM anonymous_tips WHERE id = ? LIMIT 1');
@@ -417,7 +428,7 @@ function ers_tip_save(PDO $pdo, array $item): array
                  outcome = ?,
                  source_system = ?,
                  raw_payload = ?,
-                 updated_at = NOW()
+                 updated_at = ?
              WHERE id = ?"
         );
         $stmt->execute([
@@ -429,6 +440,7 @@ function ers_tip_save(PDO $pdo, array $item): array
             $item['outcome'],
             $item['source_system'],
             $item['raw_payload'],
+            $phNow,
             $existingId,
         ]);
         return ers_tip_find($pdo, $existingId);
@@ -439,7 +451,7 @@ function ers_tip_save(PDO $pdo, array $item): array
             (tip_id, tip_datetime, location, tip_description, photo_of_evidence,
              status, outcome, source_system, received_at, updated_at, raw_payload)
          VALUES
-            (?, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW(), ?)"
+            (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
     );
     $stmt->execute([
         $item['tip_id'],
@@ -450,6 +462,7 @@ function ers_tip_save(PDO $pdo, array $item): array
         $item['status'],
         $item['outcome'],
         $item['source_system'],
+        $phNow,
         $item['raw_payload'],
     ]);
 
@@ -541,21 +554,11 @@ function ers_tip_convert_to_incident(PDO $pdo, array $input): array
     $payload = ers_tip_decode_payload((string)($item['raw_payload'] ?? ''));
     $priority = ers_external_normalize_priority($input['priority'] ?? $payload['priority'] ?? 'medium');
     $existing = ers_tip_find_linked_incident($pdo, $sourceSystem, $externalIncidentId);
-    if ($existing !== null) {
-        ers_tip_activate_incident($pdo, (int)$existing['id'], $priority);
-        $outcome = ers_tip_conversion_outcome($input, (string)$existing['reference_no'], true);
-        ers_tip_set_status($pdo, (int)$item['id'], 'converted_to_incident', $outcome);
-        return [
-            'duplicate' => true,
-            'item' => ers_tip_find($pdo, (int)$item['id']),
-            'incident' => $existing,
-        ];
-    }
 
-    $type = ers_external_normalize_type($input['incident_type'] ?? '') ?: ers_tip_infer_incident_type((string)($item['tip_description'] ?? ''));
-    if ($type === '') {
-        $type = 'medical, police, fire';
-    }
+    $rawType = trim((string)($input['incident_type'] ?? $input['type'] ?? ''));
+    $type = $rawType !== ''
+        ? (ers_external_normalize_type($rawType) ?: $rawType)
+        : (ers_tip_infer_incident_type((string)($item['tip_description'] ?? '')) ?: 'medical, police, fire');
 
     $location = ers_external_clean($item['location'] ?? '', 255);
     if ($location === '') {
@@ -566,20 +569,119 @@ function ers_tip_convert_to_incident(PDO $pdo, array $input): array
     $description = ers_tip_incident_description($item);
     $referenceNo = ers_tip_incident_reference($item);
     $title = 'Anonymous tip ' . ((string)($item['tip_id'] ?? '') !== '' ? (string)$item['tip_id'] : ('#' . (string)$item['id']));
+
+    $hasIntakeCol = ers_external_column_exists($pdo, 'incidents', 'intake_source');
+    $intakeSql = $hasIntakeCol ? ", intake_source = 'tip'" : '';
+
+    if ($existing !== null) {
+        $update = $pdo->prepare(
+            "UPDATE incidents
+             SET type = ?,
+                 priority = ?,
+                 status = 'pending',
+                 title = ?,
+                 description = ?,
+                 location_address = ?,
+                 latitude = ?,
+                 longitude = ?,
+                 updated_at = NOW()
+                 {$intakeSql}
+             WHERE id = ?"
+        );
+        $update->execute([
+            $type,
+            $priority,
+            $title,
+            $description,
+            $location,
+            $coordinates['latitude'],
+            $coordinates['longitude'],
+            (int)$existing['id'],
+        ]);
+
+        ers_external_link_incident($pdo, $sourceSystem, $externalIncidentId, (int)$existing['id'], [
+            'source' => 'anonymous_tip',
+            'tip' => $item,
+            'conversion' => [
+                'incident_type' => $type,
+                'priority' => $priority,
+            ],
+        ]);
+
+        $outcome = ers_tip_conversion_outcome($input, (string)$existing['reference_no'], true);
+        ers_tip_set_status($pdo, (int)$item['id'], 'converted_to_incident', $outcome);
+
+        log_activity_event(null, 'incident_created', 'incident', (int)$existing['id'], 'Anonymous tip '
+            . (string)($item['tip_id'] ?? ('#' . (int)$item['id']))
+            . ' was converted to incident ' . (string)$existing['reference_no'] . '.');
+
+        return [
+            'duplicate' => false,
+            'item' => ers_tip_find($pdo, (int)$item['id']),
+            'incident' => [
+                'id' => (int)$existing['id'],
+                'reference_no' => (string)$existing['reference_no'],
+                'status' => 'pending',
+                'latitude' => $coordinates['latitude'],
+                'longitude' => $coordinates['longitude'],
+            ],
+        ];
+    }
+
     $existingByReference = ers_tip_find_incident_by_reference($pdo, $referenceNo);
     if ($existingByReference !== null) {
+        $update = $pdo->prepare(
+            "UPDATE incidents
+             SET type = ?,
+                 priority = ?,
+                 status = 'pending',
+                 title = ?,
+                 description = ?,
+                 location_address = ?,
+                 latitude = ?,
+                 longitude = ?,
+                 updated_at = NOW()
+                 {$intakeSql}
+             WHERE id = ?"
+        );
+        $update->execute([
+            $type,
+            $priority,
+            $title,
+            $description,
+            $location,
+            $coordinates['latitude'],
+            $coordinates['longitude'],
+            (int)$existingByReference['id'],
+        ]);
+
         ers_external_link_incident($pdo, $sourceSystem, $externalIncidentId, (int)$existingByReference['id'], [
             'source' => 'anonymous_tip',
             'tip' => $item,
             'linked_by' => 'reference_no',
+            'conversion' => [
+                'incident_type' => $type,
+                'priority' => $priority,
+            ],
         ]);
         ers_tip_activate_incident($pdo, (int)$existingByReference['id'], $priority);
         $outcome = ers_tip_conversion_outcome($input, (string)$existingByReference['reference_no'], true);
         ers_tip_set_status($pdo, (int)$item['id'], 'converted_to_incident', $outcome);
+
+        log_activity_event(null, 'incident_created', 'incident', (int)$existingByReference['id'], 'Anonymous tip '
+            . (string)($item['tip_id'] ?? ('#' . (int)$item['id']))
+            . ' was converted to incident ' . (string)$existingByReference['reference_no'] . '.');
+
         return [
-            'duplicate' => true,
+            'duplicate' => false,
             'item' => ers_tip_find($pdo, (int)$item['id']),
-            'incident' => $existingByReference,
+            'incident' => [
+                'id' => (int)$existingByReference['id'],
+                'reference_no' => (string)$existingByReference['reference_no'],
+                'status' => 'pending',
+                'latitude' => $coordinates['latitude'],
+                'longitude' => $coordinates['longitude'],
+            ],
         ];
     }
 
@@ -640,6 +742,7 @@ function ers_tip_convert_to_incident(PDO $pdo, array $input): array
                 ':latitude' => $coordinates['latitude'],
                 ':longitude' => $coordinates['longitude'],
                 ':reported_by_call_id' => $callId,
+                ':intake_source' => 'tip',
             ]);
             $intakeSql = $hasIntakeSource ? ", intake_source = 'tip'" : '';
             $pdo->prepare("UPDATE incidents SET status = 'pending'{$intakeSql} WHERE id = ?")->execute([$incidentId]);
@@ -916,9 +1019,16 @@ function ers_tip_ph_datetime(?string $value): ?DateTimeImmutable
 
     try {
         $philippineZone = new DateTimeZone('Asia/Manila');
-        $date = new DateTimeImmutable($raw, $philippineZone);
-        return $date->setTimezone($philippineZone);
+        if (preg_match('/(Z|[+-]\d{2}(?::?\d{2})?)$/i', $raw)) {
+            $date = new DateTimeImmutable($raw);
+            return $date->setTimezone($philippineZone);
+        }
+        return new DateTimeImmutable($raw, $philippineZone);
     } catch (Throwable $error) {
+        $time = strtotime($raw);
+        if ($time !== false) {
+            return (new DateTimeImmutable('@' . $time))->setTimezone(new DateTimeZone('Asia/Manila'));
+        }
         return null;
     }
 }

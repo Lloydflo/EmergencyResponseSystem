@@ -340,10 +340,19 @@ function ers_external_insert_call(PDO $pdo, array $params): int
 
 function ers_external_insert_incident(PDO $pdo, array $params): int
 {
+    $hasIntakeSourceCol = ers_external_column_exists($pdo, 'incidents', 'intake_source');
+    $hasIntakeParam = isset($params[':intake_source']);
+    $intakeCol = ($hasIntakeSourceCol && $hasIntakeParam) ? ', intake_source' : '';
+    $intakeVal = ($hasIntakeSourceCol && $hasIntakeParam) ? ', :intake_source' : '';
+
+    if (!$hasIntakeSourceCol && $hasIntakeParam) {
+        unset($params[':intake_source']);
+    }
+
     $sql = "INSERT INTO incidents
-        (reference_no, type, priority, status, title, description, location_address, latitude, longitude, reported_by_call_id, created_at)
+        (reference_no, type, priority, status, title, description, location_address, latitude, longitude, reported_by_call_id{$intakeCol}, created_at)
         VALUES
-        (:reference_no, :type, :priority, 'pending', :title, :description, :location_address, :latitude, :longitude, :reported_by_call_id, NOW())";
+        (:reference_no, :type, :priority, 'pending', :title, :description, :location_address, :latitude, :longitude, :reported_by_call_id{$intakeVal}, NOW())";
     $stmt = $pdo->prepare($sql);
 
     try {
@@ -354,9 +363,9 @@ function ers_external_insert_incident(PDO $pdo, array $params): int
         }
         $params[':id'] = ers_external_next_id($pdo, 'incidents');
         $sql = "INSERT INTO incidents
-            (id, reference_no, type, priority, status, title, description, location_address, latitude, longitude, reported_by_call_id, created_at)
+            (id, reference_no, type, priority, status, title, description, location_address, latitude, longitude, reported_by_call_id{$intakeCol}, created_at)
             VALUES
-            (:id, :reference_no, :type, :priority, 'pending', :title, :description, :location_address, :latitude, :longitude, :reported_by_call_id, NOW())";
+            (:id, :reference_no, :type, :priority, 'pending', :title, :description, :location_address, :latitude, :longitude, :reported_by_call_id{$intakeVal}, NOW())";
         $stmt = $pdo->prepare($sql);
         $stmt->execute($params);
         return (int)$params[':id'];
