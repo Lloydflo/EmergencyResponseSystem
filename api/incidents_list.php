@@ -40,6 +40,7 @@ function ers_incidents_schema(PDO $pdo): array
 {
     $tables = [
         'incidents',
+        'anonymous_tips',
         'calls',
         'external_incident_links',
         'activity_log',
@@ -380,6 +381,28 @@ $includeIntakeSource = isset($_GET['include_intake_source'])
     && in_array(strtolower(trim((string)$_GET['include_intake_source'])), ['1', 'true', 'yes'], true);
 $typeValues = ers_incidents_normalized_type_values($type);
 [$rangeStart, $rangeEnd] = ers_incidents_resolve_range();
+
+if (
+    $includeIntakeSource
+    && $status === 'pending'
+    && ers_incidents_has_table($schema, 'anonymous_tips')
+    && ers_incidents_has_table($schema, 'external_incident_links')
+    && ers_incidents_has_table($schema, 'dispatches')
+    && ers_incidents_has_column($schema, 'dispatches', 'incident_id')
+) {
+    $pdo->exec("UPDATE incidents i
+        INNER JOIN external_incident_links l
+            ON l.incident_id = i.id
+           AND l.source_system = 'Anonymous Tip Inbox'
+        INNER JOIN anonymous_tips at
+            ON at.tip_id = l.external_incident_id
+           AND at.status = 'converted_to_incident'
+        LEFT JOIN dispatches d
+            ON d.incident_id = i.id
+        SET i.status = 'active', i.updated_at = CURRENT_TIMESTAMP
+        WHERE i.status IN ('resolved', 'completed', 'closed')
+          AND d.incident_id IS NULL");
+}
 
 // Optional shared resource table.
 $resourceRecordsTable = null;
