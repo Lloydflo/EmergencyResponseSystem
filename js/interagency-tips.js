@@ -215,8 +215,11 @@
             changedAt: Date.now(),
         };
         window.dispatchEvent(new CustomEvent('ers:incident-queue-updated', { detail }));
+        window.dispatchEvent(new CustomEvent('ers:anonymous-tips-updated', { detail }));
         try {
             window.localStorage.setItem('ers_incidents_changed', JSON.stringify(detail));
+            window.localStorage.setItem('ers_incidents', Date.now().toString());
+            window.localStorage.setItem('ers_anonymous_tips_changed', JSON.stringify(detail));
         } catch (_) {}
     };
 

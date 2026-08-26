@@ -187,28 +187,47 @@ try {
                 $dispatchSelect = 'NULL AS vehicle_name, ' . $responderDriverExpr . ' AS driver_name, NULL AS plate_number';
             }
 
-            $dispatchStmt = $pdo->prepare(
-                "SELECT
-                    d.id,
-                    d.status,
-                    d.assigned_at,
-                    d.acknowledged_at,
-                    d.enroute_at,
-                    d.on_scene_at,
-                    d.cleared_at,
-                    u.id AS unit_id,
-                    u.identifier AS unit_identifier,
-                    u.unit_type,
-                    {$dispatchSelect}
-                 FROM dispatches d
-                 LEFT JOIN units u ON u.id = d.unit_id
-                 {$dispatchJoin}
-                 WHERE d.incident_id = ?
-                 ORDER BY d.id DESC
-                 LIMIT 1"
-            );
-            $dispatchStmt->execute([$incidentId]);
-            $latestDispatch = $dispatchStmt->fetch(PDO::FETCH_ASSOC) ?: null;
+            $latestDispatch = null;
+            $hasDispatchesTable = ers_table_exists($pdo, 'dispatches');
+            $hasDispatchIncidentId = $hasDispatchesTable && ers_column_exists($pdo, 'dispatches', 'incident_id');
+            $hasDispatchReferenceNo = $hasDispatchesTable && ers_column_exists($pdo, 'dispatches', 'reference_no');
+
+            if ($hasDispatchesTable && ($hasDispatchIncidentId || $hasDispatchReferenceNo)) {
+                $dispatchWhere = [];
+                $dispatchParams = [];
+                if ($hasDispatchIncidentId) {
+                    $dispatchWhere[] = 'd.incident_id = ?';
+                    $dispatchParams[] = $incidentId;
+                }
+                if ($hasDispatchReferenceNo && !empty($incident['reference_no'])) {
+                    $dispatchWhere[] = 'd.reference_no = ?';
+                    $dispatchParams[] = (string)$incident['reference_no'];
+                }
+
+                $dispatchWhereClause = implode(' OR ', $dispatchWhere);
+                $dispatchStmt = $pdo->prepare(
+                    "SELECT
+                        d.id,
+                        d.status,
+                        d.assigned_at,
+                        d.acknowledged_at,
+                        d.enroute_at,
+                        d.on_scene_at,
+                        d.cleared_at,
+                        u.id AS unit_id,
+                        u.identifier AS unit_identifier,
+                        u.unit_type,
+                        {$dispatchSelect}
+                     FROM dispatches d
+                     LEFT JOIN units u ON u.id = d.unit_id
+                     {$dispatchJoin}
+                     WHERE ({$dispatchWhereClause})
+                     ORDER BY d.id DESC
+                     LIMIT 1"
+                );
+                $dispatchStmt->execute($dispatchParams);
+                $latestDispatch = $dispatchStmt->fetch(PDO::FETCH_ASSOC) ?: null;
+            }
 
             $incident['assigned_unit_identifier'] = null;
             $incident['assigned_unit_type'] = null;

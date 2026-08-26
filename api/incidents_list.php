@@ -662,9 +662,14 @@ END";
 // Latest dispatch is computed once per incident.
 $dispatchJoin = '';
 $unitJoin = '';
+$hasDispatchIncidentId = ers_incidents_has_column($schema, 'dispatches', 'incident_id');
+$hasDispatchReferenceNo = ers_incidents_has_column($schema, 'dispatches', 'reference_no');
 $hasLatestDispatch = ers_incidents_has_table($schema, 'dispatches')
     && ers_incidents_has_column($schema, 'dispatches', 'id')
-    && ers_incidents_has_column($schema, 'dispatches', 'incident_id');
+    && ($hasDispatchIncidentId || $hasDispatchReferenceNo);
+$dispatchJoinKey = $hasDispatchIncidentId ? 'incident_id' : 'reference_no';
+$dispatchJoinOn = $hasDispatchIncidentId ? 'ld.incident_id = i.id' : 'ld.reference_no = i.reference_no';
+
 $dispatchColumns = [
     'unit_id',
     'status',
@@ -674,7 +679,15 @@ $dispatchColumns = [
     'on_scene_at',
     'cleared_at',
 ];
-$dispatchSelectParts = ['d1.id', 'd1.incident_id'];
+$dispatchSelectParts = ['d1.id'];
+if ($hasDispatchIncidentId) {
+    $dispatchSelectParts[] = 'd1.incident_id';
+} else {
+    $dispatchSelectParts[] = 'NULL AS incident_id';
+}
+if ($hasDispatchReferenceNo) {
+    $dispatchSelectParts[] = 'd1.reference_no';
+}
 foreach ($dispatchColumns as $column) {
     $dispatchSelectParts[] = ers_incidents_has_column($schema, 'dispatches', $column)
         ? "d1.`{$column}`"
@@ -686,11 +699,12 @@ if ($hasLatestDispatch) {
         SELECT " . implode(', ', $dispatchSelectParts) . "
         FROM dispatches d1
         INNER JOIN (
-            SELECT incident_id, MAX(id) AS max_id
+            SELECT {$dispatchJoinKey}, MAX(id) AS max_id
             FROM dispatches
-            GROUP BY incident_id
+            WHERE {$dispatchJoinKey} IS NOT NULL
+            GROUP BY {$dispatchJoinKey}
         ) latest_dispatch ON latest_dispatch.max_id = d1.id
-    ) ld ON ld.incident_id = i.id";
+    ) ld ON {$dispatchJoinOn}";
 }
 
 $unitIdentifierExpr = 'NULL';
@@ -928,10 +942,13 @@ if ($status !== '' && ers_incidents_has_column($schema, 'incidents', 'status')) 
             $hasLatestDispatch
             && ers_incidents_has_column($schema, 'dispatches', 'status')
         ) {
+            $dispatchPendingMatch = $hasDispatchIncidentId
+                ? 'd_pending.incident_id = i.id'
+                : 'd_pending.reference_no = i.reference_no';
             $where[] = "NOT EXISTS (
                 SELECT 1
                 FROM dispatches d_pending
-                WHERE d_pending.incident_id = i.id
+                WHERE {$dispatchPendingMatch}
                   AND d_pending.status IN ('assigned','acknowledged','enroute','on_scene')
             )";
         }
