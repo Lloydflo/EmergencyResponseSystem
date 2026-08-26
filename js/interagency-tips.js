@@ -41,7 +41,7 @@
         || ['converted_to_incident', 'pending', 'dispatched', 'resolved'].includes(rawStatusOf(item))
         || Number(item?.converted_incident_id || 0) > 0;
     const tipKey = (item) => String(item?.tip_id || item?.id || '').trim();
-    const isOpenTip = (item) => ['pending', 'new'].includes(rawStatusOf(item));
+    const isOpenTip = (item) => ['pending', 'new'].includes(statusOf(item));
 
     const actionLabel = {
         reviewing: 'Marked for review.',
