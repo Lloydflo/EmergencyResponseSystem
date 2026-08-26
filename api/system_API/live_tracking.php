@@ -213,10 +213,130 @@ function ers_live_tracking_fetch(PDO $pdo): array
         }
         $row['unit_id'] = (int)$row['unit_id'];
         $row['incident_id'] = (int)$row['incident_id'];
+
+        // Road route from the responder's current position to the incident,
+        // same OSRM backend the dispatcher map already uses (js/routing.js,
+        // dispatch.php). Cached per unit+incident so a fast-polling partner
+        // doesn't hammer the public OSRM server or pile up temp files.
+        $route = ers_live_tracking_route_polyline(
+            $row['unit_id'],
+            $row['incident_id'],
+            $row['responder_latitude'],
+            $row['responder_longitude'],
+            $row['incident_latitude'],
+            $row['incident_longitude']
+        );
+        $row['route_polyline'] = $route['polyline'] ?? null;
+        $row['route_distance_km'] = $route['distance_km'] ?? null;
+        $row['route_duration_min'] = $route['duration_min'] ?? null;
     }
     unset($row);
 
     return $rows;
+}
+
+/**
+ * Road route (turn-by-turn geometry) from a responder's live position to
+ * their assigned incident, via the same public OSRM instance the dispatcher
+ * web map uses. Never throws — returns null on any failure so a slow/down
+ * OSRM never breaks this endpoint, it just omits the route for that unit.
+ *
+ * Cached to disk per unit_id+incident_id (not per raw coordinate) so the
+ * file count stays bounded to "one file per currently-dispatched unit"
+ * regardless of how often a consumer polls this endpoint.
+ *
+ * @return array{polyline: array<int, array{0: float, 1: float}>, distance_km: float, duration_min: float}|null
+ */
+function ers_live_tracking_route_polyline(
+    int $unitId,
+    int $incidentId,
+    ?float $fromLat,
+    ?float $fromLng,
+    ?float $toLat,
+    ?float $toLng
+): ?array {
+    if ($fromLat === null || $fromLng === null || $toLat === null || $toLng === null) {
+        return null;
+    }
+
+    $ttl = (int)(getenv('ERS_ROUTE_POLYLINE_CACHE_TTL') ?: 45); // seconds
+    $cachePath = rtrim(sys_get_temp_dir(), DIRECTORY_SEPARATOR)
+        . DIRECTORY_SEPARATOR
+        . "ers_route_{$unitId}_{$incidentId}.json";
+
+    $now = time();
+    if (is_file($cachePath) && is_readable($cachePath)) {
+        $cached = json_decode((string)file_get_contents($cachePath), true);
+        if (
+            is_array($cached)
+            && isset($cached['cached_at'], $cached['data'])
+            && (int)$cached['cached_at'] > $now - $ttl
+        ) {
+            return $cached['data'];
+        }
+    }
+
+    try {
+        $url = sprintf(
+            'https://router.project-osrm.org/route/v1/driving/%F,%F;%F,%F?overview=full&geometries=geojson&steps=false&alternatives=false',
+            $fromLng,
+            $fromLat,
+            $toLng,
+            $toLat
+        );
+
+        $curl = curl_init($url);
+        if ($curl === false) {
+            return null;
+        }
+        curl_setopt_array($curl, [
+            CURLOPT_RETURNTRANSFER => true,
+            CURLOPT_CONNECTTIMEOUT => 5,
+            CURLOPT_TIMEOUT => 8,
+        ]);
+        $raw = curl_exec($curl);
+        $status = (int)curl_getinfo($curl, CURLINFO_HTTP_CODE);
+        curl_close($curl);
+
+        if (!is_string($raw) || $raw === '' || $status < 200 || $status >= 300) {
+            return null;
+        }
+
+        $decoded = json_decode($raw, true);
+        $coords = $decoded['routes'][0]['geometry']['coordinates'] ?? null;
+        if (!is_array($coords) || count($coords) < 2) {
+            return null;
+        }
+
+        // OSRM returns [lng, lat] pairs; flip to [lat, lng] to match every
+        // other coordinate field this endpoint already returns.
+        $polyline = [];
+        foreach ($coords as $pair) {
+            if (!is_array($pair) || count($pair) < 2) {
+                continue;
+            }
+            $polyline[] = [(float)$pair[1], (float)$pair[0]];
+        }
+        if (count($polyline) < 2) {
+            return null;
+        }
+
+        $meters = (float)($decoded['routes'][0]['distance'] ?? 0);
+        $seconds = (float)($decoded['routes'][0]['duration'] ?? 0);
+
+        $result = [
+            'polyline' => $polyline,
+            'distance_km' => round($meters / 1000, 2),
+            'duration_min' => round($seconds / 60, 1),
+        ];
+
+        @file_put_contents($cachePath, json_encode(['cached_at' => $now, 'data' => $result]), LOCK_EX);
+
+        return $result;
+    } catch (Throwable $e) {
+        error_log('live_tracking route_polyline failed: ' . $e->getMessage());
+        return null;
+    }
 }
 
 /**
