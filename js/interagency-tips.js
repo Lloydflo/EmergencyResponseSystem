@@ -5,8 +5,8 @@
     }
 
     const apiUrl = 'api/system_API/?action=anonymous_tip';
-    const statuses = ['all', 'pending', 'new', 'reviewing', 'verified', 'dismissed', 'converted_to_incident', 'dispatched', 'resolved'];
-    const editableStatuses = ['new', 'reviewing', 'verified', 'dismissed', 'converted_to_incident'];
+    const statuses = ['all', 'pending', 'dispatched', 'resolved', 'new', 'reviewing', 'verified', 'dismissed'];
+    const editableStatuses = ['new', 'reviewing', 'verified', 'dismissed', 'pending', 'dispatched', 'resolved'];
     const state = {
         items: [],
         loading: true,
@@ -29,14 +29,17 @@
         .replace(/"/g, '&quot;')
         .replace(/'/g, '&#039;');
 
-    const statusLabel = (status) => String(status || 'new')
-        .replace(/_/g, ' ')
-        .replace(/\b\w/g, (letter) => letter.toUpperCase());
+    const statusLabel = (status) => {
+        const raw = String(status || 'new').toLowerCase();
+        if (raw === 'converted_to_incident') return 'Pending';
+        return raw.replace(/_/g, ' ').replace(/\b\w/g, (letter) => letter.toUpperCase());
+    };
 
     const rawStatusOf = (item) => String(item?.raw_status || item?.status || 'new').trim().toLowerCase();
     const statusOf = (item) => String(item?.display_status || item?.status || 'new').trim().toLowerCase();
-    const isConvertedStatus = (item) => ['converted_to_incident', 'dispatched'].includes(statusOf(item))
-        || rawStatusOf(item) === 'converted_to_incident';
+    const isConvertedStatus = (item) => ['converted_to_incident', 'pending', 'dispatched', 'resolved'].includes(statusOf(item))
+        || ['converted_to_incident', 'pending', 'dispatched', 'resolved'].includes(rawStatusOf(item))
+        || Number(item?.converted_incident_id || 0) > 0;
     const tipKey = (item) => String(item?.tip_id || item?.id || '').trim();
     const isOpenTip = (item) => ['pending', 'new'].includes(rawStatusOf(item));
 
@@ -520,24 +523,24 @@
     };
 
     const renderStats = () => {
-        const newCount = state.items.filter((item) => ['pending', 'new'].includes(statusOf(item))).length;
-        const reviewing = state.items.filter((item) => statusOf(item) === 'reviewing').length;
-        const verified = state.items.filter((item) => statusOf(item) === 'verified').length;
+        const pendingCount = state.items.filter((item) => ['pending', 'new', 'converted_to_incident'].includes(statusOf(item))).length;
+        const dispatchedCount = state.items.filter((item) => statusOf(item) === 'dispatched').length;
+        const resolvedCount = state.items.filter((item) => statusOf(item) === 'resolved').length;
         const evidence = state.items.filter((item) => String(item.photo_of_evidence || '').trim() !== '').length;
 
         return `
             <section class="ia-tip-stats" aria-label="Anonymous tip summary">
                 <article class="ia-tip-stat">
-                    <div class="ia-tip-stat-label">New Tips</div>
-                    <div class="ia-tip-stat-value">${newCount}</div>
+                    <div class="ia-tip-stat-label">Pending / Intake</div>
+                    <div class="ia-tip-stat-value">${pendingCount}</div>
                 </article>
                 <article class="ia-tip-stat">
-                    <div class="ia-tip-stat-label">Reviewing</div>
-                    <div class="ia-tip-stat-value">${reviewing}</div>
+                    <div class="ia-tip-stat-label">Dispatched</div>
+                    <div class="ia-tip-stat-value">${dispatchedCount}</div>
                 </article>
                 <article class="ia-tip-stat">
-                    <div class="ia-tip-stat-label">Verified</div>
-                    <div class="ia-tip-stat-value">${verified}</div>
+                    <div class="ia-tip-stat-label">Resolved</div>
+                    <div class="ia-tip-stat-value">${resolvedCount}</div>
                 </article>
                 <article class="ia-tip-stat">
                     <div class="ia-tip-stat-label">With Evidence</div>
@@ -582,10 +585,11 @@
                             <span><i class="fas fa-network-wired"></i> ${escapeHtml(item.source_system || 'Group 6')}</span>
                         </span>
                         <span class="ia-tip-flow">
-                            <span class="${['reviewing', 'verified'].includes(itemStatus) || isConverted ? 'is-done' : ''}">Review</span>
-                            <span class="${itemStatus === 'verified' || isConverted ? 'is-done' : ''}">Verify</span>
-                            <span class="${isConverted ? 'is-done' : ''}">Convert</span>
-                            <span class="${['dispatched', 'resolved'].includes(itemStatus) ? 'is-done' : ''}">Dispatch</span>
+                            <span class="${['reviewing', 'verified', 'pending', 'dispatched', 'resolved'].includes(itemStatus) || isConverted ? 'is-done' : ''}">Review</span>
+                            <span class="${['verified', 'pending', 'dispatched', 'resolved'].includes(itemStatus) || isConverted ? 'is-done' : ''}">Verify</span>
+                            <span class="${['pending', 'dispatched', 'resolved'].includes(itemStatus) || isConverted ? 'is-done' : ''}">Pending</span>
+                            <span class="${['dispatched', 'resolved'].includes(itemStatus) ? 'is-done' : ''}">Dispatched</span>
+                            <span class="${itemStatus === 'resolved' ? 'is-done' : ''}">Resolved</span>
                         </span>
                     </span>
                     <span>${evidenceButton}</span>

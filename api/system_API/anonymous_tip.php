@@ -956,8 +956,8 @@ function ers_tip_list(PDO $pdo): array
 
     $where = [];
     $params = [];
-    $displayStatusFilter = in_array($status, ['dispatched', 'resolved'], true) ? $status : '';
-    if ($status !== '' && $status !== 'all' && $displayStatusFilter === '') {
+    $displayStatusFilter = in_array($status, ['dispatched', 'resolved', 'pending', 'new', 'reviewing', 'verified', 'dismissed'], true) ? $status : '';
+    if ($status !== '' && $status !== 'all' && !in_array($status, ['dispatched', 'resolved', 'pending'], true)) {
         $where[] = 'at.status = ?';
         $params[] = $status;
     }
@@ -1075,15 +1075,25 @@ function ers_tip_prepare_response(array $row, ?PDO $pdo = null): array
         'in_progress',
     ];
     $completedStatuses = ['resolved', 'complete', 'completed', 'closed'];
-    $hasDispatch = (int)($dispatch['unit_count'] ?? 0) > 0;
-    $isCompleted = $hasDispatch && in_array($incidentStatus, $completedStatuses, true);
-    $isDispatched = (int)($dispatch['unit_count'] ?? 0) > 0
-        || in_array($incidentStatus, $dispatchedStatuses, true);
-    $row['raw_status'] = (string)($row['status'] ?? '');
-    $isConverted = $row['raw_status'] === 'converted_to_incident';
-    $row['display_status'] = $isConverted
-        ? ($isCompleted ? 'resolved' : ($isDispatched ? 'dispatched' : $row['raw_status']))
-        : ($row['raw_status'] !== '' ? $row['raw_status'] : 'new');
+    $row['raw_status'] = strtolower(trim((string)($row['status'] ?? '')));
+    $hasActiveDispatch = (int)($dispatch['unit_count'] ?? 0) > 0 || in_array($incidentStatus, $dispatchedStatuses, true);
+    $isCompleted = in_array($incidentStatus, $completedStatuses, true)
+        || $row['raw_status'] === 'resolved'
+        || ($dispatch['latest_status'] === 'cleared' && $incidentStatus === 'resolved');
+    $isDispatched = !$isCompleted && ($hasActiveDispatch || $row['raw_status'] === 'dispatched');
+    $isConverted = $row['raw_status'] === 'converted_to_incident'
+        || $row['raw_status'] === 'pending'
+        || $incidentId > 0;
+
+    if ($isCompleted) {
+        $row['display_status'] = 'resolved';
+    } elseif ($isDispatched) {
+        $row['display_status'] = 'dispatched';
+    } elseif ($isConverted) {
+        $row['display_status'] = 'pending';
+    } else {
+        $row['display_status'] = $row['raw_status'] !== '' ? $row['raw_status'] : 'new';
+    }
     $row['interagency_status'] = $row['display_status'];
     $row['dispatched'] = $isDispatched;
     $row['is_dispatched'] = $isDispatched;
