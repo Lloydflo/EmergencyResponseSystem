@@ -538,9 +538,11 @@ function ers_tip_convert_to_incident(PDO $pdo, array $input): array
 
     $sourceSystem = ers_tip_link_source();
     $externalIncidentId = ers_tip_external_id($item);
+    $payload = ers_tip_decode_payload((string)($item['raw_payload'] ?? ''));
+    $priority = ers_external_normalize_priority($input['priority'] ?? $payload['priority'] ?? 'medium');
     $existing = ers_tip_find_linked_incident($pdo, $sourceSystem, $externalIncidentId);
     if ($existing !== null) {
-        ers_tip_activate_incident($pdo, (int)$existing['id']);
+        ers_tip_activate_incident($pdo, (int)$existing['id'], $priority);
         $outcome = ers_tip_conversion_outcome($input, (string)$existing['reference_no'], true);
         ers_tip_set_status($pdo, (int)$item['id'], 'converted_to_incident', $outcome);
         $existing['status'] = 'active';
@@ -551,10 +553,8 @@ function ers_tip_convert_to_incident(PDO $pdo, array $input): array
         ];
     }
 
-    $payload = ers_tip_decode_payload((string)($item['raw_payload'] ?? ''));
     $type = 'medical, police, fire';
 
-    $priority = ers_external_normalize_priority($input['priority'] ?? $payload['priority'] ?? 'medium');
     $location = ers_external_clean($item['location'] ?? '', 255);
     if ($location === '') {
         $location = 'Location not provided';
@@ -571,7 +571,7 @@ function ers_tip_convert_to_incident(PDO $pdo, array $input): array
             'tip' => $item,
             'linked_by' => 'reference_no',
         ]);
-        ers_tip_activate_incident($pdo, (int)$existingByReference['id']);
+        ers_tip_activate_incident($pdo, (int)$existingByReference['id'], $priority);
         $outcome = ers_tip_conversion_outcome($input, (string)$existingByReference['reference_no'], true);
         ers_tip_set_status($pdo, (int)$item['id'], 'converted_to_incident', $outcome);
         $existingByReference['status'] = 'active';
@@ -677,9 +677,15 @@ function ers_tip_convert_to_incident(PDO $pdo, array $input): array
     }
 }
 
-function ers_tip_activate_incident(PDO $pdo, int $incidentId): void
+function ers_tip_activate_incident(PDO $pdo, int $incidentId, string $priority = ''): void
 {
     if ($incidentId <= 0) {
+        return;
+    }
+
+    if ($priority !== '') {
+        $stmt = $pdo->prepare("UPDATE incidents SET status = 'active', priority = ?, updated_at = NOW() WHERE id = ? AND status NOT IN ('resolved', 'cancelled')");
+        $stmt->execute([$priority, $incidentId]);
         return;
     }
 
