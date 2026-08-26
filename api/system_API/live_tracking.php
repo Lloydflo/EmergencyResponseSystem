@@ -184,7 +184,28 @@ function ers_live_tracking_fetch(PDO $pdo): array
     $stmt = $pdo->query($sql);
     $rows = $stmt !== false ? $stmt->fetchAll(PDO::FETCH_ASSOC) : [];
 
+    // The dispatcher's own live map trusts Firebase Realtime Database
+    // (node "live_locations") as the true live GPS feed, not MySQL —
+    // MySQL only gets a periodic/occasional write. Overlay it the same way
+    // so this feed matches what dispatchers actually see on their screen.
+    $firebaseByUnitCode = ers_live_tracking_firebase_locations();
+
     foreach ($rows as &$row) {
+        $unitKey = strtoupper(trim((string)($row['unit_identifier'] ?? '')));
+        if ($unitKey !== '' && isset($firebaseByUnitCode[$unitKey])) {
+            $live = $firebaseByUnitCode[$unitKey];
+            $status = strtolower(trim((string)($live['status'] ?? '')));
+            if (!in_array($status, ['offline', 'logged_out', 'inactive'], true)) {
+                $row['responder_latitude'] = $live['lat'];
+                $row['responder_longitude'] = $live['lng'];
+                $row['responder_location_recorded_at'] = date('c');
+                $row['responder_location_source'] = 'firebase_live';
+                if (!empty($live['responderName'])) {
+                    $row['responder_name'] = $live['responderName'];
+                }
+            }
+        }
+
         foreach (['responder_latitude', 'responder_longitude', 'incident_latitude', 'incident_longitude'] as $coordKey) {
             if ($row[$coordKey] !== null) {
                 $row[$coordKey] = (float)$row[$coordKey];
@@ -196,6 +217,195 @@ function ers_live_tracking_fetch(PDO $pdo): array
     unset($row);
 
     return $rows;
+}
+
+/**
+ * Reads the Firebase RTDB "live_locations" node — the same source the
+ * dispatcher web map subscribes to for real-time GPS — keyed by unit code.
+ * Returns [] (never throws) if Firebase credentials aren't configured or
+ * the request fails, so this endpoint degrades to MySQL-only rather than
+ * breaking entirely.
+ *
+ * @return array<string, array{lat: float, lng: float, status: ?string, responderName: ?string}>
+ */
+function ers_live_tracking_firebase_locations(): array
+{
+    try {
+        $credentials = ers_live_tracking_firebase_credentials();
+        if ($credentials === null) {
+            return [];
+        }
+
+        $token = ers_live_tracking_firebase_token($credentials);
+        if ($token === null) {
+            return [];
+        }
+
+        $databaseUrl = rtrim(
+            (string)(getenv('FIREBASE_DATABASE_URL') ?: ($_ENV['FIREBASE_DATABASE_URL'] ?? '')),
+            '/'
+        );
+        if ($databaseUrl === '') {
+            $projectId = (string)($credentials['project_id'] ?? '');
+            if ($projectId === '') {
+                return [];
+            }
+            $databaseUrl = "https://{$projectId}-default-rtdb.firebaseio.com";
+        }
+
+        $curl = curl_init("{$databaseUrl}/live_locations.json");
+        if ($curl === false) {
+            return [];
+        }
+        curl_setopt_array($curl, [
+            CURLOPT_RETURNTRANSFER => true,
+            CURLOPT_CONNECTTIMEOUT => 8,
+            CURLOPT_TIMEOUT => 10,
+            CURLOPT_HTTPHEADER => ['Authorization: Bearer ' . $token],
+        ]);
+        $raw = curl_exec($curl);
+        $status = (int)curl_getinfo($curl, CURLINFO_HTTP_CODE);
+        curl_close($curl);
+
+        if (!is_string($raw) || $raw === '' || $status < 200 || $status >= 300) {
+            return [];
+        }
+
+        $decoded = json_decode($raw, true);
+        if (!is_array($decoded)) {
+            return [];
+        }
+
+        $byUnitCode = [];
+        foreach ($decoded as $entry) {
+            if (!is_array($entry)) {
+                continue;
+            }
+            $lat = isset($entry['lat']) ? (float)$entry['lat'] : null;
+            $lng = isset($entry['lng']) ? (float)$entry['lng'] : null;
+            $unitCode = strtoupper(trim((string)($entry['unitCode'] ?? '')));
+            if ($lat === null || $lng === null || $unitCode === '') {
+                continue;
+            }
+            $byUnitCode[$unitCode] = [
+                'lat' => $lat,
+                'lng' => $lng,
+                'status' => isset($entry['status']) ? (string)$entry['status'] : null,
+                'responderName' => isset($entry['responderName']) ? (string)$entry['responderName'] : null,
+            ];
+        }
+
+        return $byUnitCode;
+    } catch (Throwable $e) {
+        error_log('live_tracking Firebase fetch failed: ' . $e->getMessage());
+        return [];
+    }
+}
+
+/** @return array<string,mixed>|null */
+function ers_live_tracking_firebase_credentials(): ?array
+{
+    $path = trim((string)(
+        getenv('FIREBASE_SERVICE_ACCOUNT_PATH')
+        ?: ($_ENV['FIREBASE_SERVICE_ACCOUNT_PATH'] ?? '')
+        ?: getenv('GOOGLE_APPLICATION_CREDENTIALS')
+        ?: ($_ENV['GOOGLE_APPLICATION_CREDENTIALS'] ?? '')
+    ));
+    if ($path === '' || !is_file($path) || !is_readable($path)) {
+        return null;
+    }
+
+    $decoded = json_decode((string)file_get_contents($path), true);
+    if (
+        !is_array($decoded)
+        || trim((string)($decoded['project_id'] ?? '')) === ''
+        || trim((string)($decoded['client_email'] ?? '')) === ''
+        || trim((string)($decoded['private_key'] ?? '')) === ''
+    ) {
+        return null;
+    }
+
+    return $decoded;
+}
+
+function ers_live_tracking_base64url(string $value): string
+{
+    return rtrim(strtr(base64_encode($value), '+/', '-_'), '=');
+}
+
+/** @param array<string,mixed> $credentials */
+function ers_live_tracking_firebase_token(array $credentials): ?string
+{
+    $now = time();
+    $projectId = (string)($credentials['project_id'] ?? 'default');
+    $cachePath = rtrim(sys_get_temp_dir(), DIRECTORY_SEPARATOR)
+        . DIRECTORY_SEPARATOR
+        . 'ers_rtdb_' . preg_replace('/[^A-Za-z0-9_.-]/', '_', $projectId) . '.json';
+
+    if (is_file($cachePath) && is_readable($cachePath)) {
+        $cached = json_decode((string)file_get_contents($cachePath), true);
+        if (
+            is_array($cached)
+            && trim((string)($cached['token'] ?? '')) !== ''
+            && (int)($cached['expires_at'] ?? 0) > $now + 60
+        ) {
+            return (string)$cached['token'];
+        }
+    }
+
+    $claims = [
+        'iss' => (string)$credentials['client_email'],
+        'scope' => 'https://www.googleapis.com/auth/firebase.database https://www.googleapis.com/auth/userinfo.email',
+        'aud' => 'https://oauth2.googleapis.com/token',
+        'iat' => $now,
+        'exp' => $now + 3600,
+    ];
+    $header = ['alg' => 'RS256', 'typ' => 'JWT'];
+    $unsigned = ers_live_tracking_base64url((string)json_encode($header, JSON_UNESCAPED_SLASHES))
+        . '.'
+        . ers_live_tracking_base64url((string)json_encode($claims, JSON_UNESCAPED_SLASHES));
+
+    $signature = '';
+    $signed = openssl_sign($unsigned, $signature, (string)$credentials['private_key'], OPENSSL_ALGO_SHA256);
+    if (!$signed) {
+        return null;
+    }
+
+    $assertion = $unsigned . '.' . ers_live_tracking_base64url($signature);
+    $curl = curl_init('https://oauth2.googleapis.com/token');
+    if ($curl === false) {
+        return null;
+    }
+    curl_setopt_array($curl, [
+        CURLOPT_POST => true,
+        CURLOPT_RETURNTRANSFER => true,
+        CURLOPT_CONNECTTIMEOUT => 8,
+        CURLOPT_TIMEOUT => 15,
+        CURLOPT_HTTPHEADER => ['Content-Type: application/x-www-form-urlencoded'],
+        CURLOPT_POSTFIELDS => http_build_query([
+            'grant_type' => 'urn:ietf:params:oauth:grant-type:jwt-bearer',
+            'assertion' => $assertion,
+        ]),
+    ]);
+    $raw = curl_exec($curl);
+    $status = (int)curl_getinfo($curl, CURLINFO_HTTP_CODE);
+    curl_close($curl);
+
+    if (!is_string($raw) || $raw === '' || $status < 200 || $status >= 300) {
+        return null;
+    }
+
+    $response = json_decode($raw, true);
+    $token = is_array($response) ? trim((string)($response['access_token'] ?? '')) : '';
+    $expiresIn = is_array($response) ? max(300, (int)($response['expires_in'] ?? 3600)) : 3600;
+    if ($token === '') {
+        return null;
+    }
+
+    @file_put_contents($cachePath, json_encode(['token' => $token, 'expires_at' => $now + $expiresIn]), LOCK_EX);
+    @chmod($cachePath, 0600);
+
+    return $token;
 }
 
 /**
