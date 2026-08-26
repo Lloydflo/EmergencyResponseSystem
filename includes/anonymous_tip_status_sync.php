@@ -347,11 +347,47 @@ function ers_anonymous_tip_status_log_update(PDO $pdo, int $logId, string $statu
     }
 }
 
+function ers_sync_local_anonymous_tip_status(PDO $pdo, int $incidentId, string $status, string $note = ''): void
+{
+    if ($incidentId <= 0 || !ers_anonymous_tip_sync_table_exists($pdo, 'anonymous_tips')) {
+        return;
+    }
+
+    try {
+        $row = ers_anonymous_tip_status_source_row($pdo, $incidentId);
+        if (!is_array($row) || empty($row['local_tip_id'])) {
+            return;
+        }
+
+        $localTipId = (int)$row['local_tip_id'];
+        $rawStatus = strtolower(trim($status));
+        $targetTipStatus = match ($rawStatus) {
+            'assigned', 'acknowledged', 'dispatching', 'dispatched',
+            'enroute', 'en_route', 'on_scene', 'ongoing', 'ongoing_dispatch', 'in_progress' => 'dispatched',
+            'resolved', 'complete', 'completed', 'closed' => 'resolved',
+            default => 'pending',
+        };
+
+        $outcomeUpdate = '';
+        $params = [':status' => $targetTipStatus, ':id' => $localTipId];
+        if ($note !== '') {
+            $outcomeUpdate = ', outcome = CONCAT(COALESCE(outcome, ""), "\n", :note)';
+            $params[':note'] = $note;
+        }
+
+        $stmt = $pdo->prepare("UPDATE anonymous_tips SET status = :status{$outcomeUpdate}, updated_at = NOW() WHERE id = :id");
+        $stmt->execute($params);
+    } catch (Throwable $e) {
+        error_log('Local anonymous tip status update failed: ' . $e->getMessage());
+    }
+}
+
 /**
  * @return array<string,mixed>
  */
 function ers_notify_anonymous_tip_status_result(PDO $pdo, int $incidentId, string $status, string $note = ''): array
 {
+    ers_sync_local_anonymous_tip_status($pdo, $incidentId, $status, $note);
     $payload = ers_anonymous_tip_status_payload($pdo, $incidentId, $status, $note);
     if (!$payload) {
         $logId = ers_anonymous_tip_status_log_insert($pdo, $incidentId, null, 'failed', 'No anonymous tip link found for incident.');

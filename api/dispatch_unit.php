@@ -630,6 +630,18 @@ try {
         // Dispatch already committed; keep success response even if logging fails.
     }
 
+    $anonymousTipStatusSync = null;
+    try {
+        $anonymousTipStatusSync = ers_notify_anonymous_tip_status_result(
+            $pdo,
+            $incident_id,
+            'dispatched',
+            'Unit dispatched to incident'
+        );
+    } catch (Throwable $tipSyncError) {
+        error_log('Anonymous tip dispatch status sync skipped: ' . $tipSyncError->getMessage());
+    }
+
     echo json_encode([
         'ok' => true,
         'dispatch_id' => $dispatchIds[0] ?? null,
