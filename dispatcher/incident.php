@@ -471,7 +471,20 @@ try {
                 incident.updated_at = now;
                 renderDynamicIncidents();
                 showNotification('Incident resolved. Units released to available.', 'success');
-                try { localStorage.setItem('ers_incidents_changed', String(Date.now())); } catch (e) {}
+                try {
+                    const changedStamp = String(Date.now());
+                    const detail = {
+                        source: 'incident_priority',
+                        incidentId,
+                        referenceNo: incidentCode,
+                        changedAt: Date.now()
+                    };
+                    localStorage.setItem('ers_incidents_changed', JSON.stringify(detail));
+                    localStorage.setItem('ers_incidents', changedStamp);
+                    localStorage.setItem('ers_anonymous_tips_changed', JSON.stringify(detail));
+                } catch (e) {}
+                window.dispatchEvent(new CustomEvent('ers:incident-queue-updated', { detail: { incidentId, referenceNo: incidentCode } }));
+                window.dispatchEvent(new CustomEvent('ers:anonymous-tips-updated', { detail: { incidentId, referenceNo: incidentCode } }));
                 try { await fetchIncidents(); } catch (e) {}
             } catch (err) {
                 const message = err.message || 'Network error';

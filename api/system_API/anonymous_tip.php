@@ -476,7 +476,7 @@ function ers_tip_update_status(PDO $pdo, array $input): array
     $status = strtolower(ers_external_clean($input['status'] ?? '', 40));
     $outcome = trim((string)($input['outcome'] ?? ''));
 
-    if (!in_array($status, ['new', 'reviewing', 'verified', 'dismissed', 'converted_to_incident'], true)) {
+    if (!in_array($status, ['new', 'reviewing', 'verified', 'dismissed', 'converted_to_incident', 'pending', 'dispatched', 'resolved', 'completed'], true)) {
         ers_external_json(422, [
             'success' => false,
             'error' => 'Invalid tip status',
@@ -1078,7 +1078,7 @@ function ers_tip_prepare_response(array $row, ?PDO $pdo = null): array
     $row['raw_status'] = strtolower(trim((string)($row['status'] ?? '')));
     $hasActiveDispatch = (int)($dispatch['unit_count'] ?? 0) > 0 || in_array($incidentStatus, $dispatchedStatuses, true);
     $isCompleted = in_array($incidentStatus, $completedStatuses, true)
-        || $row['raw_status'] === 'resolved'
+        || in_array($row['raw_status'], ['resolved', 'completed', 'complete', 'closed'], true)
         || ($dispatch['latest_status'] === 'cleared' && $incidentStatus === 'resolved');
     $isDispatched = !$isCompleted && ($hasActiveDispatch || $row['raw_status'] === 'dispatched');
     $isConverted = $row['raw_status'] === 'converted_to_incident'
@@ -1600,7 +1600,7 @@ function ers_tip_ensure_tables(PDO $pdo): void
             `location` VARCHAR(255) DEFAULT NULL,
             `tip_description` TEXT DEFAULT NULL,
             `photo_of_evidence` LONGTEXT DEFAULT NULL,
-            `status` ENUM('new','reviewing','verified','dismissed','converted_to_incident') NOT NULL DEFAULT 'new',
+            `status` VARCHAR(50) NOT NULL DEFAULT 'new',
             `outcome` TEXT DEFAULT NULL,
             `source_system` VARCHAR(120) DEFAULT 'Group 6',
             `received_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -1620,7 +1620,7 @@ function ers_tip_ensure_tables(PDO $pdo): void
         'location' => "ALTER TABLE `anonymous_tips` ADD COLUMN `location` VARCHAR(255) DEFAULT NULL AFTER `tip_datetime`",
         'tip_description' => "ALTER TABLE `anonymous_tips` ADD COLUMN `tip_description` TEXT DEFAULT NULL AFTER `location`",
         'photo_of_evidence' => "ALTER TABLE `anonymous_tips` ADD COLUMN `photo_of_evidence` LONGTEXT DEFAULT NULL AFTER `tip_description`",
-        'status' => "ALTER TABLE `anonymous_tips` ADD COLUMN `status` ENUM('new','reviewing','verified','dismissed','converted_to_incident') NOT NULL DEFAULT 'new' AFTER `photo_of_evidence`",
+        'status' => "ALTER TABLE `anonymous_tips` ADD COLUMN `status` VARCHAR(50) NOT NULL DEFAULT 'new' AFTER `photo_of_evidence`",
         'outcome' => "ALTER TABLE `anonymous_tips` ADD COLUMN `outcome` TEXT DEFAULT NULL AFTER `status`",
         'source_system' => "ALTER TABLE `anonymous_tips` ADD COLUMN `source_system` VARCHAR(120) DEFAULT 'Group 6' AFTER `outcome`",
         'received_at' => "ALTER TABLE `anonymous_tips` ADD COLUMN `received_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP AFTER `source_system`",
@@ -1634,6 +1634,7 @@ function ers_tip_ensure_tables(PDO $pdo): void
         }
     }
     $pdo->exec("ALTER TABLE `anonymous_tips` MODIFY COLUMN `photo_of_evidence` LONGTEXT DEFAULT NULL");
+    $pdo->exec("ALTER TABLE `anonymous_tips` MODIFY COLUMN `status` VARCHAR(50) NOT NULL DEFAULT 'new'");
 
     $pdo->exec(
         "CREATE TABLE IF NOT EXISTS `api_sync_logs` (
@@ -1650,13 +1651,13 @@ function ers_tip_ensure_tables(PDO $pdo): void
             `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
             `updated_at` DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
             PRIMARY KEY (`id`),
-            KEY `idx_api_sync_entity` (`entity_type`, `entity_id`),
-            KEY `idx_api_sync_status` (`status`),
-            KEY `idx_api_sync_group` (`target_group`)
+            KEY `idx_api_sync_logs_entity` (`entity_type`, `entity_id`),
+            KEY `idx_api_sync_logs_endpoint` (`endpoint_name`),
+            KEY `idx_api_sync_logs_status` (`status`)
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci"
     );
 
-    $syncColumns = [
+    $syncLogColumns = [
         'direction' => "ALTER TABLE `api_sync_logs` ADD COLUMN `direction` ENUM('incoming','outgoing') NOT NULL DEFAULT 'incoming' AFTER `id`",
         'target_group' => "ALTER TABLE `api_sync_logs` ADD COLUMN `target_group` VARCHAR(100) DEFAULT NULL AFTER `direction`",
         'endpoint_name' => "ALTER TABLE `api_sync_logs` ADD COLUMN `endpoint_name` VARCHAR(150) DEFAULT NULL AFTER `target_group`",
@@ -1670,13 +1671,12 @@ function ers_tip_ensure_tables(PDO $pdo): void
         'updated_at' => "ALTER TABLE `api_sync_logs` ADD COLUMN `updated_at` DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP AFTER `created_at`",
     ];
 
-    foreach ($syncColumns as $column => $sql) {
+    foreach ($syncLogColumns as $column => $sql) {
         if (!ers_external_column_exists($pdo, 'api_sync_logs', $column)) {
             $pdo->exec($sql);
         }
     }
 
-    ers_external_ensure_link_table($pdo);
     ers_tip_sync_converted_incidents($pdo);
 }
 
@@ -1694,7 +1694,7 @@ function ers_tip_sync_converted_incidents(PDO $pdo): void
         $stmt = $pdo->query(
             "SELECT at.id, at.tip_id, at.tip_datetime, at.location, at.tip_description, at.status, at.outcome, at.raw_payload
              FROM anonymous_tips at
-             WHERE at.status = 'converted_to_incident'"
+             WHERE at.status IN ('converted_to_incident', 'pending')"
         );
         $convertedTips = $stmt ? ($stmt->fetchAll(PDO::FETCH_ASSOC) ?: []) : [];
 
@@ -1749,6 +1749,15 @@ function ers_tip_sync_converted_incidents(PDO $pdo): void
             }
 
             $incId = (int)$incident['id'];
+            $incStatus = strtolower(trim((string)($incident['status'] ?? '')));
+
+            // If the linked incident is resolved/closed, sync the tip status to resolved
+            if (in_array($incStatus, ['resolved', 'completed', 'complete', 'closed'], true)) {
+                $pdo->prepare("UPDATE anonymous_tips SET status = 'resolved', updated_at = NOW() WHERE id = ? AND status <> 'resolved'")
+                    ->execute([$rawId]);
+                continue;
+            }
+
             $activeDispatches = 0;
             if (ers_external_table_exists($pdo, 'dispatches')) {
                 $dispStmt = $pdo->prepare("SELECT COUNT(*) FROM dispatches WHERE (incident_id = ? OR reference_no = ?) AND status IN ('assigned','acknowledged','enroute','on_scene')");
@@ -1757,10 +1766,10 @@ function ers_tip_sync_converted_incidents(PDO $pdo): void
             }
 
             $intakeSql = $hasIntakeCol ? ", intake_source = 'tip'" : '';
-            if ($activeDispatches === 0 && in_array(strtolower((string)$incident['status']), ['pending', 'new', 'active', 'resolved', ''], true)) {
+            if ($activeDispatches === 0 && in_array($incStatus, ['new', ''], true)) {
                 $pdo->prepare("UPDATE incidents SET status = 'pending'{$intakeSql}, updated_at = NOW() WHERE id = ?")->execute([$incId]);
-            } else {
-                $pdo->prepare("UPDATE incidents SET updated_at = NOW(){$intakeSql} WHERE id = ?")->execute([$incId]);
+            } elseif ($hasIntakeCol && empty($incident['intake_source'])) {
+                $pdo->prepare("UPDATE incidents SET intake_source = 'tip', updated_at = NOW() WHERE id = ?")->execute([$incId]);
             }
         }
     } catch (Throwable $e) {
