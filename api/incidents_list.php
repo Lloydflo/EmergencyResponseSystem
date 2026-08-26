@@ -388,20 +388,31 @@ if (
     && ers_incidents_has_table($schema, 'anonymous_tips')
     && ers_incidents_has_table($schema, 'external_incident_links')
     && ers_incidents_has_table($schema, 'dispatches')
+    && ers_incidents_has_column($schema, 'incidents', 'status')
+    && ers_incidents_has_column($schema, 'incidents', 'updated_at')
+    && ers_incidents_has_column($schema, 'external_incident_links', 'incident_id')
+    && ers_incidents_has_column($schema, 'external_incident_links', 'source_system')
+    && ers_incidents_has_column($schema, 'external_incident_links', 'external_incident_id')
+    && ers_incidents_has_column($schema, 'anonymous_tips', 'tip_id')
+    && ers_incidents_has_column($schema, 'anonymous_tips', 'status')
     && ers_incidents_has_column($schema, 'dispatches', 'incident_id')
 ) {
-    $pdo->exec("UPDATE incidents i
-        INNER JOIN external_incident_links l
-            ON l.incident_id = i.id
-           AND l.source_system = 'Anonymous Tip Inbox'
-        INNER JOIN anonymous_tips at
-            ON at.tip_id = l.external_incident_id
-           AND at.status = 'converted_to_incident'
-        LEFT JOIN dispatches d
-            ON d.incident_id = i.id
-        SET i.status = 'active', i.updated_at = CURRENT_TIMESTAMP
-        WHERE i.status IN ('resolved', 'completed', 'closed')
-          AND d.incident_id IS NULL");
+    try {
+        $pdo->exec("UPDATE incidents i
+            INNER JOIN external_incident_links l
+                ON l.incident_id = i.id
+               AND l.source_system = 'Anonymous Tip Inbox'
+            INNER JOIN anonymous_tips at
+                ON at.tip_id = l.external_incident_id
+               AND at.status = 'converted_to_incident'
+            LEFT JOIN dispatches d
+                ON d.incident_id = i.id
+            SET i.status = 'active', i.updated_at = CURRENT_TIMESTAMP
+            WHERE i.status IN ('resolved', 'completed', 'closed')
+              AND d.incident_id IS NULL");
+    } catch (Throwable $repairError) {
+        error_log('Converted anonymous tip queue repair skipped: ' . $repairError->getMessage());
+    }
 }
 
 // Optional shared resource table.
