@@ -440,6 +440,9 @@ if (
 }
 $latitudeExpr = ers_incidents_coalesce([$incidentLatExpr, $callLatExpr]);
 $longitudeExpr = ers_incidents_coalesce([$incidentLngExpr, $callLngExpr]);
+$hasAnonymousTipCallerExpr = $callerNameExpr !== 'NULL'
+    ? "CASE WHEN LOWER(TRIM(COALESCE({$callerNameExpr}, ''))) = 'anonymous tip' THEN 1 ELSE 0 END"
+    : '0';
 
 // Intake-source signals are returned as read-only metadata for the Dispatcher
 // queue. The existing incident workflow and status filters remain unchanged.
@@ -576,6 +579,7 @@ if (
 $intakeSourceExpr = "CASE
     WHEN {$normalizedReferenceNoExpr} LIKE 'TIP-%'
       OR {$hasTipOriginExpr} = 1
+    OR {$hasAnonymousTipCallerExpr} = 1
       OR {$normalizedIncidentIntakeSourceExpr} = 'tip' THEN 'tip'
     WHEN {$normalizedReferenceNoExpr} LIKE 'TRN-%' THEN 'call'
     WHEN {$normalizedReferenceNoExpr} LIKE 'REF-%'
@@ -592,6 +596,7 @@ END";
 $intakeSourceLabelExpr = "CASE
     WHEN {$normalizedReferenceNoExpr} LIKE 'TIP-%'
       OR {$hasTipOriginExpr} = 1
+    OR {$hasAnonymousTipCallerExpr} = 1
       OR {$normalizedIncidentIntakeSourceExpr} = 'tip' THEN 'Converted TIP'
     WHEN {$normalizedReferenceNoExpr} LIKE 'TRN-%' THEN 'Transferred App Call'
     WHEN {$normalizedReferenceNoExpr} LIKE 'REF-%'
@@ -628,6 +633,7 @@ END";
 $intakeDetectionExpr = "CASE
     WHEN {$normalizedReferenceNoExpr} LIKE 'TIP-%' THEN 'reference_prefix'
     WHEN {$hasTipOriginExpr} = 1 THEN 'anonymous_tip_link'
+    WHEN {$hasAnonymousTipCallerExpr} = 1 THEN 'anonymous_tip_caller'
     WHEN {$normalizedIncidentIntakeSourceExpr} = 'tip' THEN 'recorded_intake_source'
     WHEN {$normalizedReferenceNoExpr} LIKE 'TRN-%' THEN 'reference_prefix'
     WHEN {$normalizedReferenceNoExpr} LIKE 'REF-%'
@@ -651,6 +657,7 @@ $intakeSourceInferredExpr = "CASE
     WHEN {$normalizedReferenceNoExpr} LIKE 'TIP-%'
       OR {$normalizedReferenceNoExpr} LIKE 'TRN-%'
       OR {$hasTipOriginExpr} = 1
+    OR {$hasAnonymousTipCallerExpr} = 1
       OR {$hasExternalOriginExpr} = 1
       OR {$hasIncidentExternalSourceExpr} = 1
       OR {$hasSystemExternalCardExpr} = 1
