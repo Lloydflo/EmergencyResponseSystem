@@ -1101,8 +1101,8 @@ function initMap() {
     loadAvailableUnits();
     loadIncidentMarkers();
     pruneOfflineUnitMarkers().finally(() => {
-    initFirebaseLiveTracking();
-    initFirebaseAlternativeRoutes();
+        initFirebaseLiveTracking();
+        initFirebaseAlternativeRoutes();
     });
     addLegendControl();
     updateMapVisibility();
@@ -1210,7 +1210,6 @@ function initFirebaseLiveTracking() {
         showNotification('Live GPS feed disconnected', 'error');
     });
 }
-
 // ===============================
 // FIREBASE ALTERNATIVE ROUTES (from api/system_API/receive_alternative_route.php)
 // ===============================
