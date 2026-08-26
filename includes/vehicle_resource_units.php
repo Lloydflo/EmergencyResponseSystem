@@ -711,6 +711,13 @@ if (!function_exists('ers_reconcile_all_dispatch_and_unit_statuses')) {
                           AND LOWER(COALESCE(d.status, '')) IN ('assigned','acknowledged','enroute','en_route','on_scene','pending')
                     )" : "";
 
+                $unitBusyCheck = $hasUnits
+                    ? "AND NOT EXISTS (
+                        SELECT 1 FROM `units` un
+                        WHERE UPPER(TRIM(un.identifier)) COLLATE utf8mb4_unicode_ci = UPPER(TRIM(rr.`{$codeCol}`)) COLLATE utf8mb4_unicode_ci
+                          AND LOWER(COALESCE(un.status, '')) IN ('assigned','busy','enroute','en_route','on_scene')
+                    )" : "";
+
                 $pdo->exec("
                     UPDATE `{$resourceTable}` rr
                     SET rr.`{$statusCol}` = 'available',
@@ -720,6 +727,7 @@ if (!function_exists('ers_reconcile_all_dispatch_and_unit_statuses')) {
                       {$operatorCheck}
                       {$eventCheck}
                       {$dispatchCheck}
+                      {$unitBusyCheck}
                 ");
             }
 
