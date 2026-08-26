@@ -245,6 +245,23 @@ try {
 
     incident_resolve_complete_operator_records($pdo, $incidentId);
 
+    // Reset responder unit_status for responders assigned to this incident
+    if (incident_resolve_table_exists($pdo, 'users') && incident_resolve_column_exists($pdo, 'users', 'unit_status')) {
+        try {
+            if (incident_resolve_table_exists($pdo, 'dispatch_operator_records') && incident_resolve_column_exists($pdo, 'dispatch_operator_records', 'assigned_to')) {
+                $pdo->prepare("
+                    UPDATE users
+                    SET unit_status = 'available'
+                    WHERE id IN (
+                        SELECT assigned_to FROM dispatch_operator_records WHERE incident_id = :iid AND assigned_to IS NOT NULL AND assigned_to > 0
+                    ) AND LOWER(COALESCE(role, '')) = 'responder'
+                ")->execute([':iid' => $incidentId]);
+            }
+        } catch (Throwable $respUserErr) {
+            error_log('Incident resolve responder user status reset skipped: ' . $respUserErr->getMessage());
+        }
+    }
+
     // Mark incident resolved
     $incidentFields = ["status='resolved'"];
     if (incident_resolve_column_exists($pdo, 'incidents', 'resolved_at')) {
@@ -275,6 +292,10 @@ try {
     }
 
     $pdo->commit();
+
+    if (function_exists('ers_reconcile_all_dispatch_and_unit_statuses')) {
+        ers_reconcile_all_dispatch_and_unit_statuses($pdo);
+    }
     try {
         ers_tftr_sync_accident_status($pdo, $incidentId, 'Cleared');
     } catch (Throwable $tftrError) {
