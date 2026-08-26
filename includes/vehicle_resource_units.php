@@ -598,7 +598,7 @@ if (!function_exists('ers_reconcile_all_dispatch_and_unit_statuses')) {
                     ? "AND NOT EXISTS (
                         SELECT 1 FROM `dispatch_operator_records` dor
                         INNER JOIN `incidents` i ON i.id = dor.incident_id
-                        WHERE UPPER(TRIM(dor.assigned_unit_code)) = UPPER(TRIM(u.identifier))
+                        WHERE UPPER(TRIM(dor.assigned_unit_code)) COLLATE utf8mb4_unicode_ci = UPPER(TRIM(u.identifier)) COLLATE utf8mb4_unicode_ci
                           AND LOWER(COALESCE(i.status, '')) NOT IN ('resolved','closed','cancelled','completed')
                           AND LOWER(COALESCE(dor.status, '')) IN ('pending','assigned','received','accepted','acknowledged','busy','in_use','enroute','en_route','on_scene')
                     )" : "";
@@ -614,9 +614,9 @@ if (!function_exists('ers_reconcile_all_dispatch_and_unit_statuses')) {
                     UPDATE `units` u
                     SET u.status = 'available'{$currIncSql}{$lastStatusSql}
                     WHERE LOWER(COALESCE(u.status, '')) IN ('assigned','acknowledged','enroute','en_route','on_scene','busy')
-                      {$dispatchCheck}
-                      {$operatorCheck}
-                      {$eventCheck}
+                       {$dispatchCheck}
+                       {$operatorCheck}
+                       {$eventCheck}
                 ");
             }
 
@@ -646,7 +646,7 @@ if (!function_exists('ers_reconcile_all_dispatch_and_unit_statuses')) {
                     ? "AND NOT EXISTS (
                         SELECT 1 FROM `event_unit_dispatches` ed
                         INNER JOIN `units` un ON un.id = ed.unit_id
-                        WHERE UPPER(TRIM(un.identifier)) = UPPER(TRIM(usr.unit_code))
+                        WHERE UPPER(TRIM(un.identifier)) COLLATE utf8mb4_unicode_ci = UPPER(TRIM(usr.unit_code)) COLLATE utf8mb4_unicode_ci
                           AND LOWER(COALESCE(ed.status, '')) = 'assigned'
                     )" : "";
 
@@ -671,13 +671,13 @@ if (!function_exists('ers_reconcile_all_dispatch_and_unit_statuses')) {
                         ? "AND NOT EXISTS (
                             SELECT 1 FROM `dispatch_operator_records` dor
                             LEFT JOIN `incidents` i ON i.id = dor.incident_id
-                            WHERE UPPER(TRIM(dor.assigned_unit_code)) = UPPER(TRIM(rr.`{$codeCol}`))
+                            WHERE UPPER(TRIM(dor.assigned_unit_code)) COLLATE utf8mb4_unicode_ci = UPPER(TRIM(rr.`{$codeCol}`)) COLLATE utf8mb4_unicode_ci
                               AND LOWER(COALESCE(dor.status, '')) IN ('pending','assigned','received','accepted','acknowledged','busy','in_use','enroute','en_route','on_scene')
                               AND (dor.incident_id IS NULL OR dor.incident_id = 0 OR i.id IS NULL OR LOWER(COALESCE(i.status, '')) NOT IN ('resolved','closed','cancelled','completed'))
                         )"
                         : "AND NOT EXISTS (
                             SELECT 1 FROM `dispatch_operator_records` dor
-                            WHERE UPPER(TRIM(dor.assigned_unit_code)) = UPPER(TRIM(rr.`{$codeCol}`))
+                            WHERE UPPER(TRIM(dor.assigned_unit_code)) COLLATE utf8mb4_unicode_ci = UPPER(TRIM(rr.`{$codeCol}`)) COLLATE utf8mb4_unicode_ci
                               AND LOWER(COALESCE(dor.status, '')) IN ('pending','assigned','received','accepted','acknowledged','busy','in_use','enroute','en_route','on_scene')
                         )")
                     : "";
@@ -686,7 +686,7 @@ if (!function_exists('ers_reconcile_all_dispatch_and_unit_statuses')) {
                     ? "AND NOT EXISTS (
                         SELECT 1 FROM `event_unit_dispatches` ed
                         INNER JOIN `units` un ON un.id = ed.unit_id
-                        WHERE UPPER(TRIM(un.identifier)) = UPPER(TRIM(rr.`{$codeCol}`))
+                        WHERE UPPER(TRIM(un.identifier)) COLLATE utf8mb4_unicode_ci = UPPER(TRIM(rr.`{$codeCol}`)) COLLATE utf8mb4_unicode_ci
                           AND LOWER(COALESCE(ed.status, '')) = 'assigned'
                     )" : "";
 
@@ -695,7 +695,7 @@ if (!function_exists('ers_reconcile_all_dispatch_and_unit_statuses')) {
                         SELECT 1 FROM `dispatches` d
                         INNER JOIN `units` un ON un.id = d.unit_id
                         INNER JOIN `incidents` i ON i.id = d.incident_id
-                        WHERE UPPER(TRIM(un.identifier)) = UPPER(TRIM(rr.`{$codeCol}`))
+                        WHERE UPPER(TRIM(un.identifier)) COLLATE utf8mb4_unicode_ci = UPPER(TRIM(rr.`{$codeCol}`)) COLLATE utf8mb4_unicode_ci
                           AND LOWER(COALESCE(i.status, '')) NOT IN ('resolved','closed','cancelled','completed')
                           AND LOWER(COALESCE(d.status, '')) IN ('assigned','acknowledged','enroute','en_route','on_scene','pending')
                     )" : "";
@@ -716,7 +716,10 @@ if (!function_exists('ers_reconcile_all_dispatch_and_unit_statuses')) {
             if (ers_vehicle_resource_table_exists($pdo, 'responder_backup_requests') && $hasIncidents) {
                 $pdo->exec("
                     UPDATE `responder_backup_requests` rbr
-                    INNER JOIN `incidents` i ON (i.id = rbr.incident_id OR i.reference_no = rbr.incident_id)
+                    INNER JOIN `incidents` i ON (
+                        (rbr.incident_id REGEXP '^[0-9]+$' AND i.id = CAST(rbr.incident_id AS UNSIGNED))
+                        OR (i.reference_no COLLATE utf8mb4_unicode_ci = rbr.incident_id COLLATE utf8mb4_unicode_ci)
+                    )
                     SET rbr.status = 'completed',
                         rbr.updated_at = CURRENT_TIMESTAMP
                     WHERE LOWER(COALESCE(i.status, '')) IN ('resolved', 'closed', 'cancelled', 'completed')
@@ -728,7 +731,10 @@ if (!function_exists('ers_reconcile_all_dispatch_and_unit_statuses')) {
             if (ers_vehicle_resource_table_exists($pdo, 'responder_resource_requests') && $hasIncidents) {
                 $pdo->exec("
                     UPDATE `responder_resource_requests` rrr
-                    INNER JOIN `incidents` i ON (i.id = rrr.incident_id OR i.reference_no = rrr.incident_id)
+                    INNER JOIN `incidents` i ON (
+                        (rrr.incident_id REGEXP '^[0-9]+$' AND i.id = CAST(rrr.incident_id AS UNSIGNED))
+                        OR (i.reference_no COLLATE utf8mb4_unicode_ci = rrr.incident_id COLLATE utf8mb4_unicode_ci)
+                    )
                     SET rrr.status = 'completed',
                         rrr.updated_at = CURRENT_TIMESTAMP
                     WHERE LOWER(COALESCE(i.status, '')) IN ('resolved', 'closed', 'cancelled', 'completed')

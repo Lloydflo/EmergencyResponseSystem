@@ -211,7 +211,10 @@ try {
     }
 
     if (resource_notification_table_exists($pdo, 'responder_resource_requests')) {
-        $incJoin = $hasIncidents ? "LEFT JOIN incidents i ON (i.id = r.incident_id OR i.reference_no = r.incident_id)" : "";
+        $incJoin = $hasIncidents ? "LEFT JOIN incidents i ON (
+            (r.incident_id REGEXP '^[0-9]+$' AND i.id = CAST(r.incident_id AS UNSIGNED))
+            OR (i.reference_no COLLATE utf8mb4_unicode_ci = r.incident_id COLLATE utf8mb4_unicode_ci)
+        )" : "";
         $incFilter = $hasIncidents ? "AND (r.incident_id IS NULL OR r.incident_id = '' OR r.incident_id = '0' OR i.id IS NULL OR LOWER(COALESCE(i.status, '')) NOT IN ('resolved', 'closed', 'cancelled', 'completed'))" : "";
         $stmt = $pdo->query(
             "SELECT r.id, r.responder_name, r.category, r.resource_name, r.quantity, r.urgency, r.incident_id, r.location, r.notes, r.status, r.created_at, r.updated_at
@@ -231,7 +234,10 @@ try {
     }
 
     if (resource_notification_table_exists($pdo, 'responder_backup_requests')) {
-        $incJoin = $hasIncidents ? "LEFT JOIN incidents i ON (i.id = b.incident_id OR i.reference_no = b.incident_id)" : "";
+        $incJoin = $hasIncidents ? "LEFT JOIN incidents i ON (
+            (b.incident_id REGEXP '^[0-9]+$' AND i.id = CAST(b.incident_id AS UNSIGNED))
+            OR (i.reference_no COLLATE utf8mb4_unicode_ci = b.incident_id COLLATE utf8mb4_unicode_ci)
+        )" : "";
         $incFilter = $hasIncidents ? "AND (b.incident_id IS NULL OR b.incident_id = '' OR b.incident_id = '0' OR i.id IS NULL OR LOWER(COALESCE(i.status, '')) NOT IN ('resolved', 'closed', 'cancelled', 'completed'))" : "";
         $stmt = $pdo->query(
             "SELECT b.id, b.responder_name, b.requested_department, b.resources, b.is_full_backup, b.incident_id, b.status, b.created_at, b.updated_at

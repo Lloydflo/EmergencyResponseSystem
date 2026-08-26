@@ -248,14 +248,14 @@ try {
     // Complete pending responder backup & resource requests for this incident
     if (incident_resolve_table_exists($pdo, 'responder_backup_requests')) {
         try {
-            $pdo->prepare("UPDATE responder_backup_requests SET status = 'completed', updated_at = NOW() WHERE (incident_id = :iid1 OR incident_id = :ref) AND status = 'pending'")->execute([':iid1' => (string)$incidentId, ':ref' => (string)$incidentCode]);
+            $pdo->prepare("UPDATE responder_backup_requests SET status = 'completed', updated_at = NOW() WHERE (incident_id COLLATE utf8mb4_unicode_ci = :iid1 OR incident_id COLLATE utf8mb4_unicode_ci = :ref) AND status = 'pending'")->execute([':iid1' => (string)$incidentId, ':ref' => (string)$incidentCode]);
         } catch (Throwable $rbrErr) {
             error_log('Incident resolve backup request completion skipped: ' . $rbrErr->getMessage());
         }
     }
     if (incident_resolve_table_exists($pdo, 'responder_resource_requests')) {
         try {
-            $pdo->prepare("UPDATE responder_resource_requests SET status = 'completed', updated_at = NOW() WHERE (incident_id = :iid1 OR incident_id = :ref) AND status = 'pending'")->execute([':iid1' => (string)$incidentId, ':ref' => (string)$incidentCode]);
+            $pdo->prepare("UPDATE responder_resource_requests SET status = 'completed', updated_at = NOW() WHERE (incident_id COLLATE utf8mb4_unicode_ci = :iid1 OR incident_id COLLATE utf8mb4_unicode_ci = :ref) AND status = 'pending'")->execute([':iid1' => (string)$incidentId, ':ref' => (string)$incidentCode]);
         } catch (Throwable $rrrErr) {
             error_log('Incident resolve resource request completion skipped: ' . $rrrErr->getMessage());
         }

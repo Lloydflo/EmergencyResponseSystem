@@ -104,7 +104,10 @@ try {
 
     // 2. Responder app backup requests
     if (ers_vehicle_resource_table_exists($pdo, 'responder_backup_requests')) {
-        $incJoin = $hasIncidents ? "LEFT JOIN incidents i ON (i.id = b.incident_id OR i.reference_no = b.incident_id)" : "";
+        $incJoin = $hasIncidents ? "LEFT JOIN incidents i ON (
+            (b.incident_id REGEXP '^[0-9]+$' AND i.id = CAST(b.incident_id AS UNSIGNED))
+            OR (i.reference_no COLLATE utf8mb4_unicode_ci = b.incident_id COLLATE utf8mb4_unicode_ci)
+        )" : "";
         $incFilter = $hasIncidents ? "AND (b.incident_id IS NULL OR b.incident_id = '' OR b.incident_id = '0' OR i.id IS NULL OR LOWER(COALESCE(i.status, '')) NOT IN ('resolved', 'closed', 'cancelled', 'completed'))" : "";
         $bStmt = $pdo->query("
             SELECT b.*,

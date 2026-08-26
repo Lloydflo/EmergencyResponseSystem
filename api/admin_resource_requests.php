@@ -85,7 +85,10 @@ try {
                    i.priority AS incident_priority_db,
                    i.status AS incident_status_db
             FROM responder_resource_requests r
-            LEFT JOIN incidents i ON (i.id = r.incident_id OR i.reference_no = r.incident_id)
+            LEFT JOIN incidents i ON (
+                (r.incident_id REGEXP '^[0-9]+$' AND i.id = CAST(r.incident_id AS UNSIGNED))
+                OR (i.reference_no COLLATE utf8mb4_unicode_ci = r.incident_id COLLATE utf8mb4_unicode_ci)
+            )
             WHERE r.status = 'pending'
               AND (
                   r.incident_id IS NULL 
@@ -132,7 +135,10 @@ try {
                    i.location_address AS incident_location_db,
                    i.status AS incident_status_db
             FROM responder_backup_requests b
-            LEFT JOIN incidents i ON (i.id = b.incident_id OR i.reference_no = b.incident_id)
+            LEFT JOIN incidents i ON (
+                (b.incident_id REGEXP '^[0-9]+$' AND i.id = CAST(b.incident_id AS UNSIGNED))
+                OR (i.reference_no COLLATE utf8mb4_unicode_ci = b.incident_id COLLATE utf8mb4_unicode_ci)
+            )
             WHERE b.status = 'pending'
               AND (
                   b.incident_id IS NULL 
