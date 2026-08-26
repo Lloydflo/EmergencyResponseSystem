@@ -930,7 +930,7 @@ if ($priority !== '' && ers_incidents_has_column($schema, 'incidents', 'priority
 
 if ($status !== '' && ers_incidents_has_column($schema, 'incidents', 'status')) {
     if ($status === 'pending') {
-        $where[] = "i.status IN ('pending', 'new')";
+        $where[] = "i.status IN ('pending', 'new', 'active')";
         if (
             $hasLatestDispatch
             && ers_incidents_has_column($schema, 'dispatches', 'status')

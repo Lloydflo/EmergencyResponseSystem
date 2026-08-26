@@ -540,8 +540,10 @@ function ers_tip_convert_to_incident(PDO $pdo, array $input): array
     $externalIncidentId = ers_tip_external_id($item);
     $existing = ers_tip_find_linked_incident($pdo, $sourceSystem, $externalIncidentId);
     if ($existing !== null) {
+        ers_tip_activate_incident($pdo, (int)$existing['id']);
         $outcome = ers_tip_conversion_outcome($input, (string)$existing['reference_no'], true);
         ers_tip_set_status($pdo, (int)$item['id'], 'converted_to_incident', $outcome);
+        $existing['status'] = 'active';
         return [
             'duplicate' => true,
             'item' => ers_tip_find($pdo, (int)$item['id']),
@@ -569,8 +571,10 @@ function ers_tip_convert_to_incident(PDO $pdo, array $input): array
             'tip' => $item,
             'linked_by' => 'reference_no',
         ]);
+        ers_tip_activate_incident($pdo, (int)$existingByReference['id']);
         $outcome = ers_tip_conversion_outcome($input, (string)$existingByReference['reference_no'], true);
         ers_tip_set_status($pdo, (int)$item['id'], 'converted_to_incident', $outcome);
+        $existingByReference['status'] = 'active';
         return [
             'duplicate' => true,
             'item' => ers_tip_find($pdo, (int)$item['id']),
@@ -601,7 +605,7 @@ function ers_tip_convert_to_incident(PDO $pdo, array $input): array
                 "UPDATE incidents
                  SET type = ?,
                      priority = ?,
-                     status = 'pending',
+                     status = 'active',
                      title = ?,
                      description = ?,
                      location_address = ?,
@@ -620,7 +624,7 @@ function ers_tip_convert_to_incident(PDO $pdo, array $input): array
                 $coordinates['longitude'],
                 (int)$created['id'],
             ]);
-            $created['status'] = 'pending';
+            $created['status'] = 'active';
         } else {
             $incidentId = ers_external_insert_incident($pdo, [
                 ':reference_no' => $referenceNo,
@@ -633,7 +637,8 @@ function ers_tip_convert_to_incident(PDO $pdo, array $input): array
                 ':longitude' => $coordinates['longitude'],
                 ':reported_by_call_id' => $callId,
             ]);
-            $created = ['id' => $incidentId, 'reference_no' => $referenceNo, 'status' => 'pending'];
+            ers_tip_activate_incident($pdo, $incidentId);
+            $created = ['id' => $incidentId, 'reference_no' => $referenceNo, 'status' => 'active'];
         }
 
         ers_external_link_incident($pdo, $sourceSystem, $externalIncidentId, (int)$created['id'], [
@@ -670,6 +675,16 @@ function ers_tip_convert_to_incident(PDO $pdo, array $input): array
         }
         throw $e;
     }
+}
+
+function ers_tip_activate_incident(PDO $pdo, int $incidentId): void
+{
+    if ($incidentId <= 0) {
+        return;
+    }
+
+    $stmt = $pdo->prepare("UPDATE incidents SET status = 'active', updated_at = NOW() WHERE id = ? AND status NOT IN ('resolved', 'cancelled')");
+    $stmt->execute([$incidentId]);
 }
 
 function ers_tip_find(PDO $pdo, int $id): array
