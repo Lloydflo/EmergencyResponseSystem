@@ -2286,6 +2286,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const incidentId = toIncidentId(params.get('incident_id'));
         const trackUnit = params.get('track_unit') || params.get('unit') || '';
         const fromCall = params.get('from_call') === '1';
+        const sourceParam = String(params.get('source') || '').toLowerCase();
         const openDispatch = fromCall || params.get('open_dispatch') === '1';
         const period = params.get('period');
         if (openDispatch) {
@@ -2295,12 +2296,10 @@ document.addEventListener('DOMContentLoaded', () => {
                     incidentReferenceNo: code || ''
                 });
             }
-            showNotification(
-                code
-                    ? `Call incident ${code} is saved and highlighted in Call. Select a dispatch unit.`
-                    : 'Call incident is saved in Call. Select a dispatch unit.',
-                'success'
-            );
+            const noticeText = sourceParam === 'tip'
+                ? (code ? `Anonymous tip ${code} converted to incident. Select a dispatch unit.` : 'Anonymous tip converted to incident. Select a dispatch unit.')
+                : (code ? `Call incident ${code} is saved and highlighted in Call. Select a dispatch unit.` : 'Call incident is saved in Call. Select a dispatch unit.');
+            showNotification(noticeText, 'success');
             refreshActiveCalls().finally(() => {
                 if (incidentId !== null || code) {
                     window.setTimeout(() => openDispatchModal(incidentId, code), 220);
