@@ -319,6 +319,7 @@
 
         try {
             const response = await fetch(`${apiUrl}&limit=80`, {
+                cache: 'no-store',
                 credentials: 'same-origin',
                 headers: { Accept: 'application/json' },
             });

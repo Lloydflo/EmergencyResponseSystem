@@ -4405,7 +4405,7 @@ $pageTitle = 'Inter-Agency Coordination';
     <script src="js/interagency-operations.js"></script>
     <script src="js/interagency-command.js"></script>
     <script src="js/interagency-events.js?v=<?php echo filemtime($rootDir . '/js/interagency-events.js'); ?>"></script>
-    <script src="js/interagency-tips.js?v=20260809-ph-time-v1"></script>
+    <script src="js/interagency-tips.js?v=20260826-no-tip-cache-v1"></script>
     <script src="js/interagency-external-inbox.js?v=<?php echo filemtime($rootDir . '/js/interagency-external-inbox.js'); ?>"></script>
     <script src="js/interagency-module-launcher.js?v=<?php echo filemtime($rootDir . '/js/interagency-module-launcher.js'); ?>"></script>
 </body>

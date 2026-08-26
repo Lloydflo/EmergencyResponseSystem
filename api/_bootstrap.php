@@ -9,6 +9,8 @@ header('Content-Type: application/json');
 header('Access-Control-Allow-Origin: ' . (string)ers_env('ERS_EXTERNAL_API_CORS_ORIGIN', '*'));
 header('Access-Control-Allow-Headers: Authorization, Content-Type, X-ERS-API-Key, X-API-Key, X-ERS-Client');
 header('Access-Control-Allow-Methods: GET, POST, PATCH, OPTIONS');
+header('Cache-Control: no-store, no-cache, must-revalidate, max-age=0');
+header('Pragma: no-cache');
 
 if (($_SERVER['REQUEST_METHOD'] ?? '') === 'OPTIONS') {
     http_response_code(204);
