@@ -287,24 +287,57 @@ function ers_live_tracking_route_polyline(
 
         $curl = curl_init($url);
         if ($curl === false) {
+            error_log('live_tracking route_polyline: curl_init() failed');
             return null;
         }
         curl_setopt_array($curl, [
             CURLOPT_RETURNTRANSFER => true,
             CURLOPT_CONNECTTIMEOUT => 5,
             CURLOPT_TIMEOUT => 8,
+            CURLOPT_SSL_VERIFYPEER => true,
+            CURLOPT_SSL_VERIFYHOST => 2,
+            CURLOPT_HTTPHEADER => ['Accept: application/json'],
         ]);
         $raw = curl_exec($curl);
+        $curlErrno = curl_errno($curl);
+        $curlError = curl_error($curl);
         $status = (int)curl_getinfo($curl, CURLINFO_HTTP_CODE);
         curl_close($curl);
 
+        if ($raw === false || $curlErrno !== 0) {
+            error_log(sprintf(
+                'live_tracking route_polyline: curl_exec failed errno=%d error=%s url=%s',
+                $curlErrno,
+                $curlError,
+                $url
+            ));
+            return null;
+        }
+
         if (!is_string($raw) || $raw === '' || $status < 200 || $status >= 300) {
+            error_log(sprintf(
+                'live_tracking route_polyline: bad response status=%d body_len=%d',
+                $status,
+                is_string($raw) ? strlen($raw) : -1
+            ));
             return null;
         }
 
         $decoded = json_decode($raw, true);
+        if (json_last_error() !== JSON_ERROR_NONE) {
+            error_log('live_tracking route_polyline: json_decode failed - ' . json_last_error_msg());
+            return null;
+        }
+
+        $osrmCode = $decoded['code'] ?? null;
+        if ($osrmCode !== 'Ok') {
+            error_log('live_tracking route_polyline: OSRM returned code=' . var_export($osrmCode, true) . ' message=' . var_export($decoded['message'] ?? null, true));
+            return null;
+        }
+
         $coords = $decoded['routes'][0]['geometry']['coordinates'] ?? null;
         if (!is_array($coords) || count($coords) < 2) {
+            error_log('live_tracking route_polyline: no usable geometry.coordinates in OSRM response');
             return null;
         }
 
