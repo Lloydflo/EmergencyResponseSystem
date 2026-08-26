@@ -521,25 +521,29 @@ function resolve_vehicle_item_status(array $item, array $activeIncidentAssignmen
         return $item;
     }
 
-    // 4. Check units table status in database
-    if (units_table_available($pdo)) {
-        $unitStmt = $pdo->prepare("SELECT status FROM `units` WHERE UPPER(TRIM(identifier)) = ? LIMIT 1");
-        $unitStmt->execute([$unitCode]);
-        $unitRowStatus = strtolower(trim((string)$unitStmt->fetchColumn()));
-        if ($unitRowStatus !== '') {
-            $mappedStatus = match ($unitRowStatus) {
-                'assigned', 'busy', 'enroute', 'en_route', 'on_scene' => 'in_use',
-                'maintenance' => 'maintenance',
-                'unavailable', 'offline' => 'offline',
-                default => 'available',
-            };
-            if ($mappedStatus === 'available') {
-                $item['status'] = 'available';
-                if ($currentStatus === 'in_use') {
-                    ers_update_vehicle_resource_status_by_identifier($pdo, $unitCode, 'available');
+    // 4. Check units table status in database safely
+    if (units_table_available($pdo) && unit_column_exists($pdo, 'identifier') && unit_column_exists($pdo, 'status')) {
+        try {
+            $unitStmt = $pdo->prepare("SELECT status FROM `units` WHERE UPPER(TRIM(identifier)) = ? LIMIT 1");
+            $unitStmt->execute([$unitCode]);
+            $unitRowStatus = strtolower(trim((string)$unitStmt->fetchColumn()));
+            if ($unitRowStatus !== '') {
+                $mappedStatus = match ($unitRowStatus) {
+                    'assigned', 'busy', 'enroute', 'en_route', 'on_scene' => 'in_use',
+                    'maintenance' => 'maintenance',
+                    'unavailable', 'offline' => 'offline',
+                    default => 'available',
+                };
+                if ($mappedStatus === 'available') {
+                    $item['status'] = 'available';
+                    if ($currentStatus === 'in_use') {
+                        ers_update_vehicle_resource_status_by_identifier($pdo, $unitCode, 'available');
+                    }
+                    return $item;
                 }
-                return $item;
             }
+        } catch (Throwable $e) {
+            error_log('resolve_vehicle_item_status units query error: ' . $e->getMessage());
         }
     }
 
@@ -608,17 +612,6 @@ function archive_row_to_item(array $row): array {
     ];
 }
 
-function fetch_item(PDO $pdo, int $id): ?array {
-    $stmt = $pdo->prepare(
-        "SELECT id, code, name, category, status, location, latitude, longitude, driver_name, plate_number, position_title, assignment, quantity, notes, updated_at
-         FROM `" . RESOURCE_RECORDS_TABLE . "`
-         WHERE id = ?
-         LIMIT 1"
-    );
-    $stmt->execute([$id]);
-    $row = $stmt->fetch(PDO::FETCH_ASSOC);
-    return $row ? apply_active_assignment_to_item(row_to_item($row), load_active_unit_incident_assignment_map($pdo)) : null;
-}
 
 function fetch_active_resource_row(PDO $pdo, int $id): ?array {
     $stmt = $pdo->prepare(
@@ -914,59 +907,69 @@ function sync_vehicle_resource_assignment_availability(PDO $pdo): void {
         return;
     }
 
-    $presenceMap = function_exists('ers_vehicle_resource_responder_presence_map')
-        ? ers_vehicle_resource_responder_presence_map($pdo)
-        : [];
+    try {
+        $presenceMap = function_exists('ers_vehicle_resource_responder_presence_map')
+            ? ers_vehicle_resource_responder_presence_map($pdo)
+            : [];
 
-    $activeAssignments = load_active_unit_incident_assignment_map($pdo);
+        $activeAssignments = load_active_unit_incident_assignment_map($pdo);
 
-    $stmt = $pdo->query(
-        "SELECT `code`, `status`
-         FROM `" . RESOURCE_RECORDS_TABLE . "`
-         WHERE LOWER(`category`) = 'vehicles'"
-    );
+        $stmt = $pdo->query(
+            "SELECT `code`, `status`
+             FROM `" . RESOURCE_RECORDS_TABLE . "`
+             WHERE LOWER(`category`) = 'vehicles'"
+        );
 
-    foreach ($stmt->fetchAll(PDO::FETCH_ASSOC) as $row) {
-        $unitCode = strtoupper(trim((string)($row['code'] ?? '')));
-        $status = strtolower(trim((string)($row['status'] ?? '')));
-        if ($unitCode === '') {
-            continue;
-        }
+        $hasUnitsTable = units_table_available($pdo) && unit_column_exists($pdo, 'identifier') && unit_column_exists($pdo, 'status');
+        $unitStmt = $hasUnitsTable ? $pdo->prepare("SELECT status FROM `units` WHERE UPPER(TRIM(identifier)) = ? LIMIT 1") : null;
 
-        if (isset($activeAssignments[$unitCode])) {
-            if ($status !== 'in_use' && $status !== 'offline') {
-                ers_update_vehicle_resource_status_by_identifier($pdo, $unitCode, 'in_use');
+        foreach ($stmt->fetchAll(PDO::FETCH_ASSOC) as $row) {
+            $unitCode = strtoupper(trim((string)($row['code'] ?? '')));
+            $status = strtolower(trim((string)($row['status'] ?? '')));
+            if ($unitCode === '') {
+                continue;
             }
-            continue;
-        }
 
-        if (isset($presenceMap[$unitCode])) {
-            $presenceStatus = function_exists('ers_vehicle_resource_status_from_responder_state')
-                ? ers_vehicle_resource_status_from_responder_state($presenceMap[$unitCode])
-                : 'offline';
-            if ($status !== $presenceStatus) {
-                ers_update_vehicle_resource_status_by_identifier($pdo, $unitCode, $presenceStatus);
-                ers_update_unit_status_by_identifier($pdo, $unitCode, map_vehicle_resource_status_to_unit_status($presenceStatus));
+            if (isset($activeAssignments[$unitCode])) {
+                if ($status !== 'in_use' && $status !== 'offline') {
+                    ers_update_vehicle_resource_status_by_identifier($pdo, $unitCode, 'in_use');
+                }
+                continue;
             }
-            continue;
-        }
 
-        if (units_table_available($pdo)) {
-            $unitStmt = $pdo->prepare("SELECT status FROM `units` WHERE UPPER(TRIM(identifier)) = ? LIMIT 1");
-            $unitStmt->execute([$unitCode]);
-            $unitRowStatus = strtolower(trim((string)$unitStmt->fetchColumn()));
-            if ($unitRowStatus !== '') {
-                $mappedResourceStatus = match ($unitRowStatus) {
-                    'assigned', 'busy', 'enroute', 'en_route', 'on_scene' => 'in_use',
-                    'maintenance' => 'maintenance',
-                    'unavailable', 'offline' => 'offline',
-                    default => 'available',
-                };
-                if ($status === 'in_use' && $mappedResourceStatus === 'available') {
-                    ers_update_vehicle_resource_status_by_identifier($pdo, $unitCode, 'available');
+            if (isset($presenceMap[$unitCode])) {
+                $presenceStatus = function_exists('ers_vehicle_resource_status_from_responder_state')
+                    ? ers_vehicle_resource_status_from_responder_state($presenceMap[$unitCode])
+                    : 'offline';
+                if ($status !== $presenceStatus) {
+                    ers_update_vehicle_resource_status_by_identifier($pdo, $unitCode, $presenceStatus);
+                    ers_update_unit_status_by_identifier($pdo, $unitCode, map_vehicle_resource_status_to_unit_status($presenceStatus));
+                }
+                continue;
+            }
+
+            if ($unitStmt !== null) {
+                try {
+                    $unitStmt->execute([$unitCode]);
+                    $unitRowStatus = strtolower(trim((string)$unitStmt->fetchColumn()));
+                    if ($unitRowStatus !== '') {
+                        $mappedResourceStatus = match ($unitRowStatus) {
+                            'assigned', 'busy', 'enroute', 'en_route', 'on_scene' => 'in_use',
+                            'maintenance' => 'maintenance',
+                            'unavailable', 'offline' => 'offline',
+                            default => 'available',
+                        };
+                        if ($status === 'in_use' && $mappedResourceStatus === 'available') {
+                            ers_update_vehicle_resource_status_by_identifier($pdo, $unitCode, 'available');
+                        }
+                    }
+                } catch (Throwable $e) {
+                    error_log('sync_vehicle_resource_assignment_availability inner query error: ' . $e->getMessage());
                 }
             }
         }
+    } catch (Throwable $e) {
+        error_log('sync_vehicle_resource_assignment_availability error: ' . $e->getMessage());
     }
 }
 
