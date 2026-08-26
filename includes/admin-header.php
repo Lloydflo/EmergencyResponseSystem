@@ -94,7 +94,28 @@ $avatar_source = $user_avatar !== ''
         font: inherit;
     }
 
-    .header-message-avatar {
+    .message-content-item {
+        display: flex;
+        align-items: flex-start;
+        gap: 0.75rem;
+        padding: 0.75rem;
+        border-radius: 0.5rem;
+        transition: background-color 0.2s ease, transform 0.15s ease;
+        cursor: pointer;
+        width: 100%;
+        border: 0;
+        background: transparent;
+        text-align: left;
+        font: inherit;
+        color: inherit;
+        box-sizing: border-box;
+    }
+
+    .message-content-item:hover {
+        background-color: var(--sidebar-hover-bg-1, rgba(255, 255, 255, 0.06));
+    }
+
+    .message-content-avatar {
         width: 36px;
         height: 36px;
         border-radius: 50%;
@@ -102,34 +123,84 @@ $avatar_source = $user_avatar !== ''
         align-items: center;
         justify-content: center;
         background: linear-gradient(135deg, #0f766e 0%, #0ea5e9 100%);
-        color: #fff;
+        color: #ffffff;
         font-size: 0.75rem;
         font-weight: 700;
         text-transform: uppercase;
         flex-shrink: 0;
+        box-shadow: 0 2px 4px rgba(0, 0, 0, 0.12);
+        letter-spacing: 0.5px;
     }
 
-    .header-message-meta {
+    .message-content-body {
+        flex: 1;
+        min-width: 0;
+        display: flex;
+        flex-direction: column;
+        gap: 0.2rem;
+    }
+
+    .message-content-top {
         display: flex;
         align-items: center;
+        justify-content: space-between;
         gap: 0.5rem;
-        margin-top: 0.25rem;
-        font-size: 0.75rem;
-        color: var(--text-secondary-1, #64748b);
     }
 
-    .header-message-count {
+    .message-content-author {
+        font-weight: 600;
+        font-size: 0.875rem;
+        color: var(--text-color-1, #0f172a);
+        line-height: 1.3;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+
+    .message-content-time {
+        font-size: 0.6875rem;
+        color: var(--text-secondary-1, #64748b);
+        flex-shrink: 0;
+        white-space: nowrap;
+        opacity: 0.85;
+    }
+
+    .message-content-preview {
+        font-size: 0.75rem;
+        color: var(--text-secondary-1, #64748b);
+        line-height: 1.4;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+
+    .message-content-unread {
         display: inline-flex;
         align-items: center;
         justify-content: center;
-        min-width: 1.4rem;
-        height: 1.4rem;
-        padding: 0 0.4rem;
+        min-width: 1.25rem;
+        height: 1.25rem;
+        padding: 0 0.35rem;
         border-radius: 999px;
-        background: #fee2e2;
-        color: #b91c1c;
+        background: #dc2626;
+        color: #ffffff;
         font-size: 0.6875rem;
         font-weight: 700;
+        flex-shrink: 0;
+        align-self: center;
+    }
+
+    [data-theme="dark"] .message-content-author {
+        color: var(--text-color-1, #e5eef9);
+    }
+
+    [data-theme="dark"] .message-content-time,
+    [data-theme="dark"] .message-content-preview {
+        color: var(--text-secondary-1, #94a3b8);
+    }
+
+    [data-theme="dark"] .message-content-item:hover {
+        background-color: var(--sidebar-hover-bg-1, rgba(255, 255, 255, 0.08));
     }
 
     .header-live-toast {
@@ -506,6 +577,12 @@ document.addEventListener('DOMContentLoaded', function() {
         if (count <= 0) return 'No zone movement alerts';
         if (count === 1) return '1 zone movement alert';
         return count + ' zone movement alerts';
+    }
+
+    function resolvedUnreadText(count) {
+        if (count <= 0) return 'No resolved incident reviews';
+        if (count === 1) return '1 resolved incident review';
+        return count + ' resolved incident reviews';
     }
 
     function incidentCardLabel(item) {
@@ -925,8 +1002,43 @@ document.addEventListener('DOMContentLoaded', function() {
         window.requestAnimationFrame(function() {
             liveToast.classList.add('show');
         });
+    function showLiveToast(count) {
+        if (!liveToast || count <= 0) return;
+        if (liveToastIcon) liveToastIcon.className = 'fas fa-envelope';
+        if (liveToastTitle) liveToastTitle.textContent = 'Interagency';
+        if (liveToastText) liveToastText.textContent = unreadText(count);
+        liveToast.setAttribute('data-toast-target', 'interagency');
+        liveToast.hidden = false;
+        window.clearTimeout(state.toastTimer);
+        window.requestAnimationFrame(function() {
+            liveToast.classList.add('show');
+        });
         state.toastTimer = window.setTimeout(hideLiveToast, 4000);
     }
+
+    function closeModal(modalId) {
+        const modal = typeof modalId === 'string' ? document.getElementById(modalId) : modalId;
+        if (!modal) return;
+        modal.classList.remove('show');
+        if (modal === notificationModal && notificationBtn) notificationBtn.classList.remove('active');
+        if (modal === messageModal && messageBtn) messageBtn.classList.remove('active');
+        if (modal === allNotificationsModal && notificationBtn) notificationBtn.classList.remove('active');
+        if (modal === messageContentModal) modal.classList.remove('show');
+        document.body.style.overflow = '';
+    }
+
+    function closeAllModals() {
+        if (notificationModal) notificationModal.classList.remove('show');
+        if (messageModal) messageModal.classList.remove('show');
+        if (allNotificationsModal) allNotificationsModal.classList.remove('show');
+        if (messageContentModal) messageContentModal.classList.remove('show');
+        if (userProfileDropdown) userProfileDropdown.classList.remove('show');
+        if (notificationBtn) notificationBtn.classList.remove('active');
+        if (messageBtn) messageBtn.classList.remove('active');
+        if (userProfileBtn) userProfileBtn.classList.remove('active');
+        document.body.style.overflow = '';
+    }
+
     function toggleModal(modal, button, otherModal, otherButton) {
         if (!modal || !button) return;
         const willShow = !modal.classList.contains('show');
@@ -934,6 +1046,8 @@ document.addEventListener('DOMContentLoaded', function() {
         if (otherButton) otherButton.classList.remove('active');
         if (messageContentModal) messageContentModal.classList.remove('show');
         if (allNotificationsModal) allNotificationsModal.classList.remove('show');
+        if (userProfileDropdown) userProfileDropdown.classList.remove('show');
+        if (userProfileBtn) userProfileBtn.classList.remove('active');
         modal.classList.toggle('show', willShow);
         button.classList.toggle('active', willShow);
         document.body.style.overflow = '';
@@ -1311,10 +1425,12 @@ document.addEventListener('DOMContentLoaded', function() {
         userProfileBtn.addEventListener('click', function(event) {
             event.preventDefault();
             event.stopPropagation();
-            closeAllModals();
             const isOpen = userProfileDropdown.classList.contains('show');
-            userProfileDropdown.classList.toggle('show', !isOpen);
-            userProfileBtn.classList.toggle('active', !isOpen);
+            closeAllModals();
+            if (!isOpen) {
+                userProfileDropdown.classList.add('show');
+                userProfileBtn.classList.add('active');
+            }
         });
     }
 
