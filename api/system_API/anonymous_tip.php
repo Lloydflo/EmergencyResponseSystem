@@ -684,12 +684,12 @@ function ers_tip_activate_incident(PDO $pdo, int $incidentId, string $priority =
     }
 
     if ($priority !== '') {
-        $stmt = $pdo->prepare("UPDATE incidents SET status = 'active', priority = ?, updated_at = NOW() WHERE id = ? AND status NOT IN ('resolved', 'cancelled')");
+        $stmt = $pdo->prepare("UPDATE incidents SET status = 'active', priority = ?, updated_at = NOW() WHERE id = ? AND status <> 'cancelled'");
         $stmt->execute([$priority, $incidentId]);
         return;
     }
 
-    $stmt = $pdo->prepare("UPDATE incidents SET status = 'active', updated_at = NOW() WHERE id = ? AND status NOT IN ('resolved', 'cancelled')");
+    $stmt = $pdo->prepare("UPDATE incidents SET status = 'active', updated_at = NOW() WHERE id = ? AND status <> 'cancelled'");
     $stmt->execute([$incidentId]);
 }
 
