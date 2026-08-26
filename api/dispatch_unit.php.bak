@@ -30,7 +30,6 @@ require_once __DIR__ . '/../includes/vehicle_resource_units.php';
 require_once __DIR__ . '/../includes/emergency_com_status_sync.php';
 require_once __DIR__ . '/../includes/anonymous_tip_status_sync.php';
 require_once __DIR__ . '/../includes/dispatch_attempt_log.php';
-require_once __DIR__ . '/../includes/tftr_status_sync.php';
 $pdo = get_db_connection();
 if (!$pdo) {
     echo json_encode(['ok'=>false,'error'=>'DB error']);
@@ -532,11 +531,6 @@ try {
     $stmtInc->execute([$incident_id]);
 
     $pdo->commit();
-    try {
-        ers_tftr_sync_accident_status($pdo, $incident_id, 'Dispatched');
-    } catch (Throwable $tftrError) {
-        error_log('[dispatch_unit] TFTR sync skipped: ' . $tftrError->getMessage());
-    }
     ers_notify_emergency_com_status($pdo, $incident_id, 'Response units are being dispatched.');
     $anonymousTipStatusSync = ers_notify_anonymous_tip_status_result($pdo, $incident_id, 'dispatched', 'Response units are being dispatched.');
 
