@@ -477,6 +477,81 @@ function row_to_item(array $row): array {
     ];
 }
 
+function resolve_vehicle_item_status(array $item, array $activeIncidentAssignments, array $responderPresenceMap, PDO $pdo): array {
+    $category = strtolower(trim((string)($item['category'] ?? '')));
+    if ($category !== 'vehicles') {
+        return $item;
+    }
+
+    $unitCode = strtoupper(trim((string)($item['code'] ?? '')));
+    if ($unitCode === '') {
+        return $item;
+    }
+
+    $currentStatus = strtolower(trim((string)($item['status'] ?? 'available')));
+
+    // 1. If explicitly set to offline or maintenance by admin, keep offline/maintenance unless active incident assignment exists
+    if ($currentStatus === 'offline' || $currentStatus === 'maintenance') {
+        $incidentAssignment = $activeIncidentAssignments[$unitCode] ?? null;
+        if (is_array($incidentAssignment)) {
+            $item['status'] = 'in_use';
+            $item['assignmentDetails'] = (string)($incidentAssignment['details'] ?? '');
+            $item['assignmentIncidentId'] = (int)($incidentAssignment['incident_id'] ?? 0);
+            $item['assignmentIncidentCode'] = (string)($incidentAssignment['incident_code'] ?? '');
+        }
+        return $item;
+    }
+
+    // 2. Check for active incident assignment first
+    $incidentAssignment = $activeIncidentAssignments[$unitCode] ?? null;
+    if (is_array($incidentAssignment)) {
+        $item['status'] = 'in_use';
+        $item['assignmentDetails'] = (string)($incidentAssignment['details'] ?? '');
+        $item['assignmentIncidentId'] = (int)($incidentAssignment['incident_id'] ?? 0);
+        $item['assignmentIncidentCode'] = (string)($incidentAssignment['incident_code'] ?? '');
+        return $item;
+    }
+
+    // 3. No active incident assignment. Check responder presence map
+    if (isset($responderPresenceMap[$unitCode])) {
+        $presenceStatus = function_exists('ers_vehicle_resource_status_from_responder_state')
+            ? ers_vehicle_resource_status_from_responder_state($responderPresenceMap[$unitCode])
+            : 'available';
+        $item['status'] = $presenceStatus;
+        return $item;
+    }
+
+    // 4. Check units table status in database
+    if (units_table_available($pdo)) {
+        $unitStmt = $pdo->prepare("SELECT status FROM `units` WHERE UPPER(TRIM(identifier)) = ? LIMIT 1");
+        $unitStmt->execute([$unitCode]);
+        $unitRowStatus = strtolower(trim((string)$unitStmt->fetchColumn()));
+        if ($unitRowStatus !== '') {
+            $mappedStatus = match ($unitRowStatus) {
+                'assigned', 'busy', 'enroute', 'en_route', 'on_scene' => 'in_use',
+                'maintenance' => 'maintenance',
+                'unavailable', 'offline' => 'offline',
+                default => 'available',
+            };
+            if ($mappedStatus === 'available') {
+                $item['status'] = 'available';
+                if ($currentStatus === 'in_use') {
+                    ers_update_vehicle_resource_status_by_identifier($pdo, $unitCode, 'available');
+                }
+                return $item;
+            }
+        }
+    }
+
+    // 5. If status in resource_records DB was 'in_use' but NO active assignment exists anywhere, reset to available
+    if ($currentStatus === 'in_use') {
+        $item['status'] = 'available';
+        ers_update_vehicle_resource_status_by_identifier($pdo, $unitCode, 'available');
+    }
+
+    return $item;
+}
+
 function apply_active_assignment_to_item(array $item, array $activeIncidentAssignments): array {
     $unitCode = strtoupper(trim((string)($item['code'] ?? '')));
     $incidentAssignment = strtolower((string)($item['category'] ?? '')) === 'vehicles'
@@ -489,6 +564,25 @@ function apply_active_assignment_to_item(array $item, array $activeIncidentAssig
         $item['assignmentIncidentCode'] = (string)($incidentAssignment['incident_code'] ?? '');
     }
     return $item;
+}
+
+function fetch_item(PDO $pdo, int $id): ?array {
+    $stmt = $pdo->prepare(
+        "SELECT id, code, name, category, status, location, latitude, longitude, driver_name, plate_number, position_title, assignment, quantity, notes, updated_at
+         FROM `" . RESOURCE_RECORDS_TABLE . "`
+         WHERE id = ?
+         LIMIT 1"
+    );
+    $stmt->execute([$id]);
+    $row = $stmt->fetch(PDO::FETCH_ASSOC);
+    if (!$row) {
+        return null;
+    }
+    $activeIncidentAssignments = load_active_unit_incident_assignment_map($pdo);
+    $responderPresenceMap = function_exists('ers_vehicle_resource_responder_presence_map')
+        ? ers_vehicle_resource_responder_presence_map($pdo)
+        : [];
+    return resolve_vehicle_item_status(row_to_item($row), $activeIncidentAssignments, $responderPresenceMap, $pdo);
 }
 
 function archive_row_to_item(array $row): array {
@@ -946,11 +1040,9 @@ try {
                 ? ers_vehicle_resource_responder_presence_map($pdo)
                 : [];
             $items = array_map(
-                static function (array $row) use ($activeIncidentAssignments, $responderPresenceMap): array {
-                    if (function_exists('ers_apply_responder_presence_to_vehicle_resource_row')) {
-                        $row = ers_apply_responder_presence_to_vehicle_resource_row($row, $responderPresenceMap);
-                    }
-                    return apply_active_assignment_to_item(row_to_item($row), $activeIncidentAssignments);
+                static function (array $row) use ($pdo, $activeIncidentAssignments, $responderPresenceMap): array {
+                    $item = row_to_item($row);
+                    return resolve_vehicle_item_status($item, $activeIncidentAssignments, $responderPresenceMap, $pdo);
                 },
                 $rows
             );
