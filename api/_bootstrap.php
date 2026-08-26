@@ -17,7 +17,7 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'OPTIONS') {
     exit;
 }
 
-function ers_external_json(int $status, array $payload): void
+function ers_external_json(int $status, array $payload): never
 {
     http_response_code($status);
     echo json_encode($payload, JSON_UNESCAPED_SLASHES);
