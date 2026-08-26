@@ -1100,7 +1100,10 @@ function initMap() {
     loadDispatchedUnits();
     loadAvailableUnits();
     loadIncidentMarkers();
-    pruneOfflineUnitMarkers().finally(() => initFirebaseLiveTracking());
+    pruneOfflineUnitMarkers().finally(() => {
+    initFirebaseLiveTracking();
+    initFirebaseAlternativeRoutes();
+    });
     addLegendControl();
     updateMapVisibility();
     startLivePolling();
@@ -1205,6 +1208,72 @@ function initFirebaseLiveTracking() {
     }, (error) => {
         console.error('Firebase live_locations read failed:', error);
         showNotification('Live GPS feed disconnected', 'error');
+    });
+}
+
+// ===============================
+// FIREBASE ALTERNATIVE ROUTES (from api/system_API/receive_alternative_route.php)
+// ===============================
+// Keeps track of the currently-drawn alternative-route polylines so we can
+// update or remove them as new data comes in, same pattern as `markers`.
+const altRoutePolylines = {};
+
+function initFirebaseAlternativeRoutes() {
+    rtdb.ref('alternative_routes').on('value', (snapshot) => {
+        const data = snapshot.val() || {};
+        const seenKeys = new Set();
+
+        Object.entries(data).forEach(([rawKey, r]) => {
+            if (!r || !Array.isArray(r.polyline) || r.polyline.length < 2) return;
+
+            const key = resolveLiveUnitMarkerKey(String(rawKey || '').trim());
+            if (!key) return;
+
+            const latlngs = r.polyline
+                .filter(pt => Array.isArray(pt) && pt.length >= 2
+                    && Number.isFinite(parseFloat(pt[0])) && Number.isFinite(parseFloat(pt[1])))
+                .map(pt => [parseFloat(pt[0]), parseFloat(pt[1])]);
+            if (latlngs.length < 2) return;
+
+            seenKeys.add(key);
+
+            const distanceKm = parseFiniteNumber(r.distance_km);
+            const durationMin = parseFiniteNumber(r.duration_min);
+            const reason = r.reason ? String(r.reason).trim() : '';
+            const providedBy = r.provided_by ? String(r.provided_by).trim() : '';
+
+            const popupHtml = `
+                <strong>Alternative route — ${key}</strong><br>
+                ${reason ? `Reason: ${reason}<br>` : ''}
+                ${distanceKm !== null ? `Distance: ${distanceKm.toFixed(2)} km<br>` : ''}
+                ${durationMin !== null ? `ETA: ${durationMin.toFixed(1)} min<br>` : ''}
+                ${providedBy ? `<em>Provided by ${providedBy}</em>` : ''}
+            `;
+
+            if (altRoutePolylines[key]) {
+                altRoutePolylines[key].setLatLngs(latlngs);
+                altRoutePolylines[key].setPopupContent(popupHtml);
+            } else {
+                const polyline = L.polyline(latlngs, {
+                    color: '#f97316',
+                    weight: 5,
+                    opacity: 0.9,
+                    dashArray: '10, 8'
+                }).addTo(window.map);
+                polyline.bindPopup(popupHtml);
+                altRoutePolylines[key] = polyline;
+            }
+        });
+
+        Object.keys(altRoutePolylines).forEach((key) => {
+            if (!seenKeys.has(key)) {
+                try { window.map.removeLayer(altRoutePolylines[key]); } catch (e) {}
+                delete altRoutePolylines[key];
+            }
+        });
+    }, (error) => {
+        console.error('Firebase alternative_routes read failed:', error);
+        showNotification('Alternative route feed disconnected', 'error');
     });
 }
 
