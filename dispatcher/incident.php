@@ -404,20 +404,6 @@ try {
                 return;
             }
 
-            // Contact button
-            if (action === 'call' || btn.querySelector('.fa-phone')) {
-                const phone = getIncidentPhone(incident);
-                if (phone) {
-                    if (confirm(`Call ${phone}?`)) {
-                        window.location.href = 'tel:' + encodeURIComponent(phone);
-                        showNotification(`Initiating call to ${phone}`, 'info');
-                    }
-                } else {
-                    showNotification('Phone number not found', 'error');
-                }
-                return;
-            }
-
             // Resolve button
             if (action === 'resolve') {
                 resolveIncident(incident, btn);
@@ -670,15 +656,6 @@ try {
             return 'pending';
         }
 
-        function getIncidentPhone(incident) {
-            if (!incident) return '';
-            if (incident.caller_phone) return String(incident.caller_phone).trim();
-            if (incident.contact) return String(incident.contact).trim();
-            const text = [incident.description, incident.notes].map(v => String(v || '')).join(' ');
-            const match = text.match(/(\+?\d{1,3}[-.\s]?\d{1,4}[-.\s]?\d{1,4}[-.\s]?\d{1,4})/);
-            return match ? String(match[1]).trim() : '';
-        }
-
         function incidentDisplaySummary(incident) {
             const raw = String(incident && incident.description ? incident.description : '').replace(/\s+/g, ' ').trim();
             if (!raw) return 'No description recorded.';
@@ -766,9 +743,6 @@ try {
             const priorityLabel = capitalize(priority);
             const description = incidentDisplaySummary(i);
             const id = Number(i.id || 0);
-            const phone = getIncidentPhone(i);
-            const phoneDisabled = phone ? '' : ' disabled aria-disabled="true"';
-            const phoneTitle = phone ? `Call ${phone}` : 'No contact number available';
             return `
                 <article class="incident-queue-card priority-${escapeHtml(priority)}" data-incident-row data-id="${id}" data-ref="${escapeHtml(ref)}" role="listitem">
                     <div class="incident-card-header">
@@ -806,10 +780,6 @@ try {
                         <button class="btn-incident-action action-edit" type="button" data-action="edit" title="Edit incident details" aria-label="Edit incident ${escapeHtml(ref || type)}">
                             <i class="fas fa-pen-to-square" aria-hidden="true"></i>
                             <span>Edit</span>
-                        </button>
-                        <button class="btn-incident-action action-call" type="button" data-action="call" title="${escapeHtml(phoneTitle)}" aria-label="Call contact for incident ${escapeHtml(ref || type)}"${phoneDisabled}>
-                            <i class="fas fa-phone" aria-hidden="true"></i>
-                            <span>${phone ? 'Call' : 'No Phone'}</span>
                         </button>
                         <button class="btn-incident-action action-resolve" type="button" data-action="resolve" title="Resolve incident" aria-label="Resolve incident ${escapeHtml(ref || type)}">
                             <i class="fas fa-circle-check" aria-hidden="true"></i>
