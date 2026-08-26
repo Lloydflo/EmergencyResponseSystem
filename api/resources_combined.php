@@ -401,6 +401,9 @@ function ers_resources_load_active_unit_incident_assignment_map(PDO $pdo): array
     $incidentActiveFilter = $incidentsJoin !== ''
         ? "AND (d.incident_id IS NULL OR d.incident_id = 0 OR i.id IS NULL OR LOWER(COALESCE(i.status, '')) NOT IN ('resolved', 'closed', 'cancelled', 'completed'))"
         : "";
+    $userActiveFilter = $usersJoin !== '' && ers_resources_column_exists($pdo, 'users', 'unit_status')
+        ? "AND (u.id IS NULL OR LOWER(COALESCE(u.unit_status, '')) NOT IN ('available', 'ready', 'on_duty'))"
+        : "";
 
     try {
         $stmt = $pdo->query(
@@ -424,6 +427,7 @@ function ers_resources_load_active_unit_incident_assignment_map(PDO $pdo): array
              {$incidentsJoin}
              WHERE LOWER(d.status) IN ('pending','assigned','received','accepted','acknowledged','busy','in_use','enroute','en_route','on_scene')
                {$incidentActiveFilter}
+               {$userActiveFilter}
              ORDER BY {$assignedAtOrder}d.id DESC"
         );
     } catch (Throwable $e) {

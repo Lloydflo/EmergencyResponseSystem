@@ -555,6 +555,17 @@ if (!function_exists('ers_reconcile_all_dispatch_and_unit_statuses')) {
                 ");
             }
 
+            // 1b. Mark dispatch_operator_records completed if assigned responder in users table is available
+            if ($hasOperatorRecords && $hasUsers && ers_vehicle_resource_column_exists($pdo, 'users', 'unit_status')) {
+                $pdo->exec("
+                    UPDATE `dispatch_operator_records` dor
+                    INNER JOIN `users` u ON u.id = dor.assigned_to
+                    SET dor.status = 'completed'
+                    WHERE LOWER(COALESCE(u.unit_status, '')) IN ('available', 'ready', 'on_duty')
+                      AND LOWER(COALESCE(dor.status, '')) IN ('pending','assigned','received','accepted','acknowledged','busy','in_use','enroute','en_route','on_scene')
+                ");
+            }
+
             // 2. Mark dispatches cleared if linked incident is resolved/closed/cancelled
             if ($hasDispatches && $hasIncidents && ers_vehicle_resource_column_exists($pdo, 'dispatches', 'incident_id')) {
                 $clearedAtSql = ers_vehicle_resource_column_exists($pdo, 'dispatches', 'cleared_at') ? ", d.cleared_at = COALESCE(d.cleared_at, CURRENT_TIMESTAMP)" : "";
