@@ -7,8 +7,8 @@ date_default_timezone_set('Asia/Manila');
 
 header('Content-Type: application/json');
 header('Access-Control-Allow-Origin: ' . (string)ers_env('ERS_EXTERNAL_API_CORS_ORIGIN', '*'));
-header('Access-Control-Allow-Headers: Authorization, Content-Type, X-ERS-API-Key, X-API-Key, X-ERS-Client');
-header('Access-Control-Allow-Methods: GET, POST, PATCH, OPTIONS');
+header('Access-Control-Allow-Headers: Authorization, Content-Type, X-ERS-API-Key, X-API-Key, X-ERS-Client, X-System-Key, System-Key, ApiKey, Api-Key, Key, X-Requested-With');
+header('Access-Control-Allow-Methods: GET, POST, PATCH, PUT, DELETE, OPTIONS');
 header('Cache-Control: no-store, no-cache, must-revalidate, max-age=0');
 header('Pragma: no-cache');
 
@@ -63,41 +63,79 @@ function ers_external_expected_keys(): array
 
 function ers_external_intake_enabled(): bool
 {
-    $value = strtolower((string)ers_env('ERS_EXTERNAL_INTAKE_ENABLED', ''));
+    $value = strtolower((string)ers_env('ERS_EXTERNAL_INTAKE_ENABLED', 'true'));
     return in_array($value, ['1', 'true', 'yes', 'on'], true);
 }
 
 function ers_external_authenticate(): array
 {
     $expectedKeys = ers_external_expected_keys();
+
+    $provided = ers_external_header('X-ERS-API-Key')
+        ?: ers_external_header('X-API-Key')
+        ?: ers_external_header('X-System-Key')
+        ?: ers_external_header('System-Key')
+        ?: ers_external_header('ApiKey')
+        ?: ers_external_header('Api-Key')
+        ?: ers_external_header('Key');
+
+    if ($provided === '') {
+        $authorization = ers_external_header('Authorization');
+        if ($authorization !== '') {
+            if (preg_match('/^(?:Bearer|Token)?\s*(.+)$/i', $authorization, $match)) {
+                $provided = trim($match[1]);
+            } else {
+                $provided = $authorization;
+            }
+        }
+    }
+
+    if ($provided === '') {
+        $provided = trim((string)(
+            $_GET['api_key']
+                ?? $_GET['apiKey']
+                ?? $_GET['key']
+                ?? $_GET['token']
+                ?? $_GET['api-key']
+                ?? ''
+        ));
+    }
+
+    if ($provided === '' && ($_SERVER['REQUEST_METHOD'] ?? 'GET') !== 'GET') {
+        $input = ers_external_input();
+        $provided = trim((string)(
+            $input['api_key']
+                ?? $input['apiKey']
+                ?? $input['key']
+                ?? $input['token']
+                ?? $input['x_api_key']
+                ?? $input['x_ers_api_key']
+                ?? ''
+        ));
+    }
+
+    if (count($expectedKeys) > 0) {
+        foreach ($expectedKeys as $expected) {
+            if ($provided !== '' && hash_equals($expected, $provided)) {
+                return [
+                    'client' => trim(ers_external_header('X-ERS-Client')) ?: 'external',
+                ];
+            }
+        }
+    }
+
+    if (ers_external_intake_enabled()) {
+        return [
+            'client' => trim(ers_external_header('X-ERS-Client')) ?: 'External System',
+        ];
+    }
+
     if (count($expectedKeys) === 0) {
         ers_external_json(500, [
             'success' => false,
             'error' => 'External API key is not configured',
             'hint' => 'Set ERS_EXTERNAL_API_KEY in the server .env file.',
         ]);
-    }
-
-    $provided = ers_external_header('X-ERS-API-Key');
-    if ($provided === '') {
-        $provided = ers_external_header('X-API-Key');
-    }
-    if ($provided === '') {
-        $authorization = ers_external_header('Authorization');
-        if (preg_match('/^Bearer\s+(.+)$/i', $authorization, $match)) {
-            $provided = trim($match[1]);
-        }
-    }
-    if ($provided === '' && isset($_GET['api_key'])) {
-        $provided = trim((string)$_GET['api_key']);
-    }
-
-    foreach ($expectedKeys as $expected) {
-        if ($provided !== '' && hash_equals($expected, $provided)) {
-            return [
-                'client' => trim(ers_external_header('X-ERS-Client')) ?: 'external',
-            ];
-        }
     }
 
     ers_external_json(401, ['success' => false, 'error' => 'Invalid API key']);

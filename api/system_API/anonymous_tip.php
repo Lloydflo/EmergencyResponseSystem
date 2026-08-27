@@ -63,11 +63,8 @@ try {
     }
 
     $item = ers_tip_normalize($input, $externalAuth['client'] ?? null);
-    if ($item['tip_id'] === '') {
-        ers_external_json(422, [
-            'success' => false,
-            'error' => 'tip_id is required',
-        ]);
+    if (($item['tip_id'] ?? '') === '') {
+        $item['tip_id'] = 'TIP-' . date('YmdHis') . '-' . strtoupper(bin2hex(random_bytes(3)));
     }
 
     $saved = ers_tip_save($pdo, $item);
@@ -295,14 +292,37 @@ function ers_tip_evidence_data_url(string $bytes, string $extension): string
 
 function ers_tip_normalize(array $input, ?string $externalClient = null): array
 {
+    foreach (['incident', 'data', 'tip', 'item', 'payload', 'body', 'tip_details', 'incident_details', 'report'] as $nestKey) {
+        if (isset($input[$nestKey]) && is_array($input[$nestKey])) {
+            $input = array_merge($input[$nestKey], $input);
+            break;
+        }
+    }
+
     $tipId = ers_external_clean(
         $input['tip_id']
             ?? $input['tipId']
             ?? $input['tipID']
             ?? $input['id']
+            ?? $input['reference_no']
+            ?? $input['referenceNo']
+            ?? $input['incident_code']
+            ?? $input['incidentCode']
+            ?? $input['code']
+            ?? $input['uuid']
+            ?? $input['ref']
+            ?? $input['ticket_id']
+            ?? $input['tip_code']
+            ?? $input['external_incident_id']
+            ?? $input['externalIncidentId']
             ?? '',
         120
     );
+
+    if ($tipId === '') {
+        $tipId = 'TIP-' . date('YmdHis') . '-' . strtoupper(bin2hex(random_bytes(3)));
+    }
+
     $photo = $input['photo_of_evidence']
         ?? $input['photoOfEvidence']
         ?? $input['tip_photo']
@@ -321,7 +341,13 @@ function ers_tip_normalize(array $input, ?string $externalClient = null): array
         ?? $input['evidenceUrl']
         ?? $input['image_url']
         ?? $input['imageUrl']
+        ?? $input['attachment']
+        ?? $input['attachment_url']
+        ?? $input['file']
+        ?? $input['media']
+        ?? $input['media_url']
         ?? '';
+
     if (is_array($photo)) {
         $extractedPhoto = ers_tip_extract_evidence($photo);
         if ($extractedPhoto !== '') {
@@ -343,6 +369,59 @@ function ers_tip_normalize(array $input, ?string $externalClient = null): array
         $rawPayload = '{}';
     }
 
+    $location = ers_external_clean(
+        $input['location']
+            ?? $input['address']
+            ?? $input['location_address']
+            ?? $input['locationAddress']
+            ?? $input['place']
+            ?? $input['site']
+            ?? $input['spot']
+            ?? $input['loc']
+            ?? $input['incident_location']
+            ?? $input['event_location']
+            ?? '',
+        255
+    );
+    if ($location === '') {
+        $location = 'Location not specified';
+    }
+
+    $tipDescription = trim((string)(
+        $input['tip_description']
+            ?? $input['tipDescription']
+            ?? $input['description']
+            ?? $input['details']
+            ?? $input['message']
+            ?? $input['content']
+            ?? $input['text']
+            ?? $input['summary']
+            ?? $input['notes']
+            ?? $input['note']
+            ?? $input['report']
+            ?? $input['info']
+            ?? $input['information']
+            ?? $input['body']
+            ?? $input['tip']
+            ?? $input['subject']
+            ?? $input['title']
+            ?? $input['incident_description']
+            ?? ''
+    ));
+
+    $sourceSystem = ers_external_clean(
+        $input['source_system']
+            ?? $input['sourceSystem']
+            ?? $input['source']
+            ?? $input['system']
+            ?? $input['client']
+            ?? $input['client_id']
+            ?? $input['sender']
+            ?? $externalClient
+            ?? 'Group 6',
+        120
+    );
+
     return [
         'id' => max(0, (int)($input['id'] ?? 0)),
         'tip_id' => $tipId,
@@ -353,25 +432,19 @@ function ers_tip_normalize(array $input, ?string $externalClient = null): array
                 ?? $input['dateTime']
                 ?? $input['datetime']
                 ?? $input['date']
+                ?? $input['time']
+                ?? $input['created_at']
+                ?? $input['timestamp']
+                ?? $input['reported_at']
+                ?? $input['occurred_at']
                 ?? ''
         ),
-        'location' => ers_external_clean($input['location'] ?? $input['address'] ?? '', 255),
-        'tip_description' => trim((string)(
-            $input['tip_description']
-                ?? $input['tipDescription']
-                ?? $input['description']
-                ?? ''
-        )),
+        'location' => $location,
+        'tip_description' => $tipDescription,
         'photo_of_evidence' => trim((string)$photo),
         'status' => $status,
         'outcome' => trim((string)($input['outcome'] ?? '')),
-        'source_system' => ers_external_clean(
-            $input['source_system']
-                ?? $input['sourceSystem']
-                ?? $externalClient
-                ?? 'Group 6',
-            120
-        ),
+        'source_system' => $sourceSystem,
         'raw_payload' => $rawPayload,
     ];
 }

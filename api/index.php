@@ -6,10 +6,15 @@ require_once __DIR__ . '/../includes/activity_log.php';
 require_once __DIR__ . '/../includes/emergency_com_status_sync.php';
 require_once __DIR__ . '/../includes/anonymous_tip_status_sync.php';
 
+$action = strtolower(ers_external_clean($_GET['action'] ?? 'overview', 50));
+if (in_array($action, ['anonymous_tip', 'anonymous_tips', 'tips'], true)) {
+    require __DIR__ . '/system_API/anonymous_tip.php';
+    exit;
+}
+
 $auth = ers_external_authenticate();
 $pdo = ers_external_db();
 $method = $_SERVER['REQUEST_METHOD'] ?? 'GET';
-$action = strtolower(ers_external_clean($_GET['action'] ?? 'overview', 50));
 
 function ers_api_log_incident_created(int $incidentId, string $referenceNo, string $type, string $priority, string $location, string $sourceSystem): void
 {
