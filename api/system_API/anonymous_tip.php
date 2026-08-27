@@ -899,9 +899,8 @@ function ers_tip_find(PDO $pdo, int $id): array
          LEFT JOIN external_incident_links eil
             ON (eil.source_system IN ('Anonymous Tip Inbox', 'Group 6', 'anonymous_tip', 'Responder App Coordination') OR eil.source_system COLLATE utf8mb4_unicode_ci = at.source_system COLLATE utf8mb4_unicode_ci)
            AND (
-                eil.external_incident_id COLLATE utf8mb4_unicode_ci = at.tip_id COLLATE utf8mb4_unicode_ci
+                (at.tip_id IS NOT NULL AND at.tip_id <> '' AND eil.external_incident_id COLLATE utf8mb4_unicode_ci = at.tip_id COLLATE utf8mb4_unicode_ci)
              OR eil.external_incident_id COLLATE utf8mb4_unicode_ci = CONCAT('anonymous-tip-', at.id) COLLATE utf8mb4_unicode_ci
-             OR eil.external_incident_id COLLATE utf8mb4_unicode_ci = CAST(at.id AS CHAR) COLLATE utf8mb4_unicode_ci
            )
          LEFT JOIN incidents i ON i.id = eil.incident_id
          WHERE at.id = ?
@@ -938,9 +937,8 @@ function ers_tip_status_lookup(PDO $pdo, string $tipId): array
          LEFT JOIN external_incident_links eil
             ON (eil.source_system IN ('Anonymous Tip Inbox', 'Group 6', 'anonymous_tip', 'Responder App Coordination') OR eil.source_system COLLATE utf8mb4_unicode_ci = at.source_system COLLATE utf8mb4_unicode_ci)
            AND (
-                eil.external_incident_id COLLATE utf8mb4_unicode_ci = at.tip_id COLLATE utf8mb4_unicode_ci
+                (at.tip_id IS NOT NULL AND at.tip_id <> '' AND eil.external_incident_id COLLATE utf8mb4_unicode_ci = at.tip_id COLLATE utf8mb4_unicode_ci)
              OR eil.external_incident_id COLLATE utf8mb4_unicode_ci = CONCAT('anonymous-tip-', at.id) COLLATE utf8mb4_unicode_ci
-             OR eil.external_incident_id COLLATE utf8mb4_unicode_ci = CAST(at.id AS CHAR) COLLATE utf8mb4_unicode_ci
            )
          LEFT JOIN incidents i ON i.id = eil.incident_id
          WHERE at.tip_id = ? OR at.id = ?
@@ -1077,9 +1075,8 @@ function ers_tip_list(PDO $pdo): array
             LEFT JOIN external_incident_links eil
                ON (eil.source_system IN ('Anonymous Tip Inbox', 'Group 6', 'anonymous_tip', 'Responder App Coordination') OR eil.source_system COLLATE utf8mb4_unicode_ci = at.source_system COLLATE utf8mb4_unicode_ci)
               AND (
-                   eil.external_incident_id COLLATE utf8mb4_unicode_ci = at.tip_id COLLATE utf8mb4_unicode_ci
+                   (at.tip_id IS NOT NULL AND at.tip_id <> '' AND eil.external_incident_id COLLATE utf8mb4_unicode_ci = at.tip_id COLLATE utf8mb4_unicode_ci)
                 OR eil.external_incident_id COLLATE utf8mb4_unicode_ci = CONCAT('anonymous-tip-', at.id) COLLATE utf8mb4_unicode_ci
-                OR eil.external_incident_id COLLATE utf8mb4_unicode_ci = CAST(at.id AS CHAR) COLLATE utf8mb4_unicode_ci
               )
             LEFT JOIN incidents i ON i.id = eil.incident_id";
     if ($where !== []) {
