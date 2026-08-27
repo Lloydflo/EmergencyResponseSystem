@@ -406,8 +406,21 @@ function ers_tip_normalize(array $input, ?string $externalClient = null): array
             ?? $input['subject']
             ?? $input['title']
             ?? $input['incident_description']
+            ?? $input['comment']
+            ?? $input['comments']
+            ?? $input['remark']
+            ?? $input['remarks']
+            ?? $input['reason']
+            ?? $input['issue']
+            ?? $input['statement']
+            ?? $input['caption']
+            ?? $input['type']
+            ?? $input['incident_type']
             ?? ''
     ));
+    if ($tipDescription === '') {
+        $tipDescription = 'Anonymous tip report received from external system.';
+    }
 
     $sourceSystem = ers_external_clean(
         $input['source_system']
@@ -535,6 +548,7 @@ function ers_tip_save(PDO $pdo, array $item): array
         $item['status'],
         $item['outcome'],
         $item['source_system'],
+        $phNow,
         $phNow,
         $item['raw_payload'],
     ]);

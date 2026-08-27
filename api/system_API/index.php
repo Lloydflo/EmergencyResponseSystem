@@ -5,12 +5,25 @@ require_once __DIR__ . '/../_bootstrap.php';
 
 function ers_system_api_action(): string
 {
-    $action = $_GET['action'] ?? $_GET['endpoint'] ?? $_GET['module'] ?? '';
+    $action = $_GET['action'] ?? $_GET['endpoint'] ?? $_GET['module'] ?? $_POST['action'] ?? $_POST['endpoint'] ?? '';
 
     if ($action === '') {
         $pathInfo = trim((string)($_SERVER['PATH_INFO'] ?? ''), '/');
         if ($pathInfo !== '') {
             $action = explode('/', $pathInfo, 2)[0];
+        }
+    }
+
+    if ($action === '') {
+        $input = ers_external_input();
+        $action = (string)($input['action'] ?? $input['endpoint'] ?? $input['module'] ?? '');
+        if ($action === '' && (
+            isset($input['tip_description']) || isset($input['tipDescription']) ||
+            isset($input['tip_id']) || isset($input['tipId']) ||
+            isset($input['photo_of_evidence']) || isset($input['photoOfEvidence']) ||
+            isset($input['anonymous_tip']) || isset($input['tip'])
+        )) {
+            $action = 'anonymous_tip';
         }
     }
 

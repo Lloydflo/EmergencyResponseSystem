@@ -158,47 +158,42 @@ function ers_external_input(): array
         return $cached;
     }
 
-    if (!empty($_POST)) {
-        $cached = $_POST;
-        return $cached;
-    }
-
+    $input = [];
     $raw = file_get_contents('php://input');
-    if (!is_string($raw) || trim($raw) === '') {
-        $cached = [];
-        return $cached;
-    }
+    if (is_string($raw) && trim($raw) !== '') {
+        $trimmed = trim($raw);
+        $contentType = strtolower((string)($_SERVER['CONTENT_TYPE'] ?? ''));
+        $looksJson = strpos($contentType, 'application/json') !== false
+            || strpos($trimmed, '{') === 0
+            || strpos($trimmed, '[') === 0;
 
-    $trimmed = trim($raw);
-    $contentType = strtolower((string)($_SERVER['CONTENT_TYPE'] ?? ''));
-    $looksJson = strpos($contentType, 'application/json') !== false
-        || strpos($trimmed, '{') === 0
-        || strpos($trimmed, '[') === 0;
-
-    if ($looksJson) {
-        $decoded = json_decode($trimmed, true);
-        if (!is_array($decoded)) {
-            ers_external_json(400, ['success' => false, 'error' => 'Invalid JSON body']);
+        if ($looksJson) {
+            $decoded = json_decode($trimmed, true);
+            if (is_array($decoded)) {
+                $input = $decoded;
+            }
+        } elseif (strpos($contentType, 'application/x-www-form-urlencoded') !== false || strpos($trimmed, '=') !== false) {
+            parse_str($trimmed, $form);
+            if (is_array($form)) {
+                $input = $form;
+            }
         }
-
-        $cached = $decoded;
-        return $cached;
     }
 
-    $form = [];
-    if (strpos($contentType, 'application/x-www-form-urlencoded') !== false || strpos($trimmed, '=') !== false) {
-        parse_str($trimmed, $form);
-    }
-    if (is_array($form) && $form !== []) {
-        $cached = $form;
-        return $cached;
+    if (!empty($_POST) && is_array($_POST)) {
+        $input = array_merge($input, $_POST);
     }
 
-    if (!is_array(json_decode($trimmed, true))) {
-        ers_external_json(400, ['success' => false, 'error' => 'Invalid JSON body']);
+    foreach (['payload', 'data', 'body', 'item', 'tip', 'report', 'payload_json', 'tip_details', 'incident_details'] as $key) {
+        if (isset($input[$key]) && is_string($input[$key]) && trim($input[$key]) !== '') {
+            $subDecoded = json_decode(trim($input[$key]), true);
+            if (is_array($subDecoded)) {
+                $input = array_merge($input, $subDecoded);
+            }
+        }
     }
 
-    $cached = [];
+    $cached = $input;
     return $cached;
 }
 

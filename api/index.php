@@ -6,7 +6,22 @@ require_once __DIR__ . '/../includes/activity_log.php';
 require_once __DIR__ . '/../includes/emergency_com_status_sync.php';
 require_once __DIR__ . '/../includes/anonymous_tip_status_sync.php';
 
-$action = strtolower(ers_external_clean($_GET['action'] ?? 'overview', 50));
+$action = strtolower(ers_external_clean($_GET['action'] ?? $_POST['action'] ?? '', 50));
+if ($action === '') {
+    $input = ers_external_input();
+    $action = strtolower(ers_external_clean($input['action'] ?? $input['endpoint'] ?? '', 50));
+    if ($action === '' && (
+        isset($input['tip_description']) || isset($input['tipDescription']) ||
+        isset($input['tip_id']) || isset($input['tipId']) ||
+        isset($input['photo_of_evidence']) || isset($input['photoOfEvidence']) ||
+        isset($input['anonymous_tip']) || isset($input['tip'])
+    )) {
+        $action = 'anonymous_tip';
+    }
+}
+if ($action === '') {
+    $action = 'overview';
+}
 if (in_array($action, ['anonymous_tip', 'anonymous_tips', 'tips'], true)) {
     require __DIR__ . '/system_API/anonymous_tip.php';
     exit;
