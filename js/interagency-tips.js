@@ -636,10 +636,7 @@
                 : '<div class="ia-tip-detail-value">Evidence saved but no image URL was provided.</div>')
             : '<div class="ia-tip-detail-value">None</div>';
         const incidentLink = convertedReference || convertedId > 0
-            ? `<div class="ia-tip-link-group" style="display:flex;flex-wrap:wrap;gap:0.4rem;align-items:center;">
-                 <a class="ia-tip-secondary" href="${escapeHtml(dispatchUrl(convertedReference, convertedId))}"><i class="fas fa-truck-fast"></i> Dispatch Queue</a>
-                 <a class="ia-tip-secondary" href="${escapeHtml(incidentUrl(convertedReference))}"><i class="fas fa-list-check"></i> ${escapeHtml(convertedReference || ('Incident #' + convertedId))}</a>
-               </div>`
+            ? `<div class="ia-tip-detail-value">${escapeHtml(convertedReference || ('Incident #' + convertedId))}</div>`
             : '<div class="ia-tip-detail-value">Not converted</div>';
         const actionDisabled = (status) => state.action !== '' || itemStatus === status;
         const actionButtonText = (status, label) => state.action === status
