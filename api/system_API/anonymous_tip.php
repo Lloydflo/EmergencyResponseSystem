@@ -883,11 +883,11 @@ function ers_tip_find(PDO $pdo, int $id): array
                 i.id AS converted_incident_id, i.reference_no AS converted_reference_no, i.status AS converted_incident_status
          FROM anonymous_tips at
          LEFT JOIN external_incident_links eil
-            ON (eil.source_system IN ('Anonymous Tip Inbox', 'Group 6', 'anonymous_tip', 'Responder App Coordination') OR eil.source_system = at.source_system)
+            ON (eil.source_system IN ('Anonymous Tip Inbox', 'Group 6', 'anonymous_tip', 'Responder App Coordination') OR eil.source_system COLLATE utf8mb4_unicode_ci = at.source_system COLLATE utf8mb4_unicode_ci)
            AND (
-                eil.external_incident_id = at.tip_id
-             OR eil.external_incident_id = CONCAT('anonymous-tip-', at.id)
-             OR eil.external_incident_id = CAST(at.id AS CHAR)
+                eil.external_incident_id COLLATE utf8mb4_unicode_ci = at.tip_id COLLATE utf8mb4_unicode_ci
+             OR eil.external_incident_id COLLATE utf8mb4_unicode_ci = CONCAT('anonymous-tip-', at.id) COLLATE utf8mb4_unicode_ci
+             OR eil.external_incident_id COLLATE utf8mb4_unicode_ci = CAST(at.id AS CHAR) COLLATE utf8mb4_unicode_ci
            )
          LEFT JOIN incidents i ON i.id = eil.incident_id
          WHERE at.id = ?
@@ -922,11 +922,11 @@ function ers_tip_status_lookup(PDO $pdo, string $tipId): array
                 {$incidentCompletedExpr} AS incident_completed_at
          FROM anonymous_tips at
          LEFT JOIN external_incident_links eil
-            ON (eil.source_system IN ('Anonymous Tip Inbox', 'Group 6', 'anonymous_tip', 'Responder App Coordination') OR eil.source_system = at.source_system)
+            ON (eil.source_system IN ('Anonymous Tip Inbox', 'Group 6', 'anonymous_tip', 'Responder App Coordination') OR eil.source_system COLLATE utf8mb4_unicode_ci = at.source_system COLLATE utf8mb4_unicode_ci)
            AND (
-                eil.external_incident_id = at.tip_id
-             OR eil.external_incident_id = CONCAT('anonymous-tip-', at.id)
-             OR eil.external_incident_id = CAST(at.id AS CHAR)
+                eil.external_incident_id COLLATE utf8mb4_unicode_ci = at.tip_id COLLATE utf8mb4_unicode_ci
+             OR eil.external_incident_id COLLATE utf8mb4_unicode_ci = CONCAT('anonymous-tip-', at.id) COLLATE utf8mb4_unicode_ci
+             OR eil.external_incident_id COLLATE utf8mb4_unicode_ci = CAST(at.id AS CHAR) COLLATE utf8mb4_unicode_ci
            )
          LEFT JOIN incidents i ON i.id = eil.incident_id
          WHERE at.tip_id = ? OR at.id = ?
@@ -1059,11 +1059,11 @@ function ers_tip_list(PDO $pdo): array
                    i.id AS converted_incident_id, i.reference_no AS converted_reference_no, i.status AS converted_incident_status
             FROM anonymous_tips at
             LEFT JOIN external_incident_links eil
-               ON (eil.source_system IN ('Anonymous Tip Inbox', 'Group 6', 'anonymous_tip', 'Responder App Coordination') OR eil.source_system = at.source_system)
+               ON (eil.source_system IN ('Anonymous Tip Inbox', 'Group 6', 'anonymous_tip', 'Responder App Coordination') OR eil.source_system COLLATE utf8mb4_unicode_ci = at.source_system COLLATE utf8mb4_unicode_ci)
               AND (
-                   eil.external_incident_id = at.tip_id
-                OR eil.external_incident_id = CONCAT('anonymous-tip-', at.id)
-                OR eil.external_incident_id = CAST(at.id AS CHAR)
+                   eil.external_incident_id COLLATE utf8mb4_unicode_ci = at.tip_id COLLATE utf8mb4_unicode_ci
+                OR eil.external_incident_id COLLATE utf8mb4_unicode_ci = CONCAT('anonymous-tip-', at.id) COLLATE utf8mb4_unicode_ci
+                OR eil.external_incident_id COLLATE utf8mb4_unicode_ci = CAST(at.id AS CHAR) COLLATE utf8mb4_unicode_ci
               )
             LEFT JOIN incidents i ON i.id = eil.incident_id";
     if ($where !== []) {
@@ -1719,13 +1719,19 @@ function ers_tip_ensure_tables(PDO $pdo): void
     }
     $pdo->exec("ALTER TABLE `anonymous_tips` MODIFY COLUMN `photo_of_evidence` LONGTEXT DEFAULT NULL");
     $pdo->exec("ALTER TABLE `anonymous_tips` MODIFY COLUMN `status` VARCHAR(50) NOT NULL DEFAULT 'new'");
+    try {
+        $pdo->exec("ALTER TABLE `anonymous_tips` CONVERT TO CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci");
+    } catch (Throwable $e) {}
 
     try {
         $pdo->exec(
             "UPDATE anonymous_tips at
              LEFT JOIN external_incident_links eil
                 ON eil.source_system = 'Anonymous Tip Inbox'
-               AND (eil.external_incident_id = at.tip_id OR eil.external_incident_id = CONCAT('anonymous-tip-', at.id))
+               AND (
+                    eil.external_incident_id COLLATE utf8mb4_unicode_ci = at.tip_id COLLATE utf8mb4_unicode_ci
+                 OR eil.external_incident_id COLLATE utf8mb4_unicode_ci = CONCAT('anonymous-tip-', at.id) COLLATE utf8mb4_unicode_ci
+               )
              SET at.status = 'new'
              WHERE eil.incident_id IS NULL AND (at.status IS NULL OR at.status = '' OR at.status IN ('resolved', 'completed', 'complete', 'closed'))"
         );

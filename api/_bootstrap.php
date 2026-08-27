@@ -435,6 +435,12 @@ function ers_external_ensure_link_table(PDO $pdo): void
             KEY `idx_external_incident_links_incident` (`incident_id`)
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci"
     );
+
+    try {
+        $pdo->exec("ALTER TABLE `external_incident_links` CONVERT TO CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci");
+    } catch (Throwable $e) {
+        // ignore if already converted
+    }
 }
 
 function ers_external_link_incident(PDO $pdo, string $sourceSystem, string $externalIncidentId, int $incidentId, array $payload): void
