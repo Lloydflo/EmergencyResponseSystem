@@ -1827,7 +1827,7 @@ function ers_tip_sync_converted_incidents(PDO $pdo): void
         $stmt = $pdo->query(
             "SELECT at.id, at.tip_id, at.tip_datetime, at.location, at.tip_description, at.status, at.outcome, at.raw_payload
              FROM anonymous_tips at
-             WHERE at.status IN ('converted_to_incident', 'pending', 'dispatched', 'new', 'reviewing', 'verified')"
+             WHERE at.status IN ('converted_to_incident', 'pending')"
         );
         $convertedTips = $stmt ? ($stmt->fetchAll(PDO::FETCH_ASSOC) ?: []) : [];
 
@@ -1866,7 +1866,7 @@ function ers_tip_sync_converted_incidents(PDO $pdo): void
             $incStatus = strtolower(trim((string)($incident['status'] ?? '')));
 
             // Mirror exact incident status (pending -> dispatched -> resolved) into anonymous_tips table in database
-            if (in_array($incStatus, ['resolved', 'completed', 'complete', 'closed', 'cleared'], true)) {
+            if (in_array($incStatus, ['resolved', 'completed', 'complete', 'closed'], true)) {
                 $pdo->prepare("UPDATE anonymous_tips SET status = 'resolved', updated_at = NOW() WHERE id = ? AND status <> 'resolved'")
                     ->execute([$rawId]);
                 continue;
