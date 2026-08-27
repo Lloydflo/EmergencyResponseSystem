@@ -406,6 +406,20 @@ function report_page_metric($value, string $suffix = '', int $decimals = 1): str
                     <canvas id="resourcesChart" class="chart-canvas"></canvas>
                 </div>
             </div>
+
+            <!-- Total Incidents by Day Chart -->
+            <div class="chart-container" data-report-section="summary incident trend">
+                <div class="chart-header">
+                    <h3 class="chart-title">Total incidents by day</h3>
+                    <div class="chart-controls">
+                        <button class="btn-report" onclick="refreshTotalIncidentsChart()"><i class="fas fa-sync"></i> Refresh</button>
+                        <button class="btn-report" onclick="exportChart('totalIncidentsChart')"><i class="fas fa-download"></i> Export</button>
+                    </div>
+                </div>
+                <div style="position: relative; width: 100%; height: 320px;">
+                    <canvas id="totalIncidentsChart" class="chart-canvas"></canvas>
+                </div>
+            </div>
             </div>
 
             <!-- Dispatch Breakdown Table -->
