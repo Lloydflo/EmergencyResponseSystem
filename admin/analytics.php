@@ -143,7 +143,7 @@ function pa_json($value): string
                 </article>
             </section>
 
-            <section class="pa-grid" aria-label="Risk distribution and workflow">
+            <section class="pa-grid pa-grid-secondary" aria-label="Risk distribution">
                 <article class="pa-panel">
                     <div class="pa-panel-head">
                         <div>
@@ -154,6 +154,18 @@ function pa_json($value): string
                     <div class="pa-type-list" id="paTypeList"></div>
                 </article>
 
+                <article class="pa-panel">
+                    <div class="pa-panel-head">
+                        <div>
+                            <p class="pa-panel-kicker">Priority mix</p>
+                            <h2>Recent Priority Distribution</h2>
+                        </div>
+                    </div>
+                    <div class="pa-chart-wrap compact"><canvas id="paPriorityChart"></canvas></div>
+                </article>
+            </section>
+
+            <section class="pa-grid" aria-label="System process">
                 <article class="pa-panel">
                     <div class="pa-panel-head">
                         <div>
@@ -247,7 +259,7 @@ function pa_json($value): string
             if (!list) return;
             const rows = (Array.isArray(items) ? items : []).filter((row) => {
                 const type = String(row.type || '').toLowerCase();
-                return type === 'medical' || type === 'fire';
+                return type === 'medical' || type === 'fire' || type === 'flood';
             });
             list.innerHTML = rows.map((row) => `
                 <div class="pa-type-row">
@@ -309,6 +321,30 @@ function pa_json($value): string
                         ]
                     },
                     options: paChartOptions()
+                });
+            }
+
+            const priorityCanvas = document.getElementById('paPriorityChart');
+            if (priorityCanvas) {
+                if (predictiveCharts.priority) predictiveCharts.priority.destroy();
+                predictiveCharts.priority = new Chart(priorityCanvas, {
+                    type: 'doughnut',
+                    data: {
+                        labels: Array.isArray(charts.priority_labels) ? charts.priority_labels : ['High', 'Medium', 'Low'],
+                        datasets: [{
+                            data: Array.isArray(charts.priority_values) ? charts.priority_values : [0, 0, 0],
+                            backgroundColor: ['#ef4444', '#f59e0b', '#22c55e'],
+                            borderWidth: 0
+                        }]
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        plugins: {
+                            legend: { position: 'bottom' }
+                        },
+                        cutout: '62%'
+                    }
                 });
             }
         }

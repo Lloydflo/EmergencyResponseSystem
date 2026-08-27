@@ -73,7 +73,10 @@ if (!function_exists('ers_predictive_normalize_type')) {
         if ($type === 'accident') {
             return 'traffic';
         }
-        return in_array($type, ['medical', 'fire', 'police', 'traffic'], true) ? $type : 'other';
+        if (str_contains($type, 'flood')) {
+            return 'flood';
+        }
+        return in_array($type, ['medical', 'fire', 'flood', 'police', 'traffic'], true) ? $type : 'other';
     }
 }
 
@@ -83,6 +86,7 @@ if (!function_exists('ers_predictive_type_label')) {
         $map = [
             'medical' => 'Medical',
             'fire' => 'Fire',
+            'flood' => 'Flood Emergency',
             'police' => 'Police',
             'traffic' => 'Traffic',
             'other' => 'Other',
@@ -187,6 +191,7 @@ if (!function_exists('ers_predictive_default_snapshot')) {
             'type_forecast' => [
                 ['type' => 'medical', 'label' => 'Medical', 'historical' => 0, 'forecast' => 0, 'share' => 0.0, 'trend' => 'Stable', 'risk' => 'Low'],
                 ['type' => 'fire', 'label' => 'Fire', 'historical' => 0, 'forecast' => 0, 'share' => 0.0, 'trend' => 'Stable', 'risk' => 'Low'],
+                ['type' => 'flood', 'label' => 'Flood Emergency', 'historical' => 0, 'forecast' => 0, 'share' => 0.0, 'trend' => 'Stable', 'risk' => 'Low'],
             ],
             'priority_mix' => [
                 'high' => 0,
@@ -296,7 +301,7 @@ if (!function_exists('ers_predictive_build_snapshot')) {
         $deltaPercent = $recent7Avg > 0 ? round((($forecastAvg - $recent7Avg) / $recent7Avg) * 100, 1) : 0.0;
         $deltaLabel = ers_predictive_trend_label($deltaPercent);
 
-        $types = ['medical', 'fire'];
+        $types = ['medical', 'fire', 'flood'];
         $typeCurrent = array_fill_keys($types, 0);
         $typePrevious = array_fill_keys($types, 0);
 
