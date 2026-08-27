@@ -1047,7 +1047,7 @@ function ers_tip_dispatch_summary(PDO $pdo, int $incidentId, string $referenceNo
 
 function ers_tip_list(PDO $pdo): array
 {
-    $limit = max(1, min(100, (int)($_GET['limit'] ?? 60)));
+    $limit = max(1, min(200, (int)($_GET['limit'] ?? 100)));
     $status = strtolower(ers_external_clean($_GET['status'] ?? '', 40));
     $search = ers_external_clean($_GET['search'] ?? '', 120);
 
@@ -1070,7 +1070,9 @@ function ers_tip_list(PDO $pdo): array
 
     $sql = "SELECT at.id, at.tip_id, at.tip_datetime, at.location, at.tip_description, at.photo_of_evidence,
                    at.status, at.outcome, at.source_system, at.received_at, at.updated_at, at.raw_payload,
-                   i.id AS converted_incident_id, i.reference_no AS converted_reference_no, i.status AS converted_incident_status
+                   MAX(i.id) AS converted_incident_id,
+                   MAX(i.reference_no) AS converted_reference_no,
+                   MAX(i.status) AS converted_incident_status
             FROM anonymous_tips at
             LEFT JOIN external_incident_links eil
                ON (eil.source_system IN ('Anonymous Tip Inbox', 'Group 6', 'anonymous_tip', 'Responder App Coordination') OR eil.source_system COLLATE utf8mb4_unicode_ci = at.source_system COLLATE utf8mb4_unicode_ci)
@@ -1083,7 +1085,7 @@ function ers_tip_list(PDO $pdo): array
     if ($where !== []) {
         $sql .= ' WHERE ' . implode(' AND ', $where);
     }
-    $sql .= ' ORDER BY COALESCE(at.received_at, at.tip_datetime, at.updated_at) DESC LIMIT ' . $limit;
+    $sql .= ' GROUP BY at.id ORDER BY at.id DESC, COALESCE(at.received_at, at.updated_at, at.tip_datetime) DESC LIMIT ' . $limit;
 
     $stmt = $pdo->prepare($sql);
     $stmt->execute($params);
