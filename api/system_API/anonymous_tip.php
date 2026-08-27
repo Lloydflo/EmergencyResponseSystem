@@ -975,9 +975,15 @@ function ers_tip_status_lookup(PDO $pdo, string $tipId): array
     $hasDispatch = $dispatch['unit_count'] > 0;
     $completed = $incidentId > 0 && ($hasDispatch && (in_array($incidentStatus, $completedStatuses, true) || trim((string)($row['incident_completed_at'] ?? '')) !== ''));
     $rawTipStatus = strtolower(trim((string)($row['tip_status'] ?? '')));
-    $displayStatus = $completed
-        ? 'completed'
-        : ($dispatched ? 'dispatched' : (in_array($rawTipStatus, ['reviewing', 'verified', 'dismissed', 'pending'], true) ? $rawTipStatus : 'new'));
+    if ($rawTipStatus === 'new' || $rawTipStatus === '') {
+        $displayStatus = 'new';
+        $dispatched = false;
+        $completed = false;
+    } else {
+        $displayStatus = $completed
+            ? 'completed'
+            : ($dispatched ? 'dispatched' : (in_array($rawTipStatus, ['reviewing', 'verified', 'dismissed', 'pending'], true) ? $rawTipStatus : 'new'));
+    }
 
     return [
         'success' => true,
