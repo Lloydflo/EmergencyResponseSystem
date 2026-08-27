@@ -470,6 +470,13 @@
             return;
         }
 
+        const itemStatus = statusOf(item);
+        if (itemStatus === 'resolved' || itemStatus === 'completed') {
+            state.error = 'This anonymous tip has already been resolved and closed. Re-dispatching is disabled.';
+            render();
+            return;
+        }
+
         const form = root.querySelector('[data-tip-status-form]');
         state.action = 'converted_to_incident';
         state.error = '';
@@ -560,7 +567,7 @@
             return '<div class="ia-tip-empty">No anonymous tips found.</div>';
         }
 
-        return items.map((item) => {
+        const rowsHtml = items.map((item) => {
             const displayDate = tipDisplayDate(item);
             const evidencePhoto = evidenceInfo(item.photo_of_evidence);
             const itemStatus = statusOf(item);
@@ -596,6 +603,10 @@
                 </article>
             `;
         }).join('');
+
+        const footerHtml = `<div class="ia-tip-list-counter" style="padding:10px 16px; font-size:0.8rem; font-weight:700; opacity:0.8; border-top:1px solid var(--ia-border, #dfe6ee); display:flex; justify-content:space-between; align-items:center; background:var(--ia-soft, #f8fafc);"><span>Showing ${items.length} of ${state.items.length} tips</span><span><i class="fas fa-arrows-up-down"></i> Scroll to view more</span></div>`;
+
+        return rowsHtml + footerHtml;
     };
 
     const renderDetail = () => {
@@ -670,13 +681,13 @@
                     </div>
                 </div>
                 <div class="ia-tip-quick-actions" aria-label="Tip quick actions">
-                    <button type="button" class="ia-tip-secondary" data-tip-quick-status="reviewing" ${actionDisabled('reviewing') ? 'disabled' : ''}>${actionButtonText('reviewing', '<i class="fas fa-magnifying-glass"></i> Review')}</button>
-                    <button type="button" class="ia-tip-secondary" data-tip-quick-status="verified" ${actionDisabled('verified') ? 'disabled' : ''}>${actionButtonText('verified', '<i class="fas fa-check-circle"></i> Verify')}</button>
-                    <button type="button" class="ia-tip-secondary" data-tip-convert ${state.action !== '' ? 'disabled' : ''}>${actionButtonText('converted_to_incident', `<i class="fas ${isConverted ? 'fa-arrows-rotate' : 'fa-file-circle-plus'}"></i> ${isConverted ? 'Re-Send to Queue' : 'Convert to Incident'}`)}</button>
+                    <button type="button" class="ia-tip-secondary" data-tip-quick-status="reviewing" ${actionDisabled('reviewing') || itemStatus === 'resolved' || itemStatus === 'completed' ? 'disabled' : ''}>${actionButtonText('reviewing', '<i class="fas fa-magnifying-glass"></i> Review')}</button>
+                    <button type="button" class="ia-tip-secondary" data-tip-quick-status="verified" ${actionDisabled('verified') || itemStatus === 'resolved' || itemStatus === 'completed' ? 'disabled' : ''}>${actionButtonText('verified', '<i class="fas fa-check-circle"></i> Verify')}</button>
+                    <button type="button" class="ia-tip-secondary" data-tip-convert ${state.action !== '' || itemStatus === 'resolved' || itemStatus === 'completed' ? 'disabled' : ''}>${actionButtonText('converted_to_incident', `<i class="fas ${itemStatus === 'resolved' || itemStatus === 'completed' ? 'fa-circle-check' : (isConverted ? 'fa-arrows-rotate' : 'fa-file-circle-plus')}"></i> ${itemStatus === 'resolved' || itemStatus === 'completed' ? 'Incident Resolved' : (isConverted ? 'Re-Send to Queue' : 'Convert to Incident')}`)}</button>
                     ${isConverted ? `<a class="ia-tip-secondary" href="${escapeHtml(dispatchUrl(convertedReference, convertedId))}"><i class="fas fa-truck-fast"></i> Open in Dispatch</a>` : ''}
-                    <button type="button" class="ia-tip-secondary" data-tip-quick-status="dismissed" ${actionDisabled('dismissed') ? 'disabled' : ''}>${actionButtonText('dismissed', '<i class="fas fa-ban"></i> Dismiss')}</button>
+                    <button type="button" class="ia-tip-secondary" data-tip-quick-status="dismissed" ${actionDisabled('dismissed') || itemStatus === 'resolved' || itemStatus === 'completed' ? 'disabled' : ''}>${actionButtonText('dismissed', '<i class="fas fa-ban"></i> Dismiss')}</button>
                 </div>
-                ${isConverted ? '<div class="ia-tip-lock-note">This tip is already linked to an incident, so review buttons are locked.</div>' : ''}
+                ${itemStatus === 'resolved' || itemStatus === 'completed' ? '<div class="ia-tip-lock-note">This tip incident has been resolved and closed. Re-dispatching is disabled.</div>' : (isConverted ? '<div class="ia-tip-lock-note">This tip is already linked to an incident, so review buttons are locked.</div>' : '')}
                 <form data-tip-status-form>
                     <div class="ia-tip-detail-grid ia-tip-detail-form-grid">
                         <div class="ia-tip-detail-item">

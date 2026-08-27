@@ -661,6 +661,14 @@ function ers_tip_convert_to_incident(PDO $pdo, array $input): array
     $intakeSql = $hasIntakeCol ? ", intake_source = 'tip'" : '';
 
     if ($existing !== null) {
+        $incStatus = strtolower(trim((string)($existing['status'] ?? '')));
+        if (in_array($incStatus, ['resolved', 'completed', 'complete', 'closed'], true)) {
+            ers_external_json(422, [
+                'success' => false,
+                'error' => 'This anonymous tip has already been resolved and closed. Re-dispatching is disabled.',
+            ]);
+        }
+
         $update = $pdo->prepare(
             "UPDATE incidents
              SET type = ?,
