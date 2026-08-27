@@ -147,10 +147,10 @@ function ers_anonymous_tip_status_source_row(PDO $pdo, int $incidentId): ?array
                 ON at.tip_id = l.external_incident_id
                 OR l.external_incident_id = CONCAT('anonymous-tip-', at.id)
                 OR l.external_incident_id = CAST(at.id AS CHAR)
-                OR (at.tip_id IS NOT NULL AND at.tip_id <> '' AND l.external_incident_id LIKE CONCAT('%', at.tip_id, '%'))
+                OR (at.tip_id IS NOT NULL AND at.tip_id <> '' AND (l.external_incident_id LIKE CONCAT('%', at.tip_id, '%') OR at.tip_id LIKE CONCAT('%', l.external_incident_id, '%')))
             WHERE l.incident_id = ?
               AND (
-                l.source_system IN ('Anonymous Tip Inbox', 'Responder App Coordination', 'Group 6', 'anonymous_tip')
+                l.source_system IN ('Anonymous Tip Inbox', 'Responder App Coordination', 'Group 6', 'anonymous_tip', 'alertaraqc')
                 OR l.external_incident_id LIKE 'TIP-%'
                 OR l.external_incident_id LIKE 'anonymous-tip-%'
                 OR at.id IS NOT NULL

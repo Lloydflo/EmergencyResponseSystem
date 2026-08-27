@@ -661,6 +661,14 @@ function ers_tip_convert_to_incident(PDO $pdo, array $input): array
     $intakeSql = $hasIntakeCol ? ", intake_source = 'tip'" : '';
 
     if ($existing !== null) {
+        $incStatus = strtolower(trim((string)($existing['status'] ?? '')));
+        if (in_array($incStatus, ['resolved', 'completed', 'complete', 'closed'], true)) {
+            ers_external_json(422, [
+                'success' => false,
+                'error' => 'This anonymous tip has already been resolved and closed. Re-dispatching is disabled.',
+            ]);
+        }
+
         $update = $pdo->prepare(
             "UPDATE incidents
              SET type = ?,
@@ -897,7 +905,7 @@ function ers_tip_find(PDO $pdo, int $id): array
                 i.id AS converted_incident_id, i.reference_no AS converted_reference_no, i.status AS converted_incident_status
          FROM anonymous_tips at
          LEFT JOIN external_incident_links eil
-            ON (eil.source_system IN ('Anonymous Tip Inbox', 'Group 6', 'anonymous_tip', 'Responder App Coordination') OR eil.source_system COLLATE utf8mb4_unicode_ci = at.source_system COLLATE utf8mb4_unicode_ci)
+            ON (eil.source_system IN ('Anonymous Tip Inbox', 'anonymous_tip') OR eil.external_incident_id COLLATE utf8mb4_unicode_ci = CONCAT('anonymous-tip-', at.id) COLLATE utf8mb4_unicode_ci)
            AND (
                 (at.tip_id IS NOT NULL AND at.tip_id <> '' AND eil.external_incident_id COLLATE utf8mb4_unicode_ci = at.tip_id COLLATE utf8mb4_unicode_ci)
              OR eil.external_incident_id COLLATE utf8mb4_unicode_ci = CONCAT('anonymous-tip-', at.id) COLLATE utf8mb4_unicode_ci
@@ -935,7 +943,7 @@ function ers_tip_status_lookup(PDO $pdo, string $tipId): array
                 {$incidentCompletedExpr} AS incident_completed_at
          FROM anonymous_tips at
          LEFT JOIN external_incident_links eil
-            ON (eil.source_system IN ('Anonymous Tip Inbox', 'Group 6', 'anonymous_tip', 'Responder App Coordination') OR eil.source_system COLLATE utf8mb4_unicode_ci = at.source_system COLLATE utf8mb4_unicode_ci)
+            ON (eil.source_system IN ('Anonymous Tip Inbox', 'anonymous_tip') OR eil.external_incident_id COLLATE utf8mb4_unicode_ci = CONCAT('anonymous-tip-', at.id) COLLATE utf8mb4_unicode_ci)
            AND (
                 (at.tip_id IS NOT NULL AND at.tip_id <> '' AND eil.external_incident_id COLLATE utf8mb4_unicode_ci = at.tip_id COLLATE utf8mb4_unicode_ci)
              OR eil.external_incident_id COLLATE utf8mb4_unicode_ci = CONCAT('anonymous-tip-', at.id) COLLATE utf8mb4_unicode_ci
@@ -1073,7 +1081,7 @@ function ers_tip_list(PDO $pdo): array
                    MAX(i.status) AS converted_incident_status
             FROM anonymous_tips at
             LEFT JOIN external_incident_links eil
-               ON (eil.source_system IN ('Anonymous Tip Inbox', 'Group 6', 'anonymous_tip', 'Responder App Coordination') OR eil.source_system COLLATE utf8mb4_unicode_ci = at.source_system COLLATE utf8mb4_unicode_ci)
+               ON (eil.source_system IN ('Anonymous Tip Inbox', 'anonymous_tip') OR eil.external_incident_id COLLATE utf8mb4_unicode_ci = CONCAT('anonymous-tip-', at.id) COLLATE utf8mb4_unicode_ci)
               AND (
                    (at.tip_id IS NOT NULL AND at.tip_id <> '' AND eil.external_incident_id COLLATE utf8mb4_unicode_ci = at.tip_id COLLATE utf8mb4_unicode_ci)
                 OR eil.external_incident_id COLLATE utf8mb4_unicode_ci = CONCAT('anonymous-tip-', at.id) COLLATE utf8mb4_unicode_ci
@@ -1176,20 +1184,29 @@ function ers_tip_prepare_response(array $row, ?PDO $pdo = null): array
     $completedStatuses = ['resolved', 'complete', 'completed', 'closed'];
     $row['raw_status'] = strtolower(trim((string)($row['status'] ?? '')));
     $hasActiveDispatch = (int)($dispatch['unit_count'] ?? 0) > 0 || in_array($incidentStatus, $dispatchedStatuses, true);
-    $isCompleted = ($incidentId > 0 && in_array($incidentStatus, $completedStatuses, true))
-        || ($incidentId > 0 && $dispatch['latest_status'] === 'cleared' && $incidentStatus === 'resolved')
-        || in_array($row['raw_status'], ['resolved', 'completed', 'complete', 'closed'], true);
-    $isDispatched = !$isCompleted && ($incidentId > 0 && ($hasActiveDispatch || $row['raw_status'] === 'dispatched'));
-    $isConverted = $incidentId > 0 || in_array($row['raw_status'], ['converted_to_incident', 'pending'], true);
 
-    if ($isCompleted) {
-        $row['display_status'] = 'resolved';
-    } elseif ($isDispatched) {
-        $row['display_status'] = 'dispatched';
-    } elseif ($isConverted) {
-        $row['display_status'] = 'pending';
+    // If the tip status in anonymous_tips table is 'new', it has not been converted yet.
+    if ($row['raw_status'] === 'new' || $row['raw_status'] === '') {
+        $isCompleted = false;
+        $isDispatched = false;
+        $isConverted = false;
+        $row['display_status'] = 'new';
     } else {
-        $row['display_status'] = in_array($row['raw_status'], ['reviewing', 'verified', 'dismissed'], true) ? $row['raw_status'] : 'new';
+        $isCompleted = ($incidentId > 0 && in_array($incidentStatus, $completedStatuses, true))
+            || ($incidentId > 0 && $dispatch['latest_status'] === 'cleared' && $incidentStatus === 'resolved')
+            || in_array($row['raw_status'], ['resolved', 'completed', 'complete', 'closed'], true);
+        $isDispatched = !$isCompleted && ($incidentId > 0 && ($hasActiveDispatch || $row['raw_status'] === 'dispatched'));
+        $isConverted = $incidentId > 0 || in_array($row['raw_status'], ['converted_to_incident', 'pending'], true);
+
+        if ($isCompleted) {
+            $row['display_status'] = 'resolved';
+        } elseif ($isDispatched) {
+            $row['display_status'] = 'dispatched';
+        } elseif ($isConverted) {
+            $row['display_status'] = 'pending';
+        } else {
+            $row['display_status'] = in_array($row['raw_status'], ['reviewing', 'verified', 'dismissed'], true) ? $row['raw_status'] : 'new';
+        }
     }
     $row['interagency_status'] = $row['display_status'];
     $row['dispatched'] = $isDispatched;
@@ -1821,8 +1838,8 @@ function ers_tip_sync_converted_incidents(PDO $pdo): void
 
             $incident = null;
             if ($hasLinksTable) {
-                $linkStmt = $pdo->prepare("SELECT incident_id FROM external_incident_links WHERE source_system = ? AND external_incident_id = ? LIMIT 1");
-                $linkStmt->execute([$sourceSystem, $extId]);
+                $linkStmt = $pdo->prepare("SELECT incident_id FROM external_incident_links WHERE external_incident_id = ? OR external_incident_id = ? OR external_incident_id LIKE ? ORDER BY id DESC LIMIT 1");
+                $linkStmt->execute([$extId, $tipId, $tipId . '-%']);
                 $linkedIncId = $linkStmt->fetchColumn();
                 if ($linkedIncId) {
                     $incStmt = $pdo->prepare("SELECT * FROM incidents WHERE id = ? LIMIT 1");
@@ -1832,7 +1849,7 @@ function ers_tip_sync_converted_incidents(PDO $pdo): void
             }
 
             if (!$incident && $tipId !== '') {
-                $incStmt = $pdo->prepare("SELECT * FROM incidents WHERE reference_no = ? OR reference_no LIKE ? OR title LIKE ? LIMIT 1");
+                $incStmt = $pdo->prepare("SELECT * FROM incidents WHERE reference_no = ? OR reference_no LIKE ? OR title LIKE ? ORDER BY id DESC LIMIT 1");
                 $incStmt->execute([$tipId, $tipId . '-%', '%' . $tipId . '%']);
                 $incident = $incStmt->fetch(PDO::FETCH_ASSOC);
                 if ($incident && $hasLinksTable) {
@@ -1842,25 +1859,6 @@ function ers_tip_sync_converted_incidents(PDO $pdo): void
             }
 
             if (!$incident) {
-                $refNo = $tipId !== '' ? ($tipId . '-' . $rawId) : ('TIP-' . date('YmdHis') . '-' . $rawId);
-                $location = trim((string)($tip['location'] ?? 'Location not provided'));
-                $desc = trim((string)($tip['tip_description'] ?? 'Anonymous tip report'));
-                $title = 'Anonymous tip ' . ($tipId !== '' ? $tipId : ('#' . $rawId));
-                $type = 'medical, police, fire';
-                $priority = 'high';
-                $coords = ers_tip_location_coordinates($pdo, $location);
-
-                $insStmt = $pdo->prepare(
-                    "INSERT INTO incidents (reference_no, type, priority, status, title, description, location_address, latitude, longitude, intake_source, created_at, updated_at)
-                     VALUES (?, ?, ?, 'pending', ?, ?, ?, ?, ?, 'tip', NOW(), NOW())"
-                );
-                $insStmt->execute([$refNo, $type, $priority, $title, $desc, $location, $coords['latitude'], $coords['longitude']]);
-                $newIncId = (int)$pdo->lastInsertId();
-
-                if ($hasLinksTable) {
-                    $pdo->prepare("REPLACE INTO external_incident_links (source_system, external_incident_id, incident_id, payload_json, created_at, updated_at) VALUES (?, ?, ?, ?, NOW(), NOW())")
-                        ->execute([$sourceSystem, $extId, $newIncId, json_encode(['tip' => $tip])]);
-                }
                 continue;
             }
 
@@ -1876,12 +1874,12 @@ function ers_tip_sync_converted_incidents(PDO $pdo): void
 
             $activeDispatches = 0;
             if (ers_external_table_exists($pdo, 'dispatches')) {
-                $dispStmt = $pdo->prepare("SELECT COUNT(*) FROM dispatches WHERE (incident_id = ? OR reference_no = ?) AND status IN ('assigned','acknowledged','enroute','on_scene')");
+                $dispStmt = $pdo->prepare("SELECT COUNT(*) FROM dispatches WHERE (incident_id = ? OR reference_no = ?) AND status IN ('assigned','acknowledged','dispatching','dispatched','enroute','en_route','on_scene','ongoing','in_progress')");
                 $dispStmt->execute([$incId, (string)$incident['reference_no']]);
                 $activeDispatches = (int)$dispStmt->fetchColumn();
             }
 
-            if ($activeDispatches > 0 || in_array($incStatus, ['dispatched', 'assigned', 'enroute', 'en_route', 'on_scene'], true)) {
+            if ($activeDispatches > 0 || in_array($incStatus, ['dispatched', 'assigned', 'enroute', 'en_route', 'on_scene', 'in_progress'], true)) {
                 $pdo->prepare("UPDATE anonymous_tips SET status = 'dispatched', updated_at = NOW() WHERE id = ? AND status <> 'dispatched'")
                     ->execute([$rawId]);
             } elseif ($tip['status'] !== 'pending') {
