@@ -143,7 +143,7 @@ function pa_json($value): string
                 </article>
             </section>
 
-            <section class="pa-grid pa-grid-secondary" aria-label="Risk distribution">
+            <section class="pa-grid" aria-label="Risk distribution and workflow">
                 <article class="pa-panel">
                     <div class="pa-panel-head">
                         <div>
@@ -157,35 +157,13 @@ function pa_json($value): string
                 <article class="pa-panel">
                     <div class="pa-panel-head">
                         <div>
-                            <p class="pa-panel-kicker">Priority mix</p>
-                            <h2>Recent Priority Distribution</h2>
-                        </div>
-                    </div>
-                    <div class="pa-chart-wrap compact"><canvas id="paPriorityChart"></canvas></div>
-                </article>
-            </section>
-
-            <section class="pa-grid pa-grid-tertiary" aria-label="Hotspots and process">
-                <article class="pa-panel">
-                    <div class="pa-panel-head">
-                        <div>
-                            <p class="pa-panel-kicker">Location risk</p>
-                            <h2>Hotspot Watchlist</h2>
-                        </div>
-                    </div>
-                    <div class="pa-hotspot-list" id="paHotspotList"></div>
-                </article>
-
-                <article class="pa-panel">
-                    <div class="pa-panel-head">
-                        <div>
                             <p class="pa-panel-kicker">System process</p>
                             <h2>Prediction Workflow</h2>
                         </div>
                     </div>
                     <div class="pa-note-grid">
                         <div class="pa-note-card"><strong>Collect</strong><span>Incidents, dispatches, responders, units</span></div>
-                        <div class="pa-note-card"><strong>Analyze</strong><span>Trend, type mix, hotspot, peak hour</span></div>
+                        <div class="pa-note-card"><strong>Analyze</strong><span>Trend, type mix, peak hour</span></div>
                         <div class="pa-note-card"><strong>Predict</strong><span>7-day volume and resource pressure</span></div>
                         <div class="pa-note-card"><strong>Recommend</strong><span>Standby units and escalation focus</span></div>
                     </div>
@@ -267,7 +245,10 @@ function pa_json($value): string
         function paRenderTypes(items) {
             const list = document.getElementById('paTypeList');
             if (!list) return;
-            const rows = Array.isArray(items) ? items : [];
+            const rows = (Array.isArray(items) ? items : []).filter((row) => {
+                const type = String(row.type || '').toLowerCase();
+                return type === 'medical' || type === 'fire';
+            });
             list.innerHTML = rows.map((row) => `
                 <div class="pa-type-row">
                     <div class="pa-type-top">
@@ -279,28 +260,7 @@ function pa_json($value): string
             `).join('');
         }
 
-        function paRenderHotspots(items) {
-            const list = document.getElementById('paHotspotList');
-            if (!list) return;
-            const rows = Array.isArray(items) ? items : [];
-            if (!rows.length) {
-                list.innerHTML = '<div class="pa-hotspot-card"><p class="pa-hotspot-name">No hotspot signal</p><p class="pa-hotspot-meta">Location history is not concentrated enough for a watchlist.</p></div>';
-                return;
-            }
-            list.innerHTML = rows.map((row) => `
-                <div class="pa-hotspot-card">
-                    <div class="pa-hotspot-top">
-                        <p class="pa-hotspot-name">${paEscape(row.location || 'Unspecified')}</p>
-                        <span class="pa-status ${paRiskClass(row.risk)}">${paEscape(row.risk || 'Low')}</span>
-                    </div>
-                    <p class="pa-hotspot-meta">${paEscape(row.dominant_type || 'Other')} incidents are the dominant signal.</p>
-                    <div class="pa-hotspot-count">
-                        <span class="pa-micro-stat"><i class="fas fa-layer-group"></i>${paNumber(row.incidents)} incidents</span>
-                        <span class="pa-micro-stat"><i class="fas fa-bolt"></i>${paNumber(row.high_priority)} high priority</span>
-                    </div>
-                </div>
-            `).join('');
-        }
+
 
         function paChartOptions() {
             return {
@@ -351,30 +311,6 @@ function pa_json($value): string
                     options: paChartOptions()
                 });
             }
-
-            const priorityCanvas = document.getElementById('paPriorityChart');
-            if (priorityCanvas) {
-                if (predictiveCharts.priority) predictiveCharts.priority.destroy();
-                predictiveCharts.priority = new Chart(priorityCanvas, {
-                    type: 'doughnut',
-                    data: {
-                        labels: Array.isArray(charts.priority_labels) ? charts.priority_labels : ['High', 'Medium', 'Low'],
-                        datasets: [{
-                            data: Array.isArray(charts.priority_values) ? charts.priority_values : [0, 0, 0],
-                            backgroundColor: ['#ef4444', '#f59e0b', '#22c55e'],
-                            borderWidth: 0
-                        }]
-                    },
-                    options: {
-                        responsive: true,
-                        maintainAspectRatio: false,
-                        plugins: {
-                            legend: { position: 'bottom' }
-                        },
-                        cutout: '62%'
-                    }
-                });
-            }
         }
 
         function paRenderSnapshot(snapshot) {
@@ -408,7 +344,6 @@ function pa_json($value): string
 
             paRenderRecommendations(snapshot.recommendations);
             paRenderTypes(snapshot.type_forecast);
-            paRenderHotspots(snapshot.hotspots);
             paRenderCharts(snapshot);
         }
 
@@ -425,6 +360,8 @@ function pa_json($value): string
                     throw new Error((data && data.error) || 'Unable to refresh predictive analytics');
                 }
                 paRenderSnapshot(data.snapshot || {});
+                const meta = document.getElementById('paAiMeta');
+                if (meta) meta.textContent = 'Decision support only. Dispatch approval remains with operations staff.';
             } catch (error) {
                 const meta = document.getElementById('paAiMeta');
                 if (meta) meta.textContent = error.message || 'Unable to refresh predictive analytics.';

@@ -187,9 +187,6 @@ if (!function_exists('ers_predictive_default_snapshot')) {
             'type_forecast' => [
                 ['type' => 'medical', 'label' => 'Medical', 'historical' => 0, 'forecast' => 0, 'share' => 0.0, 'trend' => 'Stable', 'risk' => 'Low'],
                 ['type' => 'fire', 'label' => 'Fire', 'historical' => 0, 'forecast' => 0, 'share' => 0.0, 'trend' => 'Stable', 'risk' => 'Low'],
-                ['type' => 'police', 'label' => 'Police', 'historical' => 0, 'forecast' => 0, 'share' => 0.0, 'trend' => 'Stable', 'risk' => 'Low'],
-                ['type' => 'traffic', 'label' => 'Traffic', 'historical' => 0, 'forecast' => 0, 'share' => 0.0, 'trend' => 'Stable', 'risk' => 'Low'],
-                ['type' => 'other', 'label' => 'Other', 'historical' => 0, 'forecast' => 0, 'share' => 0.0, 'trend' => 'Stable', 'risk' => 'Low'],
             ],
             'priority_mix' => [
                 'high' => 0,
@@ -299,7 +296,7 @@ if (!function_exists('ers_predictive_build_snapshot')) {
         $deltaPercent = $recent7Avg > 0 ? round((($forecastAvg - $recent7Avg) / $recent7Avg) * 100, 1) : 0.0;
         $deltaLabel = ers_predictive_trend_label($deltaPercent);
 
-        $types = ['medical', 'fire', 'police', 'traffic', 'other'];
+        $types = ['medical', 'fire'];
         $typeCurrent = array_fill_keys($types, 0);
         $typePrevious = array_fill_keys($types, 0);
 
@@ -321,6 +318,12 @@ if (!function_exists('ers_predictive_build_snapshot')) {
         ]);
         foreach ($typeStmt->fetchAll(PDO::FETCH_ASSOC) as $row) {
             $key = ers_predictive_normalize_type((string)($row['type_name'] ?? 'other'));
+            if (!isset($typeCurrent[$key])) {
+                $typeCurrent[$key] = 0;
+            }
+            if (!isset($typePrevious[$key])) {
+                $typePrevious[$key] = 0;
+            }
             $typeCurrent[$key] += (int)($row['current_count'] ?? 0);
             $typePrevious[$key] += (int)($row['previous_count'] ?? 0);
         }
@@ -332,12 +335,12 @@ if (!function_exists('ers_predictive_build_snapshot')) {
             if ($index === count($types) - 1) {
                 $forecastCount = max(0, $remainingForecast);
             } else {
-                $share = ers_predictive_safe_ratio((float)$typeCurrent[$typeKey], (float)$currentTypeTotal);
+                $share = ers_predictive_safe_ratio((float)($typeCurrent[$typeKey] ?? 0), (float)$currentTypeTotal);
                 $forecastCount = (int)round($next7Total * $share);
                 $remainingForecast -= $forecastCount;
             }
-            $historical = $typeCurrent[$typeKey];
-            $previous = $typePrevious[$typeKey];
+            $historical = (int)($typeCurrent[$typeKey] ?? 0);
+            $previous = (int)($typePrevious[$typeKey] ?? 0);
             $trendDelta = $previous > 0 ? (($historical - $previous) / $previous) * 100 : 0.0;
             $riskScore = ($forecastCount * 10) + (($typeKey === 'medical' || $typeKey === 'fire') ? 12 : 0);
             $typeForecast[] = [
