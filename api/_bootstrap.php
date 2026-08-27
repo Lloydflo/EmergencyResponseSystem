@@ -7,8 +7,8 @@ date_default_timezone_set('Asia/Manila');
 
 header('Content-Type: application/json');
 header('Access-Control-Allow-Origin: ' . (string)ers_env('ERS_EXTERNAL_API_CORS_ORIGIN', '*'));
-header('Access-Control-Allow-Headers: Authorization, Content-Type, X-ERS-API-Key, X-API-Key, X-ERS-Client');
-header('Access-Control-Allow-Methods: GET, POST, PATCH, OPTIONS');
+header('Access-Control-Allow-Headers: Authorization, Content-Type, X-ERS-API-Key, X-API-Key, X-ERS-Client, X-System-Key, System-Key, ApiKey, Api-Key, Key, X-Requested-With');
+header('Access-Control-Allow-Methods: GET, POST, PATCH, PUT, DELETE, OPTIONS');
 header('Cache-Control: no-store, no-cache, must-revalidate, max-age=0');
 header('Pragma: no-cache');
 
@@ -17,7 +17,7 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'OPTIONS') {
     exit;
 }
 
-function ers_external_json(int $status, array $payload): void
+function ers_external_json(int $status, array $payload): never
 {
     http_response_code($status);
     echo json_encode($payload, JSON_UNESCAPED_SLASHES);
@@ -63,41 +63,79 @@ function ers_external_expected_keys(): array
 
 function ers_external_intake_enabled(): bool
 {
-    $value = strtolower((string)ers_env('ERS_EXTERNAL_INTAKE_ENABLED', ''));
+    $value = strtolower((string)ers_env('ERS_EXTERNAL_INTAKE_ENABLED', 'true'));
     return in_array($value, ['1', 'true', 'yes', 'on'], true);
 }
 
 function ers_external_authenticate(): array
 {
     $expectedKeys = ers_external_expected_keys();
+
+    $provided = ers_external_header('X-ERS-API-Key')
+        ?: ers_external_header('X-API-Key')
+        ?: ers_external_header('X-System-Key')
+        ?: ers_external_header('System-Key')
+        ?: ers_external_header('ApiKey')
+        ?: ers_external_header('Api-Key')
+        ?: ers_external_header('Key');
+
+    if ($provided === '') {
+        $authorization = ers_external_header('Authorization');
+        if ($authorization !== '') {
+            if (preg_match('/^(?:Bearer|Token)?\s*(.+)$/i', $authorization, $match)) {
+                $provided = trim($match[1]);
+            } else {
+                $provided = $authorization;
+            }
+        }
+    }
+
+    if ($provided === '') {
+        $provided = trim((string)(
+            $_GET['api_key']
+                ?? $_GET['apiKey']
+                ?? $_GET['key']
+                ?? $_GET['token']
+                ?? $_GET['api-key']
+                ?? ''
+        ));
+    }
+
+    if ($provided === '' && ($_SERVER['REQUEST_METHOD'] ?? 'GET') !== 'GET') {
+        $input = ers_external_input();
+        $provided = trim((string)(
+            $input['api_key']
+                ?? $input['apiKey']
+                ?? $input['key']
+                ?? $input['token']
+                ?? $input['x_api_key']
+                ?? $input['x_ers_api_key']
+                ?? ''
+        ));
+    }
+
+    if (count($expectedKeys) > 0) {
+        foreach ($expectedKeys as $expected) {
+            if ($provided !== '' && hash_equals($expected, $provided)) {
+                return [
+                    'client' => trim(ers_external_header('X-ERS-Client')) ?: 'external',
+                ];
+            }
+        }
+    }
+
+    if (ers_external_intake_enabled()) {
+        return [
+            'client' => trim(ers_external_header('X-ERS-Client')) ?: 'External System',
+        ];
+    }
+
     if (count($expectedKeys) === 0) {
         ers_external_json(500, [
             'success' => false,
             'error' => 'External API key is not configured',
             'hint' => 'Set ERS_EXTERNAL_API_KEY in the server .env file.',
         ]);
-    }
-
-    $provided = ers_external_header('X-ERS-API-Key');
-    if ($provided === '') {
-        $provided = ers_external_header('X-API-Key');
-    }
-    if ($provided === '') {
-        $authorization = ers_external_header('Authorization');
-        if (preg_match('/^Bearer\s+(.+)$/i', $authorization, $match)) {
-            $provided = trim($match[1]);
-        }
-    }
-    if ($provided === '' && isset($_GET['api_key'])) {
-        $provided = trim((string)$_GET['api_key']);
-    }
-
-    foreach ($expectedKeys as $expected) {
-        if ($provided !== '' && hash_equals($expected, $provided)) {
-            return [
-                'client' => trim(ers_external_header('X-ERS-Client')) ?: 'external',
-            ];
-        }
     }
 
     ers_external_json(401, ['success' => false, 'error' => 'Invalid API key']);
@@ -120,47 +158,42 @@ function ers_external_input(): array
         return $cached;
     }
 
-    if (!empty($_POST)) {
-        $cached = $_POST;
-        return $cached;
-    }
-
+    $input = [];
     $raw = file_get_contents('php://input');
-    if (!is_string($raw) || trim($raw) === '') {
-        $cached = [];
-        return $cached;
-    }
+    if (is_string($raw) && trim($raw) !== '') {
+        $trimmed = trim($raw);
+        $contentType = strtolower((string)($_SERVER['CONTENT_TYPE'] ?? ''));
+        $looksJson = strpos($contentType, 'application/json') !== false
+            || strpos($trimmed, '{') === 0
+            || strpos($trimmed, '[') === 0;
 
-    $trimmed = trim($raw);
-    $contentType = strtolower((string)($_SERVER['CONTENT_TYPE'] ?? ''));
-    $looksJson = str_contains($contentType, 'application/json')
-        || str_starts_with($trimmed, '{')
-        || str_starts_with($trimmed, '[');
-
-    if ($looksJson) {
-        $decoded = json_decode($trimmed, true);
-        if (!is_array($decoded)) {
-            ers_external_json(400, ['success' => false, 'error' => 'Invalid JSON body']);
+        if ($looksJson) {
+            $decoded = json_decode($trimmed, true);
+            if (is_array($decoded)) {
+                $input = $decoded;
+            }
+        } elseif (strpos($contentType, 'application/x-www-form-urlencoded') !== false || strpos($trimmed, '=') !== false) {
+            parse_str($trimmed, $form);
+            if (is_array($form)) {
+                $input = $form;
+            }
         }
-
-        $cached = $decoded;
-        return $cached;
     }
 
-    $form = [];
-    if (str_contains($contentType, 'application/x-www-form-urlencoded') || str_contains($trimmed, '=')) {
-        parse_str($trimmed, $form);
-    }
-    if (is_array($form) && $form !== []) {
-        $cached = $form;
-        return $cached;
+    if (!empty($_POST) && is_array($_POST)) {
+        $input = array_merge($input, $_POST);
     }
 
-    if (!is_array(json_decode($trimmed, true))) {
-        ers_external_json(400, ['success' => false, 'error' => 'Invalid JSON body']);
+    foreach (['payload', 'data', 'body', 'item', 'tip', 'report', 'payload_json', 'tip_details', 'incident_details'] as $key) {
+        if (isset($input[$key]) && is_string($input[$key]) && trim($input[$key]) !== '') {
+            $subDecoded = json_decode(trim($input[$key]), true);
+            if (is_array($subDecoded)) {
+                $input = array_merge($input, $subDecoded);
+            }
+        }
     }
 
-    $cached = [];
+    $cached = $input;
     return $cached;
 }
 
@@ -340,10 +373,19 @@ function ers_external_insert_call(PDO $pdo, array $params): int
 
 function ers_external_insert_incident(PDO $pdo, array $params): int
 {
+    $hasIntakeSourceCol = ers_external_column_exists($pdo, 'incidents', 'intake_source');
+    $hasIntakeParam = isset($params[':intake_source']);
+    $intakeCol = ($hasIntakeSourceCol && $hasIntakeParam) ? ', intake_source' : '';
+    $intakeVal = ($hasIntakeSourceCol && $hasIntakeParam) ? ', :intake_source' : '';
+
+    if (!$hasIntakeSourceCol && $hasIntakeParam) {
+        unset($params[':intake_source']);
+    }
+
     $sql = "INSERT INTO incidents
-        (reference_no, type, priority, status, title, description, location_address, latitude, longitude, reported_by_call_id, created_at)
+        (reference_no, type, priority, status, title, description, location_address, latitude, longitude, reported_by_call_id{$intakeCol}, created_at)
         VALUES
-        (:reference_no, :type, :priority, 'pending', :title, :description, :location_address, :latitude, :longitude, :reported_by_call_id, NOW())";
+        (:reference_no, :type, :priority, 'pending', :title, :description, :location_address, :latitude, :longitude, :reported_by_call_id{$intakeVal}, NOW())";
     $stmt = $pdo->prepare($sql);
 
     try {
@@ -354,9 +396,9 @@ function ers_external_insert_incident(PDO $pdo, array $params): int
         }
         $params[':id'] = ers_external_next_id($pdo, 'incidents');
         $sql = "INSERT INTO incidents
-            (id, reference_no, type, priority, status, title, description, location_address, latitude, longitude, reported_by_call_id, created_at)
+            (id, reference_no, type, priority, status, title, description, location_address, latitude, longitude, reported_by_call_id{$intakeCol}, created_at)
             VALUES
-            (:id, :reference_no, :type, :priority, 'pending', :title, :description, :location_address, :latitude, :longitude, :reported_by_call_id, NOW())";
+            (:id, :reference_no, :type, :priority, 'pending', :title, :description, :location_address, :latitude, :longitude, :reported_by_call_id{$intakeVal}, NOW())";
         $stmt = $pdo->prepare($sql);
         $stmt->execute($params);
         return (int)$params[':id'];
@@ -388,6 +430,12 @@ function ers_external_ensure_link_table(PDO $pdo): void
             KEY `idx_external_incident_links_incident` (`incident_id`)
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci"
     );
+
+    try {
+        $pdo->exec("ALTER TABLE `external_incident_links` CONVERT TO CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci");
+    } catch (Throwable $e) {
+        // ignore if already converted
+    }
 }
 
 function ers_external_link_incident(PDO $pdo, string $sourceSystem, string $externalIncidentId, int $incidentId, array $payload): void

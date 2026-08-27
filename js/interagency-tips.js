@@ -5,8 +5,8 @@
     }
 
     const apiUrl = 'api/system_API/?action=anonymous_tip';
-    const statuses = ['all', 'pending', 'new', 'reviewing', 'verified', 'dismissed', 'converted_to_incident', 'dispatched', 'resolved'];
-    const editableStatuses = ['new', 'reviewing', 'verified', 'dismissed', 'converted_to_incident'];
+    const statuses = ['all', 'pending', 'dispatched', 'resolved', 'new', 'reviewing', 'verified', 'dismissed'];
+    const editableStatuses = ['new', 'reviewing', 'verified', 'dismissed', 'pending', 'dispatched', 'resolved'];
     const state = {
         items: [],
         loading: true,
@@ -29,16 +29,19 @@
         .replace(/"/g, '&quot;')
         .replace(/'/g, '&#039;');
 
-    const statusLabel = (status) => String(status || 'new')
-        .replace(/_/g, ' ')
-        .replace(/\b\w/g, (letter) => letter.toUpperCase());
+    const statusLabel = (status) => {
+        const raw = String(status || 'new').toLowerCase();
+        if (raw === 'converted_to_incident') return 'Pending';
+        return raw.replace(/_/g, ' ').replace(/\b\w/g, (letter) => letter.toUpperCase());
+    };
 
     const rawStatusOf = (item) => String(item?.raw_status || item?.status || 'new').trim().toLowerCase();
     const statusOf = (item) => String(item?.display_status || item?.status || 'new').trim().toLowerCase();
-    const isConvertedStatus = (item) => ['converted_to_incident', 'dispatched'].includes(statusOf(item))
-        || rawStatusOf(item) === 'converted_to_incident';
+    const isConvertedStatus = (item) => ['converted_to_incident', 'pending', 'dispatched', 'resolved'].includes(statusOf(item))
+        || ['converted_to_incident', 'pending', 'dispatched', 'resolved'].includes(rawStatusOf(item))
+        || Number(item?.converted_incident_id || 0) > 0;
     const tipKey = (item) => String(item?.tip_id || item?.id || '').trim();
-    const isOpenTip = (item) => ['pending', 'new'].includes(rawStatusOf(item));
+    const isOpenTip = (item) => ['pending', 'new'].includes(statusOf(item));
 
     const actionLabel = {
         reviewing: 'Marked for review.',
@@ -203,6 +206,19 @@
         return `${base}/dispatcher/incident.php?code=${ref}`;
     };
 
+    const dispatchUrl = (referenceNo, incidentId) => {
+        const ref = String(referenceNo || '').trim();
+        const id = Number(incidentId || 0);
+        const base = appBasePath();
+        const params = new URLSearchParams({
+            source: 'tip',
+            open_dispatch: '1',
+        });
+        if (ref) params.append('code', ref);
+        if (id > 0) params.append('incident_id', String(id));
+        return `${base}/dispatcher/dispatch.php?${params.toString()}`;
+    };
+
     const notifyCountsChanged = () => {
         window.dispatchEvent(new CustomEvent('ers:anonymous-tips-updated'));
     };
@@ -215,8 +231,11 @@
             changedAt: Date.now(),
         };
         window.dispatchEvent(new CustomEvent('ers:incident-queue-updated', { detail }));
+        window.dispatchEvent(new CustomEvent('ers:anonymous-tips-updated', { detail }));
         try {
             window.localStorage.setItem('ers_incidents_changed', JSON.stringify(detail));
+            window.localStorage.setItem('ers_incidents', Date.now().toString());
+            window.localStorage.setItem('ers_anonymous_tips_changed', JSON.stringify(detail));
         } catch (_) {}
     };
 
@@ -447,7 +466,7 @@
 
     const convertTip = async () => {
         const item = selectedItem();
-        if (!item || isConvertedStatus(item)) {
+        if (!item) {
             return;
         }
 
@@ -491,15 +510,8 @@
             notifyCountsChanged();
             notifyIncidentQueueChanged(data.incident || null);
             const incidentId = Number(data.incident?.id || 0);
-            if (incidentId > 0) {
-                const dispatchUrl = new URL('dispatcher/dispatch.php', document.baseURI || window.location.href);
-                dispatchUrl.search = new URLSearchParams({
-                    incident_id: String(incidentId),
-                    code: reference,
-                    source: 'tip',
-                    open_dispatch: '1',
-                }).toString();
-                window.location.href = dispatchUrl.href;
+            if (incidentId > 0 || reference) {
+                window.location.href = dispatchUrl(reference, incidentId);
             }
         } catch (error) {
             state.error = error.message || 'Unable to convert anonymous tip';
@@ -511,24 +523,24 @@
     };
 
     const renderStats = () => {
-        const newCount = state.items.filter((item) => ['pending', 'new'].includes(statusOf(item))).length;
-        const reviewing = state.items.filter((item) => statusOf(item) === 'reviewing').length;
-        const verified = state.items.filter((item) => statusOf(item) === 'verified').length;
+        const pendingCount = state.items.filter((item) => ['pending', 'new', 'converted_to_incident'].includes(statusOf(item))).length;
+        const dispatchedCount = state.items.filter((item) => statusOf(item) === 'dispatched').length;
+        const resolvedCount = state.items.filter((item) => statusOf(item) === 'resolved').length;
         const evidence = state.items.filter((item) => String(item.photo_of_evidence || '').trim() !== '').length;
 
         return `
             <section class="ia-tip-stats" aria-label="Anonymous tip summary">
                 <article class="ia-tip-stat">
-                    <div class="ia-tip-stat-label">New Tips</div>
-                    <div class="ia-tip-stat-value">${newCount}</div>
+                    <div class="ia-tip-stat-label">Pending / Intake</div>
+                    <div class="ia-tip-stat-value">${pendingCount}</div>
                 </article>
                 <article class="ia-tip-stat">
-                    <div class="ia-tip-stat-label">Reviewing</div>
-                    <div class="ia-tip-stat-value">${reviewing}</div>
+                    <div class="ia-tip-stat-label">Dispatched</div>
+                    <div class="ia-tip-stat-value">${dispatchedCount}</div>
                 </article>
                 <article class="ia-tip-stat">
-                    <div class="ia-tip-stat-label">Verified</div>
-                    <div class="ia-tip-stat-value">${verified}</div>
+                    <div class="ia-tip-stat-label">Resolved</div>
+                    <div class="ia-tip-stat-value">${resolvedCount}</div>
                 </article>
                 <article class="ia-tip-stat">
                     <div class="ia-tip-stat-label">With Evidence</div>
@@ -573,10 +585,11 @@
                             <span><i class="fas fa-network-wired"></i> ${escapeHtml(item.source_system || 'Group 6')}</span>
                         </span>
                         <span class="ia-tip-flow">
-                            <span class="${['reviewing', 'verified'].includes(itemStatus) || isConverted ? 'is-done' : ''}">Review</span>
-                            <span class="${itemStatus === 'verified' || isConverted ? 'is-done' : ''}">Verify</span>
-                            <span class="${isConverted ? 'is-done' : ''}">Convert</span>
-                            <span class="${['dispatched', 'resolved'].includes(itemStatus) ? 'is-done' : ''}">Dispatch</span>
+                            <span class="${['reviewing', 'verified', 'pending', 'dispatched', 'resolved'].includes(itemStatus) || isConverted ? 'is-done' : ''}">Review</span>
+                            <span class="${['verified', 'pending', 'dispatched', 'resolved'].includes(itemStatus) || isConverted ? 'is-done' : ''}">Verify</span>
+                            <span class="${['pending', 'dispatched', 'resolved'].includes(itemStatus) || isConverted ? 'is-done' : ''}">Pending</span>
+                            <span class="${['dispatched', 'resolved'].includes(itemStatus) ? 'is-done' : ''}">Dispatched</span>
+                            <span class="${itemStatus === 'resolved' ? 'is-done' : ''}">Resolved</span>
                         </span>
                     </span>
                     <span>${evidenceButton}</span>
@@ -611,10 +624,13 @@
                    </a>`
                 : '<div class="ia-tip-detail-value">Evidence saved but no image URL was provided.</div>')
             : '<div class="ia-tip-detail-value">None</div>';
-        const incidentLink = convertedReference
-            ? `<a class="ia-tip-secondary" href="${escapeHtml(incidentUrl(convertedReference))}"><i class="fas fa-arrow-up-right-from-square"></i> ${escapeHtml(convertedReference)}</a>`
+        const incidentLink = convertedReference || convertedId > 0
+            ? `<div class="ia-tip-link-group" style="display:flex;flex-wrap:wrap;gap:0.4rem;align-items:center;">
+                 <a class="ia-tip-secondary" href="${escapeHtml(dispatchUrl(convertedReference, convertedId))}"><i class="fas fa-truck-fast"></i> Dispatch Queue</a>
+                 <a class="ia-tip-secondary" href="${escapeHtml(incidentUrl(convertedReference))}"><i class="fas fa-list-check"></i> ${escapeHtml(convertedReference || ('Incident #' + convertedId))}</a>
+               </div>`
             : '<div class="ia-tip-detail-value">Not converted</div>';
-        const actionDisabled = (status) => state.action !== '' || isConverted || itemStatus === status;
+        const actionDisabled = (status) => state.action !== '' || itemStatus === status;
         const actionButtonText = (status, label) => state.action === status
             ? '<i class="fas fa-spinner fa-spin"></i> Working'
             : label;
@@ -656,9 +672,8 @@
                 <div class="ia-tip-quick-actions" aria-label="Tip quick actions">
                     <button type="button" class="ia-tip-secondary" data-tip-quick-status="reviewing" ${actionDisabled('reviewing') ? 'disabled' : ''}>${actionButtonText('reviewing', '<i class="fas fa-magnifying-glass"></i> Review')}</button>
                     <button type="button" class="ia-tip-secondary" data-tip-quick-status="verified" ${actionDisabled('verified') ? 'disabled' : ''}>${actionButtonText('verified', '<i class="fas fa-check-circle"></i> Verify')}</button>
-                    ${isConverted && convertedReference
-                        ? `<a class="ia-tip-secondary" href="${escapeHtml(incidentUrl(convertedReference))}"><i class="fas fa-arrow-up-right-from-square"></i> Open Incident</a>`
-                        : `<button type="button" class="ia-tip-secondary" data-tip-convert ${state.action !== '' ? 'disabled' : ''}>${actionButtonText('converted_to_incident', '<i class="fas fa-file-circle-plus"></i> Convert')}</button>`}
+                    <button type="button" class="ia-tip-secondary" data-tip-convert ${state.action !== '' ? 'disabled' : ''}>${actionButtonText('converted_to_incident', `<i class="fas ${isConverted ? 'fa-arrows-rotate' : 'fa-file-circle-plus'}"></i> ${isConverted ? 'Re-Send to Queue' : 'Convert to Incident'}`)}</button>
+                    ${isConverted ? `<a class="ia-tip-secondary" href="${escapeHtml(dispatchUrl(convertedReference, convertedId))}"><i class="fas fa-truck-fast"></i> Open in Dispatch</a>` : ''}
                     <button type="button" class="ia-tip-secondary" data-tip-quick-status="dismissed" ${actionDisabled('dismissed') ? 'disabled' : ''}>${actionButtonText('dismissed', '<i class="fas fa-ban"></i> Dismiss')}</button>
                 </div>
                 ${isConverted ? '<div class="ia-tip-lock-note">This tip is already linked to an incident, so review buttons are locked.</div>' : ''}

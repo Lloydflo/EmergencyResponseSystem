@@ -824,10 +824,36 @@ function ers_report_fetch_daily_response(PDO $pdo, array $scope): array
         }
     }
 
+    $incidentsByDate = [];
+    foreach ($labels as $dateKey) {
+        $incidentsByDate[$dateKey] = 0;
+    }
+    if (ers_report_has_table($schema, 'incidents')) {
+        $partsInc = ers_report_incident_where($scope, 'i', 'daily_incidents', false);
+        $sqlInc = "
+            SELECT
+                DATE(i.created_at) AS date_key,
+                COUNT(*) AS incident_count
+            FROM incidents i
+            WHERE {$partsInc['where']}
+            GROUP BY DATE(i.created_at)
+            ORDER BY DATE(i.created_at)
+        ";
+        $stmtInc = $pdo->prepare($sqlInc);
+        $stmtInc->execute($partsInc['params']);
+        foreach ($stmtInc->fetchAll(PDO::FETCH_ASSOC) as $row) {
+            $dateKey = (string)($row['date_key'] ?? '');
+            if (array_key_exists($dateKey, $incidentsByDate)) {
+                $incidentsByDate[$dateKey] = (int)($row['incident_count'] ?? 0);
+            }
+        }
+    }
+
     return [
         'labels' => $labels,
         'data' => array_map(static fn(string $date) => $valuesByDate[$date], $labels),
         'sample_counts' => array_map(static fn(string $date): int => $samplesByDate[$date], $labels),
+        'incidents_data' => array_map(static fn(string $date): int => $incidentsByDate[$date], $labels),
         'unit' => 'minutes',
     ];
 }

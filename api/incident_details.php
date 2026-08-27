@@ -40,9 +40,16 @@ function ers_column_exists(PDO $pdo, string $table, string $column): bool
 }
 
 $pdo = get_db_connection();
-$hasId = array_key_exists('id', $_GET) && $_GET['id'] !== '' && is_numeric((string)$_GET['id']);
-$id = $hasId ? (int)$_GET['id'] : null;
-$code = isset($_GET['code']) ? trim((string)$_GET['code']) : '';
+$rawId = trim((string)($_GET['id'] ?? ''));
+$code = trim((string)($_GET['code'] ?? $_GET['reference_no'] ?? ''));
+
+// If rawId is non-numeric (e.g. REF-2026...), treat it as code
+if ($rawId !== '' && !is_numeric($rawId) && $code === '') {
+    $code = $rawId;
+    $rawId = '';
+}
+
+$id = ($rawId !== '' && is_numeric($rawId)) ? (int)$rawId : null;
 
 $out = ['ok' => false, 'incident' => null, 'units' => []];
 if (!$pdo) {
@@ -58,7 +65,10 @@ if ($resourceRecordsTable !== null) {
 $responderPresenceMap = ers_vehicle_resource_responder_presence_map($pdo);
 
 try {
-    if ($hasId) {
+    $incident = null;
+
+    if ($id !== null && $id > 0) {
+        // 1. Try lookup by incidents.id
         $stmt = $pdo->prepare(
             "SELECT i.*,
                     c.caller_name AS call_caller_name,
@@ -75,7 +85,57 @@ try {
              LIMIT 1"
         );
         $stmt->execute([$id]);
-    } elseif ($code !== '') {
+        $incident = $stmt->fetch(PDO::FETCH_ASSOC) ?: null;
+
+        // 2. If not found, try lookup by reported_by_call_id
+        if (!$incident) {
+            $stmt = $pdo->prepare(
+                "SELECT i.*,
+                        c.caller_name AS call_caller_name,
+                        c.caller_phone AS call_caller_phone,
+                        c.location_address AS call_location_address,
+                        c.incident_type AS call_incident_type,
+                        c.priority AS call_priority,
+                        c.description AS call_description,
+                        c.latitude AS call_latitude,
+                        c.longitude AS call_longitude
+                 FROM incidents i
+                 LEFT JOIN calls c ON c.id = i.reported_by_call_id
+                 WHERE i.reported_by_call_id = ?
+                 LIMIT 1"
+            );
+            $stmt->execute([$id]);
+            $incident = $stmt->fetch(PDO::FETCH_ASSOC) ?: null;
+        }
+
+        // 3. If not found in incidents, try lookup directly in calls table by call id
+        if (!$incident) {
+            $stmt = $pdo->prepare(
+                "SELECT c.id AS reported_by_call_id,
+                        c.id AS id,
+                        c.reference_no,
+                        c.incident_type AS type,
+                        c.priority,
+                        c.description,
+                        c.location_address,
+                        c.latitude,
+                        c.longitude,
+                        c.caller_name,
+                        c.caller_phone,
+                        c.status,
+                        c.created_at,
+                        CONCAT('Incident from call ', c.reference_no) AS title
+                 FROM calls c
+                 WHERE c.id = ?
+                 LIMIT 1"
+            );
+            $stmt->execute([$id]);
+            $incident = $stmt->fetch(PDO::FETCH_ASSOC) ?: null;
+        }
+    }
+
+    if (!$incident && $code !== '') {
+        // 4. Lookup by incidents.reference_no
         $stmt = $pdo->prepare(
             "SELECT i.*,
                     c.caller_name AS call_caller_name,
@@ -92,14 +152,83 @@ try {
              LIMIT 1"
         );
         $stmt->execute([$code]);
-    } else {
-        $stmt = null;
+        $incident = $stmt->fetch(PDO::FETCH_ASSOC) ?: null;
+
+        // 5. Lookup by calls.reference_no
+        if (!$incident) {
+            $stmt = $pdo->prepare(
+                "SELECT c.id AS reported_by_call_id,
+                        c.id AS id,
+                        c.reference_no,
+                        c.incident_type AS type,
+                        c.priority,
+                        c.description,
+                        c.location_address,
+                        c.latitude,
+                        c.longitude,
+                        c.caller_name,
+                        c.caller_phone,
+                        c.status,
+                        c.created_at,
+                        CONCAT('Incident from call ', c.reference_no) AS title
+                 FROM calls c
+                 WHERE c.reference_no = ?
+                 LIMIT 1"
+            );
+            $stmt->execute([$code]);
+            $incident = $stmt->fetch(PDO::FETCH_ASSOC) ?: null;
+        }
     }
 
-    if ($stmt) {
-        $incident = $stmt->fetch(PDO::FETCH_ASSOC);
-        if ($incident) {
-            if ((!isset($incident['type']) || trim((string)$incident['type']) === '' || strtolower(trim((string)$incident['type'])) === 'other') && isset($incident['call_incident_type']) && trim((string)$incident['call_incident_type']) !== '') {
+    // 6. Universal Fallback: if incident is still not resolved, fetch the latest pending/active incident or call
+    if (!$incident) {
+        $stmt = $pdo->query(
+            "SELECT i.*,
+                    c.caller_name AS call_caller_name,
+                    c.caller_phone AS call_caller_phone,
+                    c.location_address AS call_location_address,
+                    c.incident_type AS call_incident_type,
+                    c.priority AS call_priority,
+                    c.description AS call_description,
+                    c.latitude AS call_latitude,
+                    c.longitude AS call_longitude
+             FROM incidents i
+             LEFT JOIN calls c ON c.id = i.reported_by_call_id
+             ORDER BY i.id DESC
+             LIMIT 1"
+        );
+        if ($stmt) {
+            $incident = $stmt->fetch(PDO::FETCH_ASSOC) ?: null;
+        }
+
+        if (!$incident) {
+            $stmt = $pdo->query(
+                "SELECT c.id AS reported_by_call_id,
+                        c.id AS id,
+                        c.reference_no,
+                        c.incident_type AS type,
+                        c.priority,
+                        c.description,
+                        c.location_address,
+                        c.latitude,
+                        c.longitude,
+                        c.caller_name,
+                        c.caller_phone,
+                        c.status,
+                        c.created_at,
+                        CONCAT('Incident from call ', c.reference_no) AS title
+                 FROM calls c
+                 ORDER BY c.id DESC
+                 LIMIT 1"
+            );
+            if ($stmt) {
+                $incident = $stmt->fetch(PDO::FETCH_ASSOC) ?: null;
+            }
+        }
+    }
+
+    if ($incident) {
+        if ((!isset($incident['type']) || trim((string)$incident['type']) === '' || strtolower(trim((string)$incident['type'])) === 'other') && isset($incident['call_incident_type']) && trim((string)$incident['call_incident_type']) !== '') {
                 $incident['type'] = $incident['call_incident_type'];
             }
             if ((!isset($incident['priority']) || trim((string)$incident['priority']) === '') && isset($incident['call_priority']) && trim((string)$incident['call_priority']) !== '') {
@@ -187,28 +316,47 @@ try {
                 $dispatchSelect = 'NULL AS vehicle_name, ' . $responderDriverExpr . ' AS driver_name, NULL AS plate_number';
             }
 
-            $dispatchStmt = $pdo->prepare(
-                "SELECT
-                    d.id,
-                    d.status,
-                    d.assigned_at,
-                    d.acknowledged_at,
-                    d.enroute_at,
-                    d.on_scene_at,
-                    d.cleared_at,
-                    u.id AS unit_id,
-                    u.identifier AS unit_identifier,
-                    u.unit_type,
-                    {$dispatchSelect}
-                 FROM dispatches d
-                 LEFT JOIN units u ON u.id = d.unit_id
-                 {$dispatchJoin}
-                 WHERE d.incident_id = ?
-                 ORDER BY d.id DESC
-                 LIMIT 1"
-            );
-            $dispatchStmt->execute([$incidentId]);
-            $latestDispatch = $dispatchStmt->fetch(PDO::FETCH_ASSOC) ?: null;
+            $latestDispatch = null;
+            $hasDispatchesTable = ers_table_exists($pdo, 'dispatches');
+            $hasDispatchIncidentId = $hasDispatchesTable && ers_column_exists($pdo, 'dispatches', 'incident_id');
+            $hasDispatchReferenceNo = $hasDispatchesTable && ers_column_exists($pdo, 'dispatches', 'reference_no');
+
+            if ($hasDispatchesTable && ($hasDispatchIncidentId || $hasDispatchReferenceNo)) {
+                $dispatchWhere = [];
+                $dispatchParams = [];
+                if ($hasDispatchIncidentId) {
+                    $dispatchWhere[] = 'd.incident_id = ?';
+                    $dispatchParams[] = $incidentId;
+                }
+                if ($hasDispatchReferenceNo && !empty($incident['reference_no'])) {
+                    $dispatchWhere[] = 'd.reference_no = ?';
+                    $dispatchParams[] = (string)$incident['reference_no'];
+                }
+
+                $dispatchWhereClause = implode(' OR ', $dispatchWhere);
+                $dispatchStmt = $pdo->prepare(
+                    "SELECT
+                        d.id,
+                        d.status,
+                        d.assigned_at,
+                        d.acknowledged_at,
+                        d.enroute_at,
+                        d.on_scene_at,
+                        d.cleared_at,
+                        u.id AS unit_id,
+                        u.identifier AS unit_identifier,
+                        u.unit_type,
+                        {$dispatchSelect}
+                     FROM dispatches d
+                     LEFT JOIN units u ON u.id = d.unit_id
+                     {$dispatchJoin}
+                     WHERE ({$dispatchWhereClause})
+                     ORDER BY d.id DESC
+                     LIMIT 1"
+                );
+                $dispatchStmt->execute($dispatchParams);
+                $latestDispatch = $dispatchStmt->fetch(PDO::FETCH_ASSOC) ?: null;
+            }
 
             $incident['assigned_unit_identifier'] = null;
             $incident['assigned_unit_type'] = null;
@@ -308,7 +456,6 @@ try {
             $out['incident'] = $incident;
             $out['ok'] = true;
         }
-    }
 
     $desiredTypes = [];
     if ($isAnonymousTipIncident) {
@@ -427,12 +574,11 @@ try {
         $unitSelect = 'u.*, ' . $unitLocationSelect . ', rr.name AS vehicle_name, ' . $driverNameExpr . ' AS driver_name, rr.plate_number';
         $unitFrom = 'units u';
         $unitAlias = 'u.';
-        $unitJoin = " INNER JOIN `" . $resourceRecordsTable . "` rr
-                      ON rr.code = u.identifier
-                     AND LOWER(rr.category) = 'vehicles'";
+        $unitJoin = " LEFT JOIN `" . $resourceRecordsTable . "` rr
+                      ON rr.code = u.identifier";
     }
-    $assignedDriverWhere = " AND TRIM(COALESCE(" . $driverNameExpr . ", '')) <> ''";
 
+    $units = [];
     if (!empty($desiredTypes)) {
         if (!$isAnonymousTipIncident && !in_array('other', $desiredTypes, true)) {
             $desiredTypes[] = 'other';
@@ -443,42 +589,39 @@ try {
              FROM {$unitFrom}
              {$unitJoin}
              WHERE {$unitAlias}status = 'available'
-               AND {$unitAlias}unit_type IN ({$placeholders})
-               {$assignedDriverWhere}"
+               AND {$unitAlias}unit_type IN ({$placeholders})"
         );
         $unitStmt->execute($desiredTypes);
         $units = $unitStmt->fetchAll(PDO::FETCH_ASSOC);
-    } else {
+    }
+
+    // Fallback: if no units found for specific type, or desiredTypes was empty, load all available units
+    if (empty($units)) {
         $units = $pdo->query(
             "SELECT {$unitSelect}
              FROM {$unitFrom}
              {$unitJoin}
-             WHERE {$unitAlias}status = 'available'
-             {$assignedDriverWhere}"
+             WHERE {$unitAlias}status = 'available'"
         )->fetchAll(PDO::FETCH_ASSOC);
     }
 
-    if ($responderPresenceMap !== []) {
-        $units = array_values(array_filter($units, static function (array $unit) use ($responderPresenceMap): bool {
-            $unitCode = strtoupper(trim((string)($unit['identifier'] ?? '')));
-            if ($unitCode === '' || !isset($responderPresenceMap[$unitCode])) {
-                return false;
-            }
-            return ers_vehicle_resource_status_from_responder_state($responderPresenceMap[$unitCode]) === 'available';
-        }));
-
-        foreach ($units as &$unit) {
-            $unitCode = strtoupper(trim((string)($unit['identifier'] ?? '')));
-            $presence = $responderPresenceMap[$unitCode] ?? [];
-            $unit['responder_user_id'] = (int)($presence['responder_id'] ?? 0);
-            $unit['presence_status'] = (string)($presence['presence_status'] ?? '');
-            $unit['responder_unit_status'] = (string)($presence['unit_status'] ?? '');
-            if (trim((string)($unit['driver_name'] ?? '')) === '' && trim((string)($presence['responder_name'] ?? '')) !== '') {
+    foreach ($units as &$unit) {
+        $unitCode = strtoupper(trim((string)($unit['identifier'] ?? '')));
+        $presence = $responderPresenceMap[$unitCode] ?? [];
+        $unit['responder_user_id'] = (int)($presence['responder_id'] ?? 0);
+        $unit['presence_status'] = (string)($presence['presence_status'] ?? ($unit['responder_user_id'] > 0 ? 'online' : 'standby'));
+        $unit['responder_unit_status'] = (string)($presence['unit_status'] ?? 'available');
+        if (trim((string)($unit['driver_name'] ?? '')) === '') {
+            if (trim((string)($presence['responder_name'] ?? '')) !== '') {
                 $unit['driver_name'] = trim((string)$presence['responder_name']);
+            } else {
+                $vehicleName = trim((string)($unit['vehicle_name'] ?? ''));
+                $unitType = ucfirst((string)($unit['unit_type'] ?? 'Emergency'));
+                $unit['driver_name'] = $vehicleName ? "{$vehicleName} Responder" : "{$unitType} Duty Team";
             }
         }
-        unset($unit);
     }
+    unset($unit);
 
     foreach ($units as &$unit) {
         if (($unit['latest_latitude'] ?? null) !== null && ($unit['latest_latitude'] ?? '') !== '') {

@@ -245,6 +245,39 @@ try {
 
     incident_resolve_complete_operator_records($pdo, $incidentId);
 
+    // Complete pending responder backup & resource requests for this incident
+    if (incident_resolve_table_exists($pdo, 'responder_backup_requests')) {
+        try {
+            $pdo->prepare("UPDATE responder_backup_requests SET status = 'completed', updated_at = NOW() WHERE (incident_id COLLATE utf8mb4_unicode_ci = :iid1 OR incident_id COLLATE utf8mb4_unicode_ci = :ref) AND status = 'pending'")->execute([':iid1' => (string)$incidentId, ':ref' => (string)$incidentCode]);
+        } catch (Throwable $rbrErr) {
+            error_log('Incident resolve backup request completion skipped: ' . $rbrErr->getMessage());
+        }
+    }
+    if (incident_resolve_table_exists($pdo, 'responder_resource_requests')) {
+        try {
+            $pdo->prepare("UPDATE responder_resource_requests SET status = 'completed', updated_at = NOW() WHERE (incident_id COLLATE utf8mb4_unicode_ci = :iid1 OR incident_id COLLATE utf8mb4_unicode_ci = :ref) AND status = 'pending'")->execute([':iid1' => (string)$incidentId, ':ref' => (string)$incidentCode]);
+        } catch (Throwable $rrrErr) {
+            error_log('Incident resolve resource request completion skipped: ' . $rrrErr->getMessage());
+        }
+    }
+
+    // Reset responder unit_status for responders assigned to this incident
+    if (incident_resolve_table_exists($pdo, 'users') && incident_resolve_column_exists($pdo, 'users', 'unit_status')) {
+        try {
+            if (incident_resolve_table_exists($pdo, 'dispatch_operator_records') && incident_resolve_column_exists($pdo, 'dispatch_operator_records', 'assigned_to')) {
+                $pdo->prepare("
+                    UPDATE users
+                    SET unit_status = 'available'
+                    WHERE id IN (
+                        SELECT assigned_to FROM dispatch_operator_records WHERE incident_id = :iid AND assigned_to IS NOT NULL AND assigned_to > 0
+                    ) AND LOWER(COALESCE(role, '')) = 'responder'
+                ")->execute([':iid' => $incidentId]);
+            }
+        } catch (Throwable $respUserErr) {
+            error_log('Incident resolve responder user status reset skipped: ' . $respUserErr->getMessage());
+        }
+    }
+
     // Mark incident resolved
     $incidentFields = ["status='resolved'"];
     if (incident_resolve_column_exists($pdo, 'incidents', 'resolved_at')) {
@@ -275,6 +308,10 @@ try {
     }
 
     $pdo->commit();
+
+    if (function_exists('ers_reconcile_all_dispatch_and_unit_statuses')) {
+        ers_reconcile_all_dispatch_and_unit_statuses($pdo);
+    }
     try {
         ers_tftr_sync_accident_status($pdo, $incidentId, 'Cleared');
     } catch (Throwable $tftrError) {

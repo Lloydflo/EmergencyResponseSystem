@@ -60,7 +60,7 @@
                 const status = String(item.incident_status || '').trim().toLowerCase();
                 return !['resolved', 'cancelled', 'closed', 'rejected'].includes(status);
             }).length,
-            iaAnonymousTipInbox: tipItems.filter((item) => ['pending', 'new'].includes(String(item.status || 'new').trim().toLowerCase())).length,
+            iaAnonymousTipInbox: tipItems.filter((item) => ['pending', 'new', 'reviewing', 'verified'].includes(String(item.display_status || item.status || 'new').trim().toLowerCase())).length,
             iaEventCoordination: eventItems.filter((item) => {
                 const status = String(item.status || '').toLowerCase();
                 const hazard = String(item.on_site_safety_hazard_level || '').toLowerCase();
@@ -91,7 +91,7 @@
             const next = Number(nextCounts[id] || 0);
             const previous = Number(state.counts[id] || 0);
             setBadge(id, next);
-            if (state.initialized && next > previous && id !== 'iaAnonymousTipInbox') {
+            if (state.initialized && next > previous) {
                 const added = next - previous;
                 const label = moduleLabels[id] || 'inter-agency item';
                 showToast(`${added} new ${label}${added > 1 ? 's' : ''} received.`);
@@ -179,6 +179,12 @@
 
     guardedRefreshCounts();
     window.addEventListener('ers:anonymous-tips-updated', guardedRefreshCounts);
+    window.addEventListener('ers:incident-queue-updated', guardedRefreshCounts);
+    window.addEventListener('storage', (e) => {
+        if (e.key === 'ers_incidents' || e.key === 'ers_incidents_changed' || e.key === 'ers_anonymous_tips_changed') {
+            guardedRefreshCounts();
+        }
+    });
     window.setInterval(() => {
         if (document.visibilityState === 'visible') guardedRefreshCounts();
     }, 12000);

@@ -532,6 +532,259 @@ if (!function_exists('ers_vehicle_resource_unit_code_for_responder')) {
     }
 }
 
+if (!function_exists('ers_reconcile_all_dispatch_and_unit_statuses')) {
+    function ers_reconcile_all_dispatch_and_unit_statuses(PDO $pdo): void
+    {
+        try {
+            $hasIncidents = ers_vehicle_resource_table_exists($pdo, 'incidents');
+            $hasDispatches = ers_vehicle_resource_table_exists($pdo, 'dispatches');
+            $hasOperatorRecords = ers_vehicle_resource_table_exists($pdo, 'dispatch_operator_records');
+            $hasUnits = ers_units_table_available($pdo);
+            $hasUsers = ers_vehicle_resource_table_exists($pdo, 'users');
+            $hasResourceRecords = ers_vehicle_resource_units_table($pdo) !== null;
+            $resourceTable = ers_vehicle_resource_units_table($pdo) ?? 'resource_records';
+
+            // 1. Mark dispatch_operator_records completed if linked incident is resolved/closed/cancelled
+            if ($hasOperatorRecords && $hasIncidents && ers_vehicle_resource_column_exists($pdo, 'dispatch_operator_records', 'incident_id')) {
+                $pdo->exec("
+                    UPDATE `dispatch_operator_records` dor
+                    INNER JOIN `incidents` i ON i.id = dor.incident_id
+                    SET dor.status = 'completed'
+                    WHERE LOWER(COALESCE(i.status, '')) IN ('resolved', 'closed', 'cancelled', 'completed')
+                      AND LOWER(COALESCE(dor.status, '')) IN ('pending','assigned','received','accepted','acknowledged','busy','in_use','enroute','en_route','on_scene')
+                ");
+            }
+
+            // 1b. Mark dispatch_operator_records completed if assigned responder in users table is available
+            if ($hasOperatorRecords && $hasUsers && ers_vehicle_resource_column_exists($pdo, 'users', 'unit_status')) {
+                $pdo->exec("
+                    UPDATE `dispatch_operator_records` dor
+                    INNER JOIN `users` u ON u.id = dor.assigned_to
+                    SET dor.status = 'completed'
+                    WHERE LOWER(COALESCE(u.unit_status, '')) IN ('available', 'ready', 'on_duty')
+                      AND LOWER(COALESCE(dor.status, '')) IN ('pending','assigned','received','accepted','acknowledged','busy','in_use','enroute','en_route','on_scene')
+                ");
+            }
+
+            // 2. Mark dispatches cleared if linked incident is resolved/closed/cancelled
+            if ($hasDispatches && $hasIncidents && ers_vehicle_resource_column_exists($pdo, 'dispatches', 'incident_id')) {
+                $clearedAtSql = ers_vehicle_resource_column_exists($pdo, 'dispatches', 'cleared_at') ? ", d.cleared_at = COALESCE(d.cleared_at, CURRENT_TIMESTAMP)" : "";
+                $pdo->exec("
+                    UPDATE `dispatches` d
+                    INNER JOIN `incidents` i ON i.id = d.incident_id
+                    SET d.status = 'cleared'{$clearedAtSql}
+                    WHERE LOWER(COALESCE(i.status, '')) IN ('resolved', 'closed', 'cancelled', 'completed')
+                      AND LOWER(COALESCE(d.status, '')) IN ('assigned','acknowledged','enroute','en_route','on_scene','pending')
+                ");
+            }
+
+            // 3. Clear current_incident_id on units if linked incident is resolved/closed/cancelled
+            if ($hasUnits && $hasIncidents && ers_vehicle_resource_column_exists($pdo, 'units', 'current_incident_id')) {
+                $lastStatusSql = ers_vehicle_resource_column_exists($pdo, 'units', 'last_status_at') ? ", u.last_status_at = CURRENT_TIMESTAMP" : "";
+                $pdo->exec("
+                    UPDATE `units` u
+                    INNER JOIN `incidents` i ON i.id = u.current_incident_id
+                    SET u.current_incident_id = NULL,
+                        u.status = 'available'{$lastStatusSql}
+                    WHERE LOWER(COALESCE(i.status, '')) IN ('resolved', 'closed', 'cancelled', 'completed')
+                      AND LOWER(COALESCE(u.status, '')) IN ('assigned','acknowledged','enroute','en_route','on_scene','busy')
+                ");
+            }
+
+            // 4. Release units that have status busy/assigned/enroute but NO live unresolved dispatch
+            if ($hasUnits) {
+                $lastStatusSql = ers_vehicle_resource_column_exists($pdo, 'units', 'last_status_at') ? ", u.last_status_at = CURRENT_TIMESTAMP" : "";
+                $currIncSql = ers_vehicle_resource_column_exists($pdo, 'units', 'current_incident_id') ? ", u.current_incident_id = NULL" : "";
+
+                $dispatchCheck = $hasDispatches && $hasIncidents && ers_vehicle_resource_column_exists($pdo, 'dispatches', 'incident_id')
+                    ? "AND NOT EXISTS (
+                        SELECT 1 FROM `dispatches` d
+                        INNER JOIN `incidents` i ON i.id = d.incident_id
+                        WHERE d.unit_id = u.id
+                          AND LOWER(COALESCE(i.status, '')) NOT IN ('resolved','closed','cancelled','completed')
+                          AND LOWER(COALESCE(d.status, '')) IN ('assigned','acknowledged','enroute','en_route','on_scene','pending')
+                    )" : "";
+
+                $operatorCheck = $hasOperatorRecords && $hasIncidents && ers_vehicle_resource_column_exists($pdo, 'dispatch_operator_records', 'incident_id') && ers_vehicle_resource_column_exists($pdo, 'dispatch_operator_records', 'assigned_unit_code')
+                    ? "AND NOT EXISTS (
+                        SELECT 1 FROM `dispatch_operator_records` dor
+                        INNER JOIN `incidents` i ON i.id = dor.incident_id
+                        WHERE UPPER(TRIM(dor.assigned_unit_code)) COLLATE utf8mb4_unicode_ci = UPPER(TRIM(u.identifier)) COLLATE utf8mb4_unicode_ci
+                          AND LOWER(COALESCE(i.status, '')) NOT IN ('resolved','closed','cancelled','completed')
+                          AND LOWER(COALESCE(dor.status, '')) IN ('pending','assigned','received','accepted','acknowledged','busy','in_use','enroute','en_route','on_scene')
+                    )" : "";
+
+                $eventCheck = ers_vehicle_resource_table_exists($pdo, 'event_unit_dispatches')
+                    ? "AND NOT EXISTS (
+                        SELECT 1 FROM `event_unit_dispatches` ed
+                        WHERE ed.unit_id = u.id
+                          AND LOWER(COALESCE(ed.status, '')) = 'assigned'
+                    )" : "";
+
+                $pdo->exec("
+                    UPDATE `units` u
+                    SET u.status = 'available'{$currIncSql}{$lastStatusSql}
+                    WHERE LOWER(COALESCE(u.status, '')) IN ('assigned','acknowledged','enroute','en_route','on_scene','busy')
+                       {$dispatchCheck}
+                       {$operatorCheck}
+                       {$eventCheck}
+                ");
+            }
+
+            // 5. Reset responder unit_status in users table to 'available' if no active unresolved dispatch exists
+            if ($hasUsers && ers_vehicle_resource_column_exists($pdo, 'users', 'unit_status')) {
+                $roleFilter = ers_vehicle_resource_column_exists($pdo, 'users', 'role')
+                    ? " AND LOWER(COALESCE(usr.role, '')) = 'responder'"
+                    : "";
+
+                $operatorCheck = $hasOperatorRecords
+                    ? ($hasIncidents && ers_vehicle_resource_column_exists($pdo, 'dispatch_operator_records', 'incident_id')
+                        ? "AND NOT EXISTS (
+                            SELECT 1 FROM `dispatch_operator_records` dor
+                            LEFT JOIN `incidents` i ON i.id = dor.incident_id
+                            WHERE dor.assigned_to = usr.id
+                              AND LOWER(COALESCE(dor.status, '')) IN ('pending','assigned','received','accepted','acknowledged','busy','in_use','enroute','en_route','on_scene')
+                              AND (dor.incident_id IS NULL OR dor.incident_id = 0 OR i.id IS NULL OR LOWER(COALESCE(i.status, '')) NOT IN ('resolved','closed','cancelled','completed'))
+                        )"
+                        : "AND NOT EXISTS (
+                            SELECT 1 FROM `dispatch_operator_records` dor
+                            WHERE dor.assigned_to = usr.id
+                              AND LOWER(COALESCE(dor.status, '')) IN ('pending','assigned','received','accepted','acknowledged','busy','in_use','enroute','en_route','on_scene')
+                        )")
+                    : "";
+
+                $eventCheck = ers_vehicle_resource_table_exists($pdo, 'event_unit_dispatches') && $hasUnits && ers_vehicle_resource_column_exists($pdo, 'users', 'unit_code')
+                    ? "AND NOT EXISTS (
+                        SELECT 1 FROM `event_unit_dispatches` ed
+                        INNER JOIN `units` un ON un.id = ed.unit_id
+                        WHERE UPPER(TRIM(un.identifier)) COLLATE utf8mb4_unicode_ci = UPPER(TRIM(usr.unit_code)) COLLATE utf8mb4_unicode_ci
+                          AND LOWER(COALESCE(ed.status, '')) = 'assigned'
+                    )" : "";
+
+                $pdo->exec("
+                    UPDATE `users` usr
+                    SET usr.unit_status = 'available'
+                    WHERE LOWER(COALESCE(usr.unit_status, '')) IN ('busy','in_use','assigned','accepted','acknowledged','enroute','en_route','on_scene')
+                      {$roleFilter}
+                      {$operatorCheck}
+                      {$eventCheck}
+                ");
+            }
+
+            // 6. Reconcile vehicle resource_records status to 'available' if vehicle is currently 'in_use' with no active dispatch
+            if ($hasResourceRecords) {
+                $codeCol = 'code';
+                $catCol = 'category';
+                $statusCol = 'status';
+
+                $operatorCheck = $hasOperatorRecords
+                    ? ($hasIncidents && ers_vehicle_resource_column_exists($pdo, 'dispatch_operator_records', 'incident_id')
+                        ? "AND NOT EXISTS (
+                            SELECT 1 FROM `dispatch_operator_records` dor
+                            LEFT JOIN `incidents` i ON i.id = dor.incident_id
+                            WHERE UPPER(TRIM(dor.assigned_unit_code)) COLLATE utf8mb4_unicode_ci = UPPER(TRIM(rr.`{$codeCol}`)) COLLATE utf8mb4_unicode_ci
+                              AND LOWER(COALESCE(dor.status, '')) IN ('pending','assigned','received','accepted','acknowledged','busy','in_use','enroute','en_route','on_scene')
+                              AND (dor.incident_id IS NULL OR dor.incident_id = 0 OR i.id IS NULL OR LOWER(COALESCE(i.status, '')) NOT IN ('resolved','closed','cancelled','completed'))
+                        )"
+                        : "AND NOT EXISTS (
+                            SELECT 1 FROM `dispatch_operator_records` dor
+                            WHERE UPPER(TRIM(dor.assigned_unit_code)) COLLATE utf8mb4_unicode_ci = UPPER(TRIM(rr.`{$codeCol}`)) COLLATE utf8mb4_unicode_ci
+                              AND LOWER(COALESCE(dor.status, '')) IN ('pending','assigned','received','accepted','acknowledged','busy','in_use','enroute','en_route','on_scene')
+                        )")
+                    : "";
+
+                $eventCheck = ers_vehicle_resource_table_exists($pdo, 'event_unit_dispatches') && $hasUnits
+                    ? "AND NOT EXISTS (
+                        SELECT 1 FROM `event_unit_dispatches` ed
+                        INNER JOIN `units` un ON un.id = ed.unit_id
+                        WHERE UPPER(TRIM(un.identifier)) COLLATE utf8mb4_unicode_ci = UPPER(TRIM(rr.`{$codeCol}`)) COLLATE utf8mb4_unicode_ci
+                          AND LOWER(COALESCE(ed.status, '')) = 'assigned'
+                    )" : "";
+
+                $dispatchCheck = $hasDispatches && $hasIncidents && $hasUnits && ers_vehicle_resource_column_exists($pdo, 'dispatches', 'incident_id')
+                    ? "AND NOT EXISTS (
+                        SELECT 1 FROM `dispatches` d
+                        INNER JOIN `units` un ON un.id = d.unit_id
+                        INNER JOIN `incidents` i ON i.id = d.incident_id
+                        WHERE UPPER(TRIM(un.identifier)) COLLATE utf8mb4_unicode_ci = UPPER(TRIM(rr.`{$codeCol}`)) COLLATE utf8mb4_unicode_ci
+                          AND LOWER(COALESCE(i.status, '')) NOT IN ('resolved','closed','cancelled','completed')
+                          AND LOWER(COALESCE(d.status, '')) IN ('assigned','acknowledged','enroute','en_route','on_scene','pending')
+                    )" : "";
+
+                $unitBusyCheck = $hasUnits
+                    ? "AND NOT EXISTS (
+                        SELECT 1 FROM `units` un
+                        WHERE UPPER(TRIM(un.identifier)) COLLATE utf8mb4_unicode_ci = UPPER(TRIM(rr.`{$codeCol}`)) COLLATE utf8mb4_unicode_ci
+                          AND LOWER(COALESCE(un.status, '')) IN ('assigned','busy','enroute','en_route','on_scene')
+                    )" : "";
+
+                $pdo->exec("
+                    UPDATE `{$resourceTable}` rr
+                    SET rr.`{$statusCol}` = 'available',
+                        rr.updated_at = CURRENT_TIMESTAMP
+                    WHERE LOWER(COALESCE(rr.`{$catCol}`, '')) = 'vehicles'
+                      AND LOWER(COALESCE(rr.`{$statusCol}`, '')) = 'in_use'
+                      {$operatorCheck}
+                      {$eventCheck}
+                      {$dispatchCheck}
+                      {$unitBusyCheck}
+                ");
+            }
+
+            // 7. Mark responder_backup_requests completed if linked incident is resolved/closed/cancelled
+            if (ers_vehicle_resource_table_exists($pdo, 'responder_backup_requests') && $hasIncidents) {
+                $pdo->exec("
+                    UPDATE `responder_backup_requests` rbr
+                    INNER JOIN `incidents` i ON (
+                        (rbr.incident_id REGEXP '^[0-9]+$' AND i.id = CAST(rbr.incident_id AS UNSIGNED))
+                        OR (i.reference_no COLLATE utf8mb4_unicode_ci = rbr.incident_id COLLATE utf8mb4_unicode_ci)
+                    )
+                    SET rbr.status = 'completed',
+                        rbr.updated_at = CURRENT_TIMESTAMP
+                    WHERE LOWER(COALESCE(i.status, '')) IN ('resolved', 'closed', 'cancelled', 'completed')
+                      AND LOWER(COALESCE(rbr.status, '')) = 'pending'
+                ");
+            }
+
+            // 8. Mark responder_resource_requests completed if linked incident is resolved/closed/cancelled
+            if (ers_vehicle_resource_table_exists($pdo, 'responder_resource_requests') && $hasIncidents) {
+                $pdo->exec("
+                    UPDATE `responder_resource_requests` rrr
+                    INNER JOIN `incidents` i ON (
+                        (rrr.incident_id REGEXP '^[0-9]+$' AND i.id = CAST(rrr.incident_id AS UNSIGNED))
+                        OR (i.reference_no COLLATE utf8mb4_unicode_ci = rrr.incident_id COLLATE utf8mb4_unicode_ci)
+                    )
+                    SET rrr.status = 'completed',
+                        rrr.updated_at = CURRENT_TIMESTAMP
+                    WHERE LOWER(COALESCE(i.status, '')) IN ('resolved', 'closed', 'cancelled', 'completed')
+                      AND LOWER(COALESCE(rrr.status, '')) = 'pending'
+                ");
+            }
+
+            // 9. Mark resource_requests completed if linked incident is resolved/closed/cancelled
+            if (ers_vehicle_resource_table_exists($pdo, 'resource_requests') && $hasIncidents) {
+                $rStmt = $pdo->query("SELECT id, details FROM `resource_requests` WHERE status = 'pending'");
+                if ($rStmt) {
+                    while ($rRow = $rStmt->fetch(PDO::FETCH_ASSOC)) {
+                        $rDetails = json_decode((string)($rRow['details'] ?? ''), true);
+                        if (is_array($rDetails) && !empty($rDetails['incident_id'])) {
+                            $rIncId = (int)$rDetails['incident_id'];
+                            $chk = $pdo->prepare("SELECT 1 FROM `incidents` WHERE id = ? AND LOWER(COALESCE(status, '')) IN ('resolved', 'closed', 'cancelled', 'completed') LIMIT 1");
+                            $chk->execute([$rIncId]);
+                            if ($chk->fetchColumn()) {
+                                $upd = $pdo->prepare("UPDATE `resource_requests` SET status = 'completed' WHERE id = ?");
+                                $upd->execute([(int)$rRow['id']]);
+                            }
+                        }
+                    }
+                }
+            }
+        } catch (Throwable $e) {
+            error_log('ers_reconcile_all_dispatch_and_unit_statuses skipped: ' . $e->getMessage());
+        }
+    }
+}
+
 if (!function_exists('ers_responder_has_active_dispatch_assignment')) {
     function ers_responder_has_active_dispatch_assignment(PDO $pdo, int $responderId): bool
     {
@@ -541,12 +794,18 @@ if (!function_exists('ers_responder_has_active_dispatch_assignment')) {
 
         try {
             if (ers_vehicle_resource_table_exists($pdo, 'dispatch_operator_records')) {
+                $hasIncidents = ers_vehicle_resource_table_exists($pdo, 'incidents') && ers_vehicle_resource_column_exists($pdo, 'dispatch_operator_records', 'incident_id');
+                $incidentJoin = $hasIncidents ? "LEFT JOIN `incidents` i ON i.id = d.incident_id" : "";
+                $incidentFilter = $hasIncidents ? "AND (d.incident_id IS NULL OR d.incident_id = 0 OR i.id IS NULL OR LOWER(COALESCE(i.status, '')) NOT IN ('resolved', 'closed', 'cancelled', 'completed'))" : "";
+
                 $stmt = $pdo->prepare(
                     "SELECT 1
-                     FROM `dispatch_operator_records`
-                     WHERE `assigned_to` = ?
-                       AND `status` IN ('pending','assigned','received','accepted','acknowledged','busy','in_use','enroute','en_route','on_scene')
-                     ORDER BY `assigned_at` DESC, `id` DESC
+                     FROM `dispatch_operator_records` d
+                     {$incidentJoin}
+                     WHERE d.assigned_to = ?
+                       AND LOWER(COALESCE(d.status, '')) IN ('pending','assigned','received','accepted','acknowledged','busy','in_use','enroute','en_route','on_scene')
+                       {$incidentFilter}
+                     ORDER BY d.assigned_at DESC, d.id DESC
                      LIMIT 1"
                 );
                 $stmt->execute([$responderId]);
@@ -564,7 +823,7 @@ if (!function_exists('ers_responder_has_active_dispatch_assignment')) {
                  FROM event_unit_dispatches ed
                  INNER JOIN users u ON UPPER(TRIM(u.unit_code)) = UPPER(TRIM((SELECT identifier FROM units WHERE id = ed.unit_id LIMIT 1)))
                  WHERE u.id = ?
-                   AND ed.status = 'assigned'
+                   AND LOWER(COALESCE(ed.status, '')) = 'assigned'
                  LIMIT 1"
             );
             $eventStmt->execute([$responderId]);
@@ -799,6 +1058,7 @@ if (!function_exists('ers_apply_responder_presence_to_vehicle_resource_row')) {
 if (!function_exists('ers_sync_responder_vehicle_resources')) {
     function ers_sync_responder_vehicle_resources(PDO $pdo): int
     {
+        ers_reconcile_all_dispatch_and_unit_statuses($pdo);
         $synced = 0;
         foreach (ers_vehicle_resource_responder_presence_map($pdo) as $presence) {
             $responderId = (int) ($presence['responder_id'] ?? 0);
@@ -826,6 +1086,7 @@ if (!function_exists('ers_sync_offline_responder_vehicle_resources')) {
 if (!function_exists('ers_sync_all_vehicle_resource_units')) {
     function ers_sync_all_vehicle_resource_units(PDO $pdo, ?string $tableName = null): void
     {
+        ers_reconcile_all_dispatch_and_unit_statuses($pdo);
         $tableName = $tableName ?? ers_vehicle_resource_units_table($pdo);
         if ($tableName === null || !ers_units_table_available($pdo)) {
             return;

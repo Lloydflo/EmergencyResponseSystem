@@ -65,11 +65,46 @@ $avatar_source = $user_avatar !== ''
     : 'data:image/svg+xml;base64,' . base64_encode($fallback_avatar_svg);
 ?>
 
+<link rel="stylesheet" href="css/admin-header.css">
 <link rel="stylesheet" href="css/notification-modal.css">
 <link rel="stylesheet" href="css/message-modal.css">
 <link rel="stylesheet" href="css/message-content-modal.css">
 <link rel="stylesheet" href="css/admin-dark-theme.css">
 <style>
+    .user-profile {
+        cursor: pointer;
+        user-select: none;
+    }
+
+    .user-profile-dropdown {
+        position: fixed;
+        top: var(--app-header-height-1, 70px);
+        right: 2rem;
+        width: 320px;
+        max-width: calc(100vw - 2rem);
+        background-color: var(--card-bg-1, #ffffff);
+        border: 1px solid var(--border-color-1, #e2e8f0);
+        border-radius: 0.75rem;
+        box-shadow: 0 10px 25px rgba(0, 0, 0, 0.15);
+        z-index: 2100;
+        opacity: 0;
+        visibility: hidden;
+        transform: translateY(-10px);
+        transition: opacity 0.2s ease, transform 0.2s ease, visibility 0.2s ease;
+        overflow: hidden;
+    }
+
+    .user-profile-dropdown.show {
+        opacity: 1 !important;
+        visibility: visible !important;
+        transform: translateY(0) !important;
+        pointer-events: auto !important;
+    }
+
+    .notification-modal {
+        z-index: 2100;
+    }
+
     .header-empty-state {
         display: grid;
         place-items: center;
@@ -94,7 +129,28 @@ $avatar_source = $user_avatar !== ''
         font: inherit;
     }
 
-    .header-message-avatar {
+    .message-content-item {
+        display: flex;
+        align-items: flex-start;
+        gap: 0.75rem;
+        padding: 0.75rem;
+        border-radius: 0.5rem;
+        transition: background-color 0.2s ease, transform 0.15s ease;
+        cursor: pointer;
+        width: 100%;
+        border: 0;
+        background: transparent;
+        text-align: left;
+        font: inherit;
+        color: inherit;
+        box-sizing: border-box;
+    }
+
+    .message-content-item:hover {
+        background-color: var(--sidebar-hover-bg-1, rgba(255, 255, 255, 0.06));
+    }
+
+    .message-content-avatar {
         width: 36px;
         height: 36px;
         border-radius: 50%;
@@ -102,34 +158,84 @@ $avatar_source = $user_avatar !== ''
         align-items: center;
         justify-content: center;
         background: linear-gradient(135deg, #0f766e 0%, #0ea5e9 100%);
-        color: #fff;
+        color: #ffffff;
         font-size: 0.75rem;
         font-weight: 700;
         text-transform: uppercase;
         flex-shrink: 0;
+        box-shadow: 0 2px 4px rgba(0, 0, 0, 0.12);
+        letter-spacing: 0.5px;
     }
 
-    .header-message-meta {
+    .message-content-body {
+        flex: 1;
+        min-width: 0;
+        display: flex;
+        flex-direction: column;
+        gap: 0.2rem;
+    }
+
+    .message-content-top {
         display: flex;
         align-items: center;
+        justify-content: space-between;
         gap: 0.5rem;
-        margin-top: 0.25rem;
-        font-size: 0.75rem;
-        color: var(--text-secondary-1, #64748b);
     }
 
-    .header-message-count {
+    .message-content-author {
+        font-weight: 600;
+        font-size: 0.875rem;
+        color: var(--text-color-1, #0f172a);
+        line-height: 1.3;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+
+    .message-content-time {
+        font-size: 0.6875rem;
+        color: var(--text-secondary-1, #64748b);
+        flex-shrink: 0;
+        white-space: nowrap;
+        opacity: 0.85;
+    }
+
+    .message-content-preview {
+        font-size: 0.75rem;
+        color: var(--text-secondary-1, #64748b);
+        line-height: 1.4;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+
+    .message-content-unread {
         display: inline-flex;
         align-items: center;
         justify-content: center;
-        min-width: 1.4rem;
-        height: 1.4rem;
-        padding: 0 0.4rem;
+        min-width: 1.25rem;
+        height: 1.25rem;
+        padding: 0 0.35rem;
         border-radius: 999px;
-        background: #fee2e2;
-        color: #b91c1c;
+        background: #dc2626;
+        color: #ffffff;
         font-size: 0.6875rem;
         font-weight: 700;
+        flex-shrink: 0;
+        align-self: center;
+    }
+
+    [data-theme="dark"] .message-content-author {
+        color: var(--text-color-1, #e5eef9);
+    }
+
+    [data-theme="dark"] .message-content-time,
+    [data-theme="dark"] .message-content-preview {
+        color: var(--text-secondary-1, #94a3b8);
+    }
+
+    [data-theme="dark"] .message-content-item:hover {
+        background-color: var(--sidebar-hover-bg-1, rgba(255, 255, 255, 0.08));
     }
 
     .header-live-toast {
@@ -365,7 +471,8 @@ $avatar_source = $user_avatar !== ''
 </div>
 
 <script>
-document.addEventListener('DOMContentLoaded', function() {
+(function() {
+function initAdminHeader() {
     const menuToggle = document.getElementById('menuToggle');
     const notificationBtn = document.getElementById('headerNotificationBtn');
     const messageBtn = document.getElementById('headerMessageBtn');
@@ -508,6 +615,12 @@ document.addEventListener('DOMContentLoaded', function() {
         return count + ' zone movement alerts';
     }
 
+    function resolvedUnreadText(count) {
+        if (count <= 0) return 'No resolved incident reviews';
+        if (count === 1) return '1 resolved incident review';
+        return count + ' resolved incident reviews';
+    }
+
     function incidentCardLabel(item) {
         const card = item && item.incident_card ? item.incident_card : {};
         const ref = String(card.reference_no || '').trim();
@@ -603,106 +716,6 @@ document.addEventListener('DOMContentLoaded', function() {
         }
 
         notificationList.innerHTML = combinedNotificationParts.join('');
-        return;
-
-        const latest = state.unreadThreads[0] || state.recentThreads[0] || null;
-        const backupCount = Array.isArray(state.backupRequests) ? state.backupRequests.length : 0;
-        const latestBackup = backupCount > 0 ? state.backupRequests[0] : null;
-        const resourceAdditionItems = Array.isArray(state.resourceAdditionNotifications) ? state.resourceAdditionNotifications.slice(0, 3) : [];
-        const resolvedItems = Array.isArray(state.resolvedNotifications) ? state.resolvedNotifications.slice(0, 3) : [];
-        const incidentCardItems = Array.isArray(state.incidentCardNotifications) ? state.incidentCardNotifications.slice(0, 3) : [];
-        const parts = [];
-
-        incidentCardItems.forEach(function(item) {
-            const label = incidentCardLabel(item);
-            const isUnread = Number(item.notification_id || 0) > state.incidentCardSeenId;
-            parts.push(`
-                <button type="button" class="notification-item header-reset-button" data-open-interagency="1" data-incident-card-notification="1">
-                    <div class="notification-icon">
-                        <i class="fas ${isUnread ? 'fa-triangle-exclamation' : 'fa-clipboard-list'}"></i>
-                    </div>
-                    <div class="notification-details">
-                        <div class="notification-title">${escapeHtml(isUnread ? 'Incident card sent' : 'Incident card')}</div>
-                        <div class="notification-text">${escapeHtml(incidentCardText(item))}</div>
-                        <div class="notification-time">${escapeHtml(label)} · ${escapeHtml(relativeTime(item.notified_at))}</div>
-                    </div>
-                </button>
-            `);
-        });
-
-        resolvedItems.forEach(function(item) {
-            const incident = item && item.incident ? item.incident : {};
-            const incidentLabel = incident.label || incident.reference_no || (incident.id ? ('#' + incident.id) : 'Incident');
-            const detailText = item.details || `${incidentLabel} has been resolved.`;
-            const isUnread = Number(item.notification_id || 0) > state.resolvedSeenId;
-            parts.push(`
-                <button type="button" class="notification-item header-reset-button" data-open-review="1">
-                    <div class="notification-icon">
-                        <i class="fas ${isUnread ? 'fa-circle-check' : 'fa-check'}"></i>
-                    </div>
-                    <div class="notification-details">
-                        <div class="notification-title">${escapeHtml(isUnread ? 'Resolved review sent' : 'Resolved review')}</div>
-                        <div class="notification-text">${escapeHtml(detailText)}</div>
-                        <div class="notification-time">${escapeHtml(relativeTime(item.notified_at || incident.resolved_at))}</div>
-                    </div>
-                </button>
-            `);
-        });
-
-        resourceAdditionItems.forEach(function(item) {
-            const isUnread = Number(item.notification_id || 0) > state.resourceAdditionSeenId;
-            parts.push(`
-                <button type="button" class="notification-item header-reset-button" data-open-resources="1" data-resource-addition-notification="1">
-                    <div class="notification-icon">
-                        <i class="fas ${isUnread ? 'fa-circle-plus' : 'fa-box'}"></i>
-                    </div>
-                    <div class="notification-details">
-                        <div class="notification-title">${escapeHtml(isUnread ? 'Resource added' : 'Added resource')}</div>
-                        <div class="notification-text">${escapeHtml(resourceAdditionText(item))}</div>
-                        <div class="notification-time">${escapeHtml(relativeTime(item.notified_at))}</div>
-                    </div>
-                </button>
-            `);
-        });
-
-        if (latestBackup) {
-            const notificationText = backupRequestText(latestBackup);
-            const iconClass = latestBackup.request_kind === 'backup' ? 'fa-truck-medical' : 'fa-hand-holding-medical';
-            parts.push(`
-                <button type="button" class="notification-item header-reset-button" data-open-resources="1">
-                    <div class="notification-icon">
-                        <i class="fas ${iconClass}"></i>
-                    </div>
-                    <div class="notification-details">
-                        <div class="notification-title">${escapeHtml(backupUnreadText(backupCount))}</div>
-                        <div class="notification-text">${escapeHtml(notificationText)}</div>
-                        <div class="notification-time">${escapeHtml(relativeTime(latestBackup.date_requested))}</div>
-                    </div>
-                </button>
-            `);
-        }
-
-        if (unreadCount > 0 && latest) {
-            parts.push(`
-                <button type="button" class="notification-item header-reset-button" data-open-interagency="1">
-                    <div class="notification-icon">
-                        <i class="fas fa-envelope"></i>
-                    </div>
-                    <div class="notification-details">
-                        <div class="notification-title">${escapeHtml(unreadText(unreadCount))}</div>
-                        <div class="notification-text">${escapeHtml(threadTitle(latest))}: ${escapeHtml(previewText(latest))}</div>
-                        <div class="notification-time">${escapeHtml(relativeTime(latest.last_at))}</div>
-                    </div>
-                </button>
-            `);
-        }
-
-        if (!parts.length) {
-            notificationList.innerHTML = emptyState('fa-bell-slash', 'No new notifications.');
-            return;
-        }
-
-        notificationList.innerHTML = parts.join('');
     }
 
     function backupRequestLabel(item) {
@@ -889,26 +902,42 @@ document.addEventListener('DOMContentLoaded', function() {
 
     function renderMessageList() {
         if (!messageList) return;
-        const items = state.recentThreads.slice(0, 6);
-        if (!items.length) {
-            messageList.innerHTML = emptyState('fa-inbox', 'No interagency messages yet.');
+        if (!state.unreadThreads.length && !state.recentThreads.length) {
+            messageList.innerHTML = emptyState('fa-comment-slash', 'No conversations found.');
             return;
         }
 
-        messageList.innerHTML = items.map((item) => {
-            const unread = Math.max(0, Number(item.unread) || 0);
+        const renderedIds = new Set();
+        const items = [];
+        state.unreadThreads.forEach(function(thread) {
+            const id = String(thread.id || '');
+            if (!renderedIds.has(id)) {
+                renderedIds.add(id);
+                items.push(thread);
+            }
+        });
+        state.recentThreads.forEach(function(thread) {
+            const id = String(thread.id || '');
+            if (!renderedIds.has(id)) {
+                renderedIds.add(id);
+                items.push(thread);
+            }
+        });
+
+        messageList.innerHTML = items.map(function(thread) {
+            const unread = Math.max(0, Number(thread.unread) || 0);
+            const title = threadTitle(thread);
             return `
-                <button type="button" class="message-item header-message-item" data-open-interagency="1">
-                    <div class="message-avatar header-message-avatar">${escapeHtml(avatarInitials(threadTitle(item)))}</div>
-                    <div class="message-details">
-                        <div class="message-title">${escapeHtml(threadTitle(item))}</div>
-                        <div class="message-text">${escapeHtml(previewText(item))}</div>
-                        <div class="header-message-meta">
-                            <span class="message-time">${escapeHtml(relativeTime(item.last_at))}</span>
-                            ${unread > 0 ? `<span class="header-message-count">${escapeHtml(unreadText(unread))}</span>` : ''}
+                <button type="button" class="message-content-item header-reset-button" data-open-interagency="1">
+                    <div class="message-content-avatar">${escapeHtml(avatarInitials(title))}</div>
+                    <div class="message-content-body">
+                        <div class="message-content-top">
+                            <span class="message-content-author">${escapeHtml(title)}</span>
+                            <span class="message-content-time">${escapeHtml(relativeTime(thread.last_at))}</span>
                         </div>
+                        <div class="message-content-preview">${escapeHtml(previewText(thread))}</div>
                     </div>
-                    ${unread > 0 ? '<div class="message-status unread"></div>' : ''}
+                    ${unread > 0 ? `<span class="message-content-unread">${escapeHtml(String(unread))}</span>` : ''}
                 </button>
             `;
         }).join('');
@@ -920,14 +949,14 @@ document.addEventListener('DOMContentLoaded', function() {
         window.clearTimeout(state.toastTimer);
         state.toastTimer = window.setTimeout(function() {
             liveToast.hidden = true;
-        }, 200);
+        }, 220);
     }
 
-    function showLiveToast(count) {
-        if (!liveToast || count <= 0) return;
+    function showMessageToast(thread) {
+        if (!liveToast || !thread) return;
         if (liveToastIcon) liveToastIcon.className = 'fas fa-envelope';
-        if (liveToastTitle) liveToastTitle.textContent = 'Interagency';
-        if (liveToastText) liveToastText.textContent = unreadText(count);
+        if (liveToastTitle) liveToastTitle.textContent = threadTitle(thread);
+        if (liveToastText) liveToastText.textContent = previewText(thread);
         liveToast.setAttribute('data-toast-target', 'interagency');
         liveToast.hidden = false;
         window.clearTimeout(state.toastTimer);
@@ -942,7 +971,12 @@ document.addEventListener('DOMContentLoaded', function() {
         if (liveToastIcon) liveToastIcon.className = 'fas fa-truck-medical';
         if (liveToastTitle) liveToastTitle.textContent = 'Resource Requests';
         if (liveToastText) liveToastText.textContent = backupUnreadText(count);
-        liveToast.setAttribute('data-toast-target', 'resources');
+        liveToast.setAttribute('data-toast-target', 'backup_requests');
+        if (Array.isArray(state.backupRequests) && state.backupRequests.length > 0) {
+            const firstReq = state.backupRequests[0];
+            liveToast.setAttribute('data-request-id', String(firstReq.id || ''));
+            liveToast.setAttribute('data-incident-id', String(firstReq.incident_id || ''));
+        }
         liveToast.hidden = false;
         window.clearTimeout(state.toastTimer);
         window.requestAnimationFrame(function() {
@@ -968,8 +1002,8 @@ document.addEventListener('DOMContentLoaded', function() {
     function showResolvedToast(count) {
         if (!liveToast || count <= 0) return;
         if (liveToastIcon) liveToastIcon.className = 'fas fa-circle-check';
-        if (liveToastTitle) liveToastTitle.textContent = 'Resolved Review';
-        if (liveToastText) liveToastText.textContent = count === 1 ? '1 resolved review was sent to admin' : count + ' resolved reviews were sent to admin';
+        if (liveToastTitle) liveToastTitle.textContent = 'Resolved Incidents';
+        if (liveToastText) liveToastText.textContent = resolvedUnreadText(count);
         liveToast.setAttribute('data-toast-target', 'review');
         liveToast.hidden = false;
         window.clearTimeout(state.toastTimer);
@@ -981,8 +1015,8 @@ document.addEventListener('DOMContentLoaded', function() {
 
     function showIncidentCardToast(count) {
         if (!liveToast || count <= 0) return;
-        if (liveToastIcon) liveToastIcon.className = 'fas fa-triangle-exclamation';
-        if (liveToastTitle) liveToastTitle.textContent = 'Incident Card';
+        if (liveToastIcon) liveToastIcon.className = 'fas fa-clipboard-list';
+        if (liveToastTitle) liveToastTitle.textContent = 'Incident Cards';
         if (liveToastText) liveToastText.textContent = incidentCardUnreadText(count);
         liveToast.setAttribute('data-toast-target', 'incident-card');
         liveToast.hidden = false;
@@ -1007,22 +1041,40 @@ document.addEventListener('DOMContentLoaded', function() {
         state.toastTimer = window.setTimeout(hideLiveToast, 4000);
     }
 
+    function showLiveToast(count) {
+        if (!liveToast || count <= 0) return;
+        if (liveToastIcon) liveToastIcon.className = 'fas fa-envelope';
+        if (liveToastTitle) liveToastTitle.textContent = 'Interagency';
+        if (liveToastText) liveToastText.textContent = unreadText(count);
+        liveToast.setAttribute('data-toast-target', 'interagency');
+        liveToast.hidden = false;
+        window.clearTimeout(state.toastTimer);
+        window.requestAnimationFrame(function() {
+            liveToast.classList.add('show');
+        });
+        state.toastTimer = window.setTimeout(hideLiveToast, 4000);
+    }
+
     function closeModal(modalId) {
-        const modal = document.getElementById(modalId);
+        const modal = typeof modalId === 'string' ? document.getElementById(modalId) : modalId;
         if (!modal) return;
         modal.classList.remove('show');
-        if (modalId === 'notificationModal' && notificationBtn) notificationBtn.classList.remove('active');
-        if (modalId === 'allNotificationsModal' && notificationBtn) notificationBtn.classList.remove('active');
-        if (modalId === 'messageModal' && messageBtn) messageBtn.classList.remove('active');
+        if (modal === notificationModal && notificationBtn) notificationBtn.classList.remove('active');
+        if (modal === messageModal && messageBtn) messageBtn.classList.remove('active');
+        if (modal === allNotificationsModal && notificationBtn) notificationBtn.classList.remove('active');
+        if (modal === messageContentModal) modal.classList.remove('show');
         document.body.style.overflow = '';
     }
 
     function closeAllModals() {
-        document.querySelectorAll('.notification-modal, .message-content-modal').forEach(function(modal) {
-            modal.classList.remove('show');
-        });
+        if (notificationModal) notificationModal.classList.remove('show');
+        if (messageModal) messageModal.classList.remove('show');
+        if (allNotificationsModal) allNotificationsModal.classList.remove('show');
+        if (messageContentModal) messageContentModal.classList.remove('show');
+        if (userProfileDropdown) userProfileDropdown.classList.remove('show');
         if (notificationBtn) notificationBtn.classList.remove('active');
         if (messageBtn) messageBtn.classList.remove('active');
+        if (userProfileBtn) userProfileBtn.classList.remove('active');
         document.body.style.overflow = '';
     }
 
@@ -1033,9 +1085,23 @@ document.addEventListener('DOMContentLoaded', function() {
         if (otherButton) otherButton.classList.remove('active');
         if (messageContentModal) messageContentModal.classList.remove('show');
         if (allNotificationsModal) allNotificationsModal.classList.remove('show');
+        if (userProfileDropdown) userProfileDropdown.classList.remove('show');
+        if (userProfileBtn) userProfileBtn.classList.remove('active');
         modal.classList.toggle('show', willShow);
         button.classList.toggle('active', willShow);
         document.body.style.overflow = '';
+    }
+
+    function openBackupRequestFlow(reqId, incId) {
+        if (typeof openRequestBackupModalWithContext === 'function') {
+            openRequestBackupModalWithContext({ requestId: reqId, incidentId: incId });
+            return;
+        }
+        const targetUrl = new URL(resourcesUrl, window.location.href);
+        targetUrl.searchParams.set('open_request_backup', '1');
+        if (reqId) targetUrl.searchParams.set('request_id', String(reqId));
+        if (incId) targetUrl.searchParams.set('incident_id', String(incId));
+        window.location.href = targetUrl.toString();
     }
 
     async function openAllNotifications() {
@@ -1369,28 +1435,32 @@ document.addEventListener('DOMContentLoaded', function() {
     }
 
     if (notificationBtn) {
-        notificationBtn.addEventListener('click', async function(event) {
+        notificationBtn.addEventListener('click', function(event) {
             event.preventDefault();
             event.stopPropagation();
-            await loadHeaderSummary(100);
-            markResolvedNotificationsSeen();
-            markIncidentCardNotificationsSeen();
-            markZoneNotificationsSeen();
-            markResourceAdditionNotificationsSeen();
-            markResourceRequestNotificationsSeen();
-            const unreadCount = Math.max(0, Number(state.lastUnreadCount) || 0);
-            setBadge(notificationBadge, notificationBadgeTotal());
-            renderNotificationList(unreadCount);
             toggleModal(notificationModal, notificationBtn, messageModal, messageBtn);
+            if (notificationModal && notificationModal.classList.contains('show')) {
+                loadHeaderSummary(100).then(function() {
+                    markResolvedNotificationsSeen();
+                    markIncidentCardNotificationsSeen();
+                    markZoneNotificationsSeen();
+                    markResourceAdditionNotificationsSeen();
+                    markResourceRequestNotificationsSeen();
+                    setBadge(notificationBadge, notificationBadgeTotal());
+                    renderNotificationList(Math.max(0, Number(state.lastUnreadCount) || 0));
+                }).catch(function() {});
+            }
         });
     }
 
     if (messageBtn) {
-        messageBtn.addEventListener('click', async function(event) {
+        messageBtn.addEventListener('click', function(event) {
             event.preventDefault();
             event.stopPropagation();
-            await loadInteragencySummary();
             toggleModal(messageModal, messageBtn, notificationModal, notificationBtn);
+            if (messageModal && messageModal.classList.contains('show')) {
+                loadInteragencySummary().catch(function() {});
+            }
         });
     }
 
@@ -1398,10 +1468,12 @@ document.addEventListener('DOMContentLoaded', function() {
         userProfileBtn.addEventListener('click', function(event) {
             event.preventDefault();
             event.stopPropagation();
-            closeAllModals();
             const isOpen = userProfileDropdown.classList.contains('show');
-            userProfileDropdown.classList.toggle('show', !isOpen);
-            userProfileBtn.classList.toggle('active', !isOpen);
+            closeAllModals();
+            if (!isOpen) {
+                userProfileDropdown.classList.add('show');
+                userProfileBtn.classList.add('active');
+            }
         });
     }
 
@@ -1431,6 +1503,19 @@ document.addEventListener('DOMContentLoaded', function() {
                 markIncidentCardNotificationsSeen();
             }
             openInteragency();
+            return;
+        }
+
+        const requestBackupTrigger = event.target.closest('[data-open-request-backup]');
+        if (requestBackupTrigger) {
+            event.preventDefault();
+            markResourceRequestNotificationsSeen();
+            setBadge(notificationBadge, notificationBadgeTotal());
+            closeAllModals();
+            openBackupRequestFlow(
+                requestBackupTrigger.getAttribute('data-request-id') || '',
+                requestBackupTrigger.getAttribute('data-incident-id') || ''
+            );
             return;
         }
 
@@ -1506,6 +1591,16 @@ document.addEventListener('DOMContentLoaded', function() {
                 openReview();
                 return;
             }
+            if (liveToast.getAttribute('data-toast-target') === 'backup_requests') {
+                markResourceRequestNotificationsSeen();
+                setBadge(notificationBadge, notificationBadgeTotal());
+                hideLiveToast();
+                openBackupRequestFlow(
+                    liveToast.getAttribute('data-request-id') || '',
+                    liveToast.getAttribute('data-incident-id') || ''
+                );
+                return;
+            }
             if (liveToast.getAttribute('data-toast-target') === 'resources') {
                 openResources();
                 return;
@@ -1552,5 +1647,12 @@ document.addEventListener('DOMContentLoaded', function() {
         }
         runWhenPageSettled(startHeaderSummaryPolling);
     });
-});
+}
+
+if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', initAdminHeader);
+} else {
+    initAdminHeader();
+}
+})();
 </script>

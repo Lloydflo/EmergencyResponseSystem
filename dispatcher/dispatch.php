@@ -637,15 +637,7 @@ function formatSelectedUnitDetails(unit) {
 function isDispatchableModalUnit(unit) {
     if (!unit) return false;
     const vehicleStatus = normalizedUnitStatus(unit.status);
-    const responderStatus = normalizedUnitStatus(unit.responder_unit_status);
-    const presenceStatus = normalizedUnitStatus(unit.presence_status);
-    const hasPresenceField = Object.prototype.hasOwnProperty.call(unit, 'presence_status');
-    const hasResponder = String(unit.driver_name || unit.responder_user_id || '').trim() !== '';
-    const responderReady = responderStatus === '' || responderStatus === 'available' || responderStatus === 'ready' || responderStatus === 'on_duty';
-    return vehicleStatus === 'available'
-        && hasResponder
-        && responderReady
-        && (!hasPresenceField || presenceStatus === 'online');
+    return vehicleStatus === 'available' || vehicleStatus === 'ready' || vehicleStatus === 'standby' || vehicleStatus === '';
 }
 function renderSelectedUnitDetails(select) {
     const detailsEl = document.getElementById('unit-details');
@@ -753,16 +745,18 @@ function parseLatLngFromText(text) {
     return normalizeLatLngPair(match[1], match[2]);
 }
 function renderIncidentDetails(inc) {
+    if (!inc) return;
     const hasPoint = currentIncidentLat !== null && currentIncidentLng !== null;
     const callerName = inc.caller_name || 'N/A';
     const callerPhone = inc.caller_phone || 'N/A';
+    const location = inc.location_address || inc.location || 'N/A';
     const description = cleanEmergencyReportDispatchDescription(
         cleanAnonymousTipDispatchDescription(inc.description)
     ) || 'No description provided.';
     document.getElementById('modal-incident-details').innerHTML =
         `<strong>Type:</strong> ${escapeHtml(formatIncidentTypeLabel(inc.type) || inc.type || '')}<br>` +
         `<strong>Title:</strong> ${escapeHtml(inc.title || '')}<br>` +
-        `<strong>Location:</strong> ${escapeHtml(inc.location_address || 'N/A')}<br>` +
+        `<strong>Location:</strong> ${escapeHtml(location)}<br>` +
         (hasPoint ? `<strong>Coordinates:</strong> ${escapeHtml(currentIncidentLat + ', ' + currentIncidentLng)}<br>` : '<strong>Coordinates:</strong> Not available<br>') +
         `<strong>Priority:</strong> ${escapeHtml(inc.priority || '')}<br>` +
         `<strong>Caller:</strong> ${escapeHtml(callerName)}<br>` +
@@ -773,13 +767,28 @@ function resolveIncidentPoint(inc) {
     const savedPoint = normalizeLatLngPair(inc && inc.latitude, inc && inc.longitude);
     if (savedPoint) return Promise.resolve(savedPoint);
 
-    const textPoint = parseLatLngFromText((inc && inc.location_address) || '');
+    const textPoint = parseLatLngFromText((inc && (inc.location_address || inc.location)) || '');
     if (textPoint) return Promise.resolve(textPoint);
 
     return Promise.resolve(null);
 }
-function openDispatchModal(incidentId) {
-    currentIncidentId = toIncidentId(incidentId);
+function openDispatchModal(incidentId, incidentCode) {
+    let resolvedId = toIncidentId(incidentId);
+    let resolvedCode = typeof incidentCode === 'string' ? incidentCode.trim() : '';
+    if (!resolvedId && !resolvedCode && typeof incidentId === 'string' && incidentId.trim() !== '') {
+        resolvedCode = incidentId.trim();
+    }
+
+    let matchingItem = null;
+    if (Array.isArray(incidentIntakeItems)) {
+        matchingItem = incidentIntakeItems.find(item => {
+            if (resolvedId !== null && toIncidentId(item.id) === resolvedId) return true;
+            if (resolvedCode && (item.incident_code === resolvedCode || item.reference_no === resolvedCode)) return true;
+            return false;
+        });
+    }
+
+    currentIncidentId = resolvedId || (matchingItem ? toIncidentId(matchingItem.id) : null);
     document.getElementById('dispatch-modal').style.display = 'flex';
     const unitDropdownLabel = document.getElementById('unit-dropdown-label');
     const unitDropdownMenu = document.getElementById('unit-select');
@@ -790,23 +799,35 @@ function openDispatchModal(incidentId) {
         confirmDispatchBtn.disabled = false;
         confirmDispatchBtn.textContent = 'Confirm Dispatch';
     }
-    if (currentIncidentId === null) {
-        document.getElementById('modal-incident-details').innerHTML = '<span style="color:red">Incident not found.</span>';
-        return;
+
+    if (matchingItem) {
+        currentIncidentLat = matchingItem.latitude || null;
+        currentIncidentLng = matchingItem.longitude || null;
+        renderIncidentDetails(matchingItem);
+    } else {
+        document.getElementById('modal-incident-details').innerHTML = '<div style="color:#64748b; font-size:0.9rem; padding:0.4rem 0;"><i class="fas fa-spinner fa-spin"></i> Loading incident details...</div>';
     }
+
+    const params = new URLSearchParams();
+    if (currentIncidentId !== null && currentIncidentId > 0) {
+        params.set('id', String(currentIncidentId));
+    }
+    if (resolvedCode) {
+        params.set('code', resolvedCode);
+    }
+
     // Fetch incident details and available units
-    fetch('api/incident_details.php?id=' + encodeURIComponent(currentIncidentId))
+    fetch('api/incident_details.php?' + params.toString())
         .then(r => r.json())
         .then(data => {
-            const incidentReady = data.incident
-                ? resolveIncidentPoint(data.incident)
-                : Promise.resolve(null);
-            return incidentReady.then(incidentPoint => {
-            if (data.incident) {
-                const inc = data.incident;
-                currentIncidentLat = incidentPoint ? incidentPoint.lat : null;
-                currentIncidentLng = incidentPoint ? incidentPoint.lng : null;
-                renderIncidentDetails(inc);
+            const inc = data.incident || matchingItem;
+            if (inc) {
+                currentIncidentId = toIncidentId(inc.id) || currentIncidentId;
+                resolveIncidentPoint(inc).then(incidentPoint => {
+                    currentIncidentLat = incidentPoint ? incidentPoint.lat : (inc.latitude || null);
+                    currentIncidentLng = incidentPoint ? incidentPoint.lng : (inc.longitude || null);
+                    renderIncidentDetails(inc);
+                });
             } else {
                 document.getElementById('modal-incident-details').innerHTML = '<span style="color:red">Incident not found.</span>';
             }
@@ -847,7 +868,12 @@ function openDispatchModal(incidentId) {
                 document.getElementById('unit-details').innerHTML = 'No online available responder vehicles are ready for dispatch.';
                 document.getElementById('confirm-dispatch-btn').disabled = true;
             }
-            });
+        })
+        .catch(err => {
+            console.error('Failed to fetch incident details:', err);
+            if (!matchingItem) {
+                document.getElementById('modal-incident-details').innerHTML = '<span style="color:red">Incident not found.</span>';
+            }
         });
 }
 function closeDispatchModal() {
@@ -2260,6 +2286,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const incidentId = toIncidentId(params.get('incident_id'));
         const trackUnit = params.get('track_unit') || params.get('unit') || '';
         const fromCall = params.get('from_call') === '1';
+        const sourceParam = String(params.get('source') || '').toLowerCase();
         const openDispatch = fromCall || params.get('open_dispatch') === '1';
         const period = params.get('period');
         if (openDispatch) {
@@ -2269,15 +2296,13 @@ document.addEventListener('DOMContentLoaded', () => {
                     incidentReferenceNo: code || ''
                 });
             }
-            showNotification(
-                code
-                    ? `Call incident ${code} is saved and highlighted in Call. Select a dispatch unit.`
-                    : 'Call incident is saved in Call. Select a dispatch unit.',
-                'success'
-            );
+            const noticeText = sourceParam === 'tip'
+                ? (code ? `Anonymous tip ${code} converted to incident. Select a dispatch unit.` : 'Anonymous tip converted to incident. Select a dispatch unit.')
+                : (code ? `Call incident ${code} is saved and highlighted in Call. Select a dispatch unit.` : 'Call incident is saved in Call. Select a dispatch unit.');
+            showNotification(noticeText, 'success');
             refreshActiveCalls().finally(() => {
-                if (incidentId !== null) {
-                    window.setTimeout(() => openDispatchModal(incidentId), 220);
+                if (incidentId !== null || code) {
+                    window.setTimeout(() => openDispatchModal(incidentId, code), 220);
                 }
             });
         } else if (code) {
@@ -2830,7 +2855,7 @@ function renderIncidentIntakeQueue() {
                     </div>
                 </div>
                 <div class="call-actions intake-card-actions">
-                    <button type="button" class="btn-dispatch" onclick="openDispatchModal(${incidentId})"><svg class="dispatch-action-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" focusable="false" aria-hidden="true"><path d="M3 6h11v11H3Z"/><path d="M14 10h4l3 3v4h-2"/><circle cx="7" cy="18" r="2"/><circle cx="17" cy="18" r="2"/><path d="M8.5 8.5v5M6 11h5"/></svg><span>Dispatch Unit</span></button>
+                    <button type="button" class="btn-dispatch" onclick="openDispatchModal(${incidentId}, '${escapeAttr(reference)}')"><svg class="dispatch-action-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" focusable="false" aria-hidden="true"><path d="M3 6h11v11H3Z"/><path d="M14 10h4l3 3v4h-2"/><circle cx="7" cy="18" r="2"/><circle cx="17" cy="18" r="2"/><path d="M8.5 8.5v5M6 11h5"/></svg><span>Dispatch Unit</span></button>
                     <button type="button" class="btn-action-small" onclick="viewDetails(this)" data-incident-id="${incidentId}"><i class="fas fa-eye" aria-hidden="true"></i> View Details</button>
                 </div>
             </article>`;
@@ -2920,16 +2945,28 @@ function removeIncidentFromActiveCalls(incidentId) {
     renderIncidentIntakeQueue();
 }
 
-document.addEventListener('DOMContentLoaded', initializeIncidentIntakeQueue);
+document.addEventListener('DOMContentLoaded', function() {
+    initializeIncidentIntakeQueue();
+    setInterval(function() {
+        if (!document.hidden) {
+            refreshActiveCalls();
+        }
+    }, 6000);
+});
 
 window.addEventListener('storage', function(e) {
-    if (e.key === 'ers_incidents' || e.key === 'ers_incidents_changed' || e.key === 'ers_last_logged_incident') {
+    if (e.key === 'ers_incidents' || e.key === 'ers_incidents_changed' || e.key === 'ers_last_logged_incident' || e.key === 'ers_anonymous_tips_changed') {
         refreshActiveCalls();
         loadIncidentMarkers();
     }
 });
 
 window.addEventListener('ers:incident-queue-updated', function() {
+    refreshActiveCalls();
+    loadIncidentMarkers();
+});
+
+window.addEventListener('ers:anonymous-tips-updated', function() {
     refreshActiveCalls();
     loadIncidentMarkers();
 });

@@ -132,6 +132,7 @@ try {
     <link rel="stylesheet" href="<?php echo $assetUrl('css/sidebar-footer.css'); ?>">
     <link rel="stylesheet" href="<?php echo $assetUrl('css/cards.css'); ?>">
     <link rel="stylesheet" href="<?php echo $assetUrl('css/incident.css'); ?>">
+    <script defer src="<?php echo $assetUrl('js/place-autocomplete.js'); ?>"></script>
 
 </head>
 <body class="dispatcher-incident-page">
@@ -403,20 +404,6 @@ try {
                 return;
             }
 
-            // Contact button
-            if (action === 'call' || btn.querySelector('.fa-phone')) {
-                const phone = getIncidentPhone(incident);
-                if (phone) {
-                    if (confirm(`Call ${phone}?`)) {
-                        window.location.href = 'tel:' + encodeURIComponent(phone);
-                        showNotification(`Initiating call to ${phone}`, 'info');
-                    }
-                } else {
-                    showNotification('Phone number not found', 'error');
-                }
-                return;
-            }
-
             // Resolve button
             if (action === 'resolve') {
                 resolveIncident(incident, btn);
@@ -470,7 +457,20 @@ try {
                 incident.updated_at = now;
                 renderDynamicIncidents();
                 showNotification('Incident resolved. Units released to available.', 'success');
-                try { localStorage.setItem('ers_incidents_changed', String(Date.now())); } catch (e) {}
+                try {
+                    const changedStamp = String(Date.now());
+                    const detail = {
+                        source: 'incident_priority',
+                        incidentId,
+                        referenceNo: incidentCode,
+                        changedAt: Date.now()
+                    };
+                    localStorage.setItem('ers_incidents_changed', JSON.stringify(detail));
+                    localStorage.setItem('ers_incidents', changedStamp);
+                    localStorage.setItem('ers_anonymous_tips_changed', JSON.stringify(detail));
+                } catch (e) {}
+                window.dispatchEvent(new CustomEvent('ers:incident-queue-updated', { detail: { incidentId, referenceNo: incidentCode } }));
+                window.dispatchEvent(new CustomEvent('ers:anonymous-tips-updated', { detail: { incidentId, referenceNo: incidentCode } }));
                 try { await fetchIncidents(); } catch (e) {}
             } catch (err) {
                 const message = err.message || 'Network error';
@@ -506,10 +506,20 @@ try {
         });
 
         window.addEventListener('storage', function(e) {
-            if (e.key === 'ers_incidents' || e.key === 'ers_incidents_changed') {
+            if (e.key === 'ers_incidents' || e.key === 'ers_incidents_changed' || e.key === 'ers_anonymous_tips_changed' || e.key === 'ers_last_logged_incident') {
                 refreshAIAnalysis();
                 fetchIncidents();
             }
+        });
+
+        window.addEventListener('ers:incident-queue-updated', function() {
+            refreshAIAnalysis();
+            fetchIncidents();
+        });
+
+        window.addEventListener('ers:anonymous-tips-updated', function() {
+            refreshAIAnalysis();
+            fetchIncidents();
         });
 
         // Filter functionality
@@ -646,15 +656,6 @@ try {
             return 'pending';
         }
 
-        function getIncidentPhone(incident) {
-            if (!incident) return '';
-            if (incident.caller_phone) return String(incident.caller_phone).trim();
-            if (incident.contact) return String(incident.contact).trim();
-            const text = [incident.description, incident.notes].map(v => String(v || '')).join(' ');
-            const match = text.match(/(\+?\d{1,3}[-.\s]?\d{1,4}[-.\s]?\d{1,4}[-.\s]?\d{1,4})/);
-            return match ? String(match[1]).trim() : '';
-        }
-
         function incidentDisplaySummary(incident) {
             const raw = String(incident && incident.description ? incident.description : '').replace(/\s+/g, ' ').trim();
             if (!raw) return 'No description recorded.';
@@ -742,9 +743,6 @@ try {
             const priorityLabel = capitalize(priority);
             const description = incidentDisplaySummary(i);
             const id = Number(i.id || 0);
-            const phone = getIncidentPhone(i);
-            const phoneDisabled = phone ? '' : ' disabled aria-disabled="true"';
-            const phoneTitle = phone ? `Call ${phone}` : 'No contact number available';
             return `
                 <article class="incident-queue-card priority-${escapeHtml(priority)}" data-incident-row data-id="${id}" data-ref="${escapeHtml(ref)}" role="listitem">
                     <div class="incident-card-header">
@@ -783,10 +781,6 @@ try {
                             <i class="fas fa-pen-to-square" aria-hidden="true"></i>
                             <span>Edit</span>
                         </button>
-                        <button class="btn-incident-action action-call" type="button" data-action="call" title="${escapeHtml(phoneTitle)}" aria-label="Call contact for incident ${escapeHtml(ref || type)}"${phoneDisabled}>
-                            <i class="fas fa-phone" aria-hidden="true"></i>
-                            <span>${phone ? 'Call' : 'No Phone'}</span>
-                        </button>
                         <button class="btn-incident-action action-resolve" type="button" data-action="resolve" title="Resolve incident" aria-label="Resolve incident ${escapeHtml(ref || type)}">
                             <i class="fas fa-circle-check" aria-hidden="true"></i>
                             <span>Resolve</span>
@@ -812,10 +806,14 @@ try {
                 if (statusValue && mapped !== statusValue) return false;   // respect explicit filter selection
             }
 
-            if (typeValue && (i.type || '').toLowerCase() !== typeValue) return false;
+            if (typeValue) {
+                const incidentType = (i.type || '').toLowerCase();
+                const types = incidentType.split(',').map(t => t.trim());
+                if (!types.includes(typeValue) && !incidentType.includes(typeValue)) return false;
+            }
 
             if (searchValue) {
-                const hay = [i.reference_no, i.type, i.location, i.location_address, i.description]
+                const hay = [i.reference_no, i.incident_code, i.type, i.title, i.location, i.location_address, i.description, i.caller_name]
                     .map(v => (v || '').toString().toLowerCase()).join(' ');
                 if (!hay.includes(searchValue)) return false;
             }
@@ -1101,6 +1099,9 @@ try {
             document.getElementById('modal-priority-input').value = (incident.priority || 'low').toLowerCase();
             document.getElementById('modal-desc-input').value = incident.description || '';
             document.getElementById('modal-location-input').value = incident.location || incident.location_address || '';
+            if (typeof window.attachPlaceAutocomplete === 'function') {
+                window.attachPlaceAutocomplete('modal-location-input');
+            }
             document.getElementById('modal-status-input').value = normalizeIncidentStatus(incident.status || 'pending');
             // Add Leaflet map picker for location
             function initIncidentMap() {
@@ -1235,14 +1236,36 @@ try {
     </script>
 
     <script>
-    // Handle URL params for deep linking from reports
+    // Handle URL params for deep linking from reports or anonymous tips
     document.addEventListener('DOMContentLoaded', () => {
         try {
             const params = new URLSearchParams(window.location.search);
-            const code = params.get('code');
+            const code = params.get('code') || params.get('reference_no') || '';
+            const incidentId = Number(params.get('incident_id') || params.get('id') || 0);
             const period = params.get('period');
-            if (code) {
-                alert('Opening incident details for: ' + code);
+            if (code || incidentId > 0) {
+                const targetRef = code.trim().toLowerCase();
+                window.setTimeout(() => {
+                    const matchedCard = (incidentId > 0 ? document.querySelector(`[data-id="${incidentId}"]`) : null)
+                        || (targetRef ? document.querySelector(`[data-ref="${targetRef}"]`) : null)
+                        || Array.from(document.querySelectorAll('[data-incident-row]')).find(row => {
+                            const ref = (row.getAttribute('data-ref') || '').toLowerCase();
+                            return targetRef && ref.includes(targetRef);
+                        });
+                    if (matchedCard) {
+                        matchedCard.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                        matchedCard.style.outline = '2px solid #2563eb';
+                        matchedCard.style.outlineOffset = '3px';
+                        window.setTimeout(() => {
+                            matchedCard.style.outline = '';
+                            matchedCard.style.outlineOffset = '';
+                        }, 4000);
+                    }
+                    showNotification(
+                        code ? `Viewing incident ${code}` : 'Incident loaded in queue.',
+                        'info'
+                    );
+                }, 350);
             }
             if (period) {
                 console.log('Incident view period:', period);

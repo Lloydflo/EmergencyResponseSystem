@@ -364,7 +364,7 @@
 
         setText(els.external, openTransfers.length);
         setText(els.activeIncidents, incidentItems.length);
-        setText(els.newTips, tipItems.filter((item) => ['pending', 'new'].includes(String(item.status || 'new').trim().toLowerCase())).length);
+        setText(els.newTips, tipItems.filter((item) => ['pending', 'new'].includes(String(item.display_status || item.status || 'new').trim().toLowerCase())).length);
         setText(els.highEvents, highEvents.length);
         setText(els.standbyUnits, standbyUnits);
         renderIncidentQueue(incidentItems);
@@ -412,6 +412,12 @@
 
     guardedUpdateOperations();
     window.addEventListener('ers:anonymous-tips-updated', guardedUpdateOperations);
+    window.addEventListener('ers:incident-queue-updated', guardedUpdateOperations);
+    window.addEventListener('storage', (e) => {
+        if (e.key === 'ers_incidents' || e.key === 'ers_incidents_changed' || e.key === 'ers_anonymous_tips_changed') {
+            guardedUpdateOperations();
+        }
+    });
     window.setInterval(() => {
         if (document.visibilityState === 'visible') guardedUpdateOperations();
     }, 15000);

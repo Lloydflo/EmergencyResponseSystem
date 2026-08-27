@@ -114,8 +114,15 @@ try {
     $stmt = $pdo->prepare($sql);
     $stmt->execute($params);
     if ($status !== null) {
+        $normalizedStatus = strtolower($status);
+        if (in_array($normalizedStatus, ['resolved', 'completed', 'cancelled'], true)) {
+            require_once __DIR__ . '/../includes/vehicle_resource_units.php';
+            if (function_exists('ers_reconcile_all_dispatch_and_unit_statuses')) {
+                ers_reconcile_all_dispatch_and_unit_statuses($pdo);
+            }
+        }
         ers_notify_emergency_com_status($pdo, $id);
-        ers_notify_anonymous_tip_status($pdo, $id, strtolower($status));
+        ers_notify_anonymous_tip_status($pdo, $id, $normalizedStatus);
     }
 
     $updatedStmt = $pdo->prepare('SELECT reference_no, type, priority, status, location_address, description, updated_at FROM incidents WHERE id = ? LIMIT 1');

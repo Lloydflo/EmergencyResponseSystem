@@ -382,52 +382,6 @@ $includeIntakeSource = isset($_GET['include_intake_source'])
 $typeValues = ers_incidents_normalized_type_values($type);
 [$rangeStart, $rangeEnd] = ers_incidents_resolve_range();
 
-if (
-    $includeIntakeSource
-    && $status === 'pending'
-    && ers_incidents_has_table($schema, 'anonymous_tips')
-    && ers_incidents_has_table($schema, 'external_incident_links')
-    && ers_incidents_has_table($schema, 'dispatches')
-    && ers_incidents_has_column($schema, 'incidents', 'status')
-    && ers_incidents_has_column($schema, 'incidents', 'updated_at')
-    && ers_incidents_has_column($schema, 'external_incident_links', 'incident_id')
-    && ers_incidents_has_column($schema, 'external_incident_links', 'source_system')
-    && ers_incidents_has_column($schema, 'external_incident_links', 'external_incident_id')
-    && ers_incidents_has_column($schema, 'anonymous_tips', 'tip_id')
-    && ers_incidents_has_column($schema, 'anonymous_tips', 'status')
-) {
-    $dispatchRepairJoin = '';
-    $dispatchRepairGuard = '';
-    if (ers_incidents_has_column($schema, 'dispatches', 'incident_id')) {
-        $dispatchRepairJoin = 'LEFT JOIN dispatches d ON d.incident_id = i.id';
-        $dispatchRepairGuard = 'AND d.incident_id IS NULL';
-    } elseif (
-        ers_incidents_has_column($schema, 'dispatches', 'reference_no')
-        && ers_incidents_has_column($schema, 'incidents', 'reference_no')
-    ) {
-        $dispatchRepairJoin = 'LEFT JOIN dispatches d ON d.reference_no = i.reference_no';
-        $dispatchRepairGuard = 'AND d.reference_no IS NULL';
-    }
-
-    if ($dispatchRepairJoin !== '') {
-        try {
-            $pdo->exec("UPDATE incidents i
-            INNER JOIN external_incident_links l
-                ON l.incident_id = i.id
-               AND l.source_system = 'Anonymous Tip Inbox'
-            INNER JOIN anonymous_tips at
-                ON at.tip_id = l.external_incident_id
-               AND at.status = 'converted_to_incident'
-        {$dispatchRepairJoin}
-            SET i.status = 'active', i.updated_at = CURRENT_TIMESTAMP
-            WHERE i.status IN ('resolved', 'completed', 'closed')
-          {$dispatchRepairGuard}");
-        } catch (Throwable $repairError) {
-            error_log('Converted anonymous tip queue repair skipped: ' . $repairError->getMessage());
-        }
-    }
-}
-
 // Optional shared resource table.
 $resourceRecordsTable = null;
 foreach (['resource_records', 'admin_resources'] as $candidate) {
@@ -716,9 +670,14 @@ END";
 // Latest dispatch is computed once per incident.
 $dispatchJoin = '';
 $unitJoin = '';
+$hasDispatchIncidentId = ers_incidents_has_column($schema, 'dispatches', 'incident_id');
+$hasDispatchReferenceNo = ers_incidents_has_column($schema, 'dispatches', 'reference_no');
 $hasLatestDispatch = ers_incidents_has_table($schema, 'dispatches')
     && ers_incidents_has_column($schema, 'dispatches', 'id')
-    && ers_incidents_has_column($schema, 'dispatches', 'incident_id');
+    && ($hasDispatchIncidentId || $hasDispatchReferenceNo);
+$dispatchJoinKey = $hasDispatchIncidentId ? 'incident_id' : 'reference_no';
+$dispatchJoinOn = $hasDispatchIncidentId ? 'ld.incident_id = i.id' : 'ld.reference_no = i.reference_no';
+
 $dispatchColumns = [
     'unit_id',
     'status',
@@ -728,7 +687,15 @@ $dispatchColumns = [
     'on_scene_at',
     'cleared_at',
 ];
-$dispatchSelectParts = ['d1.id', 'd1.incident_id'];
+$dispatchSelectParts = ['d1.id'];
+if ($hasDispatchIncidentId) {
+    $dispatchSelectParts[] = 'd1.incident_id';
+} else {
+    $dispatchSelectParts[] = 'NULL AS incident_id';
+}
+if ($hasDispatchReferenceNo) {
+    $dispatchSelectParts[] = 'd1.reference_no';
+}
 foreach ($dispatchColumns as $column) {
     $dispatchSelectParts[] = ers_incidents_has_column($schema, 'dispatches', $column)
         ? "d1.`{$column}`"
@@ -740,11 +707,12 @@ if ($hasLatestDispatch) {
         SELECT " . implode(', ', $dispatchSelectParts) . "
         FROM dispatches d1
         INNER JOIN (
-            SELECT incident_id, MAX(id) AS max_id
+            SELECT {$dispatchJoinKey}, MAX(id) AS max_id
             FROM dispatches
-            GROUP BY incident_id
+            WHERE {$dispatchJoinKey} IS NOT NULL
+            GROUP BY {$dispatchJoinKey}
         ) latest_dispatch ON latest_dispatch.max_id = d1.id
-    ) ld ON ld.incident_id = i.id";
+    ) ld ON {$dispatchJoinOn}";
 }
 
 $unitIdentifierExpr = 'NULL';
@@ -982,10 +950,13 @@ if ($status !== '' && ers_incidents_has_column($schema, 'incidents', 'status')) 
             $hasLatestDispatch
             && ers_incidents_has_column($schema, 'dispatches', 'status')
         ) {
+            $dispatchPendingMatch = $hasDispatchIncidentId
+                ? 'd_pending.incident_id = i.id'
+                : 'd_pending.reference_no = i.reference_no';
             $where[] = "NOT EXISTS (
                 SELECT 1
                 FROM dispatches d_pending
-                WHERE d_pending.incident_id = i.id
+                WHERE {$dispatchPendingMatch}
                   AND d_pending.status IN ('assigned','acknowledged','enroute','on_scene')
             )";
         }

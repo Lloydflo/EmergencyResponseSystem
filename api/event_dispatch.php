@@ -288,6 +288,17 @@ try {
         $cancelResponderAssignments->execute(array_merge([$eventId], $unitIds));
         $unitUpdate = $pdo->prepare("UPDATE units SET status = 'available' WHERE id IN ($placeholders)");
         $unitUpdate->execute($unitIds);
+        if (event_dispatch_table_exists($pdo, 'dispatches')) {
+            $clearDispatches = $pdo->prepare("UPDATE dispatches SET status = 'cleared', cleared_at = CURRENT_TIMESTAMP WHERE unit_id IN ($placeholders) AND status IN ('assigned','acknowledged','enroute','on_scene','pending')");
+            $clearDispatches->execute($unitIds);
+        }
+        require_once __DIR__ . '/../includes/vehicle_resource_units.php';
+        if (function_exists('ers_sync_vehicle_resource_status_by_unit_ids')) {
+            ers_sync_vehicle_resource_status_by_unit_ids($pdo, $unitIds, 'available');
+        }
+        if (function_exists('ers_reconcile_all_dispatch_and_unit_statuses')) {
+            ers_reconcile_all_dispatch_and_unit_statuses($pdo);
+        }
     } else {
         foreach ($units as $unit) {
             if (strtolower((string)$unit['status']) !== 'available') {

@@ -99,6 +99,23 @@ function ers_anonymous_tip_status_payload(PDO $pdo, int $incidentId, string $sta
     }
 }
 
+function ers_ensure_anonymous_tips_status_column(PDO $pdo): void
+{
+    static $ensured = false;
+    if ($ensured) {
+        return;
+    }
+    try {
+        if (!ers_anonymous_tip_sync_table_exists($pdo, 'anonymous_tips')) {
+            return;
+        }
+        $pdo->exec("ALTER TABLE `anonymous_tips` MODIFY COLUMN `status` VARCHAR(50) NOT NULL DEFAULT 'new'");
+        $ensured = true;
+    } catch (Throwable $e) {
+        error_log('Ensure anonymous_tips status column failed: ' . $e->getMessage());
+    }
+}
+
 /**
  * @return array<string,mixed>|null
  */
@@ -129,14 +146,21 @@ function ers_anonymous_tip_status_source_row(PDO $pdo, int $incidentId): ?array
             LEFT JOIN anonymous_tips at
                 ON at.tip_id = l.external_incident_id
                 OR l.external_incident_id = CONCAT('anonymous-tip-', at.id)
+                OR l.external_incident_id = CAST(at.id AS CHAR)
+                OR (at.tip_id IS NOT NULL AND at.tip_id <> '' AND l.external_incident_id LIKE CONCAT('%', at.tip_id, '%'))
             WHERE l.incident_id = ?
-              AND l.source_system = 'Anonymous Tip Inbox'
+              AND (
+                l.source_system IN ('Anonymous Tip Inbox', 'Responder App Coordination', 'Group 6', 'anonymous_tip')
+                OR l.external_incident_id LIKE 'TIP-%'
+                OR l.external_incident_id LIKE 'anonymous-tip-%'
+                OR at.id IS NOT NULL
+              )
             ORDER BY l.id DESC
             LIMIT 1
         ");
         $stmt->execute([$incidentId]);
         $row = $stmt->fetch(PDO::FETCH_ASSOC);
-        if (is_array($row)) {
+        if (is_array($row) && !empty($row['local_tip_id'])) {
             return $row;
         }
     }
@@ -191,10 +215,10 @@ function ers_anonymous_tip_status_source_row_from_incident(
         $stmt = $pdo->prepare(
             "SELECT id AS local_tip_id, tip_id, status AS tip_status, outcome
              FROM anonymous_tips
-             WHERE tip_id = ?
+             WHERE tip_id = ? OR id = ?
              LIMIT 1"
         );
-        $stmt->execute([$candidate]);
+        $stmt->execute([$candidate, ctype_digit($candidate) ? (int)$candidate : 0]);
         $tip = $stmt->fetch(PDO::FETCH_ASSOC);
         if (!is_array($tip)) {
             continue;
@@ -222,10 +246,17 @@ function ers_anonymous_tip_status_source_row_from_incident(
  */
 function ers_anonymous_tip_status_candidate_tip_ids(string $value): array
 {
-    preg_match_all('/\bTIP-\d{4}-\d{1,8}\b/i', $value, $matches);
     $ids = [];
-    foreach ($matches[0] ?? [] as $match) {
-        $ids[strtoupper($match)] = true;
+    if (preg_match_all('/\bTIP-[A-Za-z0-9_-]+\b/i', $value, $matches)) {
+        foreach ($matches[0] ?? [] as $match) {
+            $ids[strtoupper($match)] = true;
+        }
+    }
+    if (preg_match_all('/\b(?:anonymous\s*tip\s*|tip\s*#?|#)(\d+)\b/i', $value, $matches)) {
+        foreach ($matches[1] ?? [] as $match) {
+            $ids[(string)$match] = true;
+            $ids['anonymous-tip-' . $match] = true;
+        }
     }
     return array_keys($ids);
 }
@@ -347,11 +378,48 @@ function ers_anonymous_tip_status_log_update(PDO $pdo, int $logId, string $statu
     }
 }
 
+function ers_sync_local_anonymous_tip_status(PDO $pdo, int $incidentId, string $status, string $note = ''): void
+{
+    if ($incidentId <= 0 || !ers_anonymous_tip_sync_table_exists($pdo, 'anonymous_tips')) {
+        return;
+    }
+
+    try {
+        ers_ensure_anonymous_tips_status_column($pdo);
+        $row = ers_anonymous_tip_status_source_row($pdo, $incidentId);
+        if (!is_array($row) || empty($row['local_tip_id'])) {
+            return;
+        }
+
+        $localTipId = (int)$row['local_tip_id'];
+        $rawStatus = strtolower(trim($status));
+        $targetTipStatus = match ($rawStatus) {
+            'assigned', 'acknowledged', 'dispatching', 'dispatched',
+            'enroute', 'en_route', 'on_scene', 'ongoing', 'ongoing_dispatch', 'in_progress' => 'dispatched',
+            'resolved', 'complete', 'completed', 'closed' => 'resolved',
+            default => 'pending',
+        };
+
+        $outcomeUpdate = '';
+        $params = [':status' => $targetTipStatus, ':id' => $localTipId];
+        if ($note !== '') {
+            $outcomeUpdate = ', outcome = CONCAT(COALESCE(outcome, ""), "\n", :note)';
+            $params[':note'] = $note;
+        }
+
+        $stmt = $pdo->prepare("UPDATE anonymous_tips SET status = :status{$outcomeUpdate}, updated_at = NOW() WHERE id = :id");
+        $stmt->execute($params);
+    } catch (Throwable $e) {
+        error_log('Local anonymous tip status update failed: ' . $e->getMessage());
+    }
+}
+
 /**
  * @return array<string,mixed>
  */
 function ers_notify_anonymous_tip_status_result(PDO $pdo, int $incidentId, string $status, string $note = ''): array
 {
+    ers_sync_local_anonymous_tip_status($pdo, $incidentId, $status, $note);
     $payload = ers_anonymous_tip_status_payload($pdo, $incidentId, $status, $note);
     if (!$payload) {
         $logId = ers_anonymous_tip_status_log_insert($pdo, $incidentId, null, 'failed', 'No anonymous tip link found for incident.');
