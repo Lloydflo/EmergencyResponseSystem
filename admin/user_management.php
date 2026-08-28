@@ -334,6 +334,15 @@ $adminName = $_SESSION['user_name'] ?? 'Admin';
             width: 44px;
             height: 44px;
             cursor: pointer;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            position: relative;
+            z-index: 10;
+        }
+
+        .um-close i {
+            pointer-events: none;
         }
 
         .um-modal-body {
@@ -1971,7 +1980,7 @@ $adminName = $_SESSION['user_name'] ?? 'Admin';
             }
             const returnTarget = modalReturnFocus.get(modal);
             modalReturnFocus.delete(modal);
-            if (returnTarget && document.contains(returnTarget) && typeof returnTarget.focus === 'function') {
+            if (returnTarget && (document.body.contains(returnTarget) || (document.contains && document.contains(returnTarget))) && typeof returnTarget.focus === 'function') {
                 window.setTimeout(() => returnTarget.focus(), 0);
             }
         }
@@ -2815,23 +2824,75 @@ $adminName = $_SESSION['user_name'] ?? 'Admin';
             }
         });
 
-        openAddUserBtn.addEventListener('click', () => {
-            editingId = null;
-            addUserForm.reset();
-            openModal();
-        });
-        closeAddUserModal.addEventListener('click', (event) => { event.preventDefault(); closeModal(true); });
-        cancelAddUserBtn.addEventListener('click', (event) => { event.preventDefault(); closeModal(true); });
+        if (openAddUserBtn) {
+            openAddUserBtn.addEventListener('click', () => {
+                editingId = null;
+                addUserForm.reset();
+                openModal();
+            });
+        }
 
-        addUserModal.addEventListener('click', (event) => {
-            if (event.target === addUserModal) closeModal();
-        });
+        if (closeAddUserModal) {
+            closeAddUserModal.addEventListener('click', (event) => {
+                event.preventDefault();
+                event.stopPropagation();
+                closeModal(true);
+            });
+        }
 
-        closeUserDetailsModal.addEventListener('click', closeDetailsModal);
-        detailsCloseBtn.addEventListener('click', closeDetailsModal);
-        userDetailsModal.addEventListener('click', (event) => {
-            if (event.target === userDetailsModal) closeDetailsModal();
-        });
+        if (cancelAddUserBtn) {
+            cancelAddUserBtn.addEventListener('click', (event) => {
+                event.preventDefault();
+                event.stopPropagation();
+                closeModal(true);
+            });
+        }
+
+        if (addUserModal) {
+            addUserModal.addEventListener('click', (event) => {
+                if (event.target === addUserModal) {
+                    closeModal(false);
+                    return;
+                }
+                const closeTarget = event.target.closest('#closeAddUserModal, #cancelAddUserBtn');
+                if (closeTarget) {
+                    event.preventDefault();
+                    event.stopPropagation();
+                    closeModal(true);
+                }
+            });
+        }
+
+        if (closeUserDetailsModal) {
+            closeUserDetailsModal.addEventListener('click', (event) => {
+                event.preventDefault();
+                event.stopPropagation();
+                closeDetailsModal();
+            });
+        }
+
+        if (detailsCloseBtn) {
+            detailsCloseBtn.addEventListener('click', (event) => {
+                event.preventDefault();
+                event.stopPropagation();
+                closeDetailsModal();
+            });
+        }
+
+        if (userDetailsModal) {
+            userDetailsModal.addEventListener('click', (event) => {
+                if (event.target === userDetailsModal) {
+                    closeDetailsModal();
+                    return;
+                }
+                const closeTarget = event.target.closest('#closeUserDetailsModal, #detailsCloseBtn');
+                if (closeTarget) {
+                    event.preventDefault();
+                    event.stopPropagation();
+                    closeDetailsModal();
+                }
+            });
+        }
 
         detailsEditBtn.addEventListener('click', () => {
             const target = userRows.find((row) => Number(row.id) === detailsUserId);
