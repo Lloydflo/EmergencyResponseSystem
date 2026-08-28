@@ -404,12 +404,65 @@ try {
                 return;
             }
 
+            // Send button
+            if (action === 'send' || btn.querySelector('.fa-paper-plane')) {
+                sendIncident(incident, btn);
+                return;
+            }
+
             // Resolve button
             if (action === 'resolve') {
                 resolveIncident(incident, btn);
                 return;
             }
         });
+
+        async function sendIncident(incident, button) {
+            if (!incident) return;
+            const incidentId = Number(incident.id || 0);
+            const incidentCode = String(incident.incident_code || incident.reference_no || '').trim();
+            if (incidentId <= 0 && !incidentCode) {
+                showNotification('Unable to send: missing incident identifier. Please refresh the page.', 'error');
+                return;
+            }
+
+            if (!confirm(`Are you sure you want to send incident ${incidentCode || '#' + incidentId}?`)) {
+                return;
+            }
+
+            const body = {};
+            const callId = Number(incident.call_id || incident.reported_by_call_id || 0);
+            if (callId > 0) body.call_id = callId;
+            if (incidentId > 0) body.incident_id = incidentId;
+            if (incidentCode) body.incident_code = incidentCode;
+
+            const previousDisabled = button ? button.disabled : false;
+            if (button) {
+                button.disabled = true;
+                button.setAttribute('aria-busy', 'true');
+            }
+
+            try {
+                const response = await fetch('api/system_API/send_incident.api.php', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(body)
+                });
+                const result = await response.json().catch(() => ({}));
+                if (!response.ok || !(result && (result.success || result.ok))) {
+                    throw new Error((result && result.error) ? String(result.error) : 'Failed to send incident');
+                }
+                showNotification(`Incident ${incidentCode || '#' + incidentId} sent successfully.`, 'success');
+            } catch (err) {
+                const message = (err && err.message) ? err.message : 'Unknown error';
+                showNotification(`Send failed: ${message}`, 'error');
+            } finally {
+                if (button) {
+                    button.disabled = previousDisabled;
+                    button.removeAttribute('aria-busy');
+                }
+            }
+        }
 
         async function resolveIncident(incident, button) {
             if (!incident) return;
@@ -780,6 +833,10 @@ try {
                         <button class="btn-incident-action action-edit" type="button" data-action="edit" title="Edit incident details" aria-label="Edit incident ${escapeHtml(ref || type)}">
                             <i class="fas fa-pen-to-square" aria-hidden="true"></i>
                             <span>Edit</span>
+                        </button>
+                        <button class="btn-incident-action action-send" type="button" data-action="send" title="Send incident" aria-label="Send incident ${escapeHtml(ref || type)}">
+                            <i class="fas fa-paper-plane" aria-hidden="true"></i>
+                            <span>Send</span>
                         </button>
                         <button class="btn-incident-action action-resolve" type="button" data-action="resolve" title="Resolve incident" aria-label="Resolve incident ${escapeHtml(ref || type)}">
                             <i class="fas fa-circle-check" aria-hidden="true"></i>

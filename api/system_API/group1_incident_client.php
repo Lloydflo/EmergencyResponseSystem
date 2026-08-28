@@ -22,7 +22,7 @@ function ers_group1_send_logged_incident(PDO $pdo, int $callId, int $incidentId 
             $options['group1_endpoint']
                 ?? $options['endpoint_url']
                 ?? $options['target_url']
-                ?? ers_env('GROUP1_INCIDENT_ENDPOINT', ''),
+                ?? ers_env('GROUP1_INCIDENT_ENDPOINT', 'https://report.alertaraqc.com/api/api.php'),
             500
         );
 

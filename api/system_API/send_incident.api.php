@@ -41,7 +41,7 @@ try {
         $input['group1_endpoint']
             ?? $input['endpoint_url']
             ?? $input['target_url']
-            ?? ers_env('GROUP1_INCIDENT_ENDPOINT', ''),
+            ?? ers_env('GROUP1_INCIDENT_ENDPOINT', 'https://report.alertaraqc.com/api/api.php'),
         500
     );
 
