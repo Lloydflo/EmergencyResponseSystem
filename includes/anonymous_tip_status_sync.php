@@ -85,7 +85,30 @@ function ers_anonymous_tip_status_payload(PDO $pdo, int $incidentId, string $sta
             'is_resolved' => $syncStatus === 'completed',
             'updated_at' => (string)($row['updated_at'] ?? ''),
             'resolved_at' => (string)($row['resolved_at'] ?? ''),
-            'source_system' => 'ERS',
+            'source_system' => ers_anonymous_tip_sync_env(
+                'ANONYMOUS_TIP_SOURCE_SYSTEM',
+                !empty($row['tip_source_system']) ? (string)$row['tip_source_system'] : (!empty($row['link_source_system']) ? (string)$row['link_source_system'] : 'ERS')
+            ),
+            'sourceSystem' => ers_anonymous_tip_sync_env(
+                'ANONYMOUS_TIP_SOURCE_SYSTEM',
+                !empty($row['tip_source_system']) ? (string)$row['tip_source_system'] : (!empty($row['link_source_system']) ? (string)$row['link_source_system'] : 'ERS')
+            ),
+            'source' => ers_anonymous_tip_sync_env(
+                'ANONYMOUS_TIP_SOURCE_SYSTEM',
+                !empty($row['tip_source_system']) ? (string)$row['tip_source_system'] : (!empty($row['link_source_system']) ? (string)$row['link_source_system'] : 'ERS')
+            ),
+            'agency' => ers_anonymous_tip_sync_env(
+                'ANONYMOUS_TIP_SOURCE_SYSTEM',
+                !empty($row['tip_source_system']) ? (string)$row['tip_source_system'] : (!empty($row['link_source_system']) ? (string)$row['link_source_system'] : 'ERS')
+            ),
+            'agency_name' => ers_anonymous_tip_sync_env(
+                'ANONYMOUS_TIP_SOURCE_SYSTEM',
+                !empty($row['tip_source_system']) ? (string)$row['tip_source_system'] : (!empty($row['link_source_system']) ? (string)$row['link_source_system'] : 'ERS')
+            ),
+            'system' => ers_anonymous_tip_sync_env(
+                'ANONYMOUS_TIP_SOURCE_SYSTEM',
+                !empty($row['tip_source_system']) ? (string)$row['tip_source_system'] : (!empty($row['link_source_system']) ? (string)$row['link_source_system'] : 'ERS')
+            ),
         ];
 
         if ($note !== '') {
@@ -135,12 +158,14 @@ function ers_anonymous_tip_status_source_row(PDO $pdo, int $incidentId): ?array
                 at.tip_id,
                 at.status AS tip_status,
                 at.outcome,
+                at.source_system AS tip_source_system,
                 i.id AS incident_id,
                 i.reference_no,
                 i.status AS incident_status,
                 {$incidentUpdatedExpr},
                 {$incidentResolvedExpr},
-                l.external_incident_id
+                l.external_incident_id,
+                l.source_system AS link_source_system
             FROM external_incident_links l
             INNER JOIN incidents i ON i.id = l.incident_id
             LEFT JOIN anonymous_tips at
@@ -213,7 +238,7 @@ function ers_anonymous_tip_status_source_row_from_incident(
     $candidates = ers_anonymous_tip_status_candidate_tip_ids($haystack);
     foreach ($candidates as $candidate) {
         $stmt = $pdo->prepare(
-            "SELECT id AS local_tip_id, tip_id, status AS tip_status, outcome
+            "SELECT id AS local_tip_id, tip_id, status AS tip_status, outcome, source_system AS tip_source_system
              FROM anonymous_tips
              WHERE tip_id = ? OR id = ?
              LIMIT 1"
@@ -229,6 +254,7 @@ function ers_anonymous_tip_status_source_row_from_incident(
             'tip_id' => (string)$tip['tip_id'],
             'tip_status' => (string)($tip['tip_status'] ?? ''),
             'outcome' => (string)($tip['outcome'] ?? ''),
+            'tip_source_system' => (string)($tip['tip_source_system'] ?? ''),
             'incident_id' => (int)$incident['incident_id'],
             'reference_no' => (string)($incident['reference_no'] ?? ''),
             'incident_status' => (string)($incident['incident_status'] ?? ''),
