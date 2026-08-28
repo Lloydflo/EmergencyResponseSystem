@@ -66,7 +66,7 @@ function priority_fallback_response(array $assessment): array
     }, (array)($assessment['factors'] ?? []))));
     $reason = !empty($factors)
         ? implode('; ', array_slice($factors, 0, 2)) . '.'
-        : 'Based on local safety triage rules.';
+        : 'Based on the incident details currently provided.';
 
     return [
         'ok' => true,
