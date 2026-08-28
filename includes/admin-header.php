@@ -500,6 +500,7 @@ function initAdminHeader() {
     const resourceAdditionSeenKey = 'ers.resourceAdditionSeen.' + userRole;
     const resourceRequestSeenKey = 'ers.resourceRequestSeen.' + userRole;
     const zoneNotificationSeenKey = 'ers.responderZoneNotificationSeen.' + userRole;
+    const broadcastAckSeenKey = 'ers.broadcastAckSeen.' + userRole;
     const presenceEndpoint = 'api/user_presence.php';
     const state = {
         lastUnreadCount: null,
@@ -509,11 +510,13 @@ function initAdminHeader() {
         lastResolvedNotificationId: null,
         lastIncidentCardNotificationId: null,
         lastZoneNotificationId: null,
+        lastBroadcastAckNotificationId: null,
         resolvedSeenId: Number(window.localStorage.getItem(resolvedSeenKey) || 0) || 0,
         incidentCardSeenId: Number(window.localStorage.getItem(incidentCardSeenKey) || 0) || 0,
         resourceAdditionSeenId: Number(window.localStorage.getItem(resourceAdditionSeenKey) || 0) || 0,
         resourceRequestSeenId: Number(window.localStorage.getItem(resourceRequestSeenKey) || 0) || 0,
         zoneNotificationSeenId: Number(window.localStorage.getItem(zoneNotificationSeenKey) || 0) || 0,
+        broadcastAckSeenId: Number(window.localStorage.getItem(broadcastAckSeenKey) || 0) || 0,
         resolvedNotifications: [],
         resolvedUnreadCount: 0,
         incidentCardNotifications: [],
@@ -522,6 +525,8 @@ function initAdminHeader() {
         zoneNotificationUnreadCount: 0,
         resourceAdditionNotifications: [],
         resourceAdditionUnreadCount: 0,
+        broadcastAckNotifications: [],
+        broadcastAckUnreadCount: 0,
         resourceRequestUnreadCount: 0,
         recentThreads: [],
         unreadThreads: [],
@@ -621,6 +626,12 @@ function initAdminHeader() {
         return count + ' resolved incident reviews';
     }
 
+    function broadcastAckUnreadText(count) {
+        if (count <= 0) return 'No broadcast acknowledgements';
+        if (count === 1) return '1 broadcast acknowledged';
+        return count + ' broadcasts acknowledged';
+    }
+
     function incidentCardLabel(item) {
         const card = item && item.incident_card ? item.incident_card : {};
         const ref = String(card.reference_no || '').trim();
@@ -681,7 +692,8 @@ function initAdminHeader() {
             + state.resolvedUnreadCount
             + state.incidentCardUnreadCount
             + state.zoneNotificationUnreadCount
-            + state.resourceAdditionUnreadCount;
+            + state.resourceAdditionUnreadCount
+            + state.broadcastAckUnreadCount;
     }
 
     function emptyState(icon, text) {
@@ -834,6 +846,21 @@ function initAdminHeader() {
                 icon: isUnread ? 'fa-circle-plus' : 'fa-box',
                 title: isUnread ? 'Resource added' : 'Added resource',
                 text: resourceAdditionText(item),
+                meta: relativeTime(item.notified_at),
+                time: item.notified_at,
+                id: Number(item.notification_id || 0)
+            });
+        });
+
+        (Array.isArray(state.broadcastAckNotifications) ? state.broadcastAckNotifications : []).forEach(function(item) {
+            const incident = item && item.incident ? item.incident : {};
+            const isUnread = Number(item.notification_id || 0) > state.broadcastAckSeenId;
+            entries.push({
+                kind: 'broadcast-ack',
+                hrefAttr: 'data-open-interagency="1"',
+                icon: isUnread ? 'fa-check-double' : 'fa-check',
+                title: isUnread ? 'Broadcast acknowledged' : 'Broadcast ack',
+                text: item.details || (String(item.responder_name || 'A responder') + ' acknowledged a broadcast.'),
                 meta: relativeTime(item.notified_at),
                 time: item.notified_at,
                 id: Number(item.notification_id || 0)
@@ -1013,6 +1040,20 @@ function initAdminHeader() {
         state.toastTimer = window.setTimeout(hideLiveToast, 4000);
     }
 
+    function showBroadcastAckToast(count) {
+        if (!liveToast || count <= 0) return;
+        if (liveToastIcon) liveToastIcon.className = 'fas fa-check-double';
+        if (liveToastTitle) liveToastTitle.textContent = 'Broadcast Acknowledged';
+        if (liveToastText) liveToastText.textContent = broadcastAckUnreadText(count);
+        liveToast.setAttribute('data-toast-target', 'interagency');
+        liveToast.hidden = false;
+        window.clearTimeout(state.toastTimer);
+        window.requestAnimationFrame(function() {
+            liveToast.classList.add('show');
+        });
+        state.toastTimer = window.setTimeout(hideLiveToast, 4000);
+    }
+
     function showIncidentCardToast(count) {
         if (!liveToast || count <= 0) return;
         if (liveToastIcon) liveToastIcon.className = 'fas fa-clipboard-list';
@@ -1111,6 +1152,7 @@ function initAdminHeader() {
         markZoneNotificationsSeen();
         markResourceAdditionNotificationsSeen();
         markResourceRequestNotificationsSeen();
+        markBroadcastAckNotificationsSeen();
         const unreadCount = Math.max(0, Number(state.lastUnreadCount) || 0);
         setBadge(notificationBadge, notificationBadgeTotal());
         renderNotificationList(unreadCount);
@@ -1176,6 +1218,17 @@ function initAdminHeader() {
             state.resourceAdditionSeenId = latestId;
             state.resourceAdditionUnreadCount = 0;
             window.localStorage.setItem(resourceAdditionSeenKey, String(latestId));
+        }
+    }
+
+    function markBroadcastAckNotificationsSeen() {
+        const latestId = Math.max(0, ...state.broadcastAckNotifications.map(function(item) {
+            return Number(item.notification_id || 0);
+        }));
+        if (latestId > state.broadcastAckSeenId) {
+            state.broadcastAckSeenId = latestId;
+            state.broadcastAckUnreadCount = 0;
+            window.localStorage.setItem(broadcastAckSeenKey, String(latestId));
         }
     }
 
@@ -1276,6 +1329,38 @@ function initAdminHeader() {
             state.resolvedNotifications = notifications;
             state.resolvedUnreadCount = notifications.filter(function(item) {
                 return Number(item.notification_id || 0) > state.resolvedSeenId;
+            }).length;
+        } catch (_) {}
+    }
+
+    async function loadBroadcastAckSummary(limit) {
+        try {
+            const requestLimit = Math.max(1, Math.min(50, Number(limit) || 10));
+            const response = await fetch('api/broadcast_ack_notifications.php?limit=' + requestLimit, {
+                cache: 'no-store',
+                credentials: 'same-origin'
+            });
+            if (!response.ok) return;
+            const data = await response.json();
+            if (!data || !data.ok || !Array.isArray(data.notifications)) return;
+
+            const notifications = data.notifications;
+            const latestId = notifications.length ? Math.max(...notifications.map(function(item) {
+                return Number(item.notification_id || 0);
+            })) : 0;
+
+            if (state.lastBroadcastAckNotificationId !== null && latestId > state.lastBroadcastAckNotificationId) {
+                const newCount = notifications.filter(function(item) {
+                    const id = Number(item.notification_id || 0);
+                    return id > state.lastBroadcastAckNotificationId;
+                }).length;
+                showBroadcastAckToast(newCount);
+            }
+
+            state.lastBroadcastAckNotificationId = latestId;
+            state.broadcastAckNotifications = notifications;
+            state.broadcastAckUnreadCount = notifications.filter(function(item) {
+                return Number(item.notification_id || 0) > state.broadcastAckSeenId;
             }).length;
         } catch (_) {}
     }
@@ -1414,6 +1499,7 @@ function initAdminHeader() {
             loadResolvedIncidentSummary(limit),
             loadIncidentCardSummary(limit),
             loadZoneNotificationSummary(limit),
+            loadBroadcastAckSummary(limit),
             loadInteragencySummary()
         ]).finally(() => {
             setBadge(notificationBadge, notificationBadgeTotal());
