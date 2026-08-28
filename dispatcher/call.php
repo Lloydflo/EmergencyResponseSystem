@@ -2870,11 +2870,10 @@ if ($turnIsConfigured && preg_match('/^turns?:(?:\/\/)?([^:\/?]+)/i', $turnUrl, 
 
     function suggestPriorityFromDescription(desc) {
         const text = ` ${(desc || '').toLowerCase()} `;
-        const incidentTypes = getSelectedIncidentTypes();
 
-        const high = [
+        const criticalHigh = [
             'unconscious', 'non-responsive', 'not breathing', 'difficulty breathing', 'chest pain', 'severe bleeding',
-            'gunshot', 'shot', 'stab', 'stabbing', 'weapon', 'armed', 'fire', 'explosion', 'earthquake', 'flood', 'collapsed',
+            'gunshot', 'shot', 'stab', 'stabbing', 'weapon', 'armed', 'fire', 'explosion', 'blast', 'earthquake', 'flood', 'collapsed',
             'stroke', 'seizure', 'mass casualty', 'cardiac arrest', 'resuscitation', 'burns', 'critical', 'life-threatening',
             'walang malay', 'hindi humihinga', 'nahihirapang huminga', 'matinding pagdurugo', 'barilan', 'binaril', 'saksak',
             'may armas', 'sunog', 'pagsabog', 'lindol', 'baha', 'gumuho', 'kombulsyon', 'maraming nasugatan',
@@ -2888,37 +2887,25 @@ if ($turnIsConfigured && preg_match('/^turns?:(?:\/\/)?([^:\/?]+)/i', $turnUrl, 
             'nahilo', 'lagnat', 'pagsusuka', 'buntis', 'manganganak', 'bata', 'matanda'
         ];
 
-        const negative = [
+        const low = [
             'minor', 'bahagya', 'walang sugat', 'hindi seryoso', 'okay na', 'stable', 'stable na', 'mild'
         ];
 
-        const intensifiers = [
-            'critical', 'life-threatening', 'delikado', 'malubha', 'grabe', 'seryoso', 'urgent', 'agarang', 'immediate'
-        ];
-
-        const manyPattern = /(\d+|multiple|many|several|marami|ilan)\s+(nasugatan|injured|pasiente|patients|tao|people|biktima|victims|sasakyan|vehicles|kotse|cars)/;
-        const unconsciousPattern = /(walang malay|unconscious|not breathing|hindi humihinga)/;
-        const majorFirePattern = /(sunog|fire)\s+(sa|in|with|na)?\s*(bahay|building|mall|school|hospital|warehouse)?/;
-
         const countHits = (keywords) => keywords.reduce((total, keyword) => total + (text.includes(keyword) ? 1 : 0), 0);
-        const highHits = countHits(high);
+        const criticalHits = countHits(criticalHigh);
         const mediumHits = countHits(medium);
-        const negativeHits = countHits(negative);
-        const intensifierHits = countHits(intensifiers);
+        const lowHits = countHits(low);
 
-        let score = (highHits * 3) + (mediumHits * 1.5) + (intensifierHits * 1.5) - (negativeHits * 2);
-
-        if (manyPattern.test(text)) score += 2;
-        if (unconsciousPattern.test(text)) score += 3;
-        if (majorFirePattern.test(text)) score += 2;
-
-        if (incidentTypes.includes('fire') && (highHits > 0 || mediumHits > 0)) score += 1;
-        if ((incidentTypes.includes('medical') || incidentTypes.includes('ambulance')) && unconsciousPattern.test(text)) score += 2;
-        if (incidentTypes.includes('police') && /(armed|may armas|weapon|barilan|binaril)/.test(text)) score += 2;
-        if (incidentTypes.includes('traffic') && /(multi-vehicle|maramihang sasakyan|multiple|many)/.test(text)) score += 2;
-
-        if (highHits >= 2 || score >= 6) return 'high';
-        if (mediumHits >= 1 || score >= 2) return 'medium';
+        if (criticalHits > 0) {
+            // Immediate life threat, armed, fire, explosion, or major hazard -> Critical (80-100 pts)
+            return 'critical';
+        }
+        if (mediumHits > 0) {
+            return 'medium';
+        }
+        if (lowHits > 0) {
+            return 'low';
+        }
         return 'low';
     }
 

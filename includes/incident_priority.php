@@ -36,29 +36,29 @@ if (!function_exists('ers_build_incident_priority_assessment')) {
             ];
         };
 
-        if (preg_match('/\b(unconscious|non[\s-]?responsive|not breathing|no pulse|cardiac arrest|cpr|resuscitation|walang malay|hindi humihinga|di humihinga|tumigil ang puso|hinto ang puso)\b/u', $text)) {
-            $addFactor('life_threat', 'Immediate life threat indicator', 80);
+        if (preg_match('/\b(unconscious|non[\s-]?responsive|not breathing|difficulty breathing|chest pain|no pulse|cardiac arrest|cpr|resuscitation|walang malay|hindi humihinga|di humihinga|nahihirapang huminga|tumigil ang puso|hinto ang puso)\b/u', $text)) {
+            $addFactor('life_threat', 'Immediate life threat indicator', 85);
         }
-        if (preg_match('/\b(gunshot|shot|shooting|stab|stabbing|weapon|armed|hostage|barilan|binaril|saksak|sinaksak|may armas|holdap)\b/u', $text)) {
-            $addFactor('weapon_or_violence', 'Weapon or violent threat indicator', 55);
+        if (preg_match('/\b(gunshot|shot|shooting|stab|stabbing|weapon|armed|hostage|barilan|binaril|saksak|sinaksak|may armas|holdap|mass casualty|maraming nasugatan)\b/u', $text)) {
+            $addFactor('weapon_or_violence', 'Weapon or violent threat indicator', 80);
         }
-        if (preg_match('/\b(fire|smoke|explosion|blast|collapse|collapsed|trapped|drowning|flood|sunog|usok|pagsabog|gumuho|guho|naipit|baha|nalulunod)\b/u', $text)) {
-            $addFactor('active_hazard', 'Active hazard or unsafe scene indicator', 45);
+        if (preg_match('/\b(fire|explosion|blast|earthquake|flood|collapse|collapsed|trapped|drowning|sunog|pagsabog|lindol|baha|gumuho|guho|naipit|nalulunod)\b/u', $text)) {
+            $addFactor('active_hazard', 'Active major hazard (explosion/fire/collapse/flood)', 80);
         }
-        if (preg_match('/\b(severe bleeding|heavy bleeding|chest pain|stroke|seizure|burns|serious injury|critical injury|matinding pagdurugo|sakit sa dibdib|kombulsyon|malubha|grabe|seryoso)\b/u', $text)) {
-            $addFactor('severe_symptoms', 'Severe injury or symptom indicator', 42);
+        if (preg_match('/\b(critical|life-threatening|delikado|malubha|grabe|seryoso)\b/u', $text)) {
+            $addFactor('critical_intensity', 'Critical or life-threatening indicator', 80);
+        }
+        if (preg_match('/\b(severe bleeding|heavy bleeding|stroke|seizure|burns|serious injury|critical injury|matinding pagdurugo|kombulsyon)\b/u', $text)) {
+            $addFactor('severe_symptoms', 'Severe injury or symptom indicator', 55);
+        }
+        if (preg_match('/\b(injury|fracture|sprain|minor bleeding|assault|robbery|burglary|smoke|collision|accident|traffic|missing|distress|dizziness|fever|vomiting|pregnant|labor|child|elderly|sugat|pilay|bukol|bahagyang pagdurugo|bugbog|aksidente|banggaan|trapiko|nawawala|nahilo|lagnat|pagsusuka|buntis|manganganak|bata|matanda)\b/u', $text)) {
+            $addFactor('medium_indicator', 'Medium urgency incident indicator', 35);
         }
         if (preg_match('/(\b\d+\b|multiple|many|several|marami|ilan|dalawa(?:ng)?|tatlo(?:ng)?|apat|lima(?:ng)?)\s+(victims?|patients?|people|persons?|injured|casualties|nasugatan|tao|biktima|pasiente|sasakyan|vehicles?)/u', $text)) {
-            $addFactor('multiple_victims', 'Multiple victims or vehicles indicator', 18);
-        }
-        if (preg_match('/\b(child|children|infant|baby|elderly|senior|pregnant|labor|bata|sanggol|matanda|buntis|manganganak)\b/u', $text)) {
-            $addFactor('vulnerable_person', 'Vulnerable person involved', 9);
-        }
-        if (preg_match('/\b(collision|accident|crash|road blocked|traffic hazard|banggaan|aksidente|nakaharang|trapiko)\b/u', $text)) {
-            $addFactor('traffic_hazard', 'Traffic or road hazard indicator', 11);
+            $addFactor('multiple_victims', 'Multiple victims or vehicles indicator', 15);
         }
         if (preg_match('/\b(minor|mild|stable|resolved|okay na|ok na|walang sugat|hindi seryoso|bahagya|stable na)\b/u', $text)) {
-            $addFactor('minor_or_stable', 'Minor, stable, or resolved indicator', -18);
+            $addFactor('minor_or_stable', 'Minor, stable, or resolved indicator', -20);
         }
 
         if (in_array('fire', $incidentTypes, true) && isset($factors['active_hazard'])) {

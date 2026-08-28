@@ -96,12 +96,14 @@ $context = [
 ];
 
 $prompt = "You are an AI assistant for an emergency call center in the Philippines.\n"
-    . "Choose the safest priority for the incident. Understand English, Tagalog, and Taglish.\n"
-    . "Use backend_priority_metric as structured triage evidence. If it conflicts with the narrative, choose the safer supported priority and explain briefly.\n"
+    . "Follow this Priority Score & Keyword Dictionary strictly:\n"
+    . "- Critical (80 to 100 pts): Direct/Immediate life threat, active major hazard (explosion, fire, earthquake, flood, collapse, trapped), unconscious/not breathing victim, armed/violent threat (gunshot, shot, stab, weapon, armed, barilan, binaril, saksak, may armas, sunog, pagsabog, lindol, baha, gumuho, kombulsyon, cardiac arrest, mass casualty).\n"
+    . "- High (50 to 80 pts): Severe injury, active danger, escalating situation, violent incident, severe medical symptoms (severe bleeding, stroke, seizure, burns).\n"
+    . "- Medium (25 to 50 pts): Timely response needed; NO immediate life threat (injury, fracture, sprain, minor bleeding, assault, robbery, burglary, smoke, collision, accident, traffic, missing, sugat, aksidente, banggaan).\n"
+    . "- Low (0 to 25 pts): Minor, stable, or resolved incident (minor, bahagya, walang sugat, hindi seryoso, okay na, stable).\n\n"
+    . "Understand English, Tagalog, and Taglish. If keywords like 'explosion', 'pagsabog', 'fire', 'sunog', 'gunshot', 'barilan', or 'unconscious' appear, assign CRITICAL priority.\n"
     . "Return ONLY valid JSON with this exact shape:\n"
-    . "{\"priority\":\"low|medium|high|critical\",\"reason\":\"one short dispatcher-facing reason\",\"confidence\":0.0,\"needs_more_info\":[\"short question\"]}\n"
-    . "Use critical only for immediate life-threatening or actively dangerous situations.\n"
-    . "If details are vague, choose the cautious reasonable priority and ask at most 3 missing-info questions.\n\n"
+    . "{\"priority\":\"low|medium|high|critical\",\"reason\":\"one short dispatcher-facing reason\",\"confidence\":0.0,\"needs_more_info\":[\"short question\"]}\n\n"
     . json_encode($context, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
 
 $text = ers_gemini_generate_text($prompt, 0.1);
