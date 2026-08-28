@@ -41,7 +41,7 @@ try {
         $input['group1_endpoint']
             ?? $input['endpoint_url']
             ?? $input['target_url']
-            ?? ers_env('GROUP1_INCIDENT_ENDPOINT', ''),
+            ?? ers_env('GROUP1_INCIDENT_ENDPOINT', 'https://report.alertaraqc.com/api/api.php'),
         500
     );
 
@@ -207,6 +207,8 @@ function ers_group1_post_json(string $endpoint, array $payload, array $input): a
             CURLOPT_POSTFIELDS => $body,
             CURLOPT_HTTPHEADER => $headers,
             CURLOPT_RETURNTRANSFER => true,
+            CURLOPT_SSL_VERIFYPEER => false,
+            CURLOPT_SSL_VERIFYHOST => 0,
             CURLOPT_CONNECTTIMEOUT => 10,
             CURLOPT_TIMEOUT => 30,
         ]);

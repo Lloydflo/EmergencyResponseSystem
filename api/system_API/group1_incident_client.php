@@ -22,7 +22,7 @@ function ers_group1_send_logged_incident(PDO $pdo, int $callId, int $incidentId 
             $options['group1_endpoint']
                 ?? $options['endpoint_url']
                 ?? $options['target_url']
-                ?? ers_env('GROUP1_INCIDENT_ENDPOINT', ''),
+                ?? ers_env('GROUP1_INCIDENT_ENDPOINT', 'https://report.alertaraqc.com/api/api.php'),
             500
         );
 
@@ -191,6 +191,8 @@ function ers_group1_post_logged_incident(string $endpoint, array $payload, array
             CURLOPT_POSTFIELDS => $body,
             CURLOPT_HTTPHEADER => $headers,
             CURLOPT_RETURNTRANSFER => true,
+            CURLOPT_SSL_VERIFYPEER => false,
+            CURLOPT_SSL_VERIFYHOST => 0,
             CURLOPT_CONNECTTIMEOUT => 10,
             CURLOPT_TIMEOUT => 30,
         ]);
