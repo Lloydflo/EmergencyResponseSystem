@@ -2917,7 +2917,8 @@ if ($turnIsConfigured && preg_match('/^turns?:(?:\/\/)?([^:\/?]+)/i', $turnUrl, 
         if (incidentTypes.includes('police') && /(armed|may armas|weapon|barilan|binaril)/.test(text)) score += 2;
         if (incidentTypes.includes('traffic') && /(multi-vehicle|maramihang sasakyan|multiple|many)/.test(text)) score += 2;
 
-        if (highHits >= 2 || score >= 6) return 'high';
+        if (unconsciousPattern.test(text) || score >= 8) return 'critical';
+        if (highHits >= 2 || score >= 5) return 'high';
         if (mediumHits >= 1 || score >= 2) return 'medium';
         return 'low';
     }
@@ -2965,7 +2966,7 @@ if ($turnIsConfigured && preg_match('/^turns?:(?:\/\/)?([^:\/?]+)/i', $turnUrl, 
             if (requestSeq !== prioritySuggestRequestSeq) return;
 
             if (!res.ok || !data || data.ok !== true) {
-                applyLocalPrioritySuggestion(text, 'Local safety rules based on the incident details.');
+                applyLocalPrioritySuggestion(text, 'Based on local safety triage rules.');
                 return;
             }
 
@@ -2979,10 +2980,10 @@ if ($turnIsConfigured && preg_match('/^turns?:(?:\/\/)?([^:\/?]+)/i', $turnUrl, 
             if (Array.isArray(data.needs_more_info) && data.needs_more_info.length) {
                 message += ` Ask: ${data.needs_more_info.join(' ')}`;
             }
-            setPrioritySuggestionMessage(message, 'ai');
+            setPrioritySuggestionMessage(message, isLocalSuggestion ? 'fallback' : 'ai');
         } catch (e) {
             if (requestSeq !== prioritySuggestRequestSeq) return;
-            applyLocalPrioritySuggestion(text, 'Local safety rules based on the incident details.');
+            applyLocalPrioritySuggestion(text, 'Based on local safety triage rules.');
         }
     }
 
