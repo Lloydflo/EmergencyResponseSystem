@@ -2572,7 +2572,16 @@ function submitDispatchProtocol(event) {
         details: JSON.stringify(details)
     }).then(res => {
         if (res && res.ok) {
-            showNotification(`${config.title} sent`, config.tone);
+            const push = res.push;
+            let statusMsg = `${config.title} sent`;
+            if (push && typeof push.delivered === 'number') {
+                statusMsg += push.attempted > 0
+                    ? ` — pushed to app on ${push.delivered}/${push.attempted} responder device(s)`
+                    : ' — no active responder devices to notify';
+            } else if (push && push.error) {
+                statusMsg += ' (app push failed — check FCM configuration)';
+            }
+            showNotification(statusMsg, config.tone);
             closeDispatchProtocolModal();
         } else {
             showNotification('Protocol alert failed', 'error');
