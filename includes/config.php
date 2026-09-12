@@ -183,7 +183,7 @@ $primaryHost = $candidateHosts[0] ?? '127.0.0.1';
 $fallbackHosts = array_slice($candidateHosts, 1);
 
 $dbPort = ($isProd && $prodPort !== '') ? $prodPort : ($stdPort !== '' ? $stdPort : ($prodPort !== '' ? $prodPort : '3306'));
-$dbName = ($isProd && $prodName !== '') ? $prodName : ($stdName !== '' ? $stdName : ($prodName !== '' ? $prodName : 'LGU'));
+$dbName = ($isProd && $prodName !== '') ? $prodName : ($stdName !== '' ? $stdName : ($prodName !== '' ? $prodName : 'emergency_response_test'));
 $dbUser = ($isProd && $prodUser !== '') ? $prodUser : ($stdUser !== '' ? $stdUser : ($prodUser !== '' ? $prodUser : 'root'));
 $dbPass = ($isProd && $prodPass !== '') ? $prodPass : ($stdPass !== '' ? $stdPass : ($prodPass !== '' ? $prodPass : ''));
 
@@ -191,7 +191,7 @@ return [
     'DB_HOST' => $primaryHost,
     'FALLBACK_HOSTS' => $fallbackHosts,
     'DB_PORT' => $dbPort !== '' ? $dbPort : '3306',
-    'DB_NAME' => $dbName !== '' ? $dbName : 'LGU',
+    'DB_NAME' => $dbName !== '' ? $dbName : 'emergency_response_test',
     'DB_USER' => $dbUser !== '' ? $dbUser : 'root',
     'DB_PASS' => $dbPass,
     'IS_PROD' => $isProd,
