@@ -91,7 +91,8 @@ if (!function_exists('ers_env')) {
 
 if (!function_exists('ers_is_production')) {
     function ers_is_production(): bool {
-        $appEnv = strtolower((string)ers_env('APP_ENV', ers_env('ENVIRONMENT', '')));
+        // Supports APP_ENV, ENVIRONMENT, or ENVIROMENT
+        $appEnv = strtolower((string)ers_env('APP_ENV', ers_env('ENVIRONMENT', ers_env('ENVIROMENT', ''))));
         if (in_array($appEnv, ['prod', 'production', 'live'], true)) {
             return true;
         }
@@ -113,6 +114,17 @@ if (!function_exists('ers_is_production')) {
     }
 }
 
+if (!function_exists('ers_host_resolves')) {
+    function ers_host_resolves(string $host): bool {
+        $host = trim($host);
+        if ($host === '' || $host === 'localhost' || $host === '127.0.0.1' || filter_var($host, FILTER_VALIDATE_IP)) {
+            return true;
+        }
+        $ip = @gethostbyname($host);
+        return $ip !== $host;
+    }
+}
+
 // Gemini AI fallback configuration
 if (!defined('GEMINI_API_KEY')) {
     define('GEMINI_API_KEY', (string) ers_env('GEMINI_API_KEY', ers_env('GOOGLE_API_KEY', '')));
@@ -131,27 +143,56 @@ if (!defined('GEMINI_API_URL')) {
 // Resolve Database Configuration
 $isProd = ers_is_production();
 
+$prodHost = ers_env('PROD_DB_HOST');
+$stdHost  = ers_env('DB_HOST');
+
+$prodName = ers_env('PROD_DB_NAME');
+$stdName  = ers_env('DB_DATABASE', ers_env('DB_NAME'));
+
+$prodUser = ers_env('PROD_DB_USER');
+$stdUser  = ers_env('DB_USERNAME', ers_env('DB_USER'));
+
+$prodPass = ers_env('PROD_DB_PASS');
+$stdPass  = ers_env('DB_PASSWORD', ers_env('DB_PASS'));
+
+$prodPort = ers_env('PROD_DB_PORT');
+$stdPort  = ers_env('DB_PORT');
+
+// Candidate hosts in intelligent priority
+$candidateHosts = [];
+
 if ($isProd) {
-    // In production, prioritize PROD_DB_* credentials, fall back to DB_*
-    $dbHost = ers_env('PROD_DB_HOST', ers_env('DB_HOST', '127.0.0.1'));
-    $dbPort = ers_env('PROD_DB_PORT', ers_env('DB_PORT', '3306'));
-    $dbName = ers_env('PROD_DB_NAME', ers_env('DB_DATABASE', ers_env('DB_NAME', 'LGU')));
-    $dbUser = ers_env('PROD_DB_USER', ers_env('DB_USERNAME', ers_env('DB_USER', 'root')));
-    $dbPass = ers_env('PROD_DB_PASS', ers_env('DB_PASSWORD', ers_env('DB_PASS', '')));
+    // If prod host is specified and resolves, prefer it; otherwise prefer standard host (db.alertaraqc.com)
+    if ($prodHost !== '' && ers_host_resolves($prodHost)) {
+        $candidateHosts[] = $prodHost;
+        if ($stdHost !== '') $candidateHosts[] = $stdHost;
+    } else {
+        if ($stdHost !== '') $candidateHosts[] = $stdHost;
+        if ($prodHost !== '') $candidateHosts[] = $prodHost;
+    }
 } else {
-    // In local / development, prioritize DB_* credentials, fall back to PROD_DB_*
-    $dbHost = ers_env('DB_HOST', ers_env('PROD_DB_HOST', '127.0.0.1'));
-    $dbPort = ers_env('DB_PORT', ers_env('PROD_DB_PORT', '3306'));
-    $dbName = ers_env('DB_DATABASE', ers_env('DB_NAME', ers_env('PROD_DB_NAME', 'LGU')));
-    $dbUser = ers_env('DB_USERNAME', ers_env('DB_USER', ers_env('PROD_DB_USER', 'root')));
-    $dbPass = ers_env('DB_PASSWORD', ers_env('DB_PASS', ers_env('PROD_DB_PASS', '')));
+    if ($stdHost !== '') $candidateHosts[] = $stdHost;
+    if ($prodHost !== '') $candidateHosts[] = $prodHost;
 }
 
+$candidateHosts[] = 'db.alertaraqc.com';
+$candidateHosts[] = '127.0.0.1';
+$candidateHosts = array_values(array_unique(array_filter($candidateHosts)));
+
+$primaryHost = $candidateHosts[0] ?? '127.0.0.1';
+$fallbackHosts = array_slice($candidateHosts, 1);
+
+$dbPort = ($isProd && $prodPort !== '') ? $prodPort : ($stdPort !== '' ? $stdPort : ($prodPort !== '' ? $prodPort : '3306'));
+$dbName = ($isProd && $prodName !== '') ? $prodName : ($stdName !== '' ? $stdName : ($prodName !== '' ? $prodName : 'LGU'));
+$dbUser = ($isProd && $prodUser !== '') ? $prodUser : ($stdUser !== '' ? $stdUser : ($prodUser !== '' ? $prodUser : 'root'));
+$dbPass = ($isProd && $prodPass !== '') ? $prodPass : ($stdPass !== '' ? $stdPass : ($prodPass !== '' ? $prodPass : ''));
+
 return [
-    'DB_HOST' => $dbHost,
+    'DB_HOST' => $primaryHost,
+    'FALLBACK_HOSTS' => $fallbackHosts,
     'DB_PORT' => $dbPort !== '' ? $dbPort : '3306',
-    'DB_NAME' => $dbName,
-    'DB_USER' => $dbUser,
+    'DB_NAME' => $dbName !== '' ? $dbName : 'LGU',
+    'DB_USER' => $dbUser !== '' ? $dbUser : 'root',
     'DB_PASS' => $dbPass,
     'IS_PROD' => $isProd,
 ];
