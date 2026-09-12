@@ -305,15 +305,30 @@ function sendOtpEmail($to, $otpCode, $systemName = null, $logoUrl = 'Email.png')
     if (file_exists($envPath)) {
         $lines = file($envPath, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES);
         foreach ($lines as $line) {
-            if (strpos(trim($line), '#') === 0) continue;
-            if (strpos($line, '=') === false) continue;
-            list($name, $value) = explode('=', $line, 2);
-            $name = trim($name);
+            $line = trim($line);
+            if ($line === '' || strpos($line, '#') === 0 || strpos($line, ';') === 0) continue;
+            if (strpos($line, '=') !== false) {
+                list($name, $value) = explode('=', $line, 2);
+            } elseif (strpos($line, '-') !== false && preg_match('/^[A-Za-z0-9_]+-/', $line)) {
+                list($name, $value) = explode('-', $line, 2);
+            } else {
+                continue;
+            }
+            $name = trim(str_replace(' ', '_', $name));
             $value = trim($value);
+            if (strlen($value) >= 2) {
+                $f = $value[0];
+                $l = $value[strlen($value) - 1];
+                if (($f === '"' && $l === '"') || ($f === "'" && $l === "'")) {
+                    $value = substr($value, 1, -1);
+                }
+            }
             if ($name !== '') {
                 $_ENV[$name] = $value;
                 $_SERVER[$name] = $value;
-                putenv($name . '=' . $value);
+                if (function_exists('putenv')) {
+                    putenv($name . '=' . $value);
+                }
             }
         }
     }
@@ -360,6 +375,8 @@ function sendOtpEmail($to, $otpCode, $systemName = null, $logoUrl = 'Email.png')
         'starttls' => 'tls',
         'tls' => 'tls',
         'ssl' => 'ssl',
+        'ss1' => 'ssl',
+        'ssi' => 'ssl',
         'smtps' => 'ssl',
         'none' => '',
         'off' => '',
@@ -378,7 +395,11 @@ function sendOtpEmail($to, $otpCode, $systemName = null, $logoUrl = 'Email.png')
         $host = trim((string)($config['host'] ?? ''));
         $username = trim((string)($config['username'] ?? ''));
         $passwordNoSpaces = preg_replace('/\s+/', '', (string)($config['password'] ?? ''));
-        $encryption = strtolower(trim((string)($config['encryption'] ?? 'tls')));
+        $rawEncryption = strtolower(trim((string)($config['encryption'] ?? 'tls')));
+        $encryption = $encryptionAliases[$rawEncryption] ?? $rawEncryption;
+        if ($encryption === 'ss1' || $encryption === 'ssi') {
+            $encryption = 'ssl';
+        }
         $port = (int)($config['port'] ?? 587);
         $fromAddress = trim((string)($config['from_address'] ?? ''));
         $fromName = trim((string)($config['from_name'] ?? 'System'));
@@ -391,10 +412,9 @@ function sendOtpEmail($to, $otpCode, $systemName = null, $logoUrl = 'Email.png')
             $fromAddress = $username;
         }
 
-        $encryption = $encryptionAliases[$encryption] ?? $encryption;
-        if ($port === 465 && $encryption === 'tls') {
+        if ($port === 465 && ($encryption === '' || $encryption === 'tls')) {
             $encryption = 'ssl';
-        } elseif ($port === 587 && $encryption === 'ssl') {
+        } elseif ($port === 587 && ($encryption === '' || $encryption === 'ssl')) {
             $encryption = 'tls';
         }
 
@@ -402,7 +422,14 @@ function sendOtpEmail($to, $otpCode, $systemName = null, $logoUrl = 'Email.png')
             ['encryption' => $encryption, 'port' => $port],
         ];
 
-        $retryAlternatePorts = filter_var($readEnv('MAIL_RETRY_ALTERNATE_PORTS', 'false'), FILTER_VALIDATE_BOOLEAN);
+        // Automatically add standard alternate Gmail/SMTP port as fallback (587 TLS <-> 465 SSL)
+        if ($port === 465) {
+            $attempts[] = ['encryption' => 'tls', 'port' => 587];
+        } elseif ($port === 587) {
+            $attempts[] = ['encryption' => 'ssl', 'port' => 465];
+        }
+
+        $retryAlternatePorts = filter_var($readEnv('MAIL_RETRY_ALTERNATE_PORTS', 'true'), FILTER_VALIDATE_BOOLEAN);
         if ($retryAlternatePorts) {
             $attempts[] = ['encryption' => 'tls', 'port' => 587];
             $attempts[] = ['encryption' => 'ssl', 'port' => 465];
