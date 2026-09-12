@@ -1,6 +1,8 @@
 <?php
 date_default_timezone_set('Asia/Manila');
-require_once __DIR__ . '/config.php';
+if (file_exists(__DIR__ . '/config.php')) {
+    require_once __DIR__ . '/config.php';
+}
 
 function get_db_connection(): ?PDO {
     static $pdo = null;
@@ -8,8 +10,12 @@ function get_db_connection(): ?PDO {
         return $pdo;
     }
 
-    $config = require __DIR__ . '/config.php';
-    if (empty($config['DB_HOST']) || empty($config['DB_NAME']) || empty($config['DB_USER'])) {
+    $config = [];
+    if (file_exists(__DIR__ . '/config.php')) {
+        $config = require __DIR__ . '/config.php';
+    }
+
+    if (!is_array($config) || empty($config['DB_HOST']) || empty($config['DB_NAME']) || empty($config['DB_USER'])) {
         error_log('Database connection failed: missing DB_HOST, DB_NAME, or DB_USER in live configuration.');
         return null;
     }
