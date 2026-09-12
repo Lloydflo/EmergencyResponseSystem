@@ -6,6 +6,7 @@ require_once __DIR__ . '/../includes/auth.php';
 require_once __DIR__ . '/../includes/activity_log.php';
 require_once __DIR__ . '/../includes/media_storage.php';
 require_once __DIR__ . '/../includes/interagency_time.php';
+require_once __DIR__ . '/api_app/_protocol_alert.php';
 
 $pdo = get_db_connection();
 if (!$pdo) {
@@ -320,9 +321,32 @@ try {
     if ($pdo->inTransaction()) {
         $pdo->commit();
     }
+
+    $push = null;
+    if ($entity_type === 'dispatch_protocol') {
+        // Fan the dispatcher's Emergency Broadcast / Lockdown Protocol / Mass
+        // Casualty quick action out to every responder's app as a real push
+        // alert, not just an entry in the admin activity log.
+        $protocolDetails = json_decode($details, true);
+        $protocolDetails = is_array($protocolDetails) ? $protocolDetails : [];
+        try {
+            $push = ers_send_protocol_alert($pdo, [
+                'protocol' => (string)($protocolDetails['protocol'] ?? ''),
+                'protocol_label' => (string)($protocolDetails['protocol_label'] ?? ''),
+                'message' => (string)($protocolDetails['formatted_message'] ?? ''),
+                'priority' => (string)($protocolDetails['priority'] ?? ''),
+                'alert_id' => (string)$insertedMessageId,
+            ]);
+        } catch (Throwable $pushError) {
+            error_log('dispatch_protocol push failed: ' . $pushError->getMessage());
+            $push = ['error' => 'Push delivery failed'];
+        }
+    }
+
     echo json_encode([
         'ok' => true,
-        'message_id' => $insertedMessageId
+        'message_id' => $insertedMessageId,
+        'push' => $push,
     ]);
 } catch (Throwable $e) {
     if ($pdo->inTransaction()) {

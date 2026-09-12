@@ -551,6 +551,39 @@
             },
             options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false }, tooltip: commonTooltip(theme) }, scales: { y: { beginAtZero: true, ticks: { precision: 0, color: theme.muted }, grid: { color: theme.grid } }, x: { ticks: { color: theme.text }, grid: { display: false } } } },
         });
+
+        const totalIncidentsValues = (responseData.incidents_data || []).map((value) => Number(value || 0));
+        replaceChart('totalIncidents', 'totalIncidentsChart', {
+            type: 'line',
+            data: {
+                labels: responseLabels,
+                datasets: [
+                    {
+                        label: 'Incidents created',
+                        data: totalIncidentsValues,
+                        borderColor: '#3f7f7d',
+                        backgroundColor: 'rgba(63,127,125,.18)',
+                        fill: true,
+                        tension: 0.25,
+                        spanGaps: false,
+                        pointRadius: 3,
+                        pointHoverRadius: 5,
+                    },
+                ],
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: { display: true, position: 'top', labels: { color: theme.text } },
+                    tooltip: commonTooltip(theme),
+                },
+                scales: {
+                    x: { ticks: { color: theme.muted, maxRotation: 45, minRotation: 0 }, grid: { color: theme.grid } },
+                    y: { beginAtZero: true, ticks: { precision: 0, color: theme.muted }, grid: { color: theme.grid } },
+                },
+            },
+        });
     }
 
     function renderDispatchTopUnits(items) {
@@ -1011,6 +1044,7 @@
     window.refreshDispatchReport = refreshChart;
     window.refreshPerformanceChart = refreshChart;
     window.refreshResourcesChart = refreshChart;
+    window.refreshTotalIncidentsChart = refreshChart;
 
     function wireEvents() {
         byId('time-period')?.addEventListener('change', syncDateInputsForPeriod);

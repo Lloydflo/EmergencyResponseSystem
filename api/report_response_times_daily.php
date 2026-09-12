@@ -26,6 +26,7 @@ try {
         'labels' => $daily['labels'],
         'data' => $daily['data'],
         'sample_counts' => $daily['sample_counts'],
+        'incidents_data' => $daily['incidents_data'] ?? [],
         'unit' => $daily['unit'],
     ], JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
 } catch (InvalidArgumentException $e) {

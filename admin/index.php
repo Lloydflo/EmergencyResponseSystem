@@ -109,7 +109,7 @@ function admin_dashboard_h($value): string
                     <article class="metric-card success">
                         <div class="metric-card-top">
                             <div>
-                                <span class="metric-title">Active accounts</span>
+                                <span class="metric-title">Active Accounts</span>
                                 <strong class="metric-value" id="metricActiveAccounts">—</strong>
                             </div>
                             <span class="metric-icon users"><i class="fas fa-users" aria-hidden="true"></i></span>

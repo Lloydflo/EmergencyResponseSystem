@@ -186,7 +186,7 @@ function report_page_metric($value, string $suffix = '', int $decimals = 1): str
                     <div class="filter-group">
                         <label for="report-type">Admin View</label>
                         <select id="report-type">
-                            <option value="">Executive Summary</option>
+                            <option value="">Incident Summary</option>
                             <option value="incident">Incident Oversight</option>
                             <option value="performance">Performance Review</option>
                             <option value="resource">Resource Audit</option>
@@ -198,10 +198,10 @@ function report_page_metric($value, string $suffix = '', int $decimals = 1): str
                         <label for="time-period">Time Period</label>
                         <select id="time-period">
                             <option value="today" <?php echo $defaultPeriod === 'today' ? 'selected' : ''; ?>>Today</option>
-                            <option value="week" <?php echo $defaultPeriod === 'week' ? 'selected' : ''; ?>>Week to Date</option>
-                            <option value="month" <?php echo $defaultPeriod === 'month' ? 'selected' : ''; ?>>Month to Date</option>
-                            <option value="quarter" <?php echo $defaultPeriod === 'quarter' ? 'selected' : ''; ?>>Quarter to Date</option>
-                            <option value="year" <?php echo $defaultPeriod === 'year' ? 'selected' : ''; ?>>Year to Date</option>
+                            <option value="week" <?php echo $defaultPeriod === 'week' ? 'selected' : ''; ?>>Weekly</option>
+                            <option value="month" <?php echo $defaultPeriod === 'month' ? 'selected' : ''; ?>>Monthly</option>
+                            <option value="quarter" <?php echo $defaultPeriod === 'quarter' ? 'selected' : ''; ?>>Quarterly</option>
+                            <option value="year" <?php echo $defaultPeriod === 'year' ? 'selected' : ''; ?>>Yearly</option>
                             <option value="custom" <?php echo $defaultPeriod === 'custom' ? 'selected' : ''; ?>>Custom Range</option>
                         </select>
                     </div>
@@ -212,8 +212,6 @@ function report_page_metric($value, string $suffix = '', int $decimals = 1): str
                             <option value="medical">Medical Emergency</option>
                             <option value="fire">Fire</option>
                             <option value="police">Police Emergency</option>
-                            <option value="traffic">Traffic Accident</option>
-                            <option value="other">Other</option>
                         </select>
                     </div>
                     <div class="filter-group">
@@ -271,7 +269,7 @@ function report_page_metric($value, string $suffix = '', int $decimals = 1): str
                     <div class="report-icon incident">
                         <i class="fas fa-exclamation-triangle"></i>
                     </div>
-                    <div class="report-title">Executive Incident Summary</div>
+                    <div class="report-title">Incident Summary</div>
                     <div class="report-description">Admin-ready overview of incident volume, priorities, and operational outcomes.</div>
                     <div class="report-actions">
                         <button class="btn-report primary" onclick="generateIncidentReport()">
@@ -394,50 +392,6 @@ function report_page_metric($value, string $suffix = '', int $decimals = 1): str
                 </div>
             </div>
 
-            <!-- Call Duration Graph -->
-            <div class="chart-container" data-report-section="summary incident">
-                <div class="chart-header">
-                    <h3 class="chart-title">Incidents Created by Priority</h3>
-                    <div class="chart-controls">
-                        <button class="btn-report" onclick="refreshChart()">
-                            <i class="fas fa-sync"></i> Refresh
-                        </button>
-                        <button class="btn-report" onclick="exportChart('callDurationChart')">
-                            <i class="fas fa-download"></i> Export
-                        </button>
-                    </div>
-                </div>
-                <div style="position: relative; width: 100%; height: 320px;">
-                    <canvas id="callDurationChart" class="chart-canvas"></canvas>
-                </div>
-            </div>
-
-            <div class="chart-container" data-report-section="summary resource performance dispatch">
-                <div class="chart-header">
-                    <h3 class="chart-title">Dispatches Assigned by Unit Type</h3>
-                    <div class="chart-controls">
-                        <button class="btn-report" onclick="refreshDispatchReport()"><i class="fas fa-sync"></i> Refresh</button>
-                        <button class="btn-report" onclick="window.open('api/reports_dispatch.php' + buildQuery(currentFilters), '_blank')"><i class="fas fa-file-pdf"></i> Open Full</button>
-                    </div>
-                </div>
-                <div style="position: relative; width: 100%; height: 320px;">
-                    <canvas id="dispatchDailyChart" class="chart-canvas"></canvas>
-                </div>
-            </div>
-
-            <!-- Admin Performance Review Chart -->
-            <div class="chart-container" data-report-section="summary performance">
-                <div class="chart-header">
-                    <h3 class="chart-title">Admin Performance Review</h3>
-                    <div class="chart-controls">
-                        <button class="btn-report" onclick="refreshPerformanceChart()"><i class="fas fa-sync"></i> Refresh</button>
-                        <button class="btn-report" onclick="exportChart('performanceChart')"><i class="fas fa-download"></i> Export</button>
-                    </div>
-                </div>
-                <div style="position: relative; width: 100%; height: 320px;">
-                    <canvas id="performanceChart" class="chart-canvas"></canvas>
-                </div>
-            </div>
 
             <!-- Current Unit Status Snapshot Chart -->
             <div class="chart-container" data-report-section="summary resource">
@@ -450,6 +404,20 @@ function report_page_metric($value, string $suffix = '', int $decimals = 1): str
                 </div>
                 <div style="position: relative; width: 100%; height: 320px;">
                     <canvas id="resourcesChart" class="chart-canvas"></canvas>
+                </div>
+            </div>
+
+            <!-- Total Incidents by Day Chart -->
+            <div class="chart-container" data-report-section="summary incident trend">
+                <div class="chart-header">
+                    <h3 class="chart-title">Total incidents by day</h3>
+                    <div class="chart-controls">
+                        <button class="btn-report" onclick="refreshTotalIncidentsChart()"><i class="fas fa-sync"></i> Refresh</button>
+                        <button class="btn-report" onclick="exportChart('totalIncidentsChart')"><i class="fas fa-download"></i> Export</button>
+                    </div>
+                </div>
+                <div style="position: relative; width: 100%; height: 320px;">
+                    <canvas id="totalIncidentsChart" class="chart-canvas"></canvas>
                 </div>
             </div>
             </div>
@@ -566,19 +534,6 @@ function report_page_metric($value, string $suffix = '', int $decimals = 1): str
                 </div>
             </div>
 
-            <!-- System Alerts -->
-            <div class="alerts-section" data-report-section="summary">
-                <div style="display:flex; align-items:center; justify-content:space-between; gap:1rem; margin-bottom:1.5rem;">
-                    <h2 class="alerts-section-title" style="font-size: 1.25rem; font-weight: 700; margin: 0; display: flex; align-items: center;">
-                        <i class="fas fa-bell" style="margin-right: 0.5rem; color: #ffc107;"></i>
-                        System Alerts & Notifications
-                    </h2>
-                    <button class="btn-report" type="button" onclick="exportSystemFeed()">
-                        <i class="fas fa-print"></i> Export
-                    </button>
-                </div>
-                <div id="alerts-dynamic" class="alerts-feed-scroll"></div>
-            </div>
     <script>
     // --- Combined System Alerts & Activity Feed ---
     let LAST_ALERTS = [];

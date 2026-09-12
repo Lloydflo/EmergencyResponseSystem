@@ -165,17 +165,7 @@ function pa_json($value): string
                 </article>
             </section>
 
-            <section class="pa-grid pa-grid-tertiary" aria-label="Hotspots and process">
-                <article class="pa-panel">
-                    <div class="pa-panel-head">
-                        <div>
-                            <p class="pa-panel-kicker">Location risk</p>
-                            <h2>Hotspot Watchlist</h2>
-                        </div>
-                    </div>
-                    <div class="pa-hotspot-list" id="paHotspotList"></div>
-                </article>
-
+            <section class="pa-grid" aria-label="System process">
                 <article class="pa-panel">
                     <div class="pa-panel-head">
                         <div>
@@ -185,7 +175,7 @@ function pa_json($value): string
                     </div>
                     <div class="pa-note-grid">
                         <div class="pa-note-card"><strong>Collect</strong><span>Incidents, dispatches, responders, units</span></div>
-                        <div class="pa-note-card"><strong>Analyze</strong><span>Trend, type mix, hotspot, peak hour</span></div>
+                        <div class="pa-note-card"><strong>Analyze</strong><span>Trend, type mix, peak hour</span></div>
                         <div class="pa-note-card"><strong>Predict</strong><span>7-day volume and resource pressure</span></div>
                         <div class="pa-note-card"><strong>Recommend</strong><span>Standby units and escalation focus</span></div>
                     </div>
@@ -267,7 +257,10 @@ function pa_json($value): string
         function paRenderTypes(items) {
             const list = document.getElementById('paTypeList');
             if (!list) return;
-            const rows = Array.isArray(items) ? items : [];
+            const rows = (Array.isArray(items) ? items : []).filter((row) => {
+                const type = String(row.type || '').toLowerCase();
+                return type === 'medical' || type === 'fire' || type === 'flood';
+            });
             list.innerHTML = rows.map((row) => `
                 <div class="pa-type-row">
                     <div class="pa-type-top">
@@ -279,28 +272,7 @@ function pa_json($value): string
             `).join('');
         }
 
-        function paRenderHotspots(items) {
-            const list = document.getElementById('paHotspotList');
-            if (!list) return;
-            const rows = Array.isArray(items) ? items : [];
-            if (!rows.length) {
-                list.innerHTML = '<div class="pa-hotspot-card"><p class="pa-hotspot-name">No hotspot signal</p><p class="pa-hotspot-meta">Location history is not concentrated enough for a watchlist.</p></div>';
-                return;
-            }
-            list.innerHTML = rows.map((row) => `
-                <div class="pa-hotspot-card">
-                    <div class="pa-hotspot-top">
-                        <p class="pa-hotspot-name">${paEscape(row.location || 'Unspecified')}</p>
-                        <span class="pa-status ${paRiskClass(row.risk)}">${paEscape(row.risk || 'Low')}</span>
-                    </div>
-                    <p class="pa-hotspot-meta">${paEscape(row.dominant_type || 'Other')} incidents are the dominant signal.</p>
-                    <div class="pa-hotspot-count">
-                        <span class="pa-micro-stat"><i class="fas fa-layer-group"></i>${paNumber(row.incidents)} incidents</span>
-                        <span class="pa-micro-stat"><i class="fas fa-bolt"></i>${paNumber(row.high_priority)} high priority</span>
-                    </div>
-                </div>
-            `).join('');
-        }
+
 
         function paChartOptions() {
             return {
@@ -408,7 +380,6 @@ function pa_json($value): string
 
             paRenderRecommendations(snapshot.recommendations);
             paRenderTypes(snapshot.type_forecast);
-            paRenderHotspots(snapshot.hotspots);
             paRenderCharts(snapshot);
         }
 
@@ -425,6 +396,8 @@ function pa_json($value): string
                     throw new Error((data && data.error) || 'Unable to refresh predictive analytics');
                 }
                 paRenderSnapshot(data.snapshot || {});
+                const meta = document.getElementById('paAiMeta');
+                if (meta) meta.textContent = 'Decision support only. Dispatch approval remains with operations staff.';
             } catch (error) {
                 const meta = document.getElementById('paAiMeta');
                 if (meta) meta.textContent = error.message || 'Unable to refresh predictive analytics.';

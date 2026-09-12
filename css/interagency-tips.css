@@ -261,20 +261,6 @@
     overflow: auto;
 }
 
-.ia-tip-row {
-    display: grid;
-    grid-template-columns: minmax(0, 1fr) auto;
-    gap: 12px;
-    width: 100%;
-    text-align: left;
-    padding: 14px 18px;
-    border: 0;
-    border-bottom: 1px solid var(--ia-border, #dfe6ee);
-    background: #ffffff;
-    color: inherit;
-    cursor: pointer;
-}
-
 .ia-tip-row:hover,
 .ia-tip-row.is-active {
     background: #f8fbfd;
@@ -853,6 +839,7 @@ html[data-theme="dark"] .ia-tip-notice {
 }
 
 @media (max-width: 640px) {
+
     .ia-tip-list-head,
     .ia-tip-row {
         align-items: stretch;
@@ -1111,9 +1098,17 @@ html[data-theme="dark"] .ia-tip-notice {
     content: "";
 }
 
-.ia-tip-stat:nth-child(2)::after { background: rgba(180, 83, 9, 0.055); }
-.ia-tip-stat:nth-child(3)::after { background: rgba(21, 128, 61, 0.055); }
-.ia-tip-stat:nth-child(4)::after { background: rgba(109, 40, 217, 0.055); }
+.ia-tip-stat:nth-child(2)::after {
+    background: rgba(180, 83, 9, 0.055);
+}
+
+.ia-tip-stat:nth-child(3)::after {
+    background: rgba(21, 128, 61, 0.055);
+}
+
+.ia-tip-stat:nth-child(4)::after {
+    background: rgba(109, 40, 217, 0.055);
+}
 
 .ia-tip-stat-label {
     position: relative;
@@ -1278,7 +1273,7 @@ html[data-theme="dark"] .ia-tip-notice {
     font-size: 0.7rem;
 }
 
-.ia-tip-kicker > span:first-child {
+.ia-tip-kicker>span:first-child {
     display: inline-flex;
     align-items: center;
     min-height: 1.45rem;
@@ -1325,7 +1320,7 @@ html[data-theme="dark"] .ia-tip-notice {
     font-size: 0.7rem;
 }
 
-.ia-tip-meta > span {
+.ia-tip-meta>span {
     display: inline-flex;
     align-items: center;
     gap: 0.28rem;
@@ -1400,7 +1395,7 @@ html[data-theme="dark"] .ia-tip-notice {
     scrollbar-gutter: stable;
 }
 
-.ia-tip-detail > h3 {
+.ia-tip-detail>h3 {
     position: sticky;
     top: 0;
     z-index: 4;
@@ -1417,7 +1412,7 @@ html[data-theme="dark"] .ia-tip-notice {
     font-weight: 850;
 }
 
-.ia-tip-detail > h3::before {
+.ia-tip-detail>h3::before {
     display: inline-flex;
     width: 1.75rem;
     height: 1.75rem;
@@ -1433,13 +1428,13 @@ html[data-theme="dark"] .ia-tip-notice {
     font-weight: 800;
 }
 
-.ia-tip-detail > .ia-tip-detail-grid:not(.ia-tip-detail-form-grid) {
+.ia-tip-detail>.ia-tip-detail-grid:not(.ia-tip-detail-form-grid) {
     grid-template-columns: repeat(2, minmax(0, 1fr));
     gap: 0.58rem;
     padding: 0.78rem 0.85rem 0;
 }
 
-.ia-tip-detail > .ia-tip-detail-grid:not(.ia-tip-detail-form-grid) > .ia-tip-detail-item {
+.ia-tip-detail>.ia-tip-detail-grid:not(.ia-tip-detail-form-grid)>.ia-tip-detail-item {
     min-width: 0;
     padding: 0.65rem 0.7rem;
     border: 1px solid #e1e9f0;
@@ -1447,7 +1442,7 @@ html[data-theme="dark"] .ia-tip-notice {
     background: var(--tip-ux-surface-soft);
 }
 
-.ia-tip-detail > .ia-tip-detail-grid:not(.ia-tip-detail-form-grid) > .ia-tip-detail-item:nth-child(n + 3) {
+.ia-tip-detail>.ia-tip-detail-grid:not(.ia-tip-detail-form-grid)>.ia-tip-detail-item:nth-child(n + 3) {
     grid-column: 1 / -1;
 }
 
@@ -1553,11 +1548,11 @@ html[data-theme="dark"] .ia-tip-notice {
     margin-top: 0;
 }
 
-.ia-tip-detail-form-grid > .ia-tip-detail-item {
+.ia-tip-detail-form-grid>.ia-tip-detail-item {
     min-width: 0;
 }
 
-.ia-tip-detail-form-grid > .ia-tip-detail-item:nth-child(4) {
+.ia-tip-detail-form-grid>.ia-tip-detail-item:nth-child(4) {
     grid-column: 1 / -1;
 }
 
@@ -1634,7 +1629,9 @@ html[data-theme="dark"] .ia-tip-notice {
 }
 
 @keyframes tipUxSpin {
-    to { transform: rotate(360deg); }
+    to {
+        transform: rotate(360deg);
+    }
 }
 
 /* Evidence viewer polish. */
@@ -1676,7 +1673,7 @@ html[data-theme="dark"] .ia-tip-section {
 
 html[data-theme="dark"] .ia-module-modal-dialog:has(.ia-tip-section) .ia-module-modal-head,
 html[data-theme="dark"] .ia-tip-toolbar,
-html[data-theme="dark"] .ia-tip-detail > h3 {
+html[data-theme="dark"] .ia-tip-detail>h3 {
     background: linear-gradient(135deg, #111827, #102522);
     border-color: var(--tip-ux-border);
 }
@@ -1712,7 +1709,7 @@ html[data-theme="dark"] .ia-tip-row.is-active {
     border-color: #2dd4bf;
 }
 
-html[data-theme="dark"] .ia-tip-kicker > span:first-child,
+html[data-theme="dark"] .ia-tip-kicker>span:first-child,
 html[data-theme="dark"] .ia-tip-flow span {
     background: #1e293b;
     color: #aebed0;
@@ -1728,7 +1725,7 @@ html[data-theme="dark"] .ia-tip-detail-note {
     color: var(--tip-ux-muted);
 }
 
-html[data-theme="dark"] .ia-tip-detail > .ia-tip-detail-grid:not(.ia-tip-detail-form-grid) > .ia-tip-detail-item {
+html[data-theme="dark"] .ia-tip-detail>.ia-tip-detail-grid:not(.ia-tip-detail-form-grid)>.ia-tip-detail-item {
     border-color: var(--tip-ux-border);
     background: var(--tip-ux-surface-soft);
 }
@@ -1805,7 +1802,7 @@ html[data-theme="dark"] .ia-tip-quick-actions [data-tip-quick-status="dismissed"
         overflow: visible;
     }
 
-    .ia-tip-detail > h3 {
+    .ia-tip-detail>h3 {
         position: static;
     }
 }
@@ -1879,13 +1876,13 @@ html[data-theme="dark"] .ia-tip-quick-actions [data-tip-quick-status="dismissed"
         height: 56px;
     }
 
-    .ia-tip-detail > .ia-tip-detail-grid:not(.ia-tip-detail-form-grid),
+    .ia-tip-detail>.ia-tip-detail-grid:not(.ia-tip-detail-form-grid),
     .ia-tip-detail-form-grid {
         grid-template-columns: 1fr;
     }
 
-    .ia-tip-detail > .ia-tip-detail-grid:not(.ia-tip-detail-form-grid) > .ia-tip-detail-item,
-    .ia-tip-detail-form-grid > .ia-tip-detail-item:nth-child(4) {
+    .ia-tip-detail>.ia-tip-detail-grid:not(.ia-tip-detail-form-grid)>.ia-tip-detail-item,
+    .ia-tip-detail-form-grid>.ia-tip-detail-item:nth-child(4) {
         grid-column: 1;
     }
 }
@@ -1899,7 +1896,7 @@ html[data-theme="dark"] .ia-tip-quick-actions [data-tip-quick-status="dismissed"
         grid-template-columns: 1fr;
     }
 
-    .ia-tip-row > span:last-child {
+    .ia-tip-row>span:last-child {
         justify-self: start;
     }
 
@@ -1914,6 +1911,7 @@ html[data-theme="dark"] .ia-tip-quick-actions [data-tip-quick-status="dismissed"
 }
 
 @media (prefers-reduced-motion: reduce) {
+
     .ia-tip-row,
     .ia-tip-evidence-thumb,
     .ia-tip-toolbar .ia-tip-icon,

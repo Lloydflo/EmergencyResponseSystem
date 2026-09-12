@@ -334,6 +334,16 @@ $adminName = $_SESSION['user_name'] ?? 'Admin';
             width: 44px;
             height: 44px;
             cursor: pointer;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            position: relative;
+            z-index: 100;
+            pointer-events: auto !important;
+        }
+
+        .um-close i {
+            pointer-events: none !important;
         }
 
         .um-modal-body {
@@ -386,6 +396,9 @@ $adminName = $_SESSION['user_name'] ?? 'Admin';
             border: 1px solid #c9d5e2;
             background: #fff;
             color: #0f172a;
+            position: relative;
+            z-index: 100;
+            pointer-events: auto !important;
         }
 
         .um-btn.primary {
@@ -1690,7 +1703,7 @@ $adminName = $_SESSION['user_name'] ?? 'Admin';
         <div class="um-modal-card" role="dialog" aria-modal="true" aria-labelledby="accountModalTitle" tabindex="-1">
             <div class="um-modal-head">
                 <h2 id="accountModalTitle">Add New Account</h2>
-                <button type="button" class="um-close" id="closeAddUserModal" aria-label="Close">
+                <button type="button" class="um-close" id="closeAddUserModal" aria-label="Close" onclick="closeModal(true)">
                     <i class="fas fa-times"></i>
                 </button>
             </div>
@@ -1780,7 +1793,7 @@ $adminName = $_SESSION['user_name'] ?? 'Admin';
                     </div>
                 </div>
                 <div class="um-modal-foot">
-                    <button type="button" class="um-btn" id="cancelAddUserBtn">Cancel</button>
+                    <button type="button" class="um-btn" id="cancelAddUserBtn" onclick="closeModal(true)">Cancel</button>
                     <button type="submit" class="um-btn primary" id="accountModalSubmitBtn">Save User</button>
                 </div>
             </form>
@@ -1794,13 +1807,13 @@ $adminName = $_SESSION['user_name'] ?? 'Admin';
                     <span class="um-section-kicker">Team member</span>
                     <h2 id="userDetailsTitle">Account details</h2>
                 </div>
-                <button type="button" class="um-close" id="closeUserDetailsModal" aria-label="Close account details">
+                <button type="button" class="um-close" id="closeUserDetailsModal" aria-label="Close account details" onclick="closeDetailsModal()">
                     <i class="fas fa-times" aria-hidden="true"></i>
                 </button>
             </div>
             <div class="um-modal-body" id="userDetailsBody"></div>
             <div class="um-modal-foot um-details-actions">
-                <button type="button" class="um-btn" id="detailsCloseBtn">Close</button>
+                <button type="button" class="um-btn" id="detailsCloseBtn" onclick="closeDetailsModal()">Close</button>
                 <button type="button" class="um-btn" id="detailsInviteBtn" hidden>
                     <i class="fas fa-envelope" aria-hidden="true"></i> Resend invitation
                 </button>
@@ -1933,8 +1946,13 @@ $adminName = $_SESSION['user_name'] ?? 'Admin';
                         element === addUserModal ||
                         element === userDetailsModal ||
                         element === userToast ||
-                        element.matches('script')
+                        (element.id && (element.id === 'addUserModal' || element.id === 'userDetailsModal' || element.id === 'userToast')) ||
+                        element.classList.contains('um-modal') ||
+                        element.classList.contains('um-toast') ||
+                        element.tagName === 'SCRIPT'
                     ) {
+                        element.inert = false;
+                        element.removeAttribute('inert');
                         return;
                     }
                     if (!modalBackgroundState.has(element)) {
@@ -1945,15 +1963,29 @@ $adminName = $_SESSION['user_name'] ?? 'Admin';
                 return;
             }
             modalBackgroundState.forEach((wasInert, element) => {
-                if (element.isConnected) element.inert = wasInert;
+                if (element && element.isConnected) {
+                    element.inert = wasInert;
+                    if (!wasInert) element.removeAttribute('inert');
+                }
             });
             modalBackgroundState.clear();
+            if (addUserModal) {
+                addUserModal.inert = false;
+                addUserModal.removeAttribute('inert');
+            }
+            if (userDetailsModal) {
+                userDetailsModal.inert = false;
+                userDetailsModal.removeAttribute('inert');
+            }
         }
 
         function showModal(modal, preferredFocus) {
+            if (!modal) return;
             modalReturnFocus.set(modal, document.activeElement instanceof HTMLElement ? document.activeElement : null);
             modal.classList.add('show');
             modal.setAttribute('aria-hidden', 'false');
+            modal.inert = false;
+            modal.removeAttribute('inert');
             document.body.style.overflow = 'hidden';
             setModalBackgroundInert(true);
             window.setTimeout(() => {
@@ -1963,6 +1995,7 @@ $adminName = $_SESSION['user_name'] ?? 'Admin';
         }
 
         function hideModal(modal) {
+            if (!modal) return;
             modal.classList.remove('show');
             modal.setAttribute('aria-hidden', 'true');
             if (!document.querySelector('.um-modal.show')) {
@@ -1971,7 +2004,7 @@ $adminName = $_SESSION['user_name'] ?? 'Admin';
             }
             const returnTarget = modalReturnFocus.get(modal);
             modalReturnFocus.delete(modal);
-            if (returnTarget && document.contains(returnTarget) && typeof returnTarget.focus === 'function') {
+            if (returnTarget && (document.body.contains(returnTarget) || (document.contains && document.contains(returnTarget))) && typeof returnTarget.focus === 'function') {
                 window.setTimeout(() => returnTarget.focus(), 0);
             }
         }
@@ -2679,6 +2712,9 @@ $adminName = $_SESSION['user_name'] ?? 'Admin';
             hideModal(userDetailsModal);
         }
 
+        window.closeModal = closeModal;
+        window.closeDetailsModal = closeDetailsModal;
+
         async function sendResponderInvitation(id, button) {
             if (button) button.disabled = true;
             try {
@@ -2815,23 +2851,75 @@ $adminName = $_SESSION['user_name'] ?? 'Admin';
             }
         });
 
-        openAddUserBtn.addEventListener('click', () => {
-            editingId = null;
-            addUserForm.reset();
-            openModal();
-        });
-        closeAddUserModal.addEventListener('click', (event) => { event.preventDefault(); closeModal(true); });
-        cancelAddUserBtn.addEventListener('click', (event) => { event.preventDefault(); closeModal(true); });
+        if (openAddUserBtn) {
+            openAddUserBtn.addEventListener('click', () => {
+                editingId = null;
+                addUserForm.reset();
+                openModal();
+            });
+        }
 
-        addUserModal.addEventListener('click', (event) => {
-            if (event.target === addUserModal) closeModal();
-        });
+        if (closeAddUserModal) {
+            closeAddUserModal.addEventListener('click', (event) => {
+                event.preventDefault();
+                event.stopPropagation();
+                closeModal(true);
+            });
+        }
 
-        closeUserDetailsModal.addEventListener('click', closeDetailsModal);
-        detailsCloseBtn.addEventListener('click', closeDetailsModal);
-        userDetailsModal.addEventListener('click', (event) => {
-            if (event.target === userDetailsModal) closeDetailsModal();
-        });
+        if (cancelAddUserBtn) {
+            cancelAddUserBtn.addEventListener('click', (event) => {
+                event.preventDefault();
+                event.stopPropagation();
+                closeModal(true);
+            });
+        }
+
+        if (addUserModal) {
+            addUserModal.addEventListener('click', (event) => {
+                if (event.target === addUserModal) {
+                    closeModal(false);
+                    return;
+                }
+                const closeTarget = event.target.closest('#closeAddUserModal, #cancelAddUserBtn');
+                if (closeTarget) {
+                    event.preventDefault();
+                    event.stopPropagation();
+                    closeModal(true);
+                }
+            });
+        }
+
+        if (closeUserDetailsModal) {
+            closeUserDetailsModal.addEventListener('click', (event) => {
+                event.preventDefault();
+                event.stopPropagation();
+                closeDetailsModal();
+            });
+        }
+
+        if (detailsCloseBtn) {
+            detailsCloseBtn.addEventListener('click', (event) => {
+                event.preventDefault();
+                event.stopPropagation();
+                closeDetailsModal();
+            });
+        }
+
+        if (userDetailsModal) {
+            userDetailsModal.addEventListener('click', (event) => {
+                if (event.target === userDetailsModal) {
+                    closeDetailsModal();
+                    return;
+                }
+                const closeTarget = event.target.closest('#closeUserDetailsModal, #detailsCloseBtn');
+                if (closeTarget) {
+                    event.preventDefault();
+                    event.stopPropagation();
+                    closeDetailsModal();
+                }
+            });
+        }
 
         detailsEditBtn.addEventListener('click', () => {
             const target = userRows.find((row) => Number(row.id) === detailsUserId);

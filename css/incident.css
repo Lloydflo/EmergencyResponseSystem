@@ -635,7 +635,7 @@
 
 .incident-card-actions {
     display: grid;
-    grid-template-columns: repeat(3, minmax(0, 1fr));
+    grid-template-columns: repeat(4, minmax(0, 1fr));
     gap: 0.55rem;
     padding-top: 0.1rem;
 }
@@ -702,6 +702,12 @@
     background: #f1f5f9;
     border-color: #dbe3ec;
     color: #334155;
+}
+
+.action-send {
+    background: #e0f2fe;
+    border-color: #bae6fd;
+    color: #0369a1;
 }
 
 .action-call {
@@ -1088,6 +1094,12 @@
     color: #e2e8f0;
     background: #1e293b;
     border-color: #475569;
+}
+
+[data-theme="dark"] .action-send {
+    color: #7dd3fc;
+    background: #0c4a6e;
+    border-color: #0369a1;
 }
 
 [data-theme="dark"] .action-call {
