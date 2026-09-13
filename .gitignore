@@ -8,6 +8,7 @@
 db.config.php
 !includes/gemini_helper.php
 api/.env
+db.php
 
 # Mail configuration (prevent accidental commit)
 mail.env
