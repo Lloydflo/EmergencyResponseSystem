@@ -807,17 +807,17 @@ try {
             const statusInfo = mapStatusToBadge(i.status);
             const created = new Date(i.created_at || Date.now());
             const location = i.location || i.location_address || 'Unknown location';
-            const ref = i.incident_code || i.reference_no || '';
+            const id = Number(i.id || 0);
+            const ref = i.incident_code || i.reference_no || i.case_no || (id > 0 ? ('INC-' + String(id).padStart(4, '0')) : '');
             const type = capitalize(i.type || 'Unknown');
             const priorityLabel = capitalize(priority);
             const description = incidentDisplaySummary(i);
-            const id = Number(i.id || 0);
             return `
                 <article class="incident-queue-card priority-${escapeHtml(priority)}" data-incident-row data-id="${id}" data-ref="${escapeHtml(ref)}" role="listitem">
                     <div class="incident-card-header">
                         <div class="incident-card-identity">
                             <span class="incident-card-label">Reference number</span>
-                            <h3 class="incident-card-reference">${escapeHtml(ref || 'N/A')}</h3>
+                            <h3 class="incident-card-reference">${escapeHtml(ref || (id > 0 ? ('INC-' + String(id).padStart(4, '0')) : 'N/A'))}</h3>
                             <span class="incident-type-label"><i class="fas fa-triangle-exclamation" aria-hidden="true"></i> ${escapeHtml(type)}</span>
                         </div>
                         <div class="incident-card-badges" aria-label="Incident priority and status">
@@ -897,7 +897,7 @@ try {
             }
 
             if (searchValue) {
-                const hay = [i.reference_no, i.incident_code, i.type, i.title, i.location, i.location_address, i.description, i.caller_name]
+                const hay = [i.reference_no, i.incident_code, i.case_no, i.type, i.title, i.location, i.location_address, i.description, i.caller_name]
                     .map(v => (v || '').toString().toLowerCase()).join(' ');
                 if (!hay.includes(searchValue)) return false;
             }

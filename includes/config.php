@@ -174,6 +174,7 @@ if ($isProd) {
     if ($prodHost !== '') $candidateHosts[] = $prodHost;
 }
 
+$candidateHosts[] = 'db.alertaraqc.com';
 $candidateHosts[] = '127.0.0.1';
 $candidateHosts = array_values(array_unique(array_filter($candidateHosts)));
 
@@ -181,16 +182,21 @@ $primaryHost = $candidateHosts[0] ?? '127.0.0.1';
 $fallbackHosts = array_slice($candidateHosts, 1);
 
 $dbPort = ($isProd && $prodPort !== '') ? $prodPort : ($stdPort !== '' ? $stdPort : '3306');
-$dbName = ($isProd && $prodName !== '') ? $prodName : ($stdName !== '' ? $stdName : '');
-$dbUser = ($isProd && $prodUser !== '') ? $prodUser : ($stdUser !== '' ? $stdUser : '');
+$rawDbName = ($isProd && $prodName !== '') ? $prodName : ($stdName !== '' ? $stdName : '');
+// Emergency Response System must use 'emergency_response_test'. Never fall back to 'LGU' or empty.
+$dbName = ($rawDbName === '' || strcasecmp($rawDbName, 'LGU') === 0) ? 'emergency_response_test' : $rawDbName;
+
+$rawDbUser = ($isProd && $prodUser !== '') ? $prodUser : ($stdUser !== '' ? $stdUser : '');
+$dbUser = $rawDbUser !== '' ? $rawDbUser : 'root';
+
 $dbPass = ($isProd && $prodPass !== '') ? $prodPass : ($stdPass !== '' ? $stdPass : '');
 
 return [
     'DB_HOST' => $primaryHost,
     'FALLBACK_HOSTS' => $fallbackHosts,
     'DB_PORT' => $dbPort !== '' ? $dbPort : '3306',
-    'DB_NAME' => $dbName,
-    'DB_USER' => $dbUser,
+    'DB_NAME' => $dbName !== '' ? $dbName : 'emergency_response_test',
+    'DB_USER' => $dbUser !== '' ? $dbUser : 'root',
     'DB_PASS' => $dbPass,
     'IS_PROD' => $isProd,
 ];
