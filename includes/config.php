@@ -162,7 +162,6 @@ $stdPort  = ers_env('DB_PORT');
 $candidateHosts = [];
 
 if ($isProd) {
-    // If prod host is specified and resolves, prefer it; otherwise prefer standard host (db.alertaraqc.com)
     if ($prodHost !== '' && ers_host_resolves($prodHost)) {
         $candidateHosts[] = $prodHost;
         if ($stdHost !== '') $candidateHosts[] = $stdHost;
@@ -175,24 +174,23 @@ if ($isProd) {
     if ($prodHost !== '') $candidateHosts[] = $prodHost;
 }
 
-$candidateHosts[] = 'db.alertaraqc.com';
 $candidateHosts[] = '127.0.0.1';
 $candidateHosts = array_values(array_unique(array_filter($candidateHosts)));
 
 $primaryHost = $candidateHosts[0] ?? '127.0.0.1';
 $fallbackHosts = array_slice($candidateHosts, 1);
 
-$dbPort = ($isProd && $prodPort !== '') ? $prodPort : ($stdPort !== '' ? $stdPort : ($prodPort !== '' ? $prodPort : '3306'));
-$dbName = ($isProd && $prodName !== '') ? $prodName : ($stdName !== '' ? $stdName : ($prodName !== '' ? $prodName : 'emergency_response_test'));
-$dbUser = ($isProd && $prodUser !== '') ? $prodUser : ($stdUser !== '' ? $stdUser : ($prodUser !== '' ? $prodUser : 'root'));
-$dbPass = ($isProd && $prodPass !== '') ? $prodPass : ($stdPass !== '' ? $stdPass : ($prodPass !== '' ? $prodPass : ''));
+$dbPort = ($isProd && $prodPort !== '') ? $prodPort : ($stdPort !== '' ? $stdPort : '3306');
+$dbName = ($isProd && $prodName !== '') ? $prodName : ($stdName !== '' ? $stdName : '');
+$dbUser = ($isProd && $prodUser !== '') ? $prodUser : ($stdUser !== '' ? $stdUser : '');
+$dbPass = ($isProd && $prodPass !== '') ? $prodPass : ($stdPass !== '' ? $stdPass : '');
 
 return [
     'DB_HOST' => $primaryHost,
     'FALLBACK_HOSTS' => $fallbackHosts,
     'DB_PORT' => $dbPort !== '' ? $dbPort : '3306',
-    'DB_NAME' => $dbName !== '' ? $dbName : 'emergency_response_test',
-    'DB_USER' => $dbUser !== '' ? $dbUser : 'root',
+    'DB_NAME' => $dbName,
+    'DB_USER' => $dbUser,
     'DB_PASS' => $dbPass,
     'IS_PROD' => $isProd,
 ];

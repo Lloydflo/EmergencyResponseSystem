@@ -34,8 +34,7 @@ function get_db_connection(): ?PDO {
             }
         }
     }
-    // Always include canonical hosts
-    $candidateHosts[] = 'db.alertaraqc.com';
+    // Always include local host fallback
     $candidateHosts[] = '127.0.0.1';
     $candidateHosts = array_values(array_unique(array_filter($candidateHosts)));
 
@@ -60,13 +59,13 @@ function get_db_connection(): ?PDO {
             }
 
             // Verify if the connected database contains ERS tables.
-            // If the database was misconfigured as 'LGU', auto-switch to 'emergency_response_test'.
             try {
                 $hasCalls = (bool)$candidatePdo->query("SHOW TABLES LIKE 'calls'")->fetchColumn();
-                if (!$hasCalls) {
-                    $hasErsDb = (bool)$candidatePdo->query("SHOW DATABASES LIKE 'emergency_response_test'")->fetchColumn();
-                    if ($hasErsDb) {
-                        $candidatePdo->exec("USE emergency_response_test");
+                if (!$hasCalls && !empty($config['DB_NAME'])) {
+                    $escapedDb = str_replace('`', '``', (string)$config['DB_NAME']);
+                    $hasConfigDb = (bool)$candidatePdo->query("SHOW DATABASES LIKE " . $candidatePdo->quote($config['DB_NAME']))->fetchColumn();
+                    if ($hasConfigDb) {
+                        $candidatePdo->exec("USE `{$escapedDb}`");
                     }
                 }
             } catch (Throwable $schemaCheckErr) {
