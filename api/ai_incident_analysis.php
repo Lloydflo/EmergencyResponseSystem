@@ -1,7 +1,9 @@
 <?php
 header('Content-Type: application/json');
 require_once __DIR__ . '/../includes/db.php';
-require_once __DIR__ . '/../includes/gemini_helper.php';
+if (is_file(__DIR__ . '/../includes/gemini_helper.php')) {
+    require_once __DIR__ . '/../includes/gemini_helper.php';
+}
 
 $pdo = get_db_connection();
 if (!$pdo) {
@@ -46,7 +48,7 @@ try {
         'severity' => strtoupper((string)($incident['priority'] ?? 'Unknown')),
     ];
 
-    $text = analyzeIncident($incidentData);
+    $text = function_exists('analyzeIncident') ? analyzeIncident($incidentData) : null;
     if ($text) {
         echo json_encode([
             'ok' => true,

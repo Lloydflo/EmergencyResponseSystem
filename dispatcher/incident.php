@@ -239,6 +239,7 @@ try {
                         <label for="status-filter">Status</label>
                         <select id="status-filter">
                             <option value="">All Status</option>
+                            <option value="pending">Pending</option>
                             <option value="active">Active</option>
                             <option value="dispatched">Dispatched</option>
                             <option value="resolved">Resolved</option>
@@ -295,8 +296,10 @@ try {
                         </div>
                         <div class="ai-analysis-content" id="ai-analysis-content">
                             <?php
-                            include $rootDir . '/includes/gemini_helper.php';
-                            $analysis = analyzeIncident($aiIncidentData);
+                            if (is_file($rootDir . '/includes/gemini_helper.php')) {
+                                include_once $rootDir . '/includes/gemini_helper.php';
+                            }
+                            $analysis = function_exists('analyzeIncident') ? analyzeIncident($aiIncidentData) : null;
                             if ($analysis) {
                                 echo incident_ai_analysis_html((string)$analysis);
                             } else {
@@ -554,9 +557,13 @@ try {
             });
         }
 
-        document.addEventListener('DOMContentLoaded', function() {
+        if (document.readyState === 'loading') {
+            document.addEventListener('DOMContentLoaded', function() {
+                refreshAIAnalysis();
+            });
+        } else {
             refreshAIAnalysis();
-        });
+        }
 
         window.addEventListener('storage', function(e) {
             if (e.key === 'ers_incidents' || e.key === 'ers_incidents_changed' || e.key === 'ers_anonymous_tips_changed' || e.key === 'ers_last_logged_incident') {
@@ -586,19 +593,22 @@ try {
             renderDynamicIncidents();
         }
 
-        // Add event listeners to filters
-        priorityFilter.addEventListener('change', fetchIncidents);
-        statusFilter.addEventListener('change', fetchIncidents);
-        typeFilter.addEventListener('change', fetchIncidents);
-        searchInput.addEventListener('input', function(e) {
-            currentSearch = e.target.value;
-            renderDynamicIncidents();
-        });
+        // Add event listeners to filters safely
+        if (priorityFilter) priorityFilter.addEventListener('change', fetchIncidents);
+        if (statusFilter) statusFilter.addEventListener('change', fetchIncidents);
+        if (typeFilter) typeFilter.addEventListener('change', fetchIncidents);
+        if (searchInput) {
+            searchInput.addEventListener('input', function(e) {
+                currentSearch = e.target.value;
+                renderDynamicIncidents();
+            });
+        }
 
         // Header button: View Resolved (opens modal)
-        document.addEventListener('DOMContentLoaded', function() {
+        function initResolvedButton() {
             const btnResolved = document.getElementById('btn-view-resolved');
-            if (btnResolved) {
+            if (btnResolved && !btnResolved.dataset.wired) {
+                btnResolved.dataset.wired = '1';
                 btnResolved.addEventListener('click', function() {
                     openResolvedModal();
                 });
@@ -611,7 +621,13 @@ try {
                     window.setTimeout(openResolvedModal, 150);
                 }
             } catch (e) {}
-        });
+        }
+
+        if (document.readyState === 'loading') {
+            document.addEventListener('DOMContentLoaded', initResolvedButton);
+        } else {
+            initResolvedButton();
+        }
 
         function isResolvedModalOpen() {
             const modal = document.getElementById('incident-resolved-modal');
@@ -855,12 +871,23 @@ try {
 
             if (priorityValue && normalizePriority(i.priority) !== priorityValue) return false;
 
-            // Default: exclude resolved incidents from logged list unless explicitly filtered
+            // Status filter handling
             {
                 const s = (i.status || '').toLowerCase();
-                const mapped = s === 'dispatched' ? 'dispatched' : (s === 'resolved' || s === 'cancelled' ? 'resolved' : 'active');
-                if (!statusValue && mapped === 'resolved') return false; // hide resolved by default
-                if (statusValue && mapped !== statusValue) return false;   // respect explicit filter selection
+                const isResolved = (s === 'resolved' || s === 'cancelled');
+                // Default ("All Status"): hide resolved/cancelled incidents from active incident queue
+                if (!statusValue && isResolved) return false;
+                if (statusValue === 'pending') {
+                    if (s !== 'pending' && s !== 'new') return false;
+                } else if (statusValue === 'active') {
+                    if (isResolved) return false;
+                } else if (statusValue === 'dispatched') {
+                    if (s !== 'dispatched') return false;
+                } else if (statusValue === 'resolved') {
+                    if (!isResolved) return false;
+                } else if (statusValue && s !== statusValue) {
+                    return false;
+                }
             }
 
             if (typeValue) {
@@ -925,13 +952,15 @@ try {
             }
             fetchIncidentsInFlight = true;
             const listContainer = document.getElementById('incident-list-dynamic');
-            if (listContainer) listContainer.setAttribute('aria-busy', 'true');
+            if (listContainer && listContainer.children.length === 0) {
+                listContainer.setAttribute('aria-busy', 'true');
+            }
             // Gather filter values
             const params = new URLSearchParams();
-            const priorityValue = (priorityFilter.value || '').toLowerCase();
-            const statusValue = (statusFilter.value || '').toLowerCase();
-            const typeValue = (typeFilter.value || '').toLowerCase();
-            const searchValue = (searchInput.value || '').toLowerCase();
+            const priorityValue = (priorityFilter ? priorityFilter.value : '').toLowerCase();
+            const statusValue = (statusFilter ? statusFilter.value : '').toLowerCase();
+            const typeValue = (typeFilter ? typeFilter.value : '').toLowerCase();
+            const searchValue = (searchInput ? searchInput.value : '').toLowerCase();
             if (priorityValue) params.append('priority', priorityValue);
             if (statusValue) params.append('status', statusValue);
             if (typeValue) params.append('type', typeValue);
@@ -940,7 +969,7 @@ try {
                 const res = await fetch(API_LIST_URL + '?' + params.toString());
                 const data = await res.json();
                 if (data && data.ok) {
-                    INCIDENTS = data.items || [];
+                    INCIDENTS = Array.isArray(data.items) ? data.items : [];
                     INCIDENTS_FETCH_ERROR = '';
                 } else {
                     INCIDENTS = [];
@@ -953,7 +982,11 @@ try {
             } finally {
                 fetchIncidentsInFlight = false;
             }
-            renderDynamicIncidents();
+            try {
+                renderDynamicIncidents();
+            } catch (renderErr) {
+                console.error('Error rendering dynamic incidents', renderErr);
+            }
             if (fetchIncidentsQueued) {
                 fetchIncidentsQueued = false;
                 fetchIncidents();
@@ -1039,14 +1072,20 @@ try {
         document.head.appendChild(style);
 
         // Initialize stats on page load
-        document.addEventListener('DOMContentLoaded', function() {
+        function initIncidentQueue() {
             fetchIncidents();
             if (REFRESH_TIMER) clearInterval(REFRESH_TIMER);
             REFRESH_TIMER = setInterval(fetchIncidents, 10000); // refresh every 10s
             pollResolvedIncidentNotifications();
             if (RESOLVED_REFRESH_TIMER) clearInterval(RESOLVED_REFRESH_TIMER);
             RESOLVED_REFRESH_TIMER = setInterval(pollResolvedIncidentNotifications, 5000);
-        });
+        }
+
+        if (document.readyState === 'loading') {
+            document.addEventListener('DOMContentLoaded', initIncidentQueue);
+        } else {
+            initIncidentQueue();
+        }
 
         // Modal for updating incident description
         function showUpdateModal(incident) {
