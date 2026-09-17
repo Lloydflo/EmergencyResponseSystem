@@ -106,7 +106,12 @@ if (!function_exists('ers_is_production')) {
         }
 
         $dir = str_replace('\\', '/', __DIR__);
-        if (strpos($dir, '/var/www/') !== false || strpos($dir, 'emergency-response.alertaraqc.com') !== false) {
+        if (
+            strpos($dir, '/var/www/') !== false ||
+            strpos($dir, 'emergency-response.alertaraqc.com') !== false ||
+            strpos($dir, '/app') === 0 ||
+            file_exists('/.dockerenv')
+        ) {
             return true;
         }
 
@@ -143,60 +148,75 @@ if (!defined('GEMINI_API_URL')) {
 // Resolve Database Configuration
 $isProd = ers_is_production();
 
+// Production-specific credentials
 $prodHost = ers_env('PROD_DB_HOST');
-$stdHost  = ers_env('DB_HOST');
-
 $prodName = ers_env('PROD_DB_NAME');
-$stdName  = ers_env('DB_DATABASE', ers_env('DB_NAME'));
-
 $prodUser = ers_env('PROD_DB_USER');
-$stdUser  = ers_env('DB_USERNAME', ers_env('DB_USER'));
-
 $prodPass = ers_env('PROD_DB_PASS');
-$stdPass  = ers_env('DB_PASSWORD', ers_env('DB_PASS'));
-
 $prodPort = ers_env('PROD_DB_PORT');
+
+// Local-specific credentials
+$localHost = ers_env('LOCAL_DB_HOST');
+$localName = ers_env('LOCAL_DB_NAME');
+$localUser = ers_env('LOCAL_DB_USER');
+$localPass = ers_env('LOCAL_DB_PASS');
+$localPort = ers_env('LOCAL_DB_PORT');
+
+// Standard fallback credentials
+$stdHost  = ers_env('DB_HOST');
+$stdName  = ers_env('DB_DATABASE', ers_env('DB_NAME'));
+$stdUser  = ers_env('DB_USERNAME', ers_env('DB_USER'));
+$stdPass  = ers_env('DB_PASSWORD', ers_env('DB_PASS'));
 $stdPort  = ers_env('DB_PORT');
 
-// Candidate hosts in intelligent priority
-$candidateHosts = [];
-
+// Resolve effective credentials based on environment
 if ($isProd) {
-    if ($prodHost !== '' && ers_host_resolves($prodHost)) {
-        $candidateHosts[] = $prodHost;
-        if ($stdHost !== '') $candidateHosts[] = $stdHost;
-    } else {
-        if ($stdHost !== '') $candidateHosts[] = $stdHost;
-        if ($prodHost !== '') $candidateHosts[] = $prodHost;
-    }
+    $effHost = $prodHost !== '' ? $prodHost : ($stdHost !== '' ? $stdHost : 'db.alertaraqc.com');
+    $effName = $prodName !== '' ? $prodName : ($stdName !== '' ? $stdName : 'emergency_response_test');
+    $effUser = $prodUser !== '' ? $prodUser : ($stdUser !== '' ? $stdUser : 'root');
+    $effPass = $prodPass !== '' ? $prodPass : ($stdPass !== '' ? $stdPass : '');
+    $effPort = $prodPort !== '' ? $prodPort : ($stdPort !== '' ? $stdPort : '3306');
 } else {
-    if ($stdHost !== '') $candidateHosts[] = $stdHost;
-    if ($prodHost !== '') $candidateHosts[] = $prodHost;
+    $effHost = $localHost !== '' ? $localHost : ($stdHost !== '' ? $stdHost : 'localhost');
+    $effName = $localName !== '' ? $localName : ($stdName !== '' ? $stdName : 'emergency_response_test');
+    $effUser = $localUser !== '' ? $localUser : ($stdUser !== '' ? $stdUser : 'root');
+    $effPass = $localPass !== '' ? $localPass : ($stdPass !== '' ? $stdPass : '');
+    $effPort = $localPort !== '' ? $localPort : ($stdPort !== '' ? $stdPort : '3306');
 }
 
-$candidateHosts[] = 'db.alertaraqc.com';
-$candidateHosts[] = '127.0.0.1';
+// Ensure database name is never empty or incorrectly 'LGU'
+if ($effName === '' || strcasecmp($effName, 'LGU') === 0) {
+    $effName = 'emergency_response_test';
+}
+
+// Build candidate hosts in intelligent priority
+$candidateHosts = [];
+if ($isProd) {
+    if ($prodHost !== '') $candidateHosts[] = $prodHost;
+    if ($stdHost !== '') $candidateHosts[] = $stdHost;
+    $candidateHosts[] = 'db.alertaraqc.com';
+    $candidateHosts[] = '127.0.0.1';
+} else {
+    if ($localHost !== '') $candidateHosts[] = $localHost;
+    if ($stdHost !== '') $candidateHosts[] = $stdHost;
+    $candidateHosts[] = '127.0.0.1';
+    $candidateHosts[] = 'localhost';
+    if ($prodHost !== '') $candidateHosts[] = $prodHost;
+    $candidateHosts[] = 'db.alertaraqc.com';
+}
 $candidateHosts = array_values(array_unique(array_filter($candidateHosts)));
 
-$primaryHost = $candidateHosts[0] ?? '127.0.0.1';
+$primaryHost = $candidateHosts[0] ?? ($isProd ? 'db.alertaraqc.com' : 'localhost');
 $fallbackHosts = array_slice($candidateHosts, 1);
-
-$dbPort = ($isProd && $prodPort !== '') ? $prodPort : ($stdPort !== '' ? $stdPort : '3306');
-$rawDbName = ($isProd && $prodName !== '') ? $prodName : ($stdName !== '' ? $stdName : '');
-// Emergency Response System must use 'emergency_response_test'. Never fall back to 'LGU' or empty.
-$dbName = ($rawDbName === '' || strcasecmp($rawDbName, 'LGU') === 0) ? 'emergency_response_test' : $rawDbName;
-
-$rawDbUser = ($isProd && $prodUser !== '') ? $prodUser : ($stdUser !== '' ? $stdUser : '');
-$dbUser = $rawDbUser !== '' ? $rawDbUser : 'root';
-
-$dbPass = ($isProd && $prodPass !== '') ? $prodPass : ($stdPass !== '' ? $stdPass : '');
 
 return [
     'DB_HOST' => $primaryHost,
     'FALLBACK_HOSTS' => $fallbackHosts,
-    'DB_PORT' => $dbPort !== '' ? $dbPort : '3306',
-    'DB_NAME' => $dbName !== '' ? $dbName : 'emergency_response_test',
-    'DB_USER' => $dbUser !== '' ? $dbUser : 'root',
-    'DB_PASS' => $dbPass,
+    'DB_PORT' => $effPort !== '' ? $effPort : '3306',
+    'DB_NAME' => $effName,
+    'DB_USER' => $effUser !== '' ? $effUser : 'root',
+    'DB_PASS' => $effPass,
+    'PROD_PASS' => $prodPass !== '' ? $prodPass : ($stdPass !== '' ? $stdPass : ''),
+    'LOCAL_PASS' => $localPass !== '' ? $localPass : ($stdPass !== '' ? $stdPass : ''),
     'IS_PROD' => $isProd,
 ];

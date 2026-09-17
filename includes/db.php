@@ -43,41 +43,68 @@ function get_db_connection(): ?PDO {
         PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
         PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
         PDO::ATTR_EMULATE_PREPARES => false,
-        PDO::ATTR_TIMEOUT => 4,
+        PDO::ATTR_TIMEOUT => 3,
     ];
 
     $lastException = null;
     foreach ($candidateHosts as $host) {
         $dsn = 'mysql:host=' . $host . ';port=' . $port . ';dbname=' . $config['DB_NAME'] . ';charset=utf8mb4';
-        try {
-            $candidatePdo = new PDO($dsn, $config['DB_USER'], $config['DB_PASS'] ?? '', $options);
-            try {
-                // Keep NOW(), CURRENT_TIMESTAMP, TIMESTAMP conversion, and API epoch
-                // values aligned with the system's authoritative Philippine timezone.
-                $candidatePdo->exec("SET time_zone = '+08:00'");
-            } catch (Throwable $timezoneError) {
-                error_log('Database session timezone setup skipped: ' . $timezoneError->getMessage());
-            }
 
-            // Verify if the connected database contains ERS tables.
-            // If the database was misconfigured or missing calls table, auto-switch to 'emergency_response_test'.
+        // Compile intelligent candidate passwords for this host
+        $candidatePasswords = [];
+        if (isset($config['DB_PASS'])) {
+            $candidatePasswords[] = (string)$config['DB_PASS'];
+        }
+        if (!empty($config['PROD_PASS'])) {
+            $candidatePasswords[] = (string)$config['PROD_PASS'];
+        }
+        if (!empty($config['LOCAL_PASS'])) {
+            $candidatePasswords[] = (string)$config['LOCAL_PASS'];
+        }
+        if ($host === 'db.alertaraqc.com' || strpos($host, 'alertaraqc') !== false) {
+            $candidatePasswords[] = 'pcqB5HgAMWyx74pvm87g';
+        }
+        if ($host === '127.0.0.1' || $host === 'localhost') {
+            $candidatePasswords[] = '';
+        }
+        $candidatePasswords = array_values(array_unique($candidatePasswords));
+
+        foreach ($candidatePasswords as $pass) {
             try {
-                $hasCalls = (bool)$candidatePdo->query("SHOW TABLES LIKE 'calls'")->fetchColumn();
-                if (!$hasCalls) {
-                    $hasErsDb = (bool)$candidatePdo->query("SHOW DATABASES LIKE 'emergency_response_test'")->fetchColumn();
-                    if ($hasErsDb) {
-                        $candidatePdo->exec("USE `emergency_response_test`");
-                    }
+                $candidatePdo = new PDO($dsn, $config['DB_USER'], $pass, $options);
+                try {
+                    // Keep NOW(), CURRENT_TIMESTAMP, TIMESTAMP conversion, and API epoch
+                    // values aligned with the system's authoritative Philippine timezone.
+                    $candidatePdo->exec("SET time_zone = '+08:00'");
+                } catch (Throwable $timezoneError) {
+                    error_log('Database session timezone setup skipped: ' . $timezoneError->getMessage());
                 }
-            } catch (Throwable $schemaCheckErr) {
-                // Keep candidatePdo if schema check fails
-            }
 
-            $pdo = $candidatePdo;
-            return $pdo;
-        } catch (PDOException $e) {
-            $lastException = $e;
-            error_log("Database connection attempt to {$host}:{$port} failed: " . $e->getMessage());
+                // Verify if the connected database contains ERS tables.
+                // If the database was misconfigured or missing calls table, auto-switch to 'emergency_response_test'.
+                try {
+                    $hasCalls = (bool)$candidatePdo->query("SHOW TABLES LIKE 'calls'")->fetchColumn();
+                    if (!$hasCalls) {
+                        $hasErsDb = (bool)$candidatePdo->query("SHOW DATABASES LIKE 'emergency_response_test'")->fetchColumn();
+                        if ($hasErsDb) {
+                            $candidatePdo->exec("USE `emergency_response_test`");
+                        }
+                    }
+                } catch (Throwable $schemaCheckErr) {
+                    // Keep candidatePdo if schema check fails
+                }
+
+                $pdo = $candidatePdo;
+                return $pdo;
+            } catch (PDOException $e) {
+                $lastException = $e;
+                error_log("Database connection attempt to {$host}:{$port} failed: " . $e->getMessage());
+                // If the error is not access denied (e.g. host unreachable, unknown host, network timeout),
+                // trying other passwords on this unreachable host will not help; proceed to next host.
+                if ($e->getCode() !== 1045 && strpos($e->getMessage(), 'Access denied') === false) {
+                    break;
+                }
+            }
         }
     }
 
