@@ -17,6 +17,17 @@ if (!function_exists('getLastOtpEmailErrorMessage')) {
     }
 }
 
+if (!function_exists('ers_log_mail_event')) {
+    function ers_log_mail_event(string $message): void {
+        error_log('[ERS_MAIL] ' . trim($message));
+        $logDir = dirname(__DIR__);
+        $logFile = $logDir . '/mail_error.log';
+        if (is_writable($logDir) || (file_exists($logFile) && is_writable($logFile))) {
+            @file_put_contents($logFile, date('Y-m-d H:i:s') . ' ' . trim($message) . "\n", FILE_APPEND);
+        }
+    }
+}
+
 if (!function_exists('detectOtpEmailErrorMessage')) {
     function detectOtpEmailErrorMessage(array $errors): string {
         $combined = strtolower(implode(' ', $errors));
@@ -526,11 +537,7 @@ function sendOtpEmail($to, $otpCode, $systemName = null, $logoUrl = 'Email.png')
                 $mail->Body = $body;
 
                 if ($mail->send()) {
-                    file_put_contents(
-                        __DIR__ . '/../mail_error.log',
-                        date('Y-m-d H:i:s') . " OTP email sent via " . $label . " SMTP to: " . $to . "\n",
-                        FILE_APPEND
-                    );
+                    ers_log_mail_event("OTP email sent via " . $label . " SMTP to: " . $to);
                     return true;
                 }
 
@@ -734,11 +741,7 @@ function sendOtpEmail($to, $otpCode, $systemName = null, $logoUrl = 'Email.png')
             fclose($fp);
 
             if (strpos($dataResp, '250') === 0) {
-                file_put_contents(
-                    __DIR__ . '/../mail_error.log',
-                    date('Y-m-d H:i:s') . " OTP email sent via native SMTP to: " . $to . "\n",
-                    FILE_APPEND
-                );
+                ers_log_mail_event("OTP email sent via native SMTP to: " . $to);
                 return true;
             }
 
@@ -754,12 +757,8 @@ function sendOtpEmail($to, $otpCode, $systemName = null, $logoUrl = 'Email.png')
         }
     }
 
-    $logMsg = date('Y-m-d H:i:s')
-        . " SMTP connect/send failed"
-        . " host=" . $host
-        . " attempts=" . implode('; ', $errors)
-        . "\n";
-    file_put_contents(__DIR__ . '/../mail_error.log', $logMsg, FILE_APPEND);
+    $logMsg = "SMTP connect/send failed host=" . $host . " attempts=" . implode('; ', $errors);
+    ers_log_mail_event($logMsg);
     $smtpFailureMessage = detectOtpEmailErrorMessage($errors);
     setLastOtpEmailErrorMessage($smtpFailureMessage);
 
@@ -792,19 +791,11 @@ function sendOtpEmail($to, $otpCode, $systemName = null, $logoUrl = 'Email.png')
         : @mail($to, $fallbackSubject, $fallbackText, implode("\r\n", $fallbackHeaders));
 
     if ($fallbackResult) {
-        file_put_contents(
-            __DIR__ . '/../mail_error.log',
-            date('Y-m-d H:i:s') . " PHP mail() fallback accepted for: " . $to . " from: " . $fallbackFromAddress . "\n",
-            FILE_APPEND
-        );
+        ers_log_mail_event("PHP mail() fallback accepted for: " . $to . " from: " . $fallbackFromAddress);
         return true;
     }
 
-    file_put_contents(
-        __DIR__ . '/../mail_error.log',
-        date('Y-m-d H:i:s') . " PHP mail() fallback failed for: " . $to . " from: " . $fallbackFromAddress . "\n",
-        FILE_APPEND
-    );
+    ers_log_mail_event("PHP mail() fallback failed for: " . $to . " from: " . $fallbackFromAddress);
 
     // Keep the specific failure reason from SMTP attempts
     setLastOtpEmailErrorMessage($smtpFailureMessage);
