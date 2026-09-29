@@ -42,7 +42,7 @@ try {
     $ins = $pdo->prepare("INSERT INTO responder_otps (responder_email, otp, expires_at) VALUES (?, ?, ?)");
     $ins->execute([$email, $otp, $expiresAt]);
 
-    $apiKey = "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"; // Bagong API key na ginamit mo sa Terminal
+    $apiKey = getenv("BREVO_API_KEY") ?: $_ENV["BREVO_API_KEY"] ?: "xkeysib-..."; // Bagong API key na ginamit mo sa Terminal
 
     $payload = [
         "sender" => ["name" => "AlerTara QC", "email" => "lloydsamonte7@gmail.com"],
