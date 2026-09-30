@@ -128,10 +128,29 @@ try {
     $mail->Host       = trim($env['MAIL_HOST']);
     $mail->SMTPAuth   = true;
     $mail->Username   = trim($env['MAIL_USERNAME']);
-    $mail->Password   = $env['MAIL_PASSWORD'];
+    $mail->Password   = preg_replace('/\s+/', '', (string)$env['MAIL_PASSWORD']);
 
-    $mail->SMTPSecure = PHPMailer::ENCRYPTION_STARTTLS;
-    $mail->Port       = (int)$env['MAIL_PORT'];
+    $encryption = strtolower(trim((string)($env['MAIL_ENCRYPTION'] ?? 'tls')));
+    $port = (int)($env['MAIL_PORT'] ?? 587);
+
+    if (in_array($encryption, ['ssl', 'smtps'], true) || $port === 465) {
+        $mail->SMTPSecure = PHPMailer::ENCRYPTION_SMTPS;
+    } elseif (!in_array($encryption, ['', 'none', 'off', 'false'], true)) {
+        $mail->SMTPSecure = PHPMailer::ENCRYPTION_STARTTLS;
+    } else {
+        $mail->SMTPSecure = '';
+    }
+    $mail->Port       = $port;
+    $mail->CharSet    = 'UTF-8';
+    $mail->Timeout    = 20;
+
+    $mail->SMTPOptions = [
+        'ssl' => [
+            'verify_peer' => false,
+            'verify_peer_name' => false,
+            'allow_self_signed' => true,
+        ],
+    ];
 
     // Keep SMTP debug OFF in production.
     $mail->SMTPDebug = 0;

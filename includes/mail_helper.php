@@ -25,8 +25,14 @@ if (!function_exists('detectOtpEmailErrorMessage')) {
             return 'OTP email failed because the Gmail sender reached its daily sending limit and no backup SMTP sender accepted the OTP. Use another SMTP sender or a transactional email provider.';
         }
 
-        if (strpos($combined, 'invalid credentials') !== false || strpos($combined, 'authentication failed') !== false) {
-            return 'OTP email failed because the SMTP username or app password is invalid.';
+        if (
+            strpos($combined, 'invalid credentials') !== false ||
+            strpos($combined, 'authentication failed') !== false ||
+            strpos($combined, '535') !== false ||
+            strpos($combined, 'username and password not accepted') !== false ||
+            strpos($combined, 'bad credentials') !== false
+        ) {
+            return 'OTP email failed because the SMTP username or app password is invalid. Check MAIL_USERNAME and MAIL_PASSWORD.';
         }
 
         if (strpos($combined, 'could not connect to smtp host') !== false || strpos($combined, 'failed to connect') !== false) {
