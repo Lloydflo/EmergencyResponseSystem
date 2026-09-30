@@ -4,9 +4,9 @@ ob_start();
 error_reporting(E_ALL);
 ini_set('display_errors', '0');
 
-header("Content-Type: application/json");
+header("Content-Type: application/json; charset=UTF-8");
 
-// Read request body
+// Read request body (Handles both Retrofit FormUrlEncoded and JSON)
 $raw = file_get_contents("php://input");
 $input = json_decode($raw, true);
 
@@ -24,10 +24,21 @@ if ($email === "") {
 }
 
 try {
-    require __DIR__ . "/connect.php";
+    // 1. Ayusin ang Path sa Database Connection
+    // Subukang hanapin sa parent directory (api/connect.php) o sa current directory
+    if (file_exists(__DIR__ . "/connect.php")) {
+        require_once __DIR__ . "/connect.php";
+    } elseif (file_exists(__DIR__ . "/../connect.php")) {
+        require_once __DIR__ . "/../connect.php";
+    } elseif (file_exists(__DIR__ . "/../includes/connect.php")) {
+        require_once __DIR__ . "/../includes/connect.php";
+    } else {
+        throw new Exception("Database connection file (connect.php) not found.");
+    }
+
     $pdo = db();
 
-    // 1. Fetch responder
+    // 2. Fetch responder
     $stmt = $pdo->prepare("SELECT id, email, name, is_active FROM users WHERE email = ? LIMIT 1");
     $stmt->execute([$email]);
     $responder = $stmt->fetch(PDO::FETCH_ASSOC);
@@ -38,15 +49,15 @@ try {
         exit;
     }
 
-    // 2. Generate and store OTP
+    // 3. Generate and store OTP
     $otp = (string)random_int(100000, 999999);
     $expiresAt = (new DateTime("+5 minutes"))->format("Y-m-d H:i:s");
 
     $ins = $pdo->prepare("INSERT INTO responder_otps (responder_email, otp, expires_at) VALUES (?, ?, ?)");
     $ins->execute([$email, $otp, $expiresAt]);
 
-    // 3. Get API Key securely from Environment Variables
-    $apiKey = getenv("BREVO_API_KEY") ?: ($_ENV["BREVO_API_KEY"] ?? "");
+    // 4. Secure API Key Fetching (Supports getenv, $_ENV, and $_SERVER)
+    $apiKey = getenv("BREVO_API_KEY") ?: ($_ENV["BREVO_API_KEY"] ?? $_SERVER["BREVO_API_KEY"] ?? "");
 
     if (empty($apiKey)) {
         throw new Exception("BREVO_API_KEY is missing in Environment Variables");
@@ -63,8 +74,8 @@ try {
     curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
     curl_setopt($ch, CURLOPT_POST, true);
     curl_setopt($ch, CURLOPT_POSTFIELDS, json_encode($payload));
-    curl_setopt($ch, CURLOPT_TIMEOUT, 5);
-    curl_setopt($ch, CURLOPT_CONNECTTIMEOUT, 3);
+    curl_setopt($ch, CURLOPT_TIMEOUT, 10);
+    curl_setopt($ch, CURLOPT_CONNECTTIMEOUT, 5);
     curl_setopt($ch, CURLOPT_HTTPHEADER, [
         "accept: application/json",
         "api-key: " . $apiKey,
