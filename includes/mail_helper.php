@@ -759,6 +759,48 @@ function sendOtpEmail($to, $otpCode, $systemName = null, $logoUrl = 'Email.png')
         }
     }
 
+    // Attempt 3: Brevo REST API (Works over HTTPS port 443 without needing valid SMTP credentials or open SMTP ports)
+    $brevoApiKey = trim((string)$readEnv('BREVO_API_KEY', ''));
+    if ($brevoApiKey !== '' && function_exists('curl_init')) {
+        $brevoFromAddress = (string)$readEnv('MAIL_BACKUP_FROM_ADDRESS', $readEnv('MAIL_FROM_ADDRESS', 'lloydsamonte7@gmail.com'));
+        if (trim($brevoFromAddress) === '') {
+            $brevoFromAddress = 'lloydsamonte7@gmail.com';
+        }
+        $brevoFromName = (string)$readEnv('MAIL_FROM_NAME', $fromName);
+
+        $payload = [
+            'sender' => ['name' => $brevoFromName, 'email' => $brevoFromAddress],
+            'to' => [['email' => $to]],
+            'subject' => 'Your OTP Code',
+            'htmlContent' => $body
+        ];
+
+        $ch = curl_init('https://api.brevo.com/v3/smtp/email');
+        curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+        curl_setopt($ch, CURLOPT_POST, true);
+        curl_setopt($ch, CURLOPT_POSTFIELDS, json_encode($payload));
+        curl_setopt($ch, CURLOPT_TIMEOUT, 10);
+        curl_setopt($ch, CURLOPT_CONNECTTIMEOUT, 5);
+        curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
+        curl_setopt($ch, CURLOPT_SSL_VERIFYHOST, false);
+        curl_setopt($ch, CURLOPT_HTTPHEADER, [
+            'accept: application/json',
+            'api-key: ' . $brevoApiKey,
+            'content-type: application/json'
+        ]);
+
+        $apiResponse = curl_exec($ch);
+        $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+        curl_close($ch);
+
+        if ($httpCode >= 200 && $httpCode < 300) {
+            ers_log_mail_event("OTP email sent via Brevo REST API fallback to: " . $to);
+            return true;
+        }
+
+        $errors[] = "brevo_api -> HTTP " . $httpCode . " " . $apiResponse;
+    }
+
     $logMsg = "SMTP connect/send failed host=" . $host . " attempts=" . implode('; ', $errors);
     ers_log_mail_event($logMsg);
     $smtpFailureMessage = detectOtpEmailErrorMessage($errors);
