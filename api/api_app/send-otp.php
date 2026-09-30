@@ -55,54 +55,52 @@ try {
     $ins = $pdo->prepare("INSERT INTO responder_otps (responder_email, otp, expires_at) VALUES (?, ?, ?)");
     $ins->execute([$email, $otp, $expiresAt]);
 
-    // 4. Send OTP via Brevo API or fallback to SMTP
-    $apiKey = getenv("BREVO_API_KEY") ?: ($_ENV["BREVO_API_KEY"] ?? $_SERVER["BREVO_API_KEY"] ?? "");
-
+    // 4. Send OTP via Primary SMTP (Gmail) -> Backup SMTP (Brevo) -> Brevo HTTP API
     $otpSent = false;
     $errorMessage = "";
 
-    if (!empty($apiKey)) {
-        $fromEmail = getenv("MAIL_FROM_ADDRESS") ?: ($_ENV["MAIL_FROM_ADDRESS"] ?? $_SERVER["MAIL_FROM_ADDRESS"] ?? "lloydsamonte7@gmail.com");
-        $payload = [
-            "sender" => ["name" => "AlerTara QC", "email" => $fromEmail],
-            "to" => [["email" => $email, "name" => $responder['name'] ?? "Responder"]],
-            "subject" => "Your OTP Code - AlerTara QC",
-            "htmlContent" => "<h3>Hello " . htmlspecialchars($responder['name'] ?? 'User') . "</h3><p>Your OTP code is: <b style='font-size:24px; color:blue;'>" . $otp . "</b></p><p>This OTP will expire in 5 minutes.</p>"
-        ];
-
-        $ch = curl_init("https://api.brevo.com/v3/smtp/email");
-        curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
-        curl_setopt($ch, CURLOPT_POST, true);
-        curl_setopt($ch, CURLOPT_POSTFIELDS, json_encode($payload));
-        curl_setopt($ch, CURLOPT_TIMEOUT, 10);
-        curl_setopt($ch, CURLOPT_CONNECTTIMEOUT, 5);
-        curl_setopt($ch, CURLOPT_HTTPHEADER, [
-            "accept: application/json",
-            "api-key: " . $apiKey,
-            "content-type: application/json"
-        ]);
-
-        $response = curl_exec($ch);
-        $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
-        curl_close($ch);
-
-        if ($httpCode >= 200 && $httpCode < 300) {
-            $otpSent = true;
-        } else {
-            $errorMessage = "Brevo API Error HTTP " . $httpCode;
+    $mailHelperPath = __DIR__ . '/../../includes/mail_helper.php';
+    if (file_exists($mailHelperPath)) {
+        require_once $mailHelperPath;
+        if (function_exists('sendOtpEmail')) {
+            $otpSent = sendOtpEmail($email, $otp, 'AlerTara QC');
+            if (!$otpSent && function_exists('getLastOtpEmailErrorMessage')) {
+                $errorMessage = getLastOtpEmailErrorMessage('SMTP email delivery failed.');
+            }
         }
     }
 
     if (!$otpSent) {
-        // Fallback to SMTP using mail_helper
-        $mailHelperPath = __DIR__ . '/../../includes/mail_helper.php';
-        if (file_exists($mailHelperPath)) {
-            require_once $mailHelperPath;
-            if (function_exists('sendOtpEmail')) {
-                $otpSent = sendOtpEmail($email, $otp, 'AlerTara QC');
-                if (!$otpSent && function_exists('getLastOtpEmailErrorMessage')) {
-                    $errorMessage = getLastOtpEmailErrorMessage($errorMessage ?: 'SMTP email failed');
-                }
+        $apiKey = getenv("BREVO_API_KEY") ?: ($_ENV["BREVO_API_KEY"] ?? $_SERVER["BREVO_API_KEY"] ?? "");
+        if (!empty($apiKey)) {
+            $fromEmail = getenv("MAIL_FROM_ADDRESS") ?: ($_ENV["MAIL_FROM_ADDRESS"] ?? $_SERVER["MAIL_FROM_ADDRESS"] ?? "lloydsamonte7@gmail.com");
+            $payload = [
+                "sender" => ["name" => "AlerTara QC", "email" => $fromEmail],
+                "to" => [["email" => $email, "name" => $responder['name'] ?? "Responder"]],
+                "subject" => "Your OTP Code - AlerTara QC",
+                "htmlContent" => "<h3>Hello " . htmlspecialchars($responder['name'] ?? 'User') . "</h3><p>Your OTP code is: <b style='font-size:24px; color:blue;'>" . $otp . "</b></p><p>This OTP will expire in 5 minutes.</p>"
+            ];
+
+            $ch = curl_init("https://api.brevo.com/v3/smtp/email");
+            curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+            curl_setopt($ch, CURLOPT_POST, true);
+            curl_setopt($ch, CURLOPT_POSTFIELDS, json_encode($payload));
+            curl_setopt($ch, CURLOPT_TIMEOUT, 10);
+            curl_setopt($ch, CURLOPT_CONNECTTIMEOUT, 5);
+            curl_setopt($ch, CURLOPT_HTTPHEADER, [
+                "accept: application/json",
+                "api-key: " . $apiKey,
+                "content-type: application/json"
+            ]);
+
+            $response = curl_exec($ch);
+            $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+            curl_close($ch);
+
+            if ($httpCode >= 200 && $httpCode < 300) {
+                $otpSent = true;
+            } else {
+                $errorMessage .= " (Brevo API HTTP " . $httpCode . ")";
             }
         }
     }
