@@ -6,6 +6,7 @@ ini_set('display_errors', '0');
 
 header("Content-Type: application/json");
 
+// Read request body
 $raw = file_get_contents("php://input");
 $input = json_decode($raw, true);
 
@@ -26,6 +27,7 @@ try {
     require __DIR__ . "/connect.php";
     $pdo = db();
 
+    // 1. Fetch responder
     $stmt = $pdo->prepare("SELECT id, email, name, is_active FROM users WHERE email = ? LIMIT 1");
     $stmt->execute([$email]);
     $responder = $stmt->fetch(PDO::FETCH_ASSOC);
@@ -36,13 +38,19 @@ try {
         exit;
     }
 
+    // 2. Generate and store OTP
     $otp = (string)random_int(100000, 999999);
     $expiresAt = (new DateTime("+5 minutes"))->format("Y-m-d H:i:s");
 
     $ins = $pdo->prepare("INSERT INTO responder_otps (responder_email, otp, expires_at) VALUES (?, ?, ?)");
     $ins->execute([$email, $otp, $expiresAt]);
 
-    $apiKey = getenv("BREVO_API_KEY") ?: $_ENV["BREVO_API_KEY"] ?: "xkeysib-..."; // Bagong API key na ginamit mo sa Terminal
+    // 3. Get API Key securely from Environment Variables
+    $apiKey = getenv("BREVO_API_KEY") ?: ($_ENV["BREVO_API_KEY"] ?? "");
+
+    if (empty($apiKey)) {
+        throw new Exception("BREVO_API_KEY is missing in Environment Variables");
+    }
 
     $payload = [
         "sender" => ["name" => "AlerTara QC", "email" => "lloydsamonte7@gmail.com"],
@@ -71,7 +79,7 @@ try {
     if ($httpCode >= 200 && $httpCode < 300) {
         echo json_encode(["success" => true, "message" => "OTP sent successfully"]);
     } else {
-        echo json_encode(["success" => false, "message" => "Brevo API Error HTTP " . $httpCode]);
+        echo json_encode(["success" => false, "message" => "Brevo API Error HTTP " . $httpCode, "response" => json_decode($response, true)]);
     }
 
 } catch (Throwable $e) {
