@@ -340,7 +340,9 @@ try {
                     </div>
                     <div class="ai-recommendations-content" id="ai-recommendations-content">
                         <?php
-                        include $rootDir . '/includes/gemini_helper.php';
+                        if (is_file($rootDir . '/includes/gemini_helper.php')) {
+                            include_once $rootDir . '/includes/gemini_helper.php';
+                        }
 
                         // Real-time dispatch data from database
                         $dispatchData = [
@@ -350,7 +352,7 @@ try {
                             'current_incident' => $currentIncidentSummary
                         ];
 
-                        $recommendations = getDispatchRecommendations($dispatchData);
+                        $recommendations = function_exists('getDispatchRecommendations') ? getDispatchRecommendations($dispatchData) : null;
                         if ($recommendations) {
                             echo dispatch_ai_text_html((string)$recommendations, 'ai-recommendation-text');
                         } else {

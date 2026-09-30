@@ -1,46 +1,12 @@
 <?php
 ob_start();
 
-// IMPORTANT: Keep errors hidden from the Android app.
-// Errors are written to the PHP error log instead.
 error_reporting(E_ALL);
 ini_set('display_errors', '0');
 
-header("Content-Type: application/json");
+header("Content-Type: application/json; charset=UTF-8");
 
-require __DIR__ . "/connect.php";
-
-// .env is expected beside this file: /api/api_app/.env
-$envPath = __DIR__ . '/.env';
-
-if (!file_exists($envPath)) {
-    ob_end_clean();
-    echo json_encode([
-        "success" => false,
-        "message" => ".env file not found"
-    ]);
-    exit;
-}
-
-$env = parse_ini_file($envPath);
-
-if ($env === false) {
-    ob_end_clean();
-    echo json_encode([
-        "success" => false,
-        "message" => "Unable to read .env file"
-    ]);
-    exit;
-}
-
-// PHPMailer
-require __DIR__ . '/PHPMailer/src/Exception.php';
-require __DIR__ . '/PHPMailer/src/PHPMailer.php';
-require __DIR__ . '/PHPMailer/src/SMTP.php';
-
-use PHPMailer\PHPMailer\PHPMailer;
-use PHPMailer\PHPMailer\Exception;
-
+// Read request body (Handles both Retrofit FormUrlEncoded and JSON)
 $raw = file_get_contents("php://input");
 $input = json_decode($raw, true);
 
@@ -49,178 +15,106 @@ if (!is_array($input)) {
     parse_str($raw, $input);
 }
 
-$email = trim((string)($input["email"] ?? $_POST["email"] ?? ""));
+$email = trim((string)($input["email"] ?? $_POST["email"] ?? $_GET["email"] ?? ""));
 
 if ($email === "") {
     ob_end_clean();
-    echo json_encode([
-        "success" => false,
-        "message" => "Email is required"
-    ]);
+    echo json_encode(["success" => false, "message" => "Email is required"]);
     exit;
 }
 
-$mail = null;
-
 try {
-    // -----------------------------
-    // 1. CHECK RESPONDER ACCOUNT
-    // -----------------------------
+    // 1. Ayusin ang Path sa Database Connection
+    if (file_exists(__DIR__ . "/connect.php")) {
+        require_once __DIR__ . "/connect.php";
+    } elseif (file_exists(__DIR__ . "/../connect.php")) {
+        require_once __DIR__ . "/../connect.php";
+    } elseif (file_exists(__DIR__ . "/../includes/connect.php")) {
+        require_once __DIR__ . "/../includes/connect.php";
+    } else {
+        throw new Exception("Database connection file (connect.php) not found.");
+    }
+
     $pdo = db();
 
-    $stmt = $pdo->prepare(
-        "SELECT id, email, name, is_active
-         FROM users
-         WHERE email = ?
-         LIMIT 1"
-    );
-
+    // 2. Fetch responder
+    $stmt = $pdo->prepare("SELECT id, email, name, is_active FROM users WHERE email = ? LIMIT 1");
     $stmt->execute([$email]);
     $responder = $stmt->fetch(PDO::FETCH_ASSOC);
 
     if (!$responder || (int)$responder["is_active"] !== 1) {
         ob_end_clean();
-        echo json_encode([
-            "success" => false,
-            "message" => "Account not found or inactive"
-        ]);
+        echo json_encode(["success" => false, "message" => "Account not found or inactive"]);
         exit;
     }
 
-    // -----------------------------
-    // 2. GENERATE OTP
-    // -----------------------------
+    // 3. Generate and store OTP
     $otp = (string)random_int(100000, 999999);
     $expiresAt = (new DateTime("+5 minutes"))->format("Y-m-d H:i:s");
 
-    $ins = $pdo->prepare(
-        "INSERT INTO responder_otps
-         (responder_email, otp, expires_at)
-         VALUES (?, ?, ?)"
-    );
-
+    $ins = $pdo->prepare("INSERT INTO responder_otps (responder_email, otp, expires_at) VALUES (?, ?, ?)");
     $ins->execute([$email, $otp, $expiresAt]);
 
-    // -----------------------------
-    // 3. CHECK SMTP SETTINGS
-    // -----------------------------
-    $requiredEnv = [
-        'MAIL_HOST',
-        'MAIL_USERNAME',
-        'MAIL_PASSWORD',
-        'MAIL_PORT'
-    ];
+    // 4. Send OTP via Brevo API or fallback to SMTP
+    $apiKey = getenv("BREVO_API_KEY") ?: ($_ENV["BREVO_API_KEY"] ?? $_SERVER["BREVO_API_KEY"] ?? "");
 
-    foreach ($requiredEnv as $key) {
-        if (!isset($env[$key]) || trim((string)$env[$key]) === '') {
-            throw new RuntimeException(
-                "Missing SMTP setting in .env: " . $key
-            );
+    $otpSent = false;
+    $errorMessage = "";
+
+    if (!empty($apiKey)) {
+        $fromEmail = getenv("MAIL_FROM_ADDRESS") ?: ($_ENV["MAIL_FROM_ADDRESS"] ?? $_SERVER["MAIL_FROM_ADDRESS"] ?? "lloydsamonte7@gmail.com");
+        $payload = [
+            "sender" => ["name" => "AlerTara QC", "email" => $fromEmail],
+            "to" => [["email" => $email, "name" => $responder['name'] ?? "Responder"]],
+            "subject" => "Your OTP Code - AlerTara QC",
+            "htmlContent" => "<h3>Hello " . htmlspecialchars($responder['name'] ?? 'User') . "</h3><p>Your OTP code is: <b style='font-size:24px; color:blue;'>" . $otp . "</b></p><p>This OTP will expire in 5 minutes.</p>"
+        ];
+
+        $ch = curl_init("https://api.brevo.com/v3/smtp/email");
+        curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+        curl_setopt($ch, CURLOPT_POST, true);
+        curl_setopt($ch, CURLOPT_POSTFIELDS, json_encode($payload));
+        curl_setopt($ch, CURLOPT_TIMEOUT, 10);
+        curl_setopt($ch, CURLOPT_CONNECTTIMEOUT, 5);
+        curl_setopt($ch, CURLOPT_HTTPHEADER, [
+            "accept: application/json",
+            "api-key: " . $apiKey,
+            "content-type: application/json"
+        ]);
+
+        $response = curl_exec($ch);
+        $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+        curl_close($ch);
+
+        if ($httpCode >= 200 && $httpCode < 300) {
+            $otpSent = true;
+        } else {
+            $errorMessage = "Brevo API Error HTTP " . $httpCode;
         }
     }
 
-    // -----------------------------
-    // 4. SEND OTP USING PHPMailer
-    // -----------------------------
-    $mail = new PHPMailer(true);
+    if (!$otpSent) {
+        // Fallback to SMTP using mail_helper
+        $mailHelperPath = __DIR__ . '/../../includes/mail_helper.php';
+        if (file_exists($mailHelperPath)) {
+            require_once $mailHelperPath;
+            if (function_exists('sendOtpEmail')) {
+                $otpSent = sendOtpEmail($email, $otp, 'AlerTara QC');
+                if (!$otpSent && function_exists('getLastOtpEmailErrorMessage')) {
+                    $errorMessage = getLastOtpEmailErrorMessage($errorMessage ?: 'SMTP email failed');
+                }
+            }
+        }
+    }
 
-    $mail->isSMTP();
-    $mail->Host       = trim($env['MAIL_HOST']);
-    $mail->SMTPAuth   = true;
-    $mail->Username   = trim($env['MAIL_USERNAME']);
-    $mail->Password   = preg_replace('/\s+/', '', (string)$env['MAIL_PASSWORD']);
-
-    $encryption = strtolower(trim((string)($env['MAIL_ENCRYPTION'] ?? 'tls')));
-    $port = (int)($env['MAIL_PORT'] ?? 587);
-
-    if (in_array($encryption, ['ssl', 'smtps'], true) || $port === 465) {
-        $mail->SMTPSecure = PHPMailer::ENCRYPTION_SMTPS;
-    } elseif (!in_array($encryption, ['', 'none', 'off', 'false'], true)) {
-        $mail->SMTPSecure = PHPMailer::ENCRYPTION_STARTTLS;
+    ob_end_clean();
+    if ($otpSent) {
+        echo json_encode(["success" => true, "message" => "OTP sent successfully"]);
     } else {
-        $mail->SMTPSecure = '';
+        echo json_encode(["success" => false, "message" => $errorMessage ?: "Failed to send OTP email"]);
     }
-    $mail->Port       = $port;
-    $mail->CharSet    = 'UTF-8';
-    $mail->Timeout    = 20;
-
-    $mail->SMTPOptions = [
-        'ssl' => [
-            'verify_peer' => false,
-            'verify_peer_name' => false,
-            'allow_self_signed' => true,
-        ],
-    ];
-
-    // Keep SMTP debug OFF in production.
-    $mail->SMTPDebug = 0;
-
-    $fromAddress = $env['MAIL_FROM_ADDRESS'] ?? $env['MAIL_USERNAME'];
-    $fromName    = $env['MAIL_FROM_NAME'] ?? 'AlerTara QC';
-
-    $mail->setFrom($fromAddress, $fromName);
-    $mail->addAddress($email);
-
-    $mail->isHTML(true);
-    $mail->Subject = "Your OTP Code - AlerTara QC";
-
-    $safeName = htmlspecialchars(
-        (string)$responder['name'],
-        ENT_QUOTES,
-        'UTF-8'
-    );
-
-    $mail->Body =
-        "<h3>Hello " . $safeName . "</h3>" .
-        "<p>Your OTP code is: " .
-        "<b style='font-size:24px; color:blue;'>" . $otp . "</b>" .
-        "</p>" .
-        "<p>This OTP will expire in 5 minutes.</p>";
-
-    $mail->AltBody =
-        "Hello " . $responder['name'] .
-        ". Your OTP code is: " . $otp .
-        ". This OTP will expire in 5 minutes.";
-
-    $mail->send();
-
-    ob_end_clean();
-    echo json_encode([
-        "success" => true,
-        "message" => "OTP sent successfully"
-    ]);
-
-} catch (Exception $e) {
-
-    // PHPMailer exception
-    error_log("send-otp PHPMailer error: " . $e->getMessage());
-
-    $message = "SMTP Error";
-
-    if ($mail instanceof PHPMailer && !empty($mail->ErrorInfo)) {
-        $message = "SMTP Error: " . $mail->ErrorInfo;
-    }
-
-    ob_end_clean();
-    echo json_encode([
-        "success" => false,
-        "message" => $message
-    ]);
 
 } catch (Throwable $e) {
-
-    // PDO errors, .env errors, PHP runtime errors, etc.
-    error_log(
-        "send-otp server error: " .
-        $e->getMessage() .
-        " in " . $e->getFile() .
-        ":" . $e->getLine()
-    );
-
     ob_end_clean();
-    echo json_encode([
-        "success" => false,
-        "message" => "Server error"
-    ]);
+    echo json_encode(["success" => false, "message" => "Error: " . $e->getMessage()]);
 }
-?>

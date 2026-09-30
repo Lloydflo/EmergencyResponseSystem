@@ -3,10 +3,12 @@
 
 # Environment & config
 .env
-config.php
+/config.php
+!includes/config.php
 db.config.php
-gemini_helper.php
+!includes/gemini_helper.php
 api/.env
+db.php
 
 # Mail configuration (prevent accidental commit)
 mail.env

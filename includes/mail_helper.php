@@ -17,33 +17,62 @@ if (!function_exists('getLastOtpEmailErrorMessage')) {
     }
 }
 
+if (!function_exists('ers_log_mail_event')) {
+    function ers_log_mail_event(string $message): void {
+        error_log('[ERS_MAIL] ' . trim($message));
+        $logDir = dirname(__DIR__);
+        $logFile = $logDir . '/mail_error.log';
+        if (is_writable($logDir) || (file_exists($logFile) && is_writable($logFile))) {
+            @file_put_contents($logFile, date('Y-m-d H:i:s') . ' ' . trim($message) . "\n", FILE_APPEND);
+        }
+    }
+}
+
 if (!function_exists('detectOtpEmailErrorMessage')) {
     function detectOtpEmailErrorMessage(array $errors): string {
         $combined = strtolower(implode(' ', $errors));
 
         if (strpos($combined, 'daily user sending limit exceeded') !== false) {
-            return 'OTP email failed because the Gmail sender reached its daily sending limit and no backup SMTP sender accepted the OTP. Use another SMTP sender or a transactional email provider.';
+            return 'OTP email failed because the Gmail sender reached its daily sending limit. Please try again later or contact support.';
         }
 
         if (
             strpos($combined, 'invalid credentials') !== false ||
             strpos($combined, 'authentication failed') !== false ||
+            strpos($combined, 'could not authenticate') !== false ||
+            strpos($combined, 'auth rejected') !== false ||
             strpos($combined, '535') !== false ||
             strpos($combined, 'username and password not accepted') !== false ||
             strpos($combined, 'bad credentials') !== false
         ) {
-            return 'OTP email failed because the SMTP username or app password is invalid. Check MAIL_USERNAME and MAIL_PASSWORD.';
+            return 'OTP email failed because the SMTP username or app password is invalid. Check MAIL_USERNAME and MAIL_PASSWORD in .env.';
         }
 
-        if (strpos($combined, 'could not connect to smtp host') !== false || strpos($combined, 'failed to connect') !== false) {
-            return 'OTP email failed because the server cannot connect to the SMTP host.';
+        if (
+            strpos($combined, 'could not connect to smtp host') !== false ||
+            strpos($combined, 'failed to connect') !== false ||
+            strpos($combined, 'connection timed out') !== false ||
+            strpos($combined, 'timed out') !== false ||
+            strpos($combined, 'network is unreachable') !== false ||
+            strpos($combined, 'connection refused') !== false
+        ) {
+            return 'OTP email failed because the server cannot connect to the SMTP host (ports 465/587 may be blocked by your hosting provider firewall).';
+        }
+
+        if (strpos($combined, 'phpmailer is missing') !== false || strpos($combined, 'missing file') !== false) {
+            return 'OTP email failed: PHPMailer dependency is missing on the server. Run composer install.';
         }
 
         if (strpos($combined, 'missing smtp host') !== false || strpos($combined, 'missing smtp') !== false) {
-            return 'OTP email failed because no working backup SMTP sender is configured.';
+            return 'OTP email failed because no SMTP host is configured in .env.';
         }
 
-        return 'OTP email could not be delivered. Configure a backup SMTP sender or server mail fallback.';
+        $lastError = count($errors) > 0 ? trim((string)end($errors)) : '';
+        if ($lastError !== '') {
+            return 'OTP email failed: ' . $lastError;
+        }
+
+        return 'OTP email could not be delivered. Please verify your SMTP settings in .env.';
     }
 }
 
@@ -311,15 +340,30 @@ function sendOtpEmail($to, $otpCode, $systemName = null, $logoUrl = 'Email.png')
     if (file_exists($envPath)) {
         $lines = file($envPath, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES);
         foreach ($lines as $line) {
-            if (strpos(trim($line), '#') === 0) continue;
-            if (strpos($line, '=') === false) continue;
-            list($name, $value) = explode('=', $line, 2);
-            $name = trim($name);
+            $line = trim($line);
+            if ($line === '' || strpos($line, '#') === 0 || strpos($line, ';') === 0) continue;
+            if (strpos($line, '=') !== false) {
+                list($name, $value) = explode('=', $line, 2);
+            } elseif (strpos($line, '-') !== false && preg_match('/^[A-Za-z0-9_]+-/', $line)) {
+                list($name, $value) = explode('-', $line, 2);
+            } else {
+                continue;
+            }
+            $name = trim(str_replace(' ', '_', $name));
             $value = trim($value);
+            if (strlen($value) >= 2) {
+                $f = $value[0];
+                $l = $value[strlen($value) - 1];
+                if (($f === '"' && $l === '"') || ($f === "'" && $l === "'")) {
+                    $value = substr($value, 1, -1);
+                }
+            }
             if ($name !== '') {
                 $_ENV[$name] = $value;
                 $_SERVER[$name] = $value;
-                putenv($name . '=' . $value);
+                if (function_exists('putenv')) {
+                    putenv($name . '=' . $value);
+                }
             }
         }
     }
@@ -366,6 +410,8 @@ function sendOtpEmail($to, $otpCode, $systemName = null, $logoUrl = 'Email.png')
         'starttls' => 'tls',
         'tls' => 'tls',
         'ssl' => 'ssl',
+        'ss1' => 'ssl',
+        'ssi' => 'ssl',
         'smtps' => 'ssl',
         'none' => '',
         'off' => '',
@@ -384,7 +430,11 @@ function sendOtpEmail($to, $otpCode, $systemName = null, $logoUrl = 'Email.png')
         $host = trim((string)($config['host'] ?? ''));
         $username = trim((string)($config['username'] ?? ''));
         $passwordNoSpaces = preg_replace('/\s+/', '', (string)($config['password'] ?? ''));
-        $encryption = strtolower(trim((string)($config['encryption'] ?? 'tls')));
+        $rawEncryption = strtolower(trim((string)($config['encryption'] ?? 'tls')));
+        $encryption = $encryptionAliases[$rawEncryption] ?? $rawEncryption;
+        if ($encryption === 'ss1' || $encryption === 'ssi') {
+            $encryption = 'ssl';
+        }
         $port = (int)($config['port'] ?? 587);
         $fromAddress = trim((string)($config['from_address'] ?? ''));
         $fromName = trim((string)($config['from_name'] ?? 'System'));
@@ -397,10 +447,9 @@ function sendOtpEmail($to, $otpCode, $systemName = null, $logoUrl = 'Email.png')
             $fromAddress = $username;
         }
 
-        $encryption = $encryptionAliases[$encryption] ?? $encryption;
-        if ($port === 465 && $encryption === 'tls') {
+        if ($port === 465 && ($encryption === '' || $encryption === 'tls')) {
             $encryption = 'ssl';
-        } elseif ($port === 587 && $encryption === 'ssl') {
+        } elseif ($port === 587 && ($encryption === '' || $encryption === 'ssl')) {
             $encryption = 'tls';
         }
 
@@ -408,7 +457,14 @@ function sendOtpEmail($to, $otpCode, $systemName = null, $logoUrl = 'Email.png')
             ['encryption' => $encryption, 'port' => $port],
         ];
 
-        $retryAlternatePorts = filter_var($readEnv('MAIL_RETRY_ALTERNATE_PORTS', 'false'), FILTER_VALIDATE_BOOLEAN);
+        // Automatically add standard alternate Gmail/SMTP port as fallback (587 TLS <-> 465 SSL)
+        if ($port === 465) {
+            $attempts[] = ['encryption' => 'tls', 'port' => 587];
+        } elseif ($port === 587) {
+            $attempts[] = ['encryption' => 'ssl', 'port' => 465];
+        }
+
+        $retryAlternatePorts = filter_var($readEnv('MAIL_RETRY_ALTERNATE_PORTS', 'true'), FILTER_VALIDATE_BOOLEAN);
         if ($retryAlternatePorts) {
             $attempts[] = ['encryption' => 'tls', 'port' => 587];
             $attempts[] = ['encryption' => 'ssl', 'port' => 465];
@@ -483,11 +539,7 @@ function sendOtpEmail($to, $otpCode, $systemName = null, $logoUrl = 'Email.png')
                 $mail->Body = $body;
 
                 if ($mail->send()) {
-                    file_put_contents(
-                        __DIR__ . '/../mail_error.log',
-                        date('Y-m-d H:i:s') . " OTP email sent via " . $label . " SMTP to: " . $to . "\n",
-                        FILE_APPEND
-                    );
+                    ers_log_mail_event("OTP email sent via " . $label . " SMTP to: " . $to);
                     return true;
                 }
 
@@ -570,6 +622,7 @@ function sendOtpEmail($to, $otpCode, $systemName = null, $logoUrl = 'Email.png')
         ]);
     }
 
+    // Attempt 1: PHPMailer
     if ($phpMailerAvailable) {
         foreach ($smtpConfigs as $smtpConfig) {
             if ($sendViaSmtp($smtpConfig, $body)) {
@@ -578,12 +631,136 @@ function sendOtpEmail($to, $otpCode, $systemName = null, $logoUrl = 'Email.png')
         }
     }
 
-    $logMsg = date('Y-m-d H:i:s')
-        . " PHPMailer Error: SMTP connect/send failed"
-        . " host=" . $host
-        . " attempts=" . implode('; ', $errors)
-        . "\n";
-    file_put_contents(__DIR__ . '/../mail_error.log', $logMsg, FILE_APPEND);
+    // Attempt 2: Native Socket SMTP (zero external dependencies, works even if vendor/composer is missing)
+    $sendViaNativeSmtp = static function (array $config, string $body, string $otpCode) use (
+        $to,
+        $systemName,
+        &$errors
+    ): bool {
+        $host = trim((string)($config['host'] ?? ''));
+        $username = trim((string)($config['username'] ?? ''));
+        $passwordNoSpaces = preg_replace('/\s+/', '', (string)($config['password'] ?? ''));
+        $fromAddress = trim((string)($config['from_address'] ?? '')) ?: $username;
+        $fromName = trim((string)($config['from_name'] ?? '')) ?: ($systemName ?? 'EMS');
+        $port = (int)($config['port'] ?? 465);
+
+        if ($host === '' || $username === '' || $passwordNoSpaces === '') {
+            return false;
+        }
+
+        $attempts = [];
+        if ($port === 465) {
+            $attempts[] = ['host' => 'ssl://' . $host, 'port' => 465, 'crypto' => 'ssl'];
+            $attempts[] = ['host' => 'tcp://' . $host, 'port' => 587, 'crypto' => 'tls'];
+        } else {
+            $attempts[] = ['host' => 'tcp://' . $host, 'port' => 587, 'crypto' => 'tls'];
+            $attempts[] = ['host' => 'ssl://' . $host, 'port' => 465, 'crypto' => 'ssl'];
+        }
+
+        $ctx = stream_context_create([
+            'ssl' => [
+                'verify_peer' => false,
+                'verify_peer_name' => false,
+                'allow_self_signed' => true,
+            ]
+        ]);
+
+        foreach ($attempts as $att) {
+            $fp = @stream_socket_client($att['host'] . ':' . $att['port'], $errno, $errstr, 8, STREAM_CLIENT_CONNECT, $ctx);
+            if (!$fp) {
+                $errors[] = "native_smtp({$att['port']}) -> connect failed: $errstr ($errno)";
+                continue;
+            }
+
+            $banner = fgets($fp);
+            if (strpos($banner, '220') !== 0) {
+                $errors[] = "native_smtp({$att['port']}) -> bad banner: " . trim($banner);
+                fclose($fp);
+                continue;
+            }
+
+            fwrite($fp, "EHLO alertaraqc.com\r\n");
+            while ($line = fgets($fp)) {
+                if (substr($line, 3, 1) === ' ') break;
+            }
+
+            if ($att['crypto'] === 'tls') {
+                fwrite($fp, "STARTTLS\r\n");
+                $stls = fgets($fp);
+                if (strpos($stls, '220') !== 0) {
+                    $errors[] = "native_smtp({$att['port']}) -> STARTTLS failed: " . trim($stls);
+                    fclose($fp);
+                    continue;
+                }
+                stream_socket_enable_crypto($fp, true, STREAM_CRYPTO_METHOD_TLSv1_2_CLIENT | STREAM_CRYPTO_METHOD_TLSv1_3_CLIENT);
+                fwrite($fp, "EHLO alertaraqc.com\r\n");
+                while ($line = fgets($fp)) {
+                    if (substr($line, 3, 1) === ' ') break;
+                }
+            }
+
+            fwrite($fp, "AUTH LOGIN\r\n");
+            fgets($fp);
+            fwrite($fp, base64_encode($username) . "\r\n");
+            fgets($fp);
+            fwrite($fp, base64_encode($passwordNoSpaces) . "\r\n");
+            $authResp = fgets($fp);
+
+            if (strpos($authResp, '235') !== 0) {
+                $errors[] = "native_smtp({$att['port']}) -> auth rejected: " . trim($authResp);
+                fclose($fp);
+                continue;
+            }
+
+            fwrite($fp, "MAIL FROM:<$fromAddress>\r\n");
+            fgets($fp);
+            fwrite($fp, "RCPT TO:<$to>\r\n");
+            $rcptResp = fgets($fp);
+
+            if (strpos($rcptResp, '250') !== 0 && strpos($rcptResp, '251') !== 0) {
+                $errors[] = "native_smtp({$att['port']}) -> RCPT TO rejected: " . trim($rcptResp);
+                fclose($fp);
+                continue;
+            }
+
+            fwrite($fp, "DATA\r\n");
+            fgets($fp);
+
+            $headers = [];
+            $headers[] = "From: " . $fromName . " <" . $fromAddress . ">";
+            $headers[] = "To: <" . $to . ">";
+            $headers[] = "Subject: Your OTP Code";
+            $headers[] = "MIME-Version: 1.0";
+            $headers[] = "Content-Type: text/html; charset=UTF-8";
+            $headers[] = "Date: " . date('r');
+            $headers[] = "Message-ID: <" . md5(uniqid((string)time(), true)) . "@alertaraqc.com>";
+
+            $payload = implode("\r\n", $headers) . "\r\n\r\n" . $body . "\r\n.\r\n";
+            fwrite($fp, $payload);
+            $dataResp = fgets($fp);
+
+            fwrite($fp, "QUIT\r\n");
+            fclose($fp);
+
+            if (strpos($dataResp, '250') === 0) {
+                ers_log_mail_event("OTP email sent via native SMTP to: " . $to);
+                return true;
+            }
+
+            $errors[] = "native_smtp({$att['port']}) -> DATA rejected: " . trim($dataResp);
+        }
+
+        return false;
+    };
+
+    foreach ($smtpConfigs as $smtpConfig) {
+        if ($sendViaNativeSmtp($smtpConfig, $body, (string)$otpCode)) {
+            return true;
+        }
+    }
+
+    $logMsg = "SMTP connect/send failed host=" . $host . " attempts=" . implode('; ', $errors);
+    ers_log_mail_event($logMsg);
     $smtpFailureMessage = detectOtpEmailErrorMessage($errors);
     setLastOtpEmailErrorMessage($smtpFailureMessage);
 
@@ -616,22 +793,14 @@ function sendOtpEmail($to, $otpCode, $systemName = null, $logoUrl = 'Email.png')
         : @mail($to, $fallbackSubject, $fallbackText, implode("\r\n", $fallbackHeaders));
 
     if ($fallbackResult) {
-        file_put_contents(
-            __DIR__ . '/../mail_error.log',
-            date('Y-m-d H:i:s') . " PHP mail() fallback accepted for: " . $to . " from: " . $fallbackFromAddress . "\n",
-            FILE_APPEND
-        );
+        ers_log_mail_event("PHP mail() fallback accepted for: " . $to . " from: " . $fallbackFromAddress);
         return true;
     }
 
-    file_put_contents(
-        __DIR__ . '/../mail_error.log',
-        date('Y-m-d H:i:s') . " PHP mail() fallback failed for: " . $to . " from: " . $fallbackFromAddress . "\n",
-        FILE_APPEND
-    );
-    if ($smtpFailureMessage === 'OTP email could not be delivered. Configure a backup SMTP sender or server mail fallback.') {
-        setLastOtpEmailErrorMessage('OTP email failed because primary SMTP failed and PHP/server mail fallback is not configured or was rejected.');
-    }
+    ers_log_mail_event("PHP mail() fallback failed for: " . $to . " from: " . $fallbackFromAddress);
+
+    // Keep the specific failure reason from SMTP attempts
+    setLastOtpEmailErrorMessage($smtpFailureMessage);
 
     return false;
 }

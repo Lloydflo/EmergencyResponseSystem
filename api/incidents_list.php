@@ -362,6 +362,16 @@ if (!$pdo) {
     exit;
 }
 
+try {
+    $hasCalls = (bool)$pdo->query("SHOW TABLES LIKE 'calls'")->fetchColumn();
+    if (!$hasCalls) {
+        $hasErsDb = (bool)$pdo->query("SHOW DATABASES LIKE 'emergency_response_test'")->fetchColumn();
+        if ($hasErsDb) {
+            $pdo->exec("USE `emergency_response_test`");
+        }
+    }
+} catch (Throwable $e) {}
+
 $schema = ers_incidents_schema($pdo);
 if (
     !ers_incidents_has_table($schema, 'incidents')
@@ -398,13 +408,40 @@ $incidentExpr = static function (string $column, string $fallback = 'NULL') use 
     return ers_incidents_has_column($schema, 'incidents', $column) ? "i.`{$column}`" : $fallback;
 };
 
-$referenceNoExpr = $incidentExpr('reference_no', "''");
+$referenceNoExpr = ers_incidents_has_column($schema, 'incidents', 'reference_no')
+    ? "i.`reference_no`"
+    : (ers_incidents_has_column($schema, 'incidents', 'case_no')
+        ? "i.`case_no`"
+        : (ers_incidents_has_column($schema, 'incidents', 'incident_code')
+            ? "i.`incident_code`"
+            : "CONCAT('INC-', LPAD(i.`id`, 4, '0'))"));
 $normalizedReferenceNoExpr = "UPPER(TRIM(COALESCE({$referenceNoExpr}, '')))";
-$typeExpr = $incidentExpr('type', "''");
-$priorityExpr = $incidentExpr('priority', "''");
-$statusExpr = $incidentExpr('status', "''");
-$locationAddressExpr = $incidentExpr('location_address', "''");
-$descriptionExpr = $incidentExpr('description', "''");
+
+$typeExpr = ers_incidents_has_column($schema, 'incidents', 'type')
+    ? "i.`type`"
+    : (ers_incidents_has_column($schema, 'incidents', 'incident_type')
+        ? "i.`incident_type`"
+        : "''");
+
+$priorityExpr = ers_incidents_has_column($schema, 'incidents', 'priority')
+    ? "i.`priority`"
+    : (ers_incidents_has_column($schema, 'incidents', 'urgency_level')
+        ? "i.`urgency_level`"
+        : "'medium'");
+
+$statusExpr = ers_incidents_has_column($schema, 'incidents', 'status') ? "i.`status`" : "'pending'";
+
+$locationAddressExpr = ers_incidents_has_column($schema, 'incidents', 'location_address')
+    ? "i.`location_address`"
+    : (ers_incidents_has_column($schema, 'incidents', 'location')
+        ? "i.`location`"
+        : "''");
+
+$descriptionExpr = ers_incidents_has_column($schema, 'incidents', 'description')
+    ? "i.`description`"
+    : (ers_incidents_has_column($schema, 'incidents', 'narrative')
+        ? "i.`narrative`"
+        : "''");
 $createdAtExpr = $incidentExpr('created_at');
 $updatedAtExpr = $incidentExpr('updated_at');
 $resolvedAtExpr = $incidentExpr('resolved_at');

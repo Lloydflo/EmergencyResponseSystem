@@ -1,16 +1,27 @@
 <?php
-// DEBUG: Enable error reporting for troubleshooting on remote server
-ini_set('display_errors', 1);
-ini_set('display_startup_errors', 1);
-error_reporting(E_ALL);
+// Ensure config is loaded for environment detection
+if (file_exists(__DIR__ . '/includes/config.php')) {
+    require_once __DIR__ . '/includes/config.php';
+}
+
+// Disable error display in production to prevent path disclosure and warnings on live server
+$isProduction = function_exists('ers_is_production') ? ers_is_production() : (getenv('APP_ENV') === 'production');
+if ($isProduction || getenv('APP_DEBUG') !== 'true') {
+    ini_set('display_errors', 0);
+    ini_set('display_startup_errors', 0);
+}
 
 function debug_log($msg) {
-    file_put_contents(__DIR__ . '/debug_login.log', date('Y-m-d H:i:s') . ' ' . $msg . "\n", FILE_APPEND);
+    if (getenv('APP_DEBUG') === 'true' || (function_exists('ers_env') && ers_env('APP_DEBUG') === 'true')) {
+        error_log('[LOGIN DEBUG] ' . $msg);
+    }
+    $logFile = __DIR__ . '/debug_login.log';
+    if (is_writable(__DIR__) || (file_exists($logFile) && is_writable($logFile))) {
+        @file_put_contents($logFile, date('Y-m-d H:i:s') . ' ' . $msg . "\n", FILE_APPEND);
+    }
 }
-debug_log('--- LOGIN.PHP START ---');
 
 require_once __DIR__ . '/includes/auth.php';
-debug_log('auth.php loaded');
 
 $pageTitle = 'Login';
 $error_message = '';
